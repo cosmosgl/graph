@@ -16,6 +16,69 @@ it('keeps the styled experiment cards within the page at the current browser wid
   expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })
 
+it('keeps Quick jump editable on a phone and shows experiment mini cards among the top matches', async () => {
+  const originalWidth = window.innerWidth; const originalHeight = window.innerHeight
+  try {
+    await page.viewport(1200, 800)
+    window.history.replaceState(null, '', '#/')
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    const input = host.querySelector<HTMLInputElement>('#lab-search')!
+    const panel = host.querySelector<HTMLElement>('.global-search-results')!
+    const clear = host.querySelector<HTMLButtonElement>('[aria-label="Clear search"]')!
+    const options = (): NodeListOf<HTMLAnchorElement> => panel.querySelectorAll('[role="option"]')
+    expect(input.getBoundingClientRect().left).toBeGreaterThanOrEqual(host.querySelector('.lab-navigation')!.getBoundingClientRect().right)
+    expect(window.innerWidth - input.getBoundingClientRect().right).toBeLessThanOrEqual(24)
+    await page.viewport(320, 780)
+    expect(input.getBoundingClientRect().width).toBeGreaterThan(0)
+    expect(window.innerWidth - input.getBoundingClientRect().right).toBeLessThanOrEqual(16)
+    expect(panel.hidden).toBe(true)
+    input.focus()
+    expect(panel.hidden).toBe(false)
+    const suggestions = Array.from(options(), link => link.hash)
+    expect(suggestions).toHaveLength(3)
+    expect(panel.querySelector('[role="status"]')?.textContent).toBe('Suggested experiments')
+    expect(clear.hidden).toBe(true)
+    input.value = 'gravity'; input.dispatchEvent(new Event('input'))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    input.value = 'point picking'; input.dispatchEvent(new Event('input'))
+    await vi.waitFor(() => expect(options()).toHaveLength(4), { timeout: 20000 })
+    expect(window.location.hash).toBe('#/')
+    const [experiment, finding] = options()
+    const catalog = host.querySelector(`.experiment-card[href="${experiment.getAttribute('href')}"]`)!
+    expect(experiment.querySelector('.case-nav-title')?.textContent).toBe('Point picking')
+    expect(experiment.querySelector('.readiness-badge')?.outerHTML).toBe(catalog.querySelector('.readiness-badge')!.outerHTML)
+    expect(finding.querySelector('.global-search-kind')?.textContent).toBe('Recorded finding')
+    expect(finding.querySelector('.readiness-badge')).toBeNull()
+    expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0)
+    expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(document.documentElement.clientWidth)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    expect(input.getAttribute('aria-activedescendant')).toBe(finding.id)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(panel.hidden).toBe(true)
+    expect(input.hasAttribute('aria-activedescendant')).toBe(false)
+    expect(document.activeElement).toBe(input)
+    expect(input.value).toBe('point picking')
+    input.click()
+    await vi.waitFor(() => expect(options()).toHaveLength(4))
+    const more = panel.querySelector<HTMLButtonElement>('[data-search-more]')!
+    more.click()
+    expect(options().length).toBeGreaterThan(4)
+    expect(more.getBoundingClientRect().bottom).toBeLessThanOrEqual(window.innerHeight)
+    expect(panel.querySelector('ol')!.scrollHeight).toBeGreaterThan(panel.querySelector('ol')!.clientHeight)
+    expect(clear.hidden).toBe(false)
+    expect(clear.textContent).toBe('×')
+    clear.click()
+    expect(input.value).toBe('')
+    expect(document.activeElement).toBe(input)
+    expect(panel.hidden).toBe(false)
+    expect(clear.hidden).toBe(true)
+    expect(Array.from(options(), link => link.hash)).toEqual(suggestions)
+  } finally {
+    await page.viewport(originalWidth, originalHeight)
+  }
+})
+
 it('keeps the open center measurement preview inside a narrow page', async () => {
   window.history.replaceState(null, '', '#/center-mass?section=center-force-cost')
   host = document.createElement('div'); host.style.width = '320px'; document.body.append(host); shell = createAppShell(host)

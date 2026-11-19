@@ -10,9 +10,12 @@ remaining gaps and the evidence needed for a production switch.
 Home groups case cards by topic. Each card opens a case and shows its recorded outcome or open question
 with a concise finding. The header links to the catalog, roadmap, feature coverage and learning guide;
 other references appear above the catalog.
-Header search finds human-facing experiment descriptions, recorded evidence, guides and references across
-the lab. Results link to the relevant case or section. Agent recipes, reproduction commands, shader code,
-raw captures and temporary live-run values are not indexed. Search loads its local index on first use.
+Focus the search field on the right of the header to see three suggested experiments. Type to find
+experiments, recorded evidence, guides and references. Quick jump shows the top four matches.
+Experiment mini cards carry the same readiness badge as their related links. The × clears the query and restores the suggestions.
+Use the arrow keys and Enter to open a result, or Escape to dismiss the list and keep the query.
+Results link to the relevant case or section. Agent recipes, reproduction commands, shader code,
+raw captures and temporary live-run values are not indexed. Search loads its local index when you first type a query.
 Coverage counts describe bounded evidence, not migration completion. Reviewed findings remain separate
 from this browser's live run.
 

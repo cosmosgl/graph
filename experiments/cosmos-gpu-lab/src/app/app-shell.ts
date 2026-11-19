@@ -229,23 +229,30 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           <span class="brand-mark" aria-hidden="true"></span>
           <span><strong>Cosmos</strong><small>GPU Lab</small></span>
         </a>
-        <button class="search-toggle" type="button" aria-controls="lab-search-form" aria-expanded="false">Search</button>
         <nav class="lab-navigation" aria-label="Lab navigation">
           <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a>
           <a data-nav="roadmap" href="#/roadmap">Roadmap</a>
           <a data-nav="feature-inventory" href="#/feature-inventory">Feature coverage</a>
           <a data-nav="learn" href="#/learn">Learn</a>
         </nav>
-        <form class="global-search" id="lab-search-form" role="search" data-expanded="false">
-          <label class="search-label" for="lab-search">Search the lab</label>
-          <input id="lab-search" type="search" placeholder="Search the lab" autocomplete="off" aria-controls="lab-search-results">
-          <button type="submit">Search</button>
+        <form class="global-search" id="lab-search-form" role="search" aria-label="Quick jump">
+          <div class="global-search-field">
+            <label class="search-label" for="lab-search">Search the lab</label>
+            <input id="lab-search" type="text" role="combobox" placeholder="Search the lab…" autocomplete="off"
+              autocapitalize="none" spellcheck="false" enterkeyhint="go" aria-autocomplete="list" aria-expanded="false"
+              aria-controls="lab-search-options" aria-keyshortcuts="Meta+K Control+K">
+            <button type="button" data-search-clear aria-label="Clear search" title="Clear search" hidden>×</button>
+          </div>
+          <section class="global-search-results" id="lab-search-results" aria-label="Quick jump results" hidden>
+            <p data-search-status role="status"></p>
+            <ol id="lab-search-options" role="listbox" aria-label="Search results"></ol>
+            <div class="global-search-actions" hidden>
+              <button type="button" data-search-more hidden></button>
+              <button type="button" data-search-retry hidden>Retry search</button>
+              <span class="global-search-keys" aria-hidden="true"><kbd>↑↓</kbd> Choose <kbd>↵</kbd> Open</span>
+            </div>
+          </section>
         </form>
-        <section class="global-search-results" id="lab-search-results" aria-label="Search results" hidden>
-          <div class="global-search-heading"><strong>Search results</strong><button type="button" data-search-close>Close</button></div>
-          <p data-search-status role="status" aria-live="polite"></p><ol></ol>
-          <p class="global-search-scope">Searches lab pages and recorded evidence. Live run values are not indexed.</p>
-        </section>
       </header>
       <main class="workspace" tabindex="-1"></main>
     </div>
@@ -258,6 +265,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   let run = createRetainedRun(disposeExperimentNotes)
   let parkedSearchRun: { owner: ReturnType<typeof createRetainedRun>; id: string; caseId?: string } | undefined
   const disposeSearch = mountGlobalSearch(header, target => {
+    workspace.focus({ preventScroll: true })
     if (!run.id || !target.experimentId || (run.id === target.experimentId && run.caseId === target.caseId)) return
     if (parkedSearchRun?.id === target.experimentId && parkedSearchRun.caseId === target.caseId) return
     parkedSearchRun?.owner.destroy()

@@ -10,6 +10,7 @@ import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './
 import { headingSlug } from './sections'
 import { vocabularyTerms } from './vocabulary'
 import { readinessFor } from './readiness'
+import type { CaseReadiness } from './readiness/types'
 
 export type SearchEntry = {
   key: string;
@@ -21,6 +22,7 @@ export type SearchEntry = {
   href: string;
   experimentId?: string;
   caseId?: string;
+  readiness?: CaseReadiness;
 }
 
 export type SearchResult = SearchEntry & { snippet: string; score: number }
@@ -167,6 +169,7 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
         href: base,
         experimentId: experiment.id,
         caseId: item.id,
+        readiness: assessment,
         text: publicText([item.question, item.description, item.tryIt, item.reference, item.acceptance,
           assessment.badge, assessment.finding, assessment.area, assessment.status,
           ...assessment.evidence.map(result => result.text), assessment.next]),

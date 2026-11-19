@@ -82,6 +82,23 @@ it('shows topic cards and the global search without starting GPU work', async ()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
+it('opens a suggested experiment from an empty search field with the keyboard', async () => {
+  const { create } = mockRun('precision-diagnostics')
+  window.history.replaceState(null, '', '#/')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  const input = host.querySelector<HTMLInputElement>('#lab-search')!
+  input.focus()
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+  const active = document.getElementById(input.getAttribute('aria-activedescendant')!)!
+  expect(active.getAttribute('href')).toBe('#/precision-diagnostics?case=gravity-accuracy')
+  expect(active.querySelector('.readiness-badge')).not.toBeNull()
+  expect(create).not.toHaveBeenCalled()
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+  expect(window.location.hash).toBe('#/precision-diagnostics?case=gravity-accuracy')
+  expect(input.value).toBe('')
+})
+
 it('opens the workgroup repulsion experiment from the catalog', async () => {
   const { create } = mockRun('workgroup-repulsion')
   window.history.replaceState(null, '', '#/')
@@ -408,7 +425,9 @@ it('keeps the current run intact while searching and restores it after visiting 
   const selector = '.global-search-results a[href="#/precision-diagnostics?case=gravity-accuracy"]'
   await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull(), { timeout: 20000 })
   expect(host.querySelector('canvas')).toBe(canvas); expect(setting.value).toBe('kept setting')
-  host.querySelector<HTMLAnchorElement>(selector)!.click()
+  search.focus()
+  expect(search.getAttribute('aria-activedescendant')).toBe(host.querySelector(selector)!.id)
+  search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
   await vi.waitFor(() => expect(host!.querySelector('h1')?.textContent).toBe('Gravity force accuracy'))
   await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(1))
   expect(original.pause).toHaveBeenCalled(); expect(original.destroy).not.toHaveBeenCalled()
