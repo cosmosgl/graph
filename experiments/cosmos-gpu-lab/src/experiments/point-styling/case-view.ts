@@ -6,7 +6,7 @@ const presentations: Record<StylingCaseId, CasePresentation> = {
   shapes: {
     fixture: 'shapes',
     fixtures: ['shapes', 'edge-cases', 'fractional'],
-    controls: ['renderer', 'fixture', 'zoom', 'ratio', 'scale'],
+    controls: ['renderer', 'fixture', 'opacity', 'zoom', 'ratio', 'scale'],
     diagnostics: [],
   },
   picking: {

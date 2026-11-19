@@ -20,6 +20,12 @@ it('opens each styling case with a focused scene and its own controls', async ()
         expect(section.hidden).toBe(section.dataset.caseDiagnostic !== item.diagnostic)
       }
       if (item.id === 'shapes') {
+        const opacity = host.querySelector<HTMLSelectElement>('[data-opacity]')!
+        expect(opacity.closest('label')!.hidden).toBe(false)
+        expect(opacity.disabled).toBe(false)
+        const overlay = host.querySelector<HTMLSelectElement>('[data-overlay-arithmetic]')!
+        expect(overlay.closest('label')!.hidden).toBe(true)
+        expect(overlay.disabled).toBe(true)
         const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
         expect(fixture.querySelector<HTMLOptionElement>('[value="fractional"]')!.hidden).toBe(false)
         fixture.value = 'fractional'; fixture.dispatchEvent(new Event('change'))
