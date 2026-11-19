@@ -308,7 +308,7 @@ export const milestones = [
     acceptance: 'Remaining forces, graph scalability and affordable precision',
     gates: ['Confirm composed layout quality across longer runs, zoom and more graph shapes. Address the strict trajectory failures.',
       'Compare the larger collision route with production WebGL and measure its integrated cost.',
-      'Test the complete million-point viewer, including high-degree hubs, and account for slow ticks.'],
+      'Validate the supported force set in the million-point viewer and account for slow ticks on dense graphs and large hubs.'],
     evidence: [['mouse-repulsion', 'Mouse repulsion'], ['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'],
       ['combined-layout', 'Combined forces'],
       ['collision', 'Collision'], ['matched-layout', 'Matched layouts'], ['million-graph', 'Million-point Four corners']],
@@ -316,13 +316,13 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Selection IDs match on bounded M3 fixtures. Link color and additional styles remain open',
+    position: 'Scale viewer picks the expected IDs on M3. Drawing and highlight cost limit million-point interaction',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
+    gates: ['Reduce point drawing and highlight cost at full Fit. Preserve the exact visible IDs.',
       'Integrate circles and solid straight links first; defer advanced styles and review parked boundary failures before full readiness.',
       'Validate transitions, remaining styles and pointer behavior. Resolve the selection readback API before production integration.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
-      ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
+      ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive'], ['million-graph', 'Scale interaction']],
   },
   {
     id: 'integration',
@@ -337,7 +337,7 @@ export const milestones = [
   {
     id: 'production',
     title: 'Production acceptance',
-    position: 'Production runs on WebGL. M3 running-pick latency and strict color compatibility remain unresolved',
+    position: 'The basic M3 million-point viewer misses frame and pick targets. Strict color compatibility remains unresolved',
     acceptance: 'Agreed quality/performance budgets and native support matrix',
     gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
       'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
@@ -348,8 +348,8 @@ export const milestones = [
 export const mainOpenIssues = [
   { text: 'Complete production force/rendering coverage and the Graph/host contracts.', href: '#/feature-inventory' },
   {
-    text: 'Measure presented frames, picking and memory in the integrated million-point viewer.',
-    href: '#/roadmap?section=milestone-simulation',
+    text: 'Reduce drawing cost and pointer latency at scale. Verify production styles and graph updates afterward.',
+    href: '#/million-graph?section=doc-interactive-study',
   },
   { text: 'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.', href: '#/roadmap?section=milestone-production' },
 ] as const
@@ -357,6 +357,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  step: 3,
-  experiment: 'combined-layout',
+  step: 5,
+  experiment: 'million-graph',
 } as const

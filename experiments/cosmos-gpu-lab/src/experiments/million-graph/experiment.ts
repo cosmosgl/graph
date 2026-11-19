@@ -22,6 +22,18 @@ export const experiment = defineExperiment({
     },
     {
       kind: 'markdown',
+      id: 'draw-cost',
+      title: 'Million-point drawing cost',
+      load: async (): Promise<string> => (await import('./draw-cost.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'interactive-study',
+      title: 'Moving graph interaction',
+      load: async (): Promise<string> => (await import('./interactive-study.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'results',
       title: 'Million-point findings',
       load: async (): Promise<string> => (await import('../workgroup-repulsion/moving-million.md?raw')).default,

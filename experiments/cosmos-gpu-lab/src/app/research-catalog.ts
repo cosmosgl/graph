@@ -16,17 +16,19 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'million-graph': entry('million-graph', {
-      conclusion: 'Four corners improves median and p95 tick time on the persistent dense fixture. Drawing dominates the expanded profile on M3.',
+      conclusion: 'The M3 viewer meets both timing references at 196,608 points in two sessions. Both million-point workloads miss them.',
       reviewed: '2026-11-19',
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
-      comparison: 'Matched moving graphs, synchronized tick time, point drift and cell-edge motion',
+      comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       milestone: 'simulation',
       method: 'overview',
-      evidence: 'dense-communities',
-      next: 'Measure drawing, presented frames, picking and memory in a complete viewer with persistent communities and high-degree hubs.',
+      evidence: 'interactive-study',
+      next: 'Reduce opaque point draw cost and measure selection feedback with a cheaper highlight on the same M3 workloads.',
       reproduce: 'Choose starting positions and distant repulsion under Configuration, then press Run graph.',
       investigations: [
-        { page: 'dense-communities', state: 'Current evidence', description: 'Persistent dense communities, cell-crossing motion and stage timestamps.' },
+        { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
+        { page: 'draw-cost', state: 'Supporting investigation', description: 'Frozen point and link drawing at two attachment sizes and two camera settings.' },
+        { page: 'interactive-study', state: 'Current evidence', description: 'Pointer input, frame intervals and tracked allocations through one million points.' },
         { page: 'cell-field', state: 'Supporting investigation', description: 'Three solvers on two million-point inputs, including density and edge checks.' },
         { page: 'results', state: 'Supporting investigation', description: 'Initial M3 hierarchy, replay and moving-frame measurements.' },
       ],

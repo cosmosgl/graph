@@ -62,8 +62,25 @@ Four corners path, their combined median was **0.88 ms** overall and **1.05 ms**
 in the slowest ten ticks. Drawing rose from **28.36 to 37.79 ms**. A fresh
 unprofiled comparison measured **53.6 → 48.3 ms** median and **70.7 → 58.2 ms**
 p95. The earlier 30.8 ms unexplained tail did not recur. In this replay,
-drawing was the largest measured cost. Presented frames, picking,
-high-degree hubs and peak memory still need a complete viewer workload.
+drawing was the largest measured cost. The expanded viewer study below
+tests those costs at a wider canvas with pointer input.
+
+### Drawing and interaction on the M3
+
+On the fully visible 961 × 541 CSS canvas at DPR 2, a frozen million-point
+Fit view used **16.18 ms** for points alone, **6.96 ms** for links alone and
+**25.27 ms** for the combined GPU draw. The 3× community zoom used
+**8.49 ms** for both even though it still submitted the full graph.
+[Drawing study](#/million-graph?section=doc-draw-cost)
+
+The moving Lab viewer now supports pan, zoom and point picking. The dense
+and high-degree workloads at **196,608 points** met the steady-frame and
+pick references in two sessions. Frame gaps still grew during repeated
+clicks. One pick exceeded 50 ms at 262,144 points. At one million points
+both workloads updated about every **50 ms**, returned the expected IDs,
+and missed the frame and pick targets. Peak sampled luma allocation was
+**154 MiB**. The slow picks spent most of their time waiting to run and
+redrawing the highlight. [Moving graph results](#/million-graph?section=doc-interactive-study)
 
 ### Production blockers
 
@@ -86,10 +103,10 @@ high-degree hubs and peak memory still need a complete viewer workload.
   match 12 fixed checkpoints. Interior colors, remaining styles and full
   transition and pointer integration are still open.
   [Feature inventory](#/feature-inventory) · [Link edge smoothing](#/viewer-comparison?section=doc-findings-straight-link-edge-smoothing)
-- **Integrated scale.** Measure presented frames, picking, update latency
-  and peak memory with the supported force set and renderer on moving
-  million-point graphs. High-degree hubs and the slowest ticks need
-  evidence. [Persistent dense communities](#/million-graph?section=doc-dense-communities)
+- **Integrated scale.** The basic million-point viewer exceeds the frame and
+  pick references with dense and high-degree workloads. Reduce drawing and
+  highlight cost. Test the full force and style set, updates, presentation
+  and memory on representative data. [Moving graph results](#/million-graph?section=doc-interactive-study)
 - **Graph and host contracts.** Borrowed device cleanup and explicit checkpoint
   restart pass. Rectangle and polygon IDs and tracked positions match bounded
   fixtures. Full setters, synchronous read APIs, automatic recovery and deck
@@ -199,14 +216,15 @@ This is the current task order. A closed investigation can retain failing cases;
 
 ### Recommended next work
 
-1. **Bring the composed forces into a representative interactive M3 workload.**
+1. **Reduce drawing and highlight cost at scale.** Use the frozen Fit and
+   zoom controls to test drawing fewer overlapping opaque points while
+   preserving visible color and picking order. Test the cost of highlighting
+   a picked point without drawing the full scene again. Rerun the moving
+   dense and high-degree workloads with the same timing references.
+2. **Bring the composed forces into a representative interactive M3 workload.**
    Extend the passed one-pixel screen to deeper zoom and more graph shapes.
    Retain the strict failures and use same-input replay to diagnose any
    visible layout change.
-2. **Measure a million-point interactive frame.** Use persistent communities
-   and a high-degree workload. Measure presented frames, pick/update latency
-   and peak memory. Check drawing cost first and keep recording time outside
-   the measured GPU stages.
 3. **Resolve the viewer API and color gaps.** Profile link paint at the
    remaining interior witnesses. Decide how production serves readback to
    selection and tracking callers. Run the host integration against a single

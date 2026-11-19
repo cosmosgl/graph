@@ -10,11 +10,11 @@ export type ValidationContract = {
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
   'million-graph': {
-    question: 'Can a moving million-point graph share distant repulsion while preserving its layout and reducing full-frame time?',
-    reference: 'Per-point WebGPU and a repeat on identical inputs, an analytic distant mass, and earlier scalar hierarchy checks.',
-    acceptance: 'Exact topology, membership, flags and fixed positions. Record timing, pixel drift, density changes, and movement at cell edges.',
-    coverage: 'Million-point chains with uniform and clustered starts, 200 ticks on M3, frozen edge probes and moving point samples.',
-    limits: 'The two clusters disperse. Persistent communities, interaction and production styles remain open. Live runs show timing only.',
+    question: 'How does shared repulsion change the layout, and how responsive is the moving graph through a million points?',
+    reference: 'Matched per-point force runs, frozen paint layers, and expected IDs and camera behavior during native input.',
+    acceptance: 'Keep flags, pins and pick results exact. Check local pixel drift and report frame and pick timing against the small pilot references.',
+    coverage: 'Uniform and dense layouts on M3, frozen draw passes, and pan, zoom and picks on moving dense and high-degree graphs.',
+    limits: 'The local study uses basic styles and a partial force set. Production drawing, graph updates and portability require separate validation.',
   },
   'mouse-repulsion': {
     question: 'Does WebGPU match Cosmos mouse repulsion and its independent execution gate?',

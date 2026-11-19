@@ -1,0 +1,223 @@
+import { luma } from '@luma.gl/core'
+import { expect, it } from 'vitest'
+import { commands } from 'vitest/browser'
+import { describeEnvironment } from '../../gpu/force-preview'
+import { waitForGpu } from '../../gpu/luma'
+import { graphRgba } from '../../runtime/palette'
+import { writeArtifact } from '../../testing/artifacts'
+import type { createResidentGraph } from '../many-body-grid/resident-graph'
+import { motionChecks, percentile } from './field-metrics'
+import type { InteractiveFixtureKind } from './interactive-fixtures'
+import { cameraFromView, type ResidentCamera } from './resident-navigation'
+import { createMillionGraphView, type MovingFrame, type PickFeedback } from './view'
+
+type ScreenPoint = [number, number]
+type WindowInfo = { bounds: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number } }
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    residentInput(action: 'layout'): Promise<WindowInfo>;
+    residentInput(action: 'pick' | 'zoom', from: ScreenPoint): Promise<void>;
+    residentInput(action: 'pan', from: ScreenPoint, to: ScreenPoint): Promise<void>;
+  }
+}
+
+const viewport = { width: 961, height: 541, pixelRatio: 2 }
+const frameTarget = 33
+const pickTarget = 50
+const warmup = 8
+const intervals = 48
+const expectedPoint = [0, 0, 1, 0]
+const cases: Array<[number, InteractiveFixtureKind]> = [
+  [65536, 'dense'], [65536, 'hubs'],
+  [131072, 'hubs'], [131072, 'dense'],
+  [196608, 'dense'], [196608, 'hubs'],
+  [262144, 'hubs'], [262144, 'dense'],
+  [393216, 'dense'], [393216, 'hubs'],
+  [524288, 'hubs'], [524288, 'dense'],
+  [786432, 'dense'], [786432, 'hubs'],
+  [1000000, 'dense'], [1000000, 'hubs'],
+]
+
+function allocation (): { buffer: number; texture: number; total: number } {
+  const stats = luma.stats.getStats('GPU Time and Memory')
+  return { buffer: stats.get('Buffer Memory').count, texture: stats.get('Texture Memory').count, total: stats.get('GPU Memory').count }
+}
+
+function describeTimes (samples: number[], budget: number): { count: number; median: number; p95: number; max: number; within: number } {
+  return {
+    count: samples.length,
+    median: percentile(samples, 0.5),
+    p95: percentile(samples, 0.95),
+    max: Math.max(...samples),
+    within: samples.filter(sample => sample <= budget).length,
+  }
+}
+
+function frameIntervals (frames: MovingFrame[]): number[] {
+  return frames.slice(1).map((frame, i) => frame.animationTime - frames[i].animationTime)
+}
+
+function screenOrigin ({ x, y, zoom }: ResidentCamera): ScreenPoint {
+  return [viewport.width / 2 - x * zoom, viewport.height / 2 + y * zoom]
+}
+
+function paintedPoint (canvas: HTMLCanvasElement, point: ScreenPoint): number[] {
+  const pixel = document.createElement('canvas')
+  pixel.width = 1; pixel.height = 1
+  const context = pixel.getContext('2d')!
+  context.drawImage(canvas, Math.floor(point[0] * viewport.pixelRatio), Math.floor(point[1] * viewport.pixelRatio), 1, 1, 0, 0, 1, 1)
+  return Array.from(context.getImageData(0, 0, 1, 1).data)
+}
+
+for (const [count, kind] of cases) {
+  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_INTERACTION !== '1')(`measures a moving ${count}-point ${kind} viewer`, async () => {
+    const frames: MovingFrame[] = []
+    const picks: PickFeedback[] = []
+    let hidden = document.visibilityState !== 'visible'
+    const recordVisibility = (): void => { hidden ||= document.visibilityState !== 'visible' }
+    document.addEventListener('visibilitychange', recordVisibility)
+    const baseline = allocation()
+    const peak = { buffer: 0, texture: 0, total: 0 }
+    const sampleMemory = (): void => {
+      const used = allocation()
+      peak.buffer = Math.max(peak.buffer, used.buffer - baseline.buffer)
+      peak.texture = Math.max(peak.texture, used.texture - baseline.texture)
+      peak.total = Math.max(peak.total, used.total - baseline.total)
+    }
+    const host = document.createElement('div')
+    host.dataset.residentStudy = 'true'
+    document.body.append(host)
+    const record: Record<string, unknown> = {
+      count,
+      kind,
+      frames,
+      picks,
+      baseline,
+      peak,
+      warmup,
+      intervals,
+      status: 'started',
+      luma: luma.VERSION,
+      source: import.meta.env.LAB_SOURCE_REVISION,
+      snapshot: import.meta.env.LAB_SOURCE_SNAPSHOT,
+      run: import.meta.env.LAB_RUN_ID,
+      browser: navigator.userAgent,
+    }
+    let backend: Awaited<ReturnType<typeof createResidentGraph>> | undefined
+    let initialPositions: Float32Array | undefined
+    let fail = ''
+    let notify = (): void => {}
+    async function until (check: () => boolean, label: string): Promise<void> {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => { notify = (): void => {}; reject(new Error(`Timed out waiting for ${label}`)) }, 25000)
+        notify = (): void => {
+          if (!fail && !check()) return
+          clearTimeout(timeout); notify = (): void => {}
+          if (fail) reject(new Error(fail))
+          else resolve()
+        }
+        notify()
+      })
+    }
+    const view = await createMillionGraphView(host, {
+      viewport,
+      ready (graph, positions, metadata): void {
+        backend = graph; initialPositions = positions; record.fixture = metadata
+        sampleMemory(); notify()
+      },
+      submitted: sampleMemory,
+      frame (frame): void { frames.push(frame); notify() },
+      feedback (feedback): void { picks.push(feedback); notify() },
+      failed (error): void { fail = error; notify() },
+    })
+    try {
+      expect(record.source && record.snapshot && record.run).toBeTruthy()
+      expect(hidden).toBe(false)
+      expect(navigator.userAgent).not.toContain('HeadlessChrome')
+      expect(devicePixelRatio).toBe(viewport.pixelRatio)
+      const canvas = host.querySelector<HTMLCanvasElement>('[data-canvas]')!
+      const setting = (name: string, value: string): void => {
+        const control = host.querySelector<HTMLSelectElement>(`[data-${name}]`)!
+        control.value = value
+        control.dispatchEvent(new Event('change'))
+      }
+      setting('count', String(count))
+      setting('distribution', kind === 'dense' ? 'persistent-communities' : 'hubs')
+      setting('force', 'four-corners')
+      const windowInfo = await commands.residentInput('layout')
+      record.windowInfo = windowInfo
+      expect(windowInfo.bounds.width).toBe(viewport.width)
+      expect(windowInfo.bounds.height).toBe(viewport.height)
+      expect([canvas.width, canvas.height]).toEqual([1922, 1082])
+      host.querySelector<HTMLButtonElement>('[data-play]')!.click()
+      await until(() => !!backend, 'resident graph startup')
+      const graph = backend!
+      expect(record.fixture).toMatchObject({ kind, pointCount: count, linkCount: count - 10 })
+      record.environment = describeEnvironment(graph.device, canvas)
+      expect(graph.device.info.fallback).toBe(false)
+      await until(() => frames.length >= warmup + intervals + 1, 'the normal timing window')
+      const normal = frameIntervals(frames.slice(warmup, warmup + intervals + 1))
+      record.normal = describeTimes(normal, frameTarget)
+      record.synchronizedTicks = describeTimes(frames.slice(warmup, warmup + intervals + 1).map(frame => frame.completed - frame.started), frameTarget)
+      const interactionStart = frames.length - 1
+
+      await commands.residentInput('pan', [300, 180], [360, 205])
+      const firstPanEnd = performance.now()
+      await until(() => !!frames.at(-1)?.camera && frames.at(-1)!.started >= firstPanEnd, 'the first pan')
+      const manual = frames.at(-1)!.camera!
+      // Once the GPU fit stops following the positions, the next pan has an
+      // exact manual-camera reference.
+      await commands.residentInput('pan', [300, 180], [320, 165])
+      await until(() => frames.at(-1)!.camera!.x < manual.x, 'the second pan')
+      const panned = frames.at(-1)!.camera!
+      // Wait for all three native pointer moves to be applied.
+      await until(() => Math.abs((manual.x - frames.at(-1)!.camera!.x) * manual.zoom - 20) < 1, 'the complete pan')
+      const afterPan = frames.at(-1)!.camera!
+      expect(Math.abs((afterPan.y - manual.y) * manual.zoom + 15)).toBeLessThan(1)
+      const panOrigin = screenOrigin(afterPan)
+      record.pan = { from: manual, intermediate: panned, to: afterPan }
+      await commands.residentInput('zoom', panOrigin)
+      await until(() => frames.at(-1)!.camera!.zoom > manual.zoom, 'the wheel zoom')
+      const afterZoom = frames.at(-1)!.camera!
+      const origin = screenOrigin(cameraFromView(await graph.readView(), viewport.height))
+      expect(Math.hypot(origin[0] - panOrigin[0], origin[1] - panOrigin[1])).toBeLessThan(1)
+      record.zoom = { from: afterPan, to: afterZoom, origin }
+
+      const expectedIds = [null, 0, null, 0, null, 0, null, 0]
+      for (const [i, expected] of expectedIds.entries()) {
+        const point: ScreenPoint = expected === null ? [origin[0] + 18, origin[1] + 18] : origin
+        await commands.residentInput('pick', point)
+        await until(() => picks.length > i, `pick ${i + 1}`)
+        await until(() => frames.at(-1)!.tick > picks[i].tick, `movement after pick ${i + 1}`)
+      }
+      record.picking = describeTimes(picks.map(pick => pick.milliseconds), pickTarget)
+      record.duringInteraction = describeTimes(frameIntervals(frames.slice(interactionStart)), frameTarget)
+      expect(picks.map(pick => pick.id)).toEqual(expectedIds)
+      expect(picks.every(pick => pick.running && pick.trusted)).toBe(true)
+      expect(hidden).toBe(false)
+
+      host.querySelector<HTMLButtonElement>('[data-pause]')!.click()
+      await waitForGpu(graph.device, 30000)
+      graph.redraw()
+      const highlight = paintedPoint(canvas, origin)
+      expect(highlight).toEqual(graphRgba.coral.map(channel => Math.round(channel * 255)))
+      record.highlight = highlight
+      const final = await graph.readPositions()
+      const motion = motionChecks(initialPositions!, final)
+      expect([motion.nonfinite, motion.flagErrors, motion.fixedMoved]).toEqual([0, 0, 0])
+      expect(motion.freeMoved).toBeGreaterThan(0)
+      expect(Array.from(final.subarray(0, 4))).toEqual(expectedPoint)
+      record.motion = motion
+      record.status = 'complete'
+    } catch (error) {
+      record.status = 'failed'
+      record.error = String(error)
+      throw error
+    } finally {
+      document.removeEventListener('visibilitychange', recordVisibility)
+      view.destroy()
+      host.remove()
+      await writeArtifact(`resident-interaction-${count}-${kind}`, record)
+    }
+  }, 120000)
+}
