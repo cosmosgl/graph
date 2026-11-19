@@ -82,6 +82,12 @@ and missed the frame and pick targets. Peak sampled luma allocation was
 **154 MiB**. The slow picks spent most of their time waiting to run and
 redrawing the highlight. [Moving graph results](#/million-graph?section=doc-interactive-study)
 
+Reduced drawing now skips covered points and reuses the rendered scene for
+highlights. The M3 replay cut wide Fit drawing from 24.5 to 13.7 ms with
+identical pixels. At one million points, both moving workloads reached a
+33.3 ms median and all 16 picks met 50 ms. Frame p95 stayed near 50 ms.
+[Reduced drawing results](#/million-graph?section=doc-draw-cost)
+
 ### Production blockers
 
 - **Pilot responsiveness.** The historical 100.4 ms running pick and
@@ -103,10 +109,11 @@ redrawing the highlight. [Moving graph results](#/million-graph?section=doc-inte
   match 12 fixed checkpoints. Interior colors, remaining styles and full
   transition and pointer integration are still open.
   [Feature inventory](#/feature-inventory) · [Link edge smoothing](#/viewer-comparison?section=doc-findings-straight-link-edge-smoothing)
-- **Integrated scale.** The basic million-point viewer exceeds the frame and
-  pick references with dense and high-degree workloads. Reduce drawing and
-  highlight cost. Test the full force and style set, updates, presentation
-  and memory on representative data. [Moving graph results](#/million-graph?section=doc-interactive-study)
+- **Integrated scale.** Reduced drawing meets the pick reference in one
+  million-point replay. The dense and high-degree workloads still miss the
+  33 ms frame reference. Test the full force and style set, updates,
+  presentation and memory on representative data.
+  [Moving graph results](#/million-graph?section=doc-interactive-study)
 - **Graph and host contracts.** Borrowed device cleanup and explicit checkpoint
   restart pass. Rectangle and polygon IDs and tracked positions match bounded
   fixtures. Full setters, synchronous read APIs, automatic recovery and deck

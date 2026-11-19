@@ -15,10 +15,13 @@ type Graph = Awaited<ReturnType<typeof createResidentGraph>>
 export type MovingFrame = { tick: number; animationTime: number; started: number; completed: number; camera?: ResidentCamera }
 export type PickFeedback = {
   id: number | null; tick: number; running: boolean; trusted: boolean;
+  cachedHighlight?: boolean;
   milliseconds: number; queueMs: number; readMs: number; drawMs: number; animationMs: number;
 }
 type Study = {
   viewport: ResidentViewport;
+  pointCulling?: boolean;
+  cachedHighlight?: boolean;
   ready(graph: Graph, initialPositions: Float32Array, metadata?: InteractiveFixture['metadata']): void;
   submitted(): void;
   frame(frame: MovingFrame): void;
@@ -55,6 +58,8 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
         <option value="per-point">Per point</option>
         <option value="cell-center"${initialView?.force === 'cell-center' ? ' selected' : ''}>Cell center</option>
         <option value="four-corners"${initialView?.force === 'four-corners' ? ' selected' : ''}>Four corners</option></select></label>
+      <label>Drawing <select data-drawing>
+        <option value="standard">Standard</option><option value="coverage">Reduced drawing</option></select></label>
     </div>
     <div class="controls"><button data-run-action="primary" data-play class="button-primary">Run graph</button>
       <button data-run-action="primary" data-pause disabled>Pause</button>
@@ -76,6 +81,8 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
   const get = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const count = get<HTMLSelectElement>('[data-count]'); const canvas = get<HTMLCanvasElement>('[data-canvas]')
   const distribution = get<HTMLSelectElement>('[data-distribution]'); const force = get<HTMLSelectElement>('[data-force]')
+  const drawing = get<HTMLSelectElement>('[data-drawing]')
+  const settings = [count, distribution, force, drawing]
   const play = get<HTMLButtonElement>('[data-play]'); const pauseButton = get<HTMLButtonElement>('[data-pause]')
   const fitButton = get<HTMLButtonElement>('[data-fit]')
   const resetButton = get<HTMLButtonElement>('[data-reset]'); const status = get<HTMLElement>('[data-status]')
@@ -98,7 +105,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
   const controls = (): void => {
     play.disabled = running || loading; pauseButton.disabled = !running; resetButton.disabled = loading
     fitButton.disabled = loading || !backend || !!error
-    for (const select of [count, distribution, force]) select.disabled = running || loading
+    for (const select of settings) select.disabled = running || loading
     play.textContent = error ? 'Retry' : tick >= 200 ? 'Run again' : tick > 0 ? 'Resume' : 'Run graph'
   }
   const release = (): void => {
@@ -142,7 +149,8 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
         const id = await picking
         const read = performance.now()
         if (destroyed || version !== generation) return
-        selection = id; active.select(id); active.redraw()
+        selection = id; active.select(id)
+        const cachedHighlight = active.redrawHighlight()
         study?.submitted()
         await waitForGpu(active.device, 30000)
         const highlighted = performance.now()
@@ -155,6 +163,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
           tick,
           running,
           trusted: click.trusted,
+          cachedHighlight,
           milliseconds: complete - click.started,
           queueMs: pickStart - click.started,
           readMs: read - pickStart,
@@ -208,7 +217,13 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
       const { input, graph } = fixture ?? (distribution.value === 'persistent-communities'
         ? createDenseCommunities(pointCount)
         : createResidentChain(pointCount, distribution.value as Distribution))
-      const next = await createResidentGraph(canvas, input, graph, force.value as DistantForce, { pixelRatio: viewport.pixelRatio, picking: true })
+      const useCoverage = drawing.value === 'coverage'
+      const next = await createResidentGraph(canvas, input, graph, force.value as DistantForce, {
+        pixelRatio: viewport.pixelRatio,
+        picking: true,
+        pointCulling: study?.pointCulling ?? useCoverage,
+        cachedHighlight: study?.cachedHighlight ?? useCoverage,
+      })
       if (destroyed || version !== generation) { next.destroy(); return }
       backend = next
       next.fit()
@@ -261,7 +276,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
   })
   fitButton.addEventListener('click', fit)
   resetButton.addEventListener('click', reset)
-  for (const select of [count, distribution, force]) select.addEventListener('change', reset)
+  for (const select of settings) select.addEventListener('change', reset)
   const updateCamera = (update: (camera: ResidentCamera) => ResidentCamera): boolean => {
     if (!backend || destroyed || loading || error) return false
     cameraUpdates.push(update); schedule()
@@ -280,7 +295,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
   }), {
     experiment: 'million-graph',
     devices: () => backend ? [describeDevice(backend.device)] : [],
-    scope: 'The demo uses your selected graph size, starting layout and repulsion method. Recorded results list the settings used in each run.',
+    scope: 'The demo uses the selected settings. Recorded results list the settings used in each run.',
     showChecks: false,
   })
   reset()

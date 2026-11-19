@@ -63,6 +63,39 @@ with archive SHA-256
 `3ce113757bded07fa40a21b0adaf804e4cf69ec343b87c9992bf74a4a1a593f6`.
 It shares the session with the moving-view sweep and ran sequentially.
 
+### Reduced drawing and cached highlights
+
+On M3, **Reduced drawing** cut wide Fit draw time from **24.5 to 13.7 ms**
+and drew **289,904** instances across both passes of the million-point graph.
+The first pass draws the final eighth of the points into an integer texture.
+Earlier points can be skipped when those later points cover every sample in
+their projected bounds. WebGPU compacts the surviving IDs in their original
+order and draws them indirectly. The count includes the coverage pass.
+
+The renderer caches the final visible owner of each pixel on the GPU. A
+selection change recolors that scene in one pass on the same canvas. Camera
+or position changes rebuild the ownership texture.
+
+| Frozen view | Standard draw median / p95 | Reduced draw median / p95 | Standard → cached highlight median |
+| --- | ---: | ---: | ---: |
+| Fit · 480 × 340 | 19.9 / 22.1 ms | 9.4 / 10.1 ms | 20.0 → 0.5 ms |
+| Fit · 1922 × 1082 | 24.5 / 26.8 ms | 13.7 / 14.8 ms | 25.5 → 0.7 ms |
+| Community zoom · 1922 × 1082 | 9.2 / 9.7 ms | 4.6 / 5.2 ms | 9.0 → 0.7 ms |
+
+All 20 frozen lanes matched the reference pixels and pick IDs at Fit and
+3× zoom, including selection replacement and clearing. The timing runs
+include the coverage, compaction and presentation work through the GPU
+fence. The earlier footprint-matching candidate preserved the same checks
+and drew 993,339 instances at wide Fit.
+
+The later Chrome 157 session used the non-fallback Apple WebGPU adapter
+and luma 10.0.0-alpha.15. Raw data and source snapshots are in
+`captures/resident-coverage-m3-cf134e46/` and
+`captures/resident-render-m3-0iregzwm-a/`. The coverage snapshot SHA-256 is
+`2969aac9155ce9b4686a397a50f9b33b84c5f5dc938f90e8b62342a170bae866`.
+Use the reproduction command below with `VITE_LAB_RESIDENT_RENDER_CANDIDATES=1`
+to compare drawing modes. [Moving rerun](#/million-graph?section=doc-interactive-study)
+
 ## Comparison
 
 Freeze the persistent dense communities after 50 Four corners ticks on the

@@ -27,6 +27,7 @@ const pickTarget = 50
 const warmup = 8
 const intervals = 48
 const expectedPoint = [0, 0, 1, 0]
+const renderCandidates = import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
 const cases: Array<[number, InteractiveFixtureKind]> = [
   [65536, 'dense'], [65536, 'hubs'],
   [131072, 'hubs'], [131072, 'dense'],
@@ -37,6 +38,12 @@ const cases: Array<[number, InteractiveFixtureKind]> = [
   [786432, 'dense'], [786432, 'hubs'],
   [1000000, 'dense'], [1000000, 'hubs'],
 ]
+const renderCases: Array<[number, InteractiveFixtureKind, 'baseline' | 'combined']> = renderCandidates
+  ? [
+    [1000000, 'dense', 'baseline'], [1000000, 'dense', 'combined'],
+    [1000000, 'hubs', 'combined'], [1000000, 'hubs', 'baseline'],
+  ]
+  : cases.map(([count, kind]) => [count, kind, 'baseline'])
 
 function allocation (): { buffer: number; texture: number; total: number } {
   const stats = luma.stats.getStats('GPU Time and Memory')
@@ -69,8 +76,10 @@ function paintedPoint (canvas: HTMLCanvasElement, point: ScreenPoint): number[] 
   return Array.from(context.getImageData(0, 0, 1, 1).data)
 }
 
-for (const [count, kind] of cases) {
-  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_INTERACTION !== '1')(`measures a moving ${count}-point ${kind} viewer`, async () => {
+for (const [count, kind, variant] of renderCases) {
+  const lane = renderCandidates ? `-${variant}` : ''
+  const candidate = variant === 'combined'
+  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_INTERACTION !== '1')(`measures a moving ${count}-point ${kind}${lane} viewer`, async () => {
     const frames: MovingFrame[] = []
     const picks: PickFeedback[] = []
     let hidden = document.visibilityState !== 'visible'
@@ -96,6 +105,9 @@ for (const [count, kind] of cases) {
       peak,
       warmup,
       intervals,
+      variant,
+      frameTarget,
+      pickTarget,
       status: 'started',
       luma: luma.VERSION,
       source: import.meta.env.LAB_SOURCE_REVISION,
@@ -121,6 +133,8 @@ for (const [count, kind] of cases) {
     }
     const view = await createMillionGraphView(host, {
       viewport,
+      pointCulling: candidate,
+      cachedHighlight: candidate,
       ready (graph, positions, metadata): void {
         backend = graph; initialPositions = positions; record.fixture = metadata
         sampleMemory(); notify()
@@ -156,8 +170,8 @@ for (const [count, kind] of cases) {
       record.environment = describeEnvironment(graph.device, canvas)
       expect(graph.device.info.fallback).toBe(false)
       await until(() => frames.length >= warmup + intervals + 1, 'the normal timing window')
-      const normal = frameIntervals(frames.slice(warmup, warmup + intervals + 1))
-      record.normal = describeTimes(normal, frameTarget)
+      const normal = describeTimes(frameIntervals(frames.slice(warmup, warmup + intervals + 1)), frameTarget)
+      record.normal = normal
       record.synchronizedTicks = describeTimes(frames.slice(warmup, warmup + intervals + 1).map(frame => frame.completed - frame.started), frameTarget)
       const interactionStart = frames.length - 1
 
@@ -190,15 +204,24 @@ for (const [count, kind] of cases) {
         await until(() => picks.length > i, `pick ${i + 1}`)
         await until(() => frames.at(-1)!.tick > picks[i].tick, `movement after pick ${i + 1}`)
       }
-      record.picking = describeTimes(picks.map(pick => pick.milliseconds), pickTarget)
-      record.duringInteraction = describeTimes(frameIntervals(frames.slice(interactionStart)), frameTarget)
+      const picking = describeTimes(picks.map(pick => pick.milliseconds), pickTarget)
+      const duringInteraction = describeTimes(frameIntervals(frames.slice(interactionStart)), frameTarget)
+      record.picking = picking
+      record.duringInteraction = duringInteraction
+      record.timingReferences = {
+        steady: normal.within >= normal.count * 0.95,
+        duringInteraction: duringInteraction.within >= duringInteraction.count * 0.95,
+        picking: picking.within === picking.count,
+      }
       expect(picks.map(pick => pick.id)).toEqual(expectedIds)
       expect(picks.every(pick => pick.running && pick.trusted)).toBe(true)
+      if (candidate) expect(picks.every(pick => pick.cachedHighlight === true)).toBe(true)
       expect(hidden).toBe(false)
 
       host.querySelector<HTMLButtonElement>('[data-pause]')!.click()
       await waitForGpu(graph.device, 30000)
-      graph.redraw()
+      if (candidate) expect(graph.redrawHighlight()).toBe(true)
+      else graph.redraw()
       const highlight = paintedPoint(canvas, origin)
       expect(highlight).toEqual(graphRgba.coral.map(channel => Math.round(channel * 255)))
       record.highlight = highlight
@@ -217,7 +240,7 @@ for (const [count, kind] of cases) {
       document.removeEventListener('visibilitychange', recordVisibility)
       view.destroy()
       host.remove()
-      await writeArtifact(`resident-interaction-${count}-${kind}`, record)
+      await writeArtifact(`resident-interaction-${count}-${kind}${lane}`, record)
     }
   }, 120000)
 }
