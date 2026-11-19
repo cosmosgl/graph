@@ -12,6 +12,12 @@ export const experiment = defineExperiment({
     { kind: 'markdown', id: 'findings', title: 'Integrated findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
     {
       kind: 'markdown',
+      id: 'composed-interaction',
+      title: 'Interactive composed forces on M3',
+      load: async (): Promise<string> => (await import('./composed-interaction.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'host-ownership',
       title: 'Shared WebGPU device and recovery',
       load: async (): Promise<string> => (await import('./host-ownership.md?raw')).default,

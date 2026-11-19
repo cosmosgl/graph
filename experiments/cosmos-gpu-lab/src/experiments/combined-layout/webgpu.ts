@@ -13,13 +13,15 @@ import { frameFor } from '../many-body-grid/data'
 import { replaceOnce } from '../many-body-grid/trace'
 import type { AggregationMode } from '../many-body-grid/aggregation'
 import { createCollisionWebGPU } from '../collision/webgpu'
-import type { CollisionArithmetic } from '../collision/data'
+import { COLLISION_EXACT_LIMIT, validateSizes, type CollisionArithmetic } from '../collision/data'
+import { collisionPassFrame } from '../collision/hashed-grid'
+import { createCollisionSlotsWebGPU } from '../collision/hashed-webgpu'
 import { createClusterWebGPU } from '../cluster-attraction/webgpu'
 import { SETTINGS as CLUSTER, type ClusterInput } from '../cluster-attraction/data'
 import { createAttractorWebGPU } from '../point-attractors/webgpu'
 import { packAttractors, SETTINGS as ATTRACTOR, type AttractorInput } from '../point-attractors/data'
 import { pointerUniform, type Vector } from '../mouse-repulsion/data'
-import { createMouseWebGPU } from '../mouse-repulsion/webgpu'
+import { createMouseWebGPU, type MouseArithmetic } from '../mouse-repulsion/webgpu'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
@@ -36,7 +38,7 @@ import { forceSettings, validateForceSettings, type ForceSettings } from './prod
 export type ExtendableStage = 'mouse' | 'cluster' | 'attractor'
 type ClusterChannels = Omit<ClusterInput, keyof Input>
 type AttractorChannels = Omit<AttractorInput, keyof Input>
-export type AdditionalForces = { cluster?: ClusterChannels; attractor?: AttractorChannels; mouse?: boolean }
+export type AdditionalForces = { cluster?: ClusterChannels; attractor?: AttractorChannels; mouse?: boolean | MouseArithmetic }
 export type MouseForce = { world: Vector; strength: number }
 export type ExtendedCombinedBackend = CombinedBackend & {
   setMouseRepulsion?(pointer?: MouseForce): void;
@@ -94,6 +96,8 @@ export async function createCombinedWebGPU (
   let readCenter: CombinedBackend['readCenter']
   const additional = overrides.additionalForces
   const initialPointCount = input.points.length / 4
+  const hashedSettings = settings.hashedCollision && initialPointCount > COLLISION_EXACT_LIMIT ? settings.collision : undefined
+  let collisionPass = 0
   let pointer: MouseForce | undefined
   let activeAttractor = false
   let replaceClusters: ExtendedCombinedBackend['replaceClusters']
@@ -123,17 +127,34 @@ export async function createCombinedWebGPU (
         ? own(await createCenterWebGPU(device, count, forces, () => settings.centerReduction ?? DEFAULT_CENTER_REDUCTION,
           overrides.centerForceVariant, overrides.centerCalculation))
         : undefined
-      const collision = settings.collision
-        ? own(await createCollisionWebGPU(device, graph.sizes, forces, settings.collision, settings.collisionArithmetic,
+      const hashed = hashedSettings?.strength
+        ? own(await createCollisionSlotsWebGPU(device, graph.sizes, forces, hashedSettings, settings.origin ?? [0, 0], overrides.context?.ledger))
+        : undefined
+      // Reserve the exact path as well when the resident graph can shrink through the cutoff.
+      const collision = settings.collision && (!hashedSettings || hashed)
+        ? own(await createCollisionWebGPU(device, hashed ? graph.sizes.subarray(0, COLLISION_EXACT_LIMIT) : graph.sizes,
+          forces, settings.collision, settings.collisionArithmetic,
           overrides.collisionAlternatives, () => settings.collisionArithmetic ?? 'strict'))
         : undefined
+      let collisionIteration = 0
+      const prepareCollisionResize = (sizes: Float32Array, nextCount: number): (() => void) | undefined => {
+        if (hashed && nextCount > COLLISION_EXACT_LIMIT) {
+          if (sizes.length !== nextCount) throw new Error('Collision slot positions and sizes disagree')
+          return hashed.prepareResize(sizes)
+        }
+        if (!collision) return undefined
+        validateSizes(sizes, nextCount)
+        return (): void => collision.resize(sizes)
+      }
       const cluster = additional?.cluster
         ? own(await createClusterWebGPU(device, { ...input, ...additional.cluster }, forces, overrides.context?.ledger))
         : undefined
       const attractor = additional?.attractor
         ? own(await createAttractorWebGPU(device, count, forces, overrides.context?.ledger))
         : undefined
-      const mouse = additional?.mouse ? own(await createMouseWebGPU(device, forces, overrides.context?.ledger)) : undefined
+      const mouse = additional?.mouse
+        ? own(await createMouseWebGPU(device, forces, overrides.context?.ledger, additional.mouse === true ? undefined : additional.mouse))
+        : undefined
       if (cluster) replaceClusters = (next): void => { cluster.update({ ...input, ...next }) }
       if (attractor && additional?.attractor) {
         replaceAttractors = (next): void => {
@@ -163,7 +184,9 @@ export async function createCombinedWebGPU (
       let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger, threshold); let version = 0
       own({ destroy: () => linkResources.destroy() })
       replaceLinks = (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => {
+        const resizeCollision = prepareCollisionResize(next.sizes, count)
         const replacement = createLinkResources(device, input.points, next, overrides.context?.ledger, threshold)
+        try { resizeCollision?.() } catch (error) { replacement.destroy(); throw error }
         const previous = linkResources; linkResources = replacement; version++
         previous.destroy()
         return { version, bytes: replacement.bytes, edgeCount: replacement.edgeCount, buildMs: replacement.buildMs }
@@ -216,10 +239,10 @@ export async function createCombinedWebGPU (
         ? own(await Kernel.createAsync(device, { source: distanceSpringSource('products', roundRest), shaderLayout: { bindings: springBindings } }))
         : spring
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
-      const collisionIntegrationParams = collision
+      const collisionIntegrationParams = collision || hashed
         ? own(upload(device, new Float32Array([count, 0, 0, 0, 1, p.referenceLength, 0, 0]), Buffer.UNIFORM))
         : undefined
-      const integration = roundSpring || extraStages.length > 0 || collision || cluster || attractor || mouse
+      const integration = roundSpring || extraStages.length > 0 || collision || hashed || cluster || attractor || mouse
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
@@ -227,10 +250,11 @@ export async function createCombinedWebGPU (
       return {
         resize (next): void {
           if (!nextGraph) throw new Error('Use resizeGraph to update composed resources')
-          collision?.resize(nextGraph.sizes)
+          const resizeCollision = prepareCollisionResize(nextGraph.sizes, next.points.length / 4)
           linkResources.update(next.points, nextGraph)
           grid.resize!(next)
           center?.resize(next.points.length / 4)
+          resizeCollision?.()
           count = next.points.length / 4; input = next
           integrationParams.write(new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]))
           collisionIntegrationParams?.write(new Float32Array([count, 0, 0, 0, 1, p.referenceLength, 0, 0]))
@@ -260,10 +284,17 @@ export async function createCombinedWebGPU (
             vertexCount: linkResources.edgeCount * 2,
             bindings: { positions: positions[source], links: linkResources.links, view: viewBuffer },
           })
-          collision?.render(positions[source], view, pass)
+          if (!hashed || count <= COLLISION_EXACT_LIMIT) collision?.render(positions[source], view, pass)
         },
         prepare (): void {
-          if (stage === 'center' || stage === 'collision') return
+          if (stage === 'center') return
+          if (stage === 'collision') {
+            if (hashed && hashedSettings && count > COLLISION_EXACT_LIMIT) {
+              collisionIteration = collisionPass % hashedSettings.iterations
+              hashed.prepare(collisionPassFrame(collisionPass++, p.alpha), collisionIteration)
+            }
+            return
+          }
           if (stage === 'mouse') { mouse!.prepare(count, pointer!.world, pointer!.strength); return }
           if (stage === 'cluster') { cluster!.prepare(p.alpha, CLUSTER.strength); return }
           if (stage === 'attractor') { attractor!.prepare(p.alpha, ATTRACTOR.strength); return }
@@ -285,7 +316,10 @@ export async function createCombinedWebGPU (
             if (!collision) throw new Error('Collision was not allocated')
             if (profile) throw new Error('Collision-enabled frames require normal-frame timing')
             const pass = sharedPass ?? device.beginComputePass(timing)
-            try { collision.encode(pass, positions[source], p.alpha) } finally { if (!sharedPass) pass.end() }
+            try {
+              if (hashed && count > COLLISION_EXACT_LIMIT) hashed.encode(pass, positions[source], collisionIteration)
+              else collision.encode(pass, positions[source], p.alpha)
+            } finally { if (!sharedPass) pass.end() }
             return
           }
           if (stage === 'center') {
@@ -355,8 +389,13 @@ export async function createCombinedWebGPU (
     occupancy: overrides.adaptiveSampling,
     farChunkSize: overrides.farChunkSize,
   })
+  function beginFrame (tick: number): void {
+    base.setGpuFrame!(tick)
+    if (hashedSettings) collisionPass = tick * hashedSettings.iterations
+  }
   return {
     ...base,
+    setGpuFrame: base.setGpuFrame ? beginFrame : undefined,
     readCenter,
     name: `WebGPU composed (${policy} repulsion)`,
     repulsionMethod: method,
@@ -420,7 +459,7 @@ export async function createCombinedWebGPU (
             // Copies are outside pass timestamp endpoints. Capture EVERY frame
             // for validation after the batch; no CPU wait separates its frames.
             device.commandEncoder.copyBufferToBuffer({ sourceBuffer: frozen, destinationBuffer: base.positionSource!().buffer, size: bytes })
-            base.setGpuFrame!(tick)
+            beginFrame(tick)
             const pass = device.beginComputePass(query
               ? { timestampQuerySet: query, beginTimestampIndex: frame * 4, endTimestampIndex: frame * 4 + 1 }
               : {})
@@ -457,7 +496,7 @@ export async function createCombinedWebGPU (
           throw new Error('Optional forces require normal-frame timing; the historical profile has fifteen fixed stages')
         }
         if (method() === 'exact') throw new Error('The fifteen-stage grid profile requires hierarchical repulsion; use normal-frame timing for exact repulsion')
-        base.resourceIdentity!(); base.setGpuFrame!(tick)
+        base.resourceIdentity!(); beginFrame(tick)
         const result = await measureGpuStages(device, (scope, draw) => {
           for (const next of stagesFor(settings.center, settings.collision)) {
             stage = next; p.alpha = alpha
@@ -472,7 +511,7 @@ export async function createCombinedWebGPU (
       ? async (alpha, tick, view, selected): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {
         base.resourceIdentity!()
         const timing = await measureFrameBatch(device, 1, 2, (query) => {
-          base.setGpuFrame!(tick)
+          beginFrame(tick)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: 0, endTimestampIndex: 1 } : {})
           try {
             for (const next of selected ?? frameStages()) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
@@ -489,7 +528,7 @@ export async function createCombinedWebGPU (
         base.setPositions(input.points)
         let alpha = 1; let tick = 0
         const timing = await measureFrameBatch(device, frames, draw ? 2 : 1, (query, frame) => {
-          base.setGpuFrame!(tick)
+          beginFrame(tick)
           const index = frame * (draw ? 4 : 2)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 } : {})
           try {
@@ -512,7 +551,7 @@ export async function createCombinedWebGPU (
       ? (alpha, tick, scope): void => {
         base.resourceIdentity!()
         if (settings.collision?.strength || additional) throw new Error('Optional forces require normal-frame timing')
-        base.setGpuFrame!(tick)
+        beginFrame(tick)
         for (const next of stagesFor(settings.center, settings.collision)) {
           stage = next; p.alpha = alpha
           base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
@@ -522,7 +561,7 @@ export async function createCombinedWebGPU (
       : undefined,
     stepTick: overrides.gpuBounds
       ? (alpha, tick, timestamps): void => {
-        base.setGpuFrame!(tick)
+        beginFrame(tick)
         const pass = device.beginComputePass(timestamps)
         try {
           for (const next of frameStages()) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }

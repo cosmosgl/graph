@@ -108,8 +108,11 @@ must remain ≤2 channel levels. Invisible picks are counted even at boundaries.
 sampling does not prove every pixel passes; isolated fixtures receive exhaustive checks
 in the lifecycle regression. No numerical tolerance in an existing experiment changes.
 
-Unsupported: curves, patterns, arrows, images, rings, transitions, link picking, collision,
-clusters, attractors, mouse repulsion, automatic fit, shared host devices and recovery.
+The core pilot measures gravity, center, many-body repulsion and springs.
+The [composed-force study](#/integrated-webgpu?section=doc-composed-interaction)
+also exercises right-button mouse repulsion, clusters, point attractors and collision.
+Curves, patterns, arrows, images, rings, transitions, link picking, automatic fit,
+shared host devices and recovery remain outside this viewer's scope.
 Only fixed screen-space sizes and finite bounded inputs (4–32,768 points in the fixture API; measured through 8,192) are supported. Empty graphs are not yet supported. Missing features
 are not implicitly ignored. Replacement prepares a new force generation on the same device and swaps it only after setup succeeds; point count and topology can both change. Data replacement is explicit; this is not the full public setter API.
 

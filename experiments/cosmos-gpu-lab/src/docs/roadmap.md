@@ -96,12 +96,14 @@ identical pixels. At one million points, both moving workloads reached a
   2,398 met the 33 ms target. The original stalls remain unexplained. The 8,192-point star
   still fails its timing checks. [Pilot findings](#/pilot-viewer?section=doc-findings) ·
   [Acceptance rules](#/validation-workflow?section=first-migration-rules)
-- **Force composition.** Isolated mouse repulsion, clusters and per-point
-  attraction pass through 8,192 points on M3. Combined same-input stage checks
-  pass, and both composed fixtures pass a local one-pixel screen over 40 ticks.
-  Independent trajectories still miss strict tolerances. The larger hash
-  collision path needs direct WebGL comparison and in-tick cost.
-  [Combined forces](#/combined-layout?section=doc-force-composition) ·
+- **Force composition.** M3 pointer, cluster and attractor tests now match
+  CPU exactly on five interactive graphs through 8,192 points and 3.3× zoom
+  with the corrected pointer force. The native pointer failures remain in
+  the report. The chain and star missed the frame target in the latest run.
+  Hashed collision matches WebGL at 4,097 and 8,192 points on the bounded
+  collision fixtures. The full resident force set passes the 8,192-point
+  community trajectory. Larger workloads with all forces remain open.
+  [Interactive composed forces](#/integrated-webgpu?section=doc-composed-interaction) ·
   [Hashed collision](#/collision?section=doc-hashed-findings)
 - **Rendering and interaction.** The integrated viewer retains 557
   interior color failures across two styles. All are in the link layer.
@@ -178,7 +180,7 @@ Keep three contracts distinct, with the **existing tolerances unchanged**:
 | Contract | What it answers | Current boundary |
 | --- | --- | --- |
 | Stage and whole-tick correctness | Does the implementation agree with the reference from the same starting input? | Same-input stages pass on both new composed fixtures. The hashed collision candidate matches its CPU model |
-| Independent layout behavior | Do evolving layouts retain matching coordinates and useful geometry? | The composed and Four corners layouts pass local pixel screens. The composed strict coordinate failures remain |
+| Independent layout behavior | Do evolving layouts retain matching coordinates and useful geometry? | Five corrected composed trajectories match CPU exactly across deeper zoom and input changes. The earlier native pointer failures remain. Four corners passes bounded million-point pixel screens |
 | GPU cost and memory | Can accepted behavior fit the intended engine workload? | Bounded frozen cost and synchronized million-point ticks are measured. Complete-engine budgets and peak memory remain open |
 
 ### Core composed simulation
@@ -199,6 +201,14 @@ with maximum projected position and motion differences under 0.015 px. The
 added forces raise median GPU time from 7.83 to 8.33 ms at 8,192 points,
 with basic drawing and frozen inputs.
 
+The [interactive follow-up](#/integrated-webgpu?section=doc-composed-interaction)
+finds a small first difference during paused pointer repulsion. Later
+repulsion magnifies it on the 8,192-point chain and star. Keeping high and
+low floats through pointer force evaluation removes all observed differences
+in 272 comparisons across four graphs. The corrected pointer pass costs
+0.245 ms median in isolation at 8,192 points. The star's live frame p95 was
+49.7 ms even with the pointer up.
+
 ### Center and collision
 
 The [center correction](#/collision/docs/findings) retains a high/low position sum through every reduction level, then supplies the existing float32 aggregate. It fixes the observed dense center sensitivity without a CPU intermediate or tolerance change. Double-single precision has a bounded numerical contract; this is not a universal exact-sum guarantee.
@@ -212,8 +222,12 @@ The correction adds roughly **0.84–0.89 ms** to initial dense-star GPU frames 
 Above the 4,096-point cutoff, the [hash and slot pilot](#/collision?section=doc-hashed-findings)
 matches all 18,874,368 selected and empty slot entries from its production-semantics
 CPU model across nine passes at 4,097 and 8,192 points. It covers a dense bucket
-with overflow, a hash tie, pins and missing points. Direct comparison with
-the production GLSL slot path, timing and integration are still open.
+with overflow, a hash tie, pins and missing points. The standalone WebGL
+replay uses the production slot and collision shaders and selects the same
+IDs in every slot. Both sizes pass the same-input and independent numeric
+checks. In a frozen 8,192-point community tick, two hashed collision passes
+added 2.03 ms median across seven paired GPU timestamp runs. Each rebuilds
+from the positions produced by the prior pass.
 
 Agree layout-quality targets for overlap, stress, motion, stability and representative data. Those targets supplement the numerical checks. They do not relabel a failed coordinate comparison as passing. Cooled stillness alone does not establish force balance or an overlap-free layout.
 

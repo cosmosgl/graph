@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import { labBrowser } from './browser-provider.mjs'
 import { writeLabArtifact } from './scripts/artifacts.mjs'
-import { residentInput } from './scripts/resident-input.mjs'
+import { composedInput, residentInput } from './scripts/resident-input.mjs'
 
 // Local research checks use the current machine's native browser/GPU.
 // Keep the legacy flag for existing native-only tests and historical reproduction commands.
@@ -83,6 +83,6 @@ export default defineConfig({
     ],
     testTimeout: 60000,
     maxWorkers: 1,
-    browser: { ...labBrowser(true), commands: { writeLabArtifact, residentInput } },
+    browser: { ...labBrowser(true), commands: { writeLabArtifact, residentInput, composedInput } },
   },
 })

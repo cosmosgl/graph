@@ -1,36 +1,43 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, upload } from '../../gpu/luma'
-import { resourceScope } from '../../gpu/resource-scope'
+import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import type { CollisionParameters } from './data'
 import { collisionSlotGrid, collisionSlotUniforms, type CollisionOrigin, type CollisionSlotFrame } from './hashed-grid'
 import { collisionSlotBuildSource, collisionSlotForceSource } from './hashed-source'
 
 export async function createCollisionSlotsWebGPU (
-  device: Device, sizes: Float32Array, forces: Buffer, settings: CollisionParameters, origin: CollisionOrigin
+  device: Device, sizes: Float32Array, forces: Buffer, settings: CollisionParameters, origin: CollisionOrigin, ledger?: BufferLedger
 ): Promise<{
     bytes: number;
-    prepare(frame: CollisionSlotFrame): void;
-    encode(pass: ComputePass, positions: Buffer): void;
+    prepareResize(sizes: Float32Array): () => void;
+    prepare(frame: CollisionSlotFrame, iteration?: number): void;
+    encode(pass: ComputePass, positions: Buffer, iteration?: number): void;
     readSlots(): Promise<Uint32Array>;
     destroy(): void;
   }> {
-  const grid = collisionSlotGrid(sizes, settings, origin)
+  let grid = collisionSlotGrid(sizes, settings, origin)
+  // Every supported count uses a 256×256 grid with 32 slots per bucket.
   const buckets = grid.edge ** 2
-  const workgroups = Math.ceil(sizes.length / 64)
+  const capacity = sizes.length
+  let count = capacity
   const bucketGroups = Math.ceil(buckets / 64)
-  const scope = resourceScope()
+  const scope = resourceScope(ledger)
   const own = scope.own
   try {
     const storage = (words: number, readback = false): Buffer => own(device.createBuffer({
       byteLength: words * 4, usage: Buffer.STORAGE | (readback ? Buffer.COPY_SRC : 0),
     }))
     const heads = storage(buckets)
-    const next = storage(sizes.length)
+    const next = storage(capacity)
     const slots = storage(buckets * grid.capacity, true)
     const sizeBuffer = own(upload(device, sizes))
-    const gridParams = own(upload(device, new Uint32Array(8), Buffer.UNIFORM))
-    const forceParams = own(upload(device, new Float32Array(8), Buffer.UNIFORM))
+    // Several iterations can share a command submission. Bind each to its
+    // own uniforms so the final queue write cannot replace earlier seeds.
+    const uniforms = Array.from({ length: settings.iterations }, () => ({
+      grid: own(upload(device, new Uint32Array(8), Buffer.UNIFORM)),
+      params: own(upload(device, new Float32Array(8), Buffer.UNIFORM)),
+    }))
     const buildBindings = bindingLayout([
       ['positions', 'read-only-storage'], ['grid', 'uniform'], ['heads', 'storage'], ['next', 'storage'], ['slots', 'storage'],
     ])
@@ -53,16 +60,29 @@ export async function createCollisionSlotsWebGPU (
       },
     }))
     return {
-      bytes: [heads, next, slots, sizeBuffer, gridParams, forceParams].reduce((total, buffer) => total + buffer.byteLength, 0),
-      prepare (frame): void {
-        gridParams.write(collisionSlotUniforms(sizes.length, grid, origin, frame))
-        forceParams.write(new Float32Array([sizes.length, settings.strength, settings.radius, settings.padding, 0, frame.alpha, settings.cooling, 0]))
+      bytes: [heads, next, slots, sizeBuffer, ...uniforms.flatMap(({ grid, params }) => [grid, params])]
+        .reduce((total, buffer) => total + buffer.byteLength, 0),
+      prepareResize (sizes): () => void {
+        if (sizes.length > capacity) throw new Error('Hashed collision size capacity exceeded')
+        const nextGrid = collisionSlotGrid(sizes, settings, origin)
+        return (): void => {
+          sizeBuffer.write(sizes)
+          count = sizes.length
+          grid = nextGrid
+        }
       },
-      encode (pass, positions): void {
+      prepare (frame, iteration = 0): void {
+        const { grid: gridParams, params } = uniforms[iteration]
+        gridParams.write(collisionSlotUniforms(count, grid, origin, frame))
+        params.write(new Float32Array([count, settings.strength, settings.radius, settings.padding, 0, frame.alpha, settings.cooling, 0]))
+      },
+      encode (pass, positions, iteration = 0): void {
+        const { grid, params } = uniforms[iteration]
+        const workgroups = Math.ceil(count / 64)
         clear.dispatch(pass, { x: bucketGroups, bindings: { heads } })
-        link.dispatch(pass, { x: workgroups, bindings: { positions, grid: gridParams, heads, next } })
-        select.dispatch(pass, { x: bucketGroups, bindings: { grid: gridParams, heads, next, slots } })
-        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params: forceParams, forces, grid: gridParams, slots } })
+        link.dispatch(pass, { x: workgroups, bindings: { positions, grid, heads, next } })
+        select.dispatch(pass, { x: bucketGroups, bindings: { grid, heads, next, slots } })
+        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params, forces, grid, slots } })
       },
       async readSlots (): Promise<Uint32Array> {
         const bytes = await slots.readAsync(0, slots.byteLength)

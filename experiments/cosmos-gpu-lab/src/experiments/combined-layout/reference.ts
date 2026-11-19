@@ -5,6 +5,9 @@ import { gridReference, integrate } from '../many-body-grid/reference'
 import { createReferenceIndex, referenceTick as springTick } from '../weighted-links/reference'
 import type { GraphInput } from '../weighted-links/data'
 import { collisionReference } from '../collision/reference'
+import { COLLISION_EXACT_LIMIT } from '../collision/data'
+import { collisionPassFrame } from '../collision/hashed-grid'
+import { collisionSlotsReference } from '../collision/hashed-reference'
 import { GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from './data'
 import { centerReference } from './center-reference'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
@@ -27,16 +30,20 @@ export function gravity (points: Float32Array, alpha: number, origin?: [number, 
 export function createOracle (
   graph: GraphInput, input: Input, policy: RepulsionPolicy = 'hierarchical', settings: ForceSettings = forceSettings('reference', input.points.length / 4)
 ): {
-  stage(stage: Stage, points: Float32Array, alpha: number, tick: number): Snapshot;
+  stage(stage: Stage, points: Float32Array, alpha: number, tick: number, collisionIteration?: number): Snapshot;
   tick(points: Float32Array, alpha: number, tick: number): Float32Array;
 } {
   validateForceSettings(settings)
   const index = createReferenceIndex(graph)
-  const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
+  const stage = (name: Stage, points: Float32Array, alpha: number, tick: number, collisionIteration = 0): Snapshot => {
     if (name === 'gravity') return gravity(points, alpha, settings.origin)
     if (name === 'center') return centerReference(points, alpha, settings.center ?? 0)
     if (name === 'collision') {
       if (!settings.collision) throw new Error('Collision settings are required')
+      if (settings.hashedCollision && points.length / 4 > COLLISION_EXACT_LIMIT) {
+        return collisionSlotsReference(points, graph.sizes, settings.collision, settings.origin ?? [0, 0],
+          collisionPassFrame(tick * settings.collision.iterations + collisionIteration, alpha))
+      }
       return collisionReference(points, graph.sizes, settings.collision, alpha)
     }
     if (name === 'repulsion') {
@@ -58,7 +65,10 @@ export function createOracle (
   return {
     stage,
     tick (points, alpha, tick): Float32Array {
-      for (const name of stagesFor(settings.center, settings.collision)) points = stage(name, points, alpha, tick).positions
+      let collisionIteration = 0
+      for (const name of stagesFor(settings.center, settings.collision)) {
+        points = stage(name, points, alpha, tick, name === 'collision' ? collisionIteration++ : 0).positions
+      }
       return points
     },
   }

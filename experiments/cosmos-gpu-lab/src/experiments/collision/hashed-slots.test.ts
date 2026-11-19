@@ -8,6 +8,7 @@ import { compareArray } from '../many-body/reference'
 import { COLLISION, radius, type CollisionParameters } from './data'
 import { collisionSlotGrid, type CollisionSlotFrame } from './hashed-grid'
 import { collisionSlotsReference } from './hashed-reference'
+import { createCollisionSlotsWebGL } from './hashed-webgl'
 import { createCollisionSlotsWebGPU } from './hashed-webgpu'
 
 const ORIGIN = [127.5, -63.25] as const
@@ -61,6 +62,31 @@ function compareSlots (actual: Uint32Array, expected: Uint32Array): {
   return { failures, first }
 }
 
+function describeDifference (actual: Float32Array, expected: Float32Array, absence?: Float32Array): ReturnType<typeof compareArray> & {
+  witness: { index: number; actual: number; expected: number } | null;
+} {
+  const check = compareArray(actual, expected, absence)
+  const index = check.worstIndex
+  return { ...check, witness: check.valid || index < 0 ? null : { index, actual: actual[index], expected: expected[index] } }
+}
+
+function movementChecks (
+  output: Float32Array, force: Float32Array, input: Float32Array, sizes: Float32Array, settings: CollisionParameters, moving: boolean
+): { maskFailures: number; capFailures: number; movementMatches: boolean; moved: number } {
+  let maskFailures = 0; let capFailures = 0; let moved = 0
+  for (let offset = 0; offset < input.length; offset += 4) {
+    const pinned = input[offset + 2] > 0.5
+    const absent = input[offset + 3] > 0.5
+    if ((pinned || absent) && (!Object.is(output[offset], input[offset]) || !Object.is(output[offset + 1], input[offset + 1]))) maskFailures++
+    if (output[offset + 2] !== input[offset + 2] || output[offset + 3] !== input[offset + 3] ||
+      (absent && (force[offset] !== 0 || force[offset + 1] !== 0))) maskFailures++
+    const magnitude = Math.hypot(force[offset], force[offset + 1])
+    if (!Number.isFinite(magnitude) || magnitude > radius(sizes[offset / 4], settings) + 2e-5) capFailures++
+    if (!pinned && !absent && (output[offset] !== input[offset] || output[offset + 1] !== input[offset + 1])) moved++
+  }
+  return { maskFailures, capFailures, movementMatches: (moved > 0) === moving, moved }
+}
+
 it('uses the slot tier above the exact limit and exposes the declared duplicate and overflow controls', () => {
   expect(() => collisionSlotGrid(new Float32Array(4096), COLLISION, ORIGIN)).toThrow('4,097–8,192')
   expect(() => collisionSlotGrid(new Float32Array(8193), COLLISION, ORIGIN)).toThrow('4,097–8,192')
@@ -96,6 +122,7 @@ for (const count of COUNTS) {
     const rows = []
     let issue: string | null = null
     let ownedBytes: number | null = null
+    let webglInfo: string | null = null
     try {
       const forces = own(upload(device, new Float32Array(points.length)))
       const positions = [own(upload(device, points)), own(upload(device, points))]
@@ -105,8 +132,12 @@ for (const count of COUNTS) {
       ])))
       const slots = own(await createCollisionSlotsWebGPU(device, sizes, forces, settings, ORIGIN))
       ownedBytes = slots.bytes
+      const webgl = own(await createCollisionSlotsWebGL(points, sizes, settings, ORIGIN))
+      webglInfo = webgl.info
+      const capacity = collisionSlotGrid(sizes, settings, ORIGIN).capacity
       let cpu = points
       let previous = points
+      let webglPrevious = points
       let source = 0
       for (const frame of frames) {
         const expected = collisionSlotsReference(previous, sizes, settings, ORIGIN, frame)
@@ -122,35 +153,50 @@ for (const count of COUNTS) {
         const actualSlots = await slots.readSlots()
         const actualForce = await readFloats(forces)
         const actualPosition = await readFloats(output)
-        let maskFailures = 0; let capFailures = 0; let moved = 0
-        for (let offset = 0; offset < points.length; offset += 4) {
-          const pinned = points[offset + 2] > 0.5
-          const absent = points[offset + 3] > 0.5
-          if ((pinned || absent) && (!Object.is(actualPosition[offset], points[offset]) ||
-            !Object.is(actualPosition[offset + 1], points[offset + 1]))) maskFailures++
-          if (actualPosition[offset + 2] !== points[offset + 2] || actualPosition[offset + 3] !== points[offset + 3] ||
-            (absent && (actualForce[offset] !== 0 || actualForce[offset + 1] !== 0))) maskFailures++
-          const magnitude = Math.hypot(actualForce[offset], actualForce[offset + 1])
-          if (!Number.isFinite(magnitude) || magnitude > radius(sizes[offset / 4], settings) + 2e-5) capFailures++
-          if (!pinned && !absent && (actualPosition[offset] !== previous[offset] || actualPosition[offset + 1] !== previous[offset + 1])) moved++
+        webgl.setPositions(previous)
+        webgl.step(frame)
+        const glSlots = webgl.readSlots()
+        const gl = await webgl.read()
+        let glIndependent = gl
+        if (webglPrevious !== previous) {
+          webgl.setPositions(webglPrevious)
+          webgl.step(frame)
+          glIndependent = await webgl.read()
         }
+        const glReference = compareSlots(glSlots.ids, expected.slots)
+        const comparison = compareSlots(glSlots.ids, actualSlots)
+        const first = comparison.first ?? glReference.first
+        const expectedMovement = frame.alpha > 0 || settings.cooling === 0
         rows.push({
           frame,
           slots: compareSlots(actualSlots, expected.slots),
-          force: compareArray(actualForce, expected.forces),
-          positions: compareArray(actualPosition, expected.positions, previous),
-          trajectory: compareArray(actualPosition, independent.positions, cpu),
-          maskFailures,
-          capFailures,
-          moved,
+          force: describeDifference(actualForce, expected.forces),
+          positions: describeDifference(actualPosition, expected.positions, previous),
+          trajectory: describeDifference(actualPosition, independent.positions, cpu),
+          ...movementChecks(actualPosition, actualForce, previous, sizes, settings, expectedMovement),
+          webgl: {
+            slots: glReference,
+            force: describeDifference(gl.forces, expected.forces),
+            positions: describeDifference(gl.positions, expected.positions, previous),
+            trajectory: describeDifference(glIndependent.positions, independent.positions, cpu),
+            ...movementChecks(glIndependent.positions, glIndependent.forces, webglPrevious, sizes, settings, expectedMovement),
+          },
+          direct: {
+            slots: comparison,
+            force: describeDifference(actualForce, gl.forces),
+            positions: describeDifference(actualPosition, gl.positions, previous),
+            trajectory: describeDifference(actualPosition, glIndependent.positions, previous),
+            firstSlot: first ? { bucket: Math.floor(first.index / capacity), slot: first.index % capacity, webglHash: glSlots.hashes[first.index] } : null,
+          },
           maxOccupancy: expected.maxOccupancy,
           overflow: expected.overflow,
           aliasedBuckets: expected.aliases,
           equalHashes: expected.ties,
-          expectedMovement: frame.alpha > 0 || settings.cooling === 0,
+          expectedMovement,
         })
         cpu = independent.positions
         previous = actualPosition
+        webglPrevious = glIndependent.positions
         source = 1 - source
       }
     } catch (error) { issue = error instanceof Error ? error.message : String(error) } finally {
@@ -164,6 +210,7 @@ for (const count of COUNTS) {
         origin: ORIGIN,
         frames,
         adapter,
+        webglInfo,
         browser: navigator.userAgent,
         visible: document.visibilityState,
         ownedBytes,
@@ -182,7 +229,11 @@ for (const count of COUNTS) {
     expect(rows.length).toBe(frames.length)
     for (const row of rows) {
       expect(row.slots.failures === 0 && row.force.valid && row.positions.valid && row.trajectory.valid &&
-        row.maskFailures === 0 && row.capFailures === 0 && (row.moved > 0) === row.expectedMovement, JSON.stringify(row)).toBe(true)
+        row.maskFailures === 0 && row.capFailures === 0 && row.movementMatches, JSON.stringify(row)).toBe(true)
+      expect(row.webgl.slots.failures === 0 && row.webgl.force.valid && row.webgl.positions.valid && row.webgl.trajectory.valid &&
+        row.webgl.maskFailures === 0 && row.webgl.capFailures === 0 && row.webgl.movementMatches, JSON.stringify(row)).toBe(true)
+      expect(row.direct.slots.failures === 0 && row.direct.force.valid && row.direct.positions.valid && row.direct.trajectory.valid,
+        JSON.stringify(row)).toBe(true)
     }
   }, 120000)
 }

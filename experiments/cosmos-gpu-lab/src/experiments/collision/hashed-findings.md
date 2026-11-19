@@ -1,8 +1,8 @@
 ---
 source: Recorded findings
 recorded: 2026-11-19
-device: Apple M3; native Chrome 157; non-fallback Apple Metal 3 WebGPU
-scope: Isolated hashed collision at 4,097 and 8,192 points, compared with an independent CPU slot model.
+device: Apple M3; native Chrome 157; ANGLE Metal WebGL and non-fallback Apple Metal 3 WebGPU
+scope: Isolated comparisons at 4,097 and 8,192 points, plus normal-tick validation and timing at 8,192.
 ---
 
 # Hashed collision passes at 4,097 and 8,192 points
@@ -32,8 +32,46 @@ captures `collision-hashed-4097.json` and `collision-hashed-8192.json` are in
 and `source-context.json`. The source archive includes the working tree and
 lockfile, with SHA-256 `69263becdf0320774f945c8ff7883dd8d9c6a13911acbc7b5279f38263d6d7b5`.
 
-Production readiness remains open. The CPU defines which point wins a hash
-tie, and the unchanged WebGL depth-peeling path still needs a direct
-comparison on the same inputs. Dense-bucket time, counts above 8,192, and
-whole-layout behavior with links and other forces remain unmeasured. The
-study used the [declared fixtures and gates](#/collision/docs/hashed-method).
+## Direct WebGL comparison
+
+The production WebGL depth-peeling shaders selected the same point IDs as
+WebGPU across all 18,874,368 slot entries, including the tied hash, the
+full bucket and the signed cell alias. Both backends passed the existing
+force and position gate on shared inputs and independently evolving layouts.
+
+| Points | Passes | Slot differences | Max same-input force difference | Max same-input position difference | Max trajectory difference |
+| --- | --- | --- | --- | --- | --- |
+| 4,097 | 4 / 4 | 0 | 2.38e−7 | 0 | 0 |
+| 8,192 | 5 / 5 | 0 | 1.19e−6 | 1.53e−5 | 4.58e−5 |
+
+All differences are absolute world units. The pin, absence, cap and cooling
+checks passed in both backends. The WebGL control used the production GLSL,
+RG32F slot targets, depth24plus peeling, layer copies and position integrator
+through luma `10.0.0-alpha.15` in native visible Chrome 157. WebGL reported an
+Apple M3 ANGLE Metal renderer. WebGPU reported non-fallback Apple Metal 3.
+The focused test passed 3/3.
+
+The capture is in `captures/collision-hashed-webgl-m3-20261119.8TyBK8/`.
+The accompanying `source.tar.gz` includes the tested worktree and lockfile,
+with SHA-256 `51b39175cc72b60ca6c9fda076c17194c859b12262fca1159af8b0553efbfccb`.
+
+## Normal tick at 8,192 points
+
+Two hashed collision passes added **2.03 ms per tick** on the M3. The paired
+GPU measurement includes compute and drawing. The median was 7.63 ms with the
+collision passes omitted and 9.71 ms with them enabled. Both lanes used spring
+rest lengths that respect contact radii and drew the resulting graph with the
+same camera and settings. There were 28 measured frames per lane.
+
+Three moving ticks matched the independent CPU positions exactly. The dense
+two-pass check, the exact path after shrinking to 4,096, and the hashed path
+after regrowth and a radius update also matched the CPU. Zero strength skipped
+the passes and used the same tracked buffer allocation as a graph without
+collision configured.
+
+The visible Chrome 157 run passed 2/2 on non-fallback Apple Metal 3. The capture
+and exact tested source archive are in
+`captures/collision-hashed-tick-m3-20261119.zgXgWH/`, with source SHA-256
+`f75165c9d277db19c33130eef30427c166d36ba58c1b5b75255e286b50bbfd29`.
+Performance on larger graphs and sustained dense layouts remains open.
+[Declared fixtures and gates](#/collision/docs/hashed-method)
