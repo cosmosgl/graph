@@ -111,17 +111,17 @@ function nextFrame (): Promise<void> {
   return new Promise(resolve => window.requestAnimationFrame(() => resolve()))
 }
 
-export async function createPerformanceLab (host: HTMLElement): Promise<ExperimentInstance> {
+export async function createPerformanceLab (host: HTMLElement, caseId?: string): Promise<ExperimentInstance> {
   let runError: string | undefined
   host.innerHTML = `
     <section class="performance-lab">
       <div
       data-run-part="configuration" class="scale-toolbar benchmark-toolbar">
-        <label>
+        <label${caseId ? ' hidden' : ''}>
           Workload
           <select data-control="workload">
             <option value="rendering">Circle rendering</option>
-            <option value="simulation">Center-mass reduction</option>
+            <option value="simulation"${caseId === 'center-reduction' ? ' selected' : ''}>Center-mass reduction</option>
           </select>
         </label>
         <label>
@@ -234,7 +234,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     const workload = workloadSelect.value as Workload
     const counts = workload === 'rendering' ? RENDER_COUNTS : SIMULATION_COUNTS
     countSelect.innerHTML = counts.map((count, index) =>
-      `<option value="${count}" ${index === 1 ? 'selected' : ''}>${count.toLocaleString('en-US')}</option>`
+      `<option value="${count}" ${index === (caseId ? 0 : 1) ? 'selected' : ''}>${count.toLocaleString('en-US')}</option>`
     ).join('')
     diameterGroup.hidden = workload !== 'rendering'
     preview.hidden = workload !== 'rendering'

@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'collision',
   title: 'Collision constraints',
   summary: 'Compare production all-pairs disc collision, luma WebGPU and CPU; validate composition and measure the added GPU cost.',
   tags: ['simulation', 'collision', 'WebGL', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createCollisionView(host),
   pages: [
     {

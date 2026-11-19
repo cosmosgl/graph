@@ -1,5 +1,6 @@
 import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createControlledProfiler, profileSummary, PROFILE_POLICY, type ControlledProfiler } from '../combined-layout/controlled-profile'
 import { PROFILE_STAGES } from '../combined-layout/stage-timing'
@@ -19,9 +20,9 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     <div
       data-run-part="configuration" class="scale-toolbar"><label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
       <option>star</option></select></label>
-      <label>Logical points <select data-control="count"><option>4096</option><option selected>8192</option></select></label>
-      <label>Input state <select data-control="history"><option value="resized" selected>After resize history</option>
-        <option value="initial">Initial fixture · control</option></select></label></div>
+      <label>Logical points <select data-control="count"><option selected>4096</option><option>8192</option></select></label>
+      <label>Input state <select data-control="history"><option value="resized">After resize history</option>
+        <option value="initial" selected>Initial fixture · control</option></select></label></div>
     <p class="demo-note"
       data-run-part="explanation">${PROFILE_POLICY.warmups} warmup rounds + ${PROFILE_POLICY.samples} measured rounds.
       Each round balances rebuilt/retained resources and normal/profile timing. Keep this tab visible.
@@ -48,13 +49,11 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     <div data-output="frames" class="many-body-results"
       data-run-part="results"></div>
     <h3
-      data-run-part="diagnostics">Diagnostic GPU stages</h3><p class="demo-note"
-      data-run-part="diagnostics">The same kernels and dispatch order run in both modes.
-      The repulsion resolve stage includes near-field work and the stored far-field result.
-      Very short stages can round to zero at the timer's resolution.
-      All position/force bits must match the normal replay; every trial also checks the original independent CPU position tolerance.</p>
+      data-run-part="results">Diagnostic GPU stages</h3><p class="demo-note"
+      data-run-part="results">Separate passes change scheduling. Very short stages can round to zero at the timer's resolution.
+      Replay and CPU checks apply to each trial.</p>
     <div data-output="stages" class="many-body-results"
-      data-run-part="diagnostics"></div><p data-output="checks" class="demo-note"></p>`
+      data-run-part="results"></div><p data-output="checks" class="demo-note" data-run-part="results"></p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
   const select = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
@@ -147,5 +146,6 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     [],
     runError,
     'trial checks'), { experiment: 'gpu-stage-profile', devices: () => profiler?.report.info ?? [] })
+  compactRunControls(host, { settings: ['[data-control="history"]'] })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; profiler?.destroy() } }
 }

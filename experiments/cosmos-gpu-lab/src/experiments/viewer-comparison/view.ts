@@ -1,4 +1,5 @@
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphRgba } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createIntegrated, nextFrame, type Integrated } from '../integrated-webgpu/runtime'
@@ -15,11 +16,10 @@ type SavedSession = {
 }
 
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<div class="controls" data-controls>
-    <button data-action="run">Run both</button><button data-action="pause">Pause both</button><button data-action="fit">Fit both</button>
-    <button data-action="style">Toggle style A / B</button><button data-action="chain">Replace with 32-point chain</button>
-    <button data-action="karate">Restore Karate Club</button><button data-action="resize">Toggle height 320 / 280</button>
-    <button data-action="recreate">Destroy and recreate</button></div>
+  host.innerHTML = `<div class="controls">
+    <button data-action="run" data-run-action="primary">Run both</button>
+    <button data-action="pause" data-run-action="primary">Pause both</button>
+    <button data-action="fit" data-run-action="primary">Fit both</button></div>
     <p role="status" data-run-part="status">Creating production WebGL and candidate WebGPU viewers…</p>
     <div data-run-part="visualization" class="viewer-comparison-panels" data-panels>
       <section><h3>Production WebGL · luma v9</h3><div data-webgl style="height:320px;position:relative"></div><p data-gl-status></p></section>
@@ -32,16 +32,17 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     : `<p data-run-part="configuration" data-restart-note>On this browser, opening a reference restarts the graphs.
     Completed results stay in this tab; export JSON to keep them after closing it.</p>`}
     <section data-run-part="results"><div data-results>No assessment yet.</div><div data-recovered-results></div></section>
-    <section data-run-part="diagnostics"><div class="controls"><button data-action="assess">Assess early and cooled viewers</button>
+    <section data-run-part="diagnostics"><div class="controls">
+    <button data-action="style">Toggle style A / B</button><button data-action="chain">Replace with 32-point chain</button>
+    <button data-action="karate">Restore Karate Club</button><button data-action="resize">Toggle height 320 / 280</button>
+    <button data-action="recreate">Destroy and recreate</button>
+    <button data-action="assess">Assess early and cooled viewers</button>
     <button data-action="paint">Compare same-geometry paint</button><button data-action="paint-layers">Attribute paint differences</button>
     <button data-action="paint-link-smoothing">Test link edge smoothing</button>
     <button data-action="check">Check current updates</button>
     <button data-action="cancel">Cancel assessment</button><button data-action="export">Export JSON</button></div>
-    <p>${protocol}</p><p>Style A: six-pixel blue circles, width-1.25 grey links at opacity 0.45.
-    Style B: every third point coral and ten pixels, alpha 0.35 (point 0 alpha 0); width-2.5 coral links at opacity 0.7.
-    Transitions, link picking, curves, collision and automatic framing are outside this comparison.</p>
-    <p>Same-geometry paint intentionally replaces the production layout with the candidate positions for raster comparison.
-    Early/cooled assessment records each independently evolved layout before that operation.</p></section>`
+    <p>Paint checks use the same fixed positions in both viewers and replace the current production layout.
+    The recorded evidence describes the test conditions and limits.</p></section>`
   host.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = true })
   const status = host.querySelector<HTMLElement>('[role=status]')!; const results = host.querySelector<HTMLElement>('[data-results]')!
   const glHost = host.querySelector<HTMLDivElement>('[data-webgl]')!; const canvas = host.querySelector<HTMLCanvasElement>('canvas')!
@@ -58,7 +59,6 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     element.addEventListener('wheel', mark, { signal: interactionAbort.signal, passive: true })
   }
   watchInteraction(canvas)
-  host.querySelectorAll('[data-controls] button').forEach(b => b.setAttribute('data-run-action', 'primary'))
   mountRunLayout(host, () => ({
     state: busy ? 'Evaluating' : playing ? 'Running' : 'Paused',
     passed: `${records.filter(r => report(r).verdict === 'Pass').length} named checks`,
@@ -66,6 +66,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     unchecked: 'Full compatibility and migration readiness',
   }),
   { experiment: 'viewer-comparison', visualFirst: true, devices: () => [gl?.info, gpu?.info].filter(Boolean) })
+  compactRunControls(host, { diagnostics: true })
   host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
   const panel = glHost.parentElement!
   let width = Math.max(1, Math.floor(panel.getBoundingClientRect().width))

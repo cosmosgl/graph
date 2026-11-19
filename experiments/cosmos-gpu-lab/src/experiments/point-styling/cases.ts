@@ -1,0 +1,78 @@
+import type { ExperimentCase } from '../../runtime/experiment'
+
+// Each case uses the same renderers, but asks a different question. The
+// recorded findings describe their original inputs, not this browser's run.
+export const cases: ExperimentCase[] = [
+  {
+    id: 'shapes',
+    title: 'Point shapes',
+    kind: 'compare',
+    question: 'Do WebGL and WebGPU draw the same point shapes?',
+    description: 'Both panels draw the same eight shapes. The top row is filled; the bottom row has an inset stroke.',
+    tryIt: 'Compare the rows, then change zoom or pixel ratio. The selected scene is checked automatically.',
+    reference: 'Production WebGL, the WebGPU port and an independent CPU shape mask.',
+    acceptance: 'IDs and shape masks must match exactly; color channels may differ by at most 2/255.',
+    recorded: {
+      conclusion: 'The selected shape, overlap and default-setting configurations passed the original pixel checks on M3.',
+      date: '2026-11-12',
+      environment: 'Apple M3 · Chrome 157 · luma 10.0.0-alpha.4',
+      scope: '12 frozen configurations, including shapes, strokes, overlap, zoom and pixel ratio.',
+      limits: 'Fractional size and position cases retain failed parity checks. This is not full Graph or cross-device acceptance.',
+      evidence: [{ label: 'Point-shape evidence', page: 'shapes-evidence' }],
+    },
+  },
+  {
+    id: 'picking',
+    title: 'Point picking',
+    kind: 'compare',
+    question: 'Which point is selected where shapes overlap?',
+    description: 'Both panels show the same overlapping points. Their readouts identify the point at the inspected pixel.',
+    tryIt: 'Move over either image, or use Inspect center pixel. Reverse the draw order and inspect the overlap again.',
+    reference: 'Production host-picking IDs, the WebGPU ID image and an independent CPU shape mask.',
+    acceptance: 'IDs and masks must match the selected picking rule; an invisible point must not claim a pixel.',
+    recorded: {
+      conclusion: 'A stored-alpha prototype avoided invisible picks without changing color bytes in the bounded checks on M3 and SwiftShader.',
+      date: '2026-11-16',
+      environment: 'Apple M3 · inline Chromium 157; Linux SwiftShader · Chromium 151',
+      scope: 'Selected alpha boundaries and overlapping points, including retained source-byte controls.',
+      limits: 'This is a bounded prototype, not production hover latency or all-device picking acceptance; earlier source-byte failures remain.',
+      evidence: [{ label: 'Point-picking evidence', page: 'picking-evidence' }],
+    },
+  },
+  {
+    id: 'images',
+    title: 'Point images',
+    kind: 'compare',
+    question: 'Do point images render and pick correctly, including transparent areas?',
+    description: 'Both panels draw the same images from an atlas. Transparent areas and faint pixels exercise image sampling and picking.',
+    tryIt: 'Compare the image-only scene, then choose an overlapping or updating image scene.',
+    reference: 'Production WebGL, the WebGPU port and independently sampled CPU image colors and picking masks.',
+    acceptance: 'The selected rule requires exact IDs and masks, no invisible picks, and colors within 2/255.',
+    recorded: {
+      conclusion: 'The source-byte candidate passed the declared 40-row image-atlas matrix on M3; production compatibility did not pass that matrix.',
+      date: '2026-11-13',
+      environment: 'Apple M3 · inline Chromium 157 · luma 10.0.0-alpha.4',
+      scope: 'Four image fixtures, nearest and linear filtering, and five frozen display profiles.',
+      limits: 'The candidate and production controls answer different questions. Other atlas layouts, image decoding and devices require their own evidence.',
+      evidence: [{ label: 'Point-image evidence', page: 'images-evidence' }],
+    },
+  },
+  {
+    id: 'effects',
+    title: 'Point rings and greyout',
+    kind: 'compare',
+    question: 'Do rings and greyout preserve point colors and picking?',
+    description: 'Both panels draw the same highlighted and greyed points. Rings are decorative and should not change the picked ID.',
+    tryIt: 'Compare the overlapping points, then change the scene or the greyout profile.',
+    reference: 'Production and candidate GPU images, independent CPU colors and the unchanged scalar picking mask.',
+    acceptance: 'Colors must stay within 2/255, IDs and masks must match exactly, and decorative rings must not change IDs.',
+    recorded: {
+      conclusion: 'The pixel-distance overlay passed CPU color checks in 96 cases on M3 and SwiftShader; eight polygon-mask rows remained rejected.',
+      date: '2026-11-16',
+      environment: 'Apple M3 · inline Chromium 157; Linux SwiftShader · Chromium 151',
+      scope: 'Four scenes, eight effect profiles and three views, including overlays and greyout.',
+      limits: 'The rejected polygon boundaries and separate production-compatibility results remain open; transitions are not checked.',
+      evidence: [{ label: 'Ring and greyout evidence', page: 'effects-evidence' }],
+    },
+  },
+]

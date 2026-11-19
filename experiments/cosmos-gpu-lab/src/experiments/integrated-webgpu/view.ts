@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { gpuTimingProtocol, hubComparisonProtocol, gpuLargeMatrix, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
 import { createIntegrated } from './runtime'
 import { workload, matrix, unsupported, type Workload } from './data'
@@ -23,7 +24,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <p>Click a circle to select it; drag to move it. Drag empty space to pan; scroll to zoom. Selection turns yellow.
     The graph stays paused until Run. Fit downloads positions once; ordinary frames do not.</p></section>
     <section data-run-part="results"><p data-device></p><div data-report></div></section>
-    <section data-run-part="diagnostics"><h3>Declared local evaluation</h3><p>${protocol}</p>
+    <section data-run-part="diagnostics"><h3>Additional measurements</h3><p>Run focused pixel, interaction and timing checks on this device.</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
     <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button>
@@ -35,11 +36,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <label>Cooled Karate capture (local JSON) <input type="file" accept=".json,application/json" data-cooled-capture></label>
     <button data-action="pick-replay">Replay cooled picking</button>
     <p>Choose an earlier Export JSON, or use this session’s settled assessment. Only its tick-5,300 geometry is restored;
-    imported results do not become live passes.</p><p>${pickReplayProtocol}</p>
-    <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
-    The matrix first checks 1,024-point picking and dragging.
-    An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p>
-    <p>${pacingProtocol}</p><p>${gpuTimingProtocol}</p><p>${starProfileProtocol}</p><p>${hubComparisonProtocol}</p><p>${settledProtocol}</p></section>
+    imported results do not become live passes.</p></section>
     <section data-run-part="explanation"><h3>Supported first slice</h3><p>Corrected resident repulsion, weighted directional springs,
     gravity, high/low center reduction and cooling. Circles and solid straight links read the same positions. Picking reads one RGBA8 ID pixel.</p>
     <h3>Unsupported options</h3><p>${unsupported}</p><p>Strict compatibility: historical failures remain.
@@ -61,6 +58,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: failure || runtime.error || evidenceFailure || 'None recorded',
     unchecked: 'Strict pixel compatibility, physical display latency and full migration readiness.',
   }), { experiment: 'integrated-webgpu', devices: () => [runtime.info] })
+  compactRunControls(host, { diagnostics: true })
   const update = (): void => {
     host.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => {
       button.disabled = busy && button.dataset.action !== 'cancel'

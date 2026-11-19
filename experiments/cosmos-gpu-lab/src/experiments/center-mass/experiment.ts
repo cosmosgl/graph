@@ -1,16 +1,32 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
+import { centerMassCases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'center-mass',
   title: 'Global center of mass',
-  summary: 'Compare Cosmos-style WebGL blending with a two-stage WebGPU compute reduction.',
+  summary: 'Compare center calculations and explore the cost and behavior of the center force.',
   tags: ['compute', 'reduction', 'WebGL', 'WebGPU'],
-  create: async (host): Promise<ExperimentInstance> => {
+  cases: centerMassCases,
+  create: async (host, caseId): Promise<ExperimentInstance> => {
     const module = await import('./view')
-    return module.createCenterMassExperiment(host)
+    return caseId === 'center-measurements'
+      ? module.createCenterMeasurementsExperiment(host)
+      : module.createCenterMassExperiment(host)
   },
   pages: [
+    {
+      kind: 'markdown',
+      id: 'cost-evidence',
+      title: 'Center-force measurement evidence',
+      load: async (): Promise<string> => (await import('./docs/cost-evidence.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'trajectory-evidence',
+      title: 'Center-force trajectory evidence',
+      load: async (): Promise<string> => (await import('./docs/trajectory-evidence.md?raw')).default,
+    },
     {
       kind: 'markdown',
       id: 'overview',

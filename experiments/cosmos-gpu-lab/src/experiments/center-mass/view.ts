@@ -46,8 +46,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       <div class="demo-toolbar"
       data-run-part="configuration">
         <div>
-          <p class="eyebrow">Synchronized input</p>
-          <p>The same ${POINT_COUNT.toLocaleString('en-US')} moving points are sent to both backends.</p>
+          <p class="eyebrow">Starting case</p>
+          <p>${POINT_COUNT.toLocaleString('en-US')} deterministic points, shared by both GPUs and the CPU.</p>
         </div>
         <div class="controls">
           <button class="button-primary" data-action="step" type="button" disabled
@@ -59,24 +59,19 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         </div>
       </div>
 
-      <section class="summary" aria-live="polite"
-      data-run-part="results">
-        <span>Tick <strong data-output="tick">0</strong></span>
-        <span>CPU reference <strong data-output="cpu-center">—</strong></span>
-        <span>Backend delta <strong data-output="backend-delta">—</strong></span>
-      </section>
+      <p class="demo-note" data-run-part="status">Yellow square: each GPU's calculated center. Compare its error with the CPU average.</p>
 
       <section
       data-run-part="visualization" class="backend-panels">
         <article class="backend-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">Cosmos/WebGL approach</p>
-              <h2>RGBA32F additive blend</h2>
+              <p class="eyebrow">Cosmos-style calculation</p>
+              <h2>WebGL · additive blending</h2>
             </div>
             <span data-status="webgl" class="status">Starting…</span>
           </div>
-          <canvas data-canvas="webgl" width="420" height="320"></canvas>
+          <canvas data-canvas="webgl" width="420" height="320" role="img" aria-label="WebGL points and calculated center"></canvas>
           <dl>
             <div><dt>Center</dt><dd data-output="webgl-center">—</dd></div>
             <div><dt>Error vs CPU</dt><dd data-output="webgl-error">—</dd></div>
@@ -87,12 +82,12 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         <article class="backend-panel">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow">WebGPU approach</p>
-              <h2>Two-stage workgroup reduction</h2>
+              <p class="eyebrow">Compute calculation</p>
+              <h2>WebGPU · two-stage reduction</h2>
             </div>
             <span data-status="webgpu" class="status">Starting…</span>
           </div>
-          <canvas data-canvas="webgpu" width="420" height="320"></canvas>
+          <canvas data-canvas="webgpu" width="420" height="320" role="img" aria-label="WebGPU points and calculated center"></canvas>
           <dl>
             <div><dt>Center</dt><dd data-output="webgpu-center">—</dd></div>
             <div><dt>Error vs CPU</dt><dd data-output="webgpu-error">—</dd></div>
@@ -101,13 +96,16 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         </article>
       </section>
 
-      <p class="demo-note"
-      data-run-part="explanation">
-        Yellow square = GPU-computed center. Timing includes upload, execution, synchronization,
-        readback and drawing; use the Results and Performance sections for interpretation.
+      <section class="summary" aria-live="polite" data-run-part="visualization">
+        <span>Tick <strong data-output="tick">0</strong></span>
+        <span>CPU center <strong data-output="cpu-center">—</strong></span>
+        <span>Difference between GPU centers <strong data-output="backend-delta">—</strong></span>
+      </section>
+
+      <p class="demo-note" data-run-part="visualization">
+        Error is the distance from the CPU center; this demo has no pass threshold. Tick time includes upload,
+        execution, synchronization, readback and drawing, so it is not an isolated GPU benchmark.
       </p>
-      <section data-run-part="diagnostics" data-center-scale></section>
-      <section data-run-part="diagnostics" data-center-once></section>
     </section>
   `
 
@@ -123,7 +121,6 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   let tick = 0
   let isPlaying = false
   let isRunning = false
-  let scaleRunning = false
   let destroyed = false
   let playTimer: number | undefined
 
@@ -144,7 +141,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   }
 
   const runTick = async (advance: boolean): Promise<void> => {
-    if (isRunning || scaleRunning || destroyed) return
+    if (isRunning || destroyed) return
     isRunning = true
     stepButton.disabled = true
     resetButton.disabled = true
@@ -236,7 +233,12 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
     [],
     'Center accuracy budget and rendered-pixel parity.',
     slots.filter(s => s.error).map(s => s.id),
-    runError), { experiment: 'center-mass', devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
+    runError), {
+    experiment: 'center-mass',
+    devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []),
+    showChecks: false,
+    scope: 'The selected tick of one shared 8,192-point input; GPU centers are compared with the CPU average.',
+  })
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()
@@ -251,24 +253,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
 
   await runTick(false)
   playButton.disabled = false
-  const beginStudy = (): boolean => {
-    if (isRunning || scaleRunning || destroyed) return false
-    scaleRunning = true; isPlaying = false; window.clearTimeout(playTimer)
-    playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
-    stepButton.disabled = true; playButton.disabled = true; resetButton.disabled = true
-    return true
-  }
-  const endStudy = (): void => {
-    scaleRunning = false
-    stepButton.disabled = false; playButton.disabled = false; resetButton.disabled = false
-  }
-  const scale = mountCenterScale(element(host, '[data-center-scale]'), beginStudy, endStudy)
-  const once = mountCenterOnce(element(host, '[data-center-once]'), beginStudy, endStudy)
-
   return {
     pause (): void {
-      scale.pause()
-      once.pause()
       isPlaying = false; window.clearTimeout(playTimer)
       playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
     },
@@ -276,12 +262,37 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
-      scale.destroy()
-      once.destroy()
       isPlaying = false
       window.clearTimeout(playTimer)
       for (const slot of slots) slot.backend?.destroy()
       host.replaceChildren()
+    },
+  }
+}
+
+export function createCenterMeasurementsExperiment (host: HTMLElement): ExperimentInstance {
+  host.innerHTML = `<p data-run-part="configuration">Choose a point count in either measurement below.</p>
+    <section data-run-part="visualization" data-center-scale></section>
+    <section data-run-part="visualization" data-center-once></section>`
+  let busy = false; let destroyed = false
+  const begin = (): boolean => {
+    if (busy || destroyed) return false
+    busy = true
+    return true
+  }
+  const end = (): void => { busy = false }
+  mountRunLayout(host, () => summarizeRun(busy ? 'Measuring' : 'Ready', [], 'Complete graph frames'), {
+    experiment: 'center-mass',
+    showChecks: false,
+    scope: 'The selected frozen-input center and force measurements; complete graph frames are not measured.',
+  })
+  const scale = mountCenterScale(element(host, '[data-center-scale]'), begin, end)
+  const once = mountCenterOnce(element(host, '[data-center-once]'), begin, end)
+  return {
+    pause (): void { scale.pause(); once.pause() },
+    destroy (): void {
+      if (destroyed) return
+      destroyed = true; scale.destroy(); once.destroy(); disposeRunLayout(host); host.replaceChildren()
     },
   }
 }

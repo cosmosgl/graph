@@ -1,6 +1,7 @@
 import type {
   ExperimentDefinition,
 } from '../runtime/experiment'
+import { caseEvidenceLinks } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
@@ -8,18 +9,20 @@ import { createRetainedRun } from '../runtime/retained-run'
 import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import {
-  architectureHref, articleSectionId, conceptHref, experimentHref, readRoute, vocabularyHref, currentSection,
+  architectureHref, articleSectionId, caseHref, conceptHref, experimentHref, readRoute, vocabularyHref, currentSection,
 } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { research, milestones, migrationFocus } from './research'
-import { currentStep, currentJourneyStep, experimentRole, focusedExperiment, milestoneTitle, renderJourney, renderJourneyFlow } from './journey'
-import { renderCoverageIndex, renderCoverageSummary, markCoverageRows } from './coverage'
+import { research } from './research'
+import { renderJourney, renderJourneyFlow } from './journey'
+import { renderCoverageSummary, markCoverageRows } from './coverage'
 import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
 import { resolveExperimentSection } from './article-sections'
 import { disposeExperimentNotes, mountExperimentNotes, renderExperimentContents } from './experiment-page'
 import { renderStudyOverview } from './study-overview'
 import { checkAgentFindingLinks, renderAgentFindings } from './agent-findings'
+import { renderCaseEvidence, renderCaseFrame } from './case-page'
+import { mountGlobalSearch } from './global-search'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -29,51 +32,65 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 
 function renderHome (host: HTMLElement): void {
   host.innerHTML = `<header class="home-intro"><h1>Cosmos GPU Lab</h1>
-    <p>WebGPU methods, demonstrated scope and remaining Cosmos feature gaps. Production still uses WebGL.</p></header>
-    <div data-migration-overview></div><section id="feature-map" class="feature-map" aria-label="Feature coverage map"></section>
+    <p>Independent experiments exploring Cosmos rendering, simulation and WebGPU.</p></header>
     <nav class="home-references" aria-label="Lab references"><a href="#/validation-workflow">Validation workflow</a>
       <a href="${architectureHref()}">Lab architecture</a><a href="${vocabularyHref()}">Vocabulary</a>
       <a href="${conceptHref('reduction')}">Parallel reduction</a></nav>
     <section class="experiment-catalog" id="experiment-catalog" aria-label="Available experiments">
-      <header class="catalog-header"><h2 class="catalog-title">Experiment catalog</h2>
-      <label>Group experiments by <select data-catalog-grouping><option value="milestone">Migration area</option>
-        <option value="reading">Reading path</option></select></label>
-      <p class="catalog-intro">Roles describe the purpose of a study, not approval.
-        Reading order teaches prerequisites; it is not migration progress.</p></header>
-      <div data-catalog-groups></div></section>`
-  renderMigrationOverview(requiredElement(host, '[data-migration-overview]'))
-  renderCoverageIndex(requiredElement(host, '#feature-map'))
-  const catalog = requiredElement<HTMLElement>(host, '[data-catalog-groups]')
-  const grouping = requiredElement<HTMLSelectElement>(host, '[data-catalog-grouping]')
-  const renderGroups = (): void => {
-    catalog.replaceChildren()
-    const groups = grouping.value === 'reading'
-      ? experimentGroups
-      : milestones.map(m => ({
-        id: m.id,
-        title: m.title,
-        description: `Open workstream · ${m.position}`,
-        experiments: experimentGroups.flatMap(group => group.experiments).filter(e => research[e.id].milestone === m.id),
-      }))
-    for (const group of groups) {
-      if (!group.experiments.length) continue
-      const section = document.createElement('section'); section.className = 'home-experiment-group'
-      section.setAttribute('aria-labelledby', `catalog-${group.id}`)
-      section.innerHTML = `<header class="catalog-group-heading"><h3 id="catalog-${group.id}">${group.title}</h3>
-        <p>${group.description}</p></header><div class="experiment-grid"></div>`
-      const grid = requiredElement<HTMLElement>(section, '.experiment-grid')
-      for (const experiment of group.experiments) {
+      <header class="catalog-header"><h2 class="catalog-title">Experiments</h2></header>
+      <div class="catalog-groups"></div></section>`
+  const catalog = requiredElement<HTMLElement>(host, '.catalog-groups')
+  for (const group of experimentGroups) {
+    const section = document.createElement('section'); section.className = 'home-experiment-group'
+    section.setAttribute('aria-labelledby', `catalog-${group.id}`)
+    const heading = document.createElement('header'); heading.className = 'catalog-group-heading'
+    const title = document.createElement('h3'); title.id = `catalog-${group.id}`; title.textContent = group.title
+    const description = document.createElement('p'); description.textContent = group.description
+    heading.append(title, description)
+    const grid = document.createElement('ul'); grid.className = 'experiment-grid'
+    for (const experiment of group.experiments) {
+      const card = document.createElement('li'); card.className = 'experiment-item'
+      if (!experiment.cases) {
         const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
         link.dataset.experimentId = experiment.id
-        if (experiment.id === migrationFocus.experiment) link.dataset.current = 'true'
-        link.innerHTML = `<p class="research-meta">${experimentRole(experiment.id)} · ${milestoneTitle(research[experiment.id].milestone)}</p>
-          <h3>${experiment.title}</h3><p>${research[experiment.id].conclusion}</p>`
-        grid.append(link)
+        const title = document.createElement('h4'); title.textContent = experiment.title
+        const question = document.createElement('p'); question.textContent = research[experiment.id].question
+        link.append(title, question)
+        if (research[experiment.id].investigations.some(item => item.page === research[experiment.id].evidence && item.state === 'Parked')) {
+          const note = document.createElement('span'); note.className = 'catalog-meta'; note.textContent = 'Recorded study'; link.append(note)
+        }
+        card.append(link); grid.append(card)
+        continue
       }
-      catalog.append(section)
+      if (experiment.cases.length === 1) {
+        const item = experiment.cases[0]
+        const link = document.createElement('a'); link.className = 'experiment-card'; link.href = caseHref(experiment.id, item.id)
+        link.dataset.experimentId = experiment.id; link.dataset.caseId = item.id
+        const title = document.createElement('h4'); title.textContent = item.title
+        const question = document.createElement('p'); question.textContent = item.question
+        link.append(title, question)
+        if (item.kind === 'recorded') {
+          const note = document.createElement('span'); note.className = 'catalog-meta'; note.textContent = 'Recorded study'; link.append(note)
+        }
+        card.append(link); grid.append(card)
+        continue
+      }
+      const article = document.createElement('article'); article.className = 'experiment-card experiment-card-group'
+      const meta = document.createElement('span'); meta.className = 'catalog-meta'; meta.textContent = `${experiment.cases.length} experiments`
+      const title = document.createElement('h4'); title.textContent = experiment.title
+      const summary = document.createElement('p'); summary.textContent = experiment.summary
+      const list = document.createElement('ul'); list.className = 'catalog-cases'
+      for (const item of experiment.cases) {
+        const element = document.createElement('li'); const link = document.createElement('a')
+        link.href = caseHref(experiment.id, item.id); link.dataset.experimentId = experiment.id; link.dataset.caseId = item.id
+        const label = document.createElement('span'); label.textContent = item.title; link.append(label)
+        if (item.kind === 'recorded') { const note = document.createElement('small'); note.textContent = 'Recorded study'; link.append(note) }
+        element.append(link); list.append(element)
+      }
+      article.append(meta, title, summary, list); card.append(article); grid.append(card)
     }
+    section.append(heading, grid); catalog.append(section)
   }
-  grouping.addEventListener('change', renderGroups); renderGroups()
 }
 
 function renderVocabularyFrame (host: HTMLElement): HTMLElement {
@@ -166,8 +183,6 @@ function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinit
   const record = research[experiment.id]
   host.innerHTML = `<div class="experiment-document">
     <header class="experiment-header unified-header"><h1>${experiment.title}</h1>
-      <p class="experiment-role">${experimentRole(experiment.id)} ·
-        <a href="#/roadmap?section=milestone-${record.milestone}">${milestoneTitle(record.milestone)}</a></p>
       <p>${record.question}</p>
       ${experiment.study ? '' : `<p class="research-conclusion">${record.conclusion}</p>`}</header>
     <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
@@ -222,13 +237,23 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           <span class="brand-mark" aria-hidden="true"></span>
           <span><strong>Cosmos</strong><small>GPU Lab</small></span>
         </a>
-        <p class="lab-position">Current work · Step ${currentStep} ·
-          <a href="#/roadmap?section=journey-${currentJourneyStep().id}">${currentJourneyStep().title}</a>
-          <a href="${experimentHref(migrationFocus.experiment)}">${focusedExperiment().title}</a></p>
+        <button class="search-toggle" type="button" aria-controls="lab-search-form" aria-expanded="false">Search</button>
         <nav class="lab-navigation" aria-label="Lab navigation">
-          <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a><a data-nav="roadmap" href="#/roadmap">Roadmap</a>
-          <a data-nav="feature-inventory" href="#/feature-inventory">Feature coverage</a><a data-nav="learn" href="#/learn">Learn</a>
+          <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a>
+          <a data-nav="roadmap" href="#/roadmap">Roadmap</a>
+          <a data-nav="feature-inventory" href="#/feature-inventory">Feature coverage</a>
+          <a data-nav="learn" href="#/learn">Learn</a>
         </nav>
+        <form class="global-search" id="lab-search-form" role="search" data-expanded="false">
+          <label class="search-label" for="lab-search">Search the lab</label>
+          <input id="lab-search" type="search" placeholder="Search the lab" autocomplete="off" aria-controls="lab-search-results">
+          <button type="submit">Search</button>
+        </form>
+        <section class="global-search-results" id="lab-search-results" aria-label="Search results" hidden>
+          <div class="global-search-heading"><strong>Search results</strong><button type="button" data-search-close>Close</button></div>
+          <p data-search-status role="status" aria-live="polite"></p><ol></ol>
+          <p class="global-search-scope">Searches lab pages and recorded evidence. Live run values are not indexed.</p>
+        </section>
       </header>
       <main class="workspace" tabindex="-1"></main>
     </div>
@@ -238,9 +263,22 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   const measureHeader = (): void => { root.style.setProperty('--lab-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`) }
   const headerSize = new ResizeObserver(measureHeader); headerSize.observe(header); measureHeader()
   const workspace = requiredElement<HTMLElement>(root, '.workspace')
-  const run = createRetainedRun(disposeExperimentNotes)
+  let run = createRetainedRun(disposeExperimentNotes)
+  let parkedSearchRun: { owner: ReturnType<typeof createRetainedRun>; id: string; caseId?: string } | undefined
+  const disposeSearch = mountGlobalSearch(header, target => {
+    if (!run.id || !target.experimentId || (run.id === target.experimentId && run.caseId === target.caseId)) return
+    if (parkedSearchRun?.id === target.experimentId && parkedSearchRun.caseId === target.caseId) return
+    parkedSearchRun?.owner.destroy()
+    const id = run.id; const caseId = run.caseId
+    run.hide()
+    parkedSearchRun = { owner: run, id, caseId }
+    run = createRetainedRun(disposeExperimentNotes)
+  })
+  const destroyRuns = (): void => { run.destroy(); parkedSearchRun?.owner.destroy(); parkedSearchRun = undefined }
   let disposeContents = (): void => {}
   let mountedExperiment: string | undefined
+  let mountedCase: string | undefined
+  let mountedEvidence: string | undefined
   let failedRun: HTMLElement | undefined
   let studyNotes: HTMLElement | undefined
   let startStudyLive: (() => Promise<void>) | undefined
@@ -259,20 +297,60 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   const render = async (): Promise<void> => {
     const route = readRoute()
-    const selectedNav = route.kind === 'experiment' || (route.kind === 'home' && currentSection() === 'experiment-catalog')
-      ? 'experiments'
-      : route.kind === 'vocabulary' || route.kind === 'concept' ? 'learn' : route.kind
     const brand = root.querySelector('.brand')!
-    if (selectedNav === 'home') brand.setAttribute('aria-current', 'page'); else brand.removeAttribute('aria-current')
+    if (route.kind === 'home') brand.setAttribute('aria-current', 'page'); else brand.removeAttribute('aria-current')
     for (const link of root.querySelectorAll<HTMLAnchorElement>('[data-nav]')) {
-      if (link.dataset.nav === selectedNav) link.setAttribute('aria-current', route.kind === 'experiment' ? 'true' : 'page')
+      if (link.dataset.nav === 'experiments' && route.kind === 'home' && currentSection() === 'experiment-catalog') {
+        link.setAttribute('aria-current', 'location')
+      } else if (link.dataset.nav === route.kind) link.setAttribute('aria-current', 'page')
       else link.removeAttribute('aria-current')
     }
     const definition = route.kind === 'experiment' ? findExperiment(route.experimentId) : undefined
     const validPage = definition && (route.kind !== 'experiment' || !route.pageId || definition.pages.some(page => page.id === route.pageId))
-    if (route.kind === 'experiment' && validPage) {
+    let selectedCase = route.kind === 'experiment' && definition?.cases
+      ? definition.cases.find(item => item.id === (route.caseId ?? definition.cases![0].id))
+      : undefined
+    let caseSection = currentSection()
+    let evidencePage = route.kind === 'experiment' ? route.evidencePage ?? route.pageId : undefined
+    if (route.kind === 'experiment' && selectedCase && definition) {
+      if (route.pageId) {
+        caseSection = caseSection?.startsWith(`${articleSectionId(route.pageId)}-`)
+          ? caseSection
+          : articleSectionId(route.pageId, caseSection ?? undefined)
+      }
+      if (!evidencePage && caseSection?.startsWith('doc-')) {
+        evidencePage = [...definition.pages].sort((a, b) => b.id.length - a.id.length).find(page =>
+          caseSection === articleSectionId(page.id) || caseSection!.startsWith(`${articleSectionId(page.id)}-`))?.id
+      }
+      if (!route.caseId && evidencePage && evidencePage !== 'agent-recipe') {
+        const candidates = definition.cases!.filter(item => caseEvidenceLinks(item).some(link => link.page === evidencePage))
+        const exact = candidates.find(item => caseEvidenceLinks(item).some(link => link.page === evidencePage && link.section &&
+          caseSection === articleSectionId(link.page, link.section)))
+        selectedCase = exact ?? candidates.find(item => item.kind === 'recorded') ?? candidates[0] ?? selectedCase
+      }
+      if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'center-mass') {
+        selectedCase = definition.cases!.find(item => item.id === 'center-measurements')!
+        caseSection = 'case-live'
+      } else if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'point-styling') {
+        selectedCase = definition.cases!.find(item => item.id === 'picking')!
+      }
+      if (caseSection === 'run-run') caseSection = 'case-live'
+      if (caseSection === 'study-overview' || caseSection === 'study-investigations') caseSection = 'recorded-findings'
+      if (evidencePage === 'agent-recipe') {
+        evidencePage = undefined; caseSection = 'recorded-findings'
+        window.history.replaceState(null, '', `${caseHref(definition.id, selectedCase.id)}&section=recorded-findings`)
+      } else if (route.view === 'evidence' && !evidencePage && !caseSection) caseSection = 'recorded-findings'
+      if (mountedExperiment === definition.id && mountedCase === selectedCase.id && mountedEvidence === evidencePage) {
+        if (caseSection) {
+          if (!scrollToSection(workspace, caseSection) && evidencePage) scrollToSection(workspace, articleSectionId(evidencePage))
+        } else window.scrollTo(0, 0)
+        return
+      }
+    } else if (route.kind === 'experiment' && validPage && !definition?.cases) {
       const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
-      if (route.pageId) params.set('section', articleSectionId(route.pageId, currentSection() ?? undefined))
+      if (route.pageId === 'agent-recipe' || params.get('section')?.startsWith('doc-agent-recipe')) {
+        params.set('section', 'recorded-findings')
+      } else if (route.pageId) params.set('section', articleSectionId(route.pageId, currentSection() ?? undefined))
       else if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
       window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
       if (mountedExperiment === route.experimentId) {
@@ -280,9 +358,13 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         focusExperimentSection(route.experimentId); return
       }
     }
+    if (route.kind === 'experiment' && definition && parkedSearchRun?.id === definition.id &&
+      parkedSearchRun.caseId === selectedCase?.id) {
+      run.destroy(); run = parkedSearchRun.owner; parkedSearchRun = undefined
+    }
     renderVersion += 1
     const version = renderVersion
-    disposeContents(); mountedExperiment = undefined
+    disposeContents(); mountedExperiment = undefined; mountedCase = undefined; mountedEvidence = undefined
     if (failedRun) { disposeExperimentNotes(failedRun); failedRun = undefined }
     if (studyNotes) { disposeExperimentNotes(studyNotes); studyNotes = undefined }
     startStudyLive = undefined
@@ -296,7 +378,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       window.scrollTo(0, route.kind === 'home' ? 0 : scrollPositions.get(path) ?? 0)
     }
     run.hide()
-    if (route.kind === 'home' || (route.kind === 'experiment' && run.id !== route.experimentId)) {
+    if (route.kind === 'home' || (route.kind === 'experiment' &&
+      (run.id !== route.experimentId || (definition?.cases && run.caseId !== selectedCase?.id)))) {
       if (run.id) scrollPositions.delete(experimentHref(run.id))
       run.destroy()
     }
@@ -435,6 +518,61 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     if (route.pageId && !experiment.pages.some(page => page.id === route.pageId)) {
       renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return
     }
+    if (experiment.cases) {
+      selectedCase = selectedCase ?? (route.caseId ? undefined : experiment.cases[0])
+      if (!selectedCase) { renderMissing(workspace, `${experiment.id}?case=${route.caseId}`); return }
+      if (evidencePage) {
+        const page = experiment.pages.find(entry => entry.id === evidencePage)
+        if (!page) { renderMissing(workspace, `${experiment.id}/docs/${evidencePage}`); return }
+        try {
+          await renderCaseEvidence(workspace, experiment, selectedCase, page)
+          if (version !== renderVersion) return
+          mountedExperiment = experiment.id; mountedCase = selectedCase.id; mountedEvidence = evidencePage
+          if (caseSection && !scrollToSection(workspace, caseSection)) scrollToSection(workspace, articleSectionId(page.id))
+        } catch (error) { if (version === renderVersion) renderFailure(workspace, error) }
+        return
+      }
+      const frame = renderCaseFrame(workspace, experiment, selectedCase)
+      mountedExperiment = experiment.id; mountedCase = selectedCase.id; mountedEvidence = undefined
+      if (selectedCase.kind === 'recorded') {
+        frame.stage.setAttribute('aria-busy', 'false')
+        if (caseSection) scrollToSection(workspace, caseSection)
+        return
+      }
+      let opening: Promise<void> | undefined
+      const openCase = (): Promise<void> => {
+        if (opening) return opening
+        frame.retry.hidden = true; frame.retry.disabled = true; frame.status.textContent = 'Creating the live experiment…'
+        opening = (async (): Promise<void> => {
+          try {
+            await run.show(experiment, frame.slot, selectedCase!.id)
+            if (version !== renderVersion || !frame.slot.isConnected) return
+            const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
+            if (layout) {
+              layout.querySelector('.case-recorded')?.remove()
+              layout.querySelector('.case-comparison')?.remove()
+              const supplementary = layout.querySelector('#run-explanation, #run-live-explanation, #run-diagnostics')
+              if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, frame.comparison)
+              else layout.append(frame.recorded, frame.comparison)
+            }
+            frame.status.textContent = ''
+          } catch (error) {
+            if (version !== renderVersion || !frame.slot.isConnected) return
+            frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
+            frame.retry.hidden = false; frame.retry.disabled = false
+          } finally {
+            if (version === renderVersion) {
+              frame.stage.setAttribute('aria-busy', 'false')
+              if (caseSection) scrollToSection(workspace, caseSection)
+            }
+          }
+        })().finally(() => { opening = undefined })
+        return opening
+      }
+      frame.retry.addEventListener('click', () => { openCase().catch(error => { frame.status.textContent = String(error) }) })
+      await openCase()
+      return
+    }
     const record = research[experiment.id]
     renderExperimentFrame(workspace, experiment)
     const documentFrame = requiredElement<HTMLElement>(workspace, '.experiment-document')
@@ -546,17 +684,17 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   }
   root.addEventListener('click', handleSameSection)
   window.addEventListener('hashchange', handleRoute)
-  window.addEventListener('beforeunload', run.destroy)
+  window.addEventListener('beforeunload', destroyRuns)
   handleRoute()
   return {
     destroy (): void {
-      headerSize.disconnect(); disposeDocumentTables(workspace)
-      renderVersion++; disposeContents(); run.destroy()
+      headerSize.disconnect(); disposeDocumentTables(workspace); disposeSearch()
+      renderVersion++; disposeContents(); destroyRuns()
       if (failedRun) disposeExperimentNotes(failedRun)
       if (studyNotes) disposeExperimentNotes(studyNotes)
       root.removeEventListener('click', handleSameSection)
       window.removeEventListener('hashchange', handleRoute)
-      window.removeEventListener('beforeunload', run.destroy)
+      window.removeEventListener('beforeunload', destroyRuns)
       root.replaceChildren()
     },
   }

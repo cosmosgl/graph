@@ -1,5 +1,6 @@
 import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createCapacitySession, type CapacitySession, type CapacityComparison } from '../combined-layout/capacity-session'
 import { CAPACITY_CYCLE } from '../combined-layout/capacity'
@@ -17,7 +18,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       <option value="transfer">CPU copy vs GPU rebuild</option></select></label>
       <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
       <option>star</option></select></label>
-      <label>Repetitions <select data-control="repeats"><option>1</option><option selected>3</option><option>5</option></select></label>
+      <label>Repetitions <select data-control="repeats"><option selected>1</option><option>3</option><option>5</option></select></label>
       <label class="checkbox-control"><input data-control="cpu" type="checkbox" checked> Check unchanged CPU tolerance</label></div>
     <div class="controls"><button data-action="step"
       data-run-action="primary">Step + validate</button>
@@ -223,6 +224,11 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     [],
     runError ?? error,
     'frame and resize checks'), { experiment: 'point-capacity', devices: () => session?.lanes.map(l => l.info) ?? [] })
+  compactRunControls(host, {
+    settings: ['[data-control="comparison"]', '[data-control="fixture"]', '[data-control="repeats"]',
+      '[data-control="cpu"]'],
+    diagnostics: true,
+  })
   await reset()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import { fitView } from '../many-body/backend'
 import { median } from '../many-body/timing'
@@ -25,10 +26,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     : api === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'}</h2></div>
       <canvas width="480" height="340" data-canvas="${api}" aria-label="${api} cluster attraction"></canvas></article>`).join('')}</section>
     <div data-run-part="results" data-results></div>
-    <section data-run-part="diagnostics"><p>Declared study: eight-point semantics, then balanced, uneven, single-group and custom-target inputs
-      at 1,024 and 8,192 points. Check ticks 1, 2, 10 and 30 plus a membership/target/strength update.
-      GPU cost: two warmups and seven samples of 16 frozen force evaluations, alternating backend order. Keep this page visible.</p>
-      <button data-action="study" data-run-action="diagnostic">Run declared study</button>
+    <section data-run-part="diagnostics"><p>Compare more group inputs and measure isolated GPU force cost. Keep this tab visible during timing.</p>
+      <button data-action="study" data-run-action="diagnostic">Run full comparison</button>
       <button data-action="export" data-run-action="export">Export JSON</button>
       <div data-study-results></div></section>
     <p data-run-part="explanation">Run keeps positions on each GPU and evolves the CPU separately. Step and check reads results outside timing.
@@ -156,6 +155,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     unchecked: 'Unsampled ticks; combined forces; complete frame cost; production integration',
   }),
   { experiment: 'cluster-attraction', visualFirst: true, devices: () => Object.values(backends).map(b => b.info) })
+  compactRunControls(host, { diagnostics: true })
   await initialize()
   return {
     pause: stop,

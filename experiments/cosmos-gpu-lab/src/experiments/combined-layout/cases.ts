@@ -1,0 +1,56 @@
+import type { ExperimentCase } from '../../runtime/experiment'
+
+export const cases: ExperimentCase[] = [
+  {
+    id: 'layout-comparison',
+    title: 'Compare a composed layout',
+    kind: 'compare',
+    question: 'Do gravity, repulsion and springs stay consistent as a graph moves?',
+    description: 'WebGL, WebGPU and CPU start with the same 128-point chain and evolve independently, using the refined WebGPU candidate.',
+    tryIt: 'Press Step + validate to advance once and inspect the stage and whole-tick checks.',
+    reference: 'Production WebGL stages and independent float32 CPU calculations for each checked input.',
+    acceptance: 'Stage and whole-tick checks use the existing tolerances; ticks between checkpoints are not checked.',
+    recorded: {
+      conclusion: 'The refined-gravity candidate passed all 126 scheduled checkpoints and six probes across six 8,192-point trajectories.',
+      date: 'Not recorded',
+      environment: 'Apple M3, standalone Chrome 156; luma version not recorded in this evidence.',
+      scope: 'Chain, communities and star graphs with 100- and 300-tick cooling schedules.',
+      limits: 'Intermediate ticks were unchecked, and the refined gravity stage had substantial measured cost on this device.',
+      evidence: [{ label: 'Composed-layout evidence', page: 'gravity-trig' }, { label: 'Comparison method', page: 'method' }],
+    },
+  },
+  {
+    id: 'additional-forces',
+    title: 'Additional forces in one tick',
+    kind: 'recorded',
+    question: 'What happens when pointer, cluster and target forces join the composed layout?',
+    description: 'This recorded study extends the resident tick with additional forces in their production order.',
+    reference: 'A staged same-input CPU reference and independently evolving WebGPU positions.',
+    acceptance: 'Position and force checkpoints retain their existing tolerance; a one-pixel screen is reported separately.',
+    recorded: {
+      conclusion: 'Both tested layouts passed the 40-tick one-pixel screen, while strict CPU trajectory checks still failed.',
+      date: 'Not recorded',
+      environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
+      scope: 'Two communities graphs at 256 and 8,192 points, with selected stage replays and frozen cost checks.',
+      limits: 'This is not a complete-frame responsiveness test or proof of strict trajectory equivalence.',
+      evidence: [{ label: 'Additional-force evidence', page: 'force-composition' }],
+    },
+  },
+  {
+    id: 'spring-rounding',
+    title: 'Rounding spring calculations',
+    kind: 'recorded',
+    question: 'Can a targeted spring correction preserve the checked layouts at lower cost?',
+    description: 'This recorded comparison changes selected spring arithmetic while keeping the original numerical checks.',
+    reference: 'The independent float32 CPU model and the more fully refined spring calculation.',
+    acceptance: 'Scheduled stage, hierarchy and whole-tick checks use the existing budgets; GPU timings are a separate measurement.',
+    recorded: {
+      conclusion: 'The targeted candidate passed 12 recorded trajectories; its 2,048-point star hub pass cost 1.74 ms versus 67.32 ms for the refined control.',
+      date: '2026-11-11',
+      environment: 'Apple M3, native Chrome; browser and luma versions not recorded in this evidence.',
+      scope: 'Chain, star and community graphs at 512 and 2,048 points with 100- and 300-tick schedules.',
+      limits: 'Intermediate ticks, other graph options and other devices remain unverified; this is not a production policy.',
+      evidence: [{ label: 'Targeted spring evidence', page: 'spring-products' }, { label: 'Earlier arithmetic cost comparison', page: 'spring-cost' }],
+    },
+  },
+]

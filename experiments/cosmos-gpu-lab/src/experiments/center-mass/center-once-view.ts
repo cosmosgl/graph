@@ -6,7 +6,7 @@ export function mountCenterOnce (host: HTMLElement, begin: () => boolean, end: (
     <h3>Calculate the center once</h3>
     <p>Compare the current linear force with a version that calculates the center in the final GPU reduction.
       Both keep positions and center on the GPU.</p>
-    <label>Points <input data-once-count type="number" min="1" step="1" value="1000000"></label>
+    <label>Points <input data-once-count type="number" min="1" step="1" value="8192"></label>
     <div class="controls">
       <button data-once-run type="button">Compare center calculation</button>
       <button data-once-stop type="button" disabled>Stop</button>

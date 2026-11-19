@@ -55,4 +55,10 @@ it('reads production GLSL gravity and both native WGSL forces without hiding par
   // Native evaluation may be more accurate than the stepwise CPU model.
   // Keep its cancellation error diagnostic; do not require an inaccurate answer.
   expect(cancellation.sums.every(row => Number.isFinite(row.value))).toBe(true)
+  const additionOnly = await nativeDiagnostics(new Float32Array(), sums, 'addition')
+  expect(additionOnly.gravity).toHaveLength(0)
+  expect(additionOnly.sums.map(row => row.value)).toEqual(gpu.sums.map(row => row.value))
+  const gravityOnly = await nativeDiagnostics(points, new Float32Array(), 'gravity')
+  expect(gravityOnly.gravity.map(row => row.name)).toEqual(gpu.gravity.map(row => row.name))
+  expect(gravityOnly.sums).toHaveLength(0)
 })

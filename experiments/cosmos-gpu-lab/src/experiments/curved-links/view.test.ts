@@ -47,5 +47,7 @@ it('keeps controls, strict failures and source checks visible while cancelling a
   expect(host.querySelector<HTMLSelectElement>('[data-variant]')!.value).toBe('front')
   await select('[data-opacity]', '0')
   expect(host.querySelector('[role="status"]')!.textContent).toContain('Selected policy passed')
-  expect(host.querySelector('details')).toBeNull()
+  expect(host.querySelector('#run-configuration details summary')!.textContent).toBe('More settings')
+  expect(host.querySelector('#run-diagnostics details summary')!.textContent).toBe('Additional checks')
+  expect(host.querySelector('[data-compare]')!.closest('details')).toBeNull()
 }, 90000)

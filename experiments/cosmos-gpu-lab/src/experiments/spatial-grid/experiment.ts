@@ -1,11 +1,13 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'spatial-grid',
   title: 'Spatial grid builder',
   summary: 'Build a million-scale CSR spatial index with GPU count, scan and scatter passes.',
   tags: ['compute', 'grid', 'scan', 'scatter', 'million-scale', 'WebGPU'],
+  cases,
   create: async (host): Promise<ExperimentInstance> => {
     const module = await import('./view')
     return module.createSpatialGridExperiment(host)

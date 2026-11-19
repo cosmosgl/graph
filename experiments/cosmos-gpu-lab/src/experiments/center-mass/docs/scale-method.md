@@ -72,8 +72,8 @@ sample batches four operations and records GPU timestamps separately for the
 force alone and for the complete reduction plus force. Report paired differences
 and their range; timing is not an end-to-end frame-rate result. All validation
 readbacks happen outside timed intervals. Use `LAB_CENTER_ONCE=1` with the visible
-browser and exact-source snapshot requirements below. The live Diagnostics
-control is exploratory unless its exact source is retained.
+browser and exact-source snapshot requirements below. A live measurement
+is exploratory unless its exact source is retained.
 
 The optional `LAB_CENTER_ONCE_FRAME=1` run uses frozen community graphs with
 8,192 and 16,384 points, one pin and one absent point. It alternates the two
@@ -99,7 +99,7 @@ point above that bound is rejected before allocation.
 
 ## Reproduction and boundaries
 
-In **Global center of mass → Diagnostics**, enter comma-separated counts and run
+In [Measure center-force cost](#/center-mass?case=center-measurements), enter comma-separated counts and run
 the study, then export the JSON. For a repeatable timed capture, retain a clean
 source revision or exact source snapshot, rebuild generated controls beforehand,
 and run the opt-in `scale.test.ts` with `LAB_CENTER_SCALE=1`,

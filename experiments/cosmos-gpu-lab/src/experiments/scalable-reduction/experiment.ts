@@ -1,11 +1,13 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'scalable-reduction',
   title: 'Scalable reduction',
   summary: 'Reduce up to ten million GPU-resident points through a dynamic hierarchy of compute passes.',
   tags: ['compute', 'million-scale', 'WebGPU'],
+  cases,
   create: async (host): Promise<ExperimentInstance> => {
     const module = await import('./view')
     return module.createScalableReductionExperiment(host)

@@ -25,25 +25,36 @@ type Study = {
   feedback(pick: PickFeedback): void;
   failed(error: string): void;
 }
+type StartingView = {
+  points: 65536 | 131072 | 196608 | 262144 | 393216 | 524288 | 786432 | 1000000;
+  distribution: 'uniform' | 'clusters' | 'persistent-communities' | 'hubs';
+  force: DistantForce;
+}
 
-export async function createMillionGraphView (host: HTMLElement, study?: Study): Promise<ExperimentInstance> {
+export async function createMillionGraphView (host: HTMLElement, study?: Study, initialView?: StartingView): Promise<ExperimentInstance> {
   const viewport = study?.viewport ?? { width: 480, height: 340, pixelRatio: 1 }
+  const startingPoints = initialView?.points ?? 1000000
   host.classList.add('million-graph')
   host.innerHTML = `
     <div data-run-part="configuration" class="scale-toolbar million-graph-settings">
       <label>Points <select data-count data-control="point-count">
-        <option value="65536">65,536</option><option value="131072">131,072</option>
-        <option value="196608">196,608</option><option value="262144">262,144</option>
-        <option value="393216">393,216</option><option value="524288">524,288</option>
-        <option value="786432">786,432</option>
-        <option value="1000000" selected>1,000,000</option></select></label>
+        <option value="65536"${startingPoints === 65536 ? ' selected' : ''}>65,536</option>
+        <option value="131072"${startingPoints === 131072 ? ' selected' : ''}>131,072</option>
+        <option value="196608"${startingPoints === 196608 ? ' selected' : ''}>196,608</option>
+        <option value="262144"${startingPoints === 262144 ? ' selected' : ''}>262,144</option>
+        <option value="393216"${startingPoints === 393216 ? ' selected' : ''}>393,216</option>
+        <option value="524288"${startingPoints === 524288 ? ' selected' : ''}>524,288</option>
+        <option value="786432"${startingPoints === 786432 ? ' selected' : ''}>786,432</option>
+        <option value="1000000"${startingPoints === 1000000 ? ' selected' : ''}>1,000,000</option></select></label>
       <label>Starting layout <select data-distribution>
-        <option value="uniform">Evenly spread</option><option value="clusters">Two dense clusters</option>
-        <option value="persistent-communities">Dense communities</option>
-        <option value="hubs">Communities with a hub</option></select></label>
+        <option value="uniform">Evenly spread</option>
+        <option value="clusters"${initialView?.distribution === 'clusters' ? ' selected' : ''}>Two dense clusters</option>
+        <option value="persistent-communities"${initialView?.distribution === 'persistent-communities' ? ' selected' : ''}>Dense communities</option>
+        <option value="hubs"${initialView?.distribution === 'hubs' ? ' selected' : ''}>Communities with a hub</option></select></label>
       <label>Distant repulsion <select data-force>
-        <option value="per-point">Per point</option><option value="cell-center">Cell center</option>
-        <option value="four-corners">Four corners</option></select></label>
+        <option value="per-point">Per point</option>
+        <option value="cell-center"${initialView?.force === 'cell-center' ? ' selected' : ''}>Cell center</option>
+        <option value="four-corners"${initialView?.force === 'four-corners' ? ' selected' : ''}>Four corners</option></select></label>
     </div>
     <div class="controls"><button data-run-action="primary" data-play class="button-primary">Run graph</button>
       <button data-run-action="primary" data-pause disabled>Pause</button>

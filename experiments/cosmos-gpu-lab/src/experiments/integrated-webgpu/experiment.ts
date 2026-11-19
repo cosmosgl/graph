@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'integrated-webgpu',
   title: 'First integrated WebGPU graph',
   summary: 'One resident graph with core forces, circle points, straight links and interaction; assess the bounded first-migration slice.',
   tags: ['integration', 'simulation', 'rendering', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createView(host),
   pages: [
     { kind: 'markdown', id: 'method', title: 'Scope and evaluation protocol', load: async (): Promise<string> => (await import('./method.md?raw')).default },

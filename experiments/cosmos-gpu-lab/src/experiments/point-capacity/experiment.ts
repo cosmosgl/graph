@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'point-capacity',
   title: 'Point capacity and memory',
   summary: 'Grow and shrink a resident graph on the same devices; check retained data, resize costs and buffer cleanup.',
   tags: ['simulation', 'resources', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createCapacityView(host),
   pages: [{
     kind: 'markdown',

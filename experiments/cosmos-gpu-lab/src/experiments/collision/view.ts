@@ -3,6 +3,7 @@ import { count as formatCount, milliseconds, scientific } from '../../runtime/re
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { collisionView } from './camera'
 import { FIXTURES, TOPOLOGIES, COLLISION, overlap, radius, type Settings } from './data'
@@ -165,8 +166,10 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
           : report.rows.length ? `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length} tick checks` : 'Ready · no checks yet'
       el(`[data-info="${name}"]`).textContent = errors ?? (name === 'cpu'
         ? 'Stepwise float32 arithmetic · Canvas2D preview'
-        : `${failed} failed tick checks · ` +
-          `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length} trajectory checks vs CPU pass`)
+        : !report.rows.length
+          ? 'No tick or trajectory checks yet.'
+          : `${failed} failed tick checks · ` +
+            `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length} trajectory checks vs CPU pass`)
     }
     el('[data-output="trajectory"]').innerHTML = row
       ? `<table><caption>Tick ${row.tick} · ${settings.evolution === 'independent' ? 'independent trajectories' : 'shared-input outputs'}</caption>
@@ -470,6 +473,15 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     Object.keys(session?.report.errors ?? {}),
     runError,
     'tick and trajectory gates'), { experiment: 'collision', devices: () => Object.values(session?.report.devices ?? {}) })
+  compactRunControls(host, {
+    diagnostics: true,
+    settings: [
+      '[data-control="evolution"]', '[data-control="topology"]', '[data-control="coolingTicks"]', '[data-control="iterations"]',
+      '[data-control="centerReduction"]', '[data-control="radius"]', '[data-control="padding"]', '[data-control="strength"]',
+      '[data-control="alpha"]', '[data-control="cooling"]',
+    ],
+  })
+  host.querySelector('#run-configuration .advanced-controls > div')?.prepend(host.querySelector('.run-presets')!)
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

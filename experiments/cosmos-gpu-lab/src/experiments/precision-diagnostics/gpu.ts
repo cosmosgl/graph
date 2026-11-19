@@ -69,7 +69,9 @@ var<workgroup> partials: array<f32, 256>;
   if (lane == 0u) { output[0] = vec4f(partials[0], 0., 0., 0.); }
 }`
 
-export async function nativeDiagnostics (points: Float32Array, values: Float32Array): Promise<{
+export type DiagnosticPath = 'all' | 'gravity' | 'addition'
+
+export async function nativeDiagnostics (points: Float32Array, values: Float32Array, path: DiagnosticPath = 'all'): Promise<{
   gravity: Array<{ name: string; forces: Float32Array }>;
   sums: Array<{ name: string; value: number }>;
   device: string;
@@ -78,10 +80,14 @@ export async function nativeDiagnostics (points: Float32Array, values: Float32Ar
   const device = await createDevice('webgpu', undefined, false)
   const scope = resourceScope()
   try {
-    const positions = scope.own(upload(device, points)); const input = scope.own(upload(device, values))
-    const forces = scope.own(upload(device, new Float32Array(points.length)))
-    const sumOutput = scope.own(upload(device, new Float32Array(4)))
+    const positions = path !== 'addition' ? scope.own(upload(device, points)) : undefined
+    const input = path !== 'gravity' ? scope.own(upload(device, values)) : undefined
+    const forces = positions ? scope.own(upload(device, new Float32Array(points.length))) : undefined
+    const sumOutput = input ? scope.own(upload(device, new Float32Array(4))) : undefined
     const evaluate = async (source: string, field: 'points' | 'values'): Promise<Float32Array> => {
+      const sourceBuffer = field === 'points' ? positions : input
+      const outputBuffer = field === 'points' ? forces : sumOutput
+      if (!sourceBuffer || !outputBuffer) throw new Error(`Diagnostic input unavailable: ${field}`)
       const kernel = scope.own(await Kernel.createAsync(device, {
         source, shaderLayout: { bindings: bindingLayout([[field, 'read-only-storage'], ['output', 'storage']]) },
       }))
@@ -89,17 +95,23 @@ export async function nativeDiagnostics (points: Float32Array, values: Float32Ar
       try {
         kernel.dispatch(pass, {
           x: field === 'points' ? Math.ceil(points.length / 4 / 64) : 1,
-          bindings: { [field]: field === 'points' ? positions : input, output: field === 'points' ? forces : sumOutput },
+          bindings: { [field]: sourceBuffer, output: outputBuffer },
         })
       } finally { pass.end() }
       device.submit()
-      return await readFloats(field === 'points' ? forces : sumOutput)
+      return await readFloats(outputBuffer)
     }
     const gravity = []
-    for (const [name, source] of [['WGSL native polar', polar], ['WGSL Cartesian', cartesian]]) gravity.push({ name, forces: await evaluate(source, 'points') })
+    if (positions) {
+      for (const [name, source] of [['WGSL native polar', polar], ['WGSL Cartesian', cartesian]]) {
+        gravity.push({ name, forces: await evaluate(source, 'points') })
+      }
+    }
     const sums = []
-    for (const [name, source] of [['WGSL serial', serial], ['WGSL blocked 64', blocked], ['WGSL tree 256', tree]]) {
-      sums.push({ name, value: (await evaluate(source, 'values'))[0] })
+    if (input) {
+      for (const [name, source] of [['WGSL serial', serial], ['WGSL blocked 64', blocked], ['WGSL tree 256', tree]]) {
+        sums.push({ name, value: (await evaluate(source, 'values'))[0] })
+      }
     }
     return { gravity, sums, device: `${String(device.info.vendor)} / ${String(device.info.renderer)}`, adapter: { ...device.info } }
   } finally { try { scope.destroy() } finally { device.destroy() } }

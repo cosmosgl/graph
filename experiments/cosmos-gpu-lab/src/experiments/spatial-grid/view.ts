@@ -1,5 +1,6 @@
 import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createSpatialGridBackend,
@@ -17,7 +18,7 @@ import {
 
 const POINT_PRESETS = [100_000, 1_000_000, 5_000_000] as const
 const GRID_PRESETS = [32, 64, 128, 256] as const
-const DEFAULT_POINT_COUNT = 1_000_000
+const DEFAULT_POINT_COUNT = 100_000
 const DEFAULT_GRID_SIZE = 128
 
 function element<T extends HTMLElement> (host: ParentNode, selector: string): T {
@@ -374,6 +375,7 @@ export async function createSpatialGridExperiment (
     [],
     runError,
     'exhaustive grid builds'), { experiment: 'spatial-grid', devices: () => backend?.info ? [backend.info] : [] })
+  compactRunControls(host, { settings: ['[data-control="distribution"]'], diagnostics: true })
   configure().catch(console.error)
 
   return {

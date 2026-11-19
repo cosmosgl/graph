@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'resident-layout',
   title: 'GPU-resident layout',
   summary: 'Keep bounds, composed forces and circle/link rendering on WebGPU; compare checkpoints with the staged precision reference.',
   tags: ['simulation', 'integration', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createResidentView(host),
   pages: [{
     kind: 'markdown',

@@ -6,7 +6,7 @@ export function mountCenterScale (host: HTMLElement, begin: () => boolean, end: 
     <h3>Center force at larger sizes</h3>
     <p>Compare the current GPU-resident center reduction and force with a CPU sum and the older WebGL blend.
       Timings are isolated GPU work, not a complete graph frame.</p>
-    <label>Point counts <input data-scale-counts type="text" value="8192, 65536, 100000, 1000000, 2000000"></label>
+    <label>Point counts <input data-scale-counts type="text" value="8192"></label>
     <div class="controls">
       <button data-scale-run type="button">Run scale study</button>
       <button data-scale-stop type="button" disabled>Stop</button>

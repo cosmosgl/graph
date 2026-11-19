@@ -1,10 +1,12 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'mouse-repulsion',
   title: 'Mouse repulsion',
   summary: 'Compare the pointer force in production WebGL and WebGPU, including when the main simulation is paused.',
   tags: ['simulation', 'interaction'],
+  cases,
   create: async host => (await import('./view')).createView(host),
   pages: [
     { kind: 'markdown', id: 'method', title: 'How mouse repulsion works', load: async (): Promise<string> => (await import('./method.md?raw')).default },

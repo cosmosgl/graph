@@ -1,4 +1,5 @@
 import type { ExperimentDefinition, ExperimentModule } from '../runtime/experiment'
+import { caseEvidenceLinks } from '../runtime/experiment'
 import { research, researchMethodPages } from './research'
 
 function validateExperiments (definitions: ExperimentDefinition[]): void {
@@ -24,12 +25,15 @@ function validateExperiments (definitions: ExperimentDefinition[]): void {
     if (!record) throw new Error(`Add a research assessment for ${experiment.id}`)
     const methodIds = researchMethodPages(record)
     const evidenceIds = record.investigations.map(item => item.page)
+    const caseEvidenceIds = experiment.cases?.flatMap(item => caseEvidenceLinks(item).map(link => link.page)) ?? []
     if (new Set(evidenceIds).size !== evidenceIds.length) throw new Error(`Duplicate evidence in ${experiment.id}`)
     for (const id of [...methodIds, ...evidenceIds, ...record.evidence ? [record.evidence] : []]) {
       if (!pageIds.has(id)) throw new Error(`Unknown research page ${experiment.id}/${id}`)
     }
     for (const id of pageIds) {
-      if (!methodIds.includes(id) && !evidenceIds.includes(id)) throw new Error(`Assign ${experiment.id}/${id} to Method or Evidence`)
+      if (!methodIds.includes(id) && !evidenceIds.includes(id) && !caseEvidenceIds.includes(id)) {
+        throw new Error(`Assign ${experiment.id}/${id} to Method or Evidence`)
+      }
     }
     if (record.evidence && !evidenceIds.includes(record.evidence)) throw new Error(`Current evidence is not indexed in ${experiment.id}`)
     for (const item of record.investigations) {
@@ -45,52 +49,60 @@ const modules = import.meta.glob<ExperimentModule>('../experiments/*/experiment.
 const definitions = Object.values(modules).map(module => module.experiment)
 validateExperiments(definitions)
 
-const ungrouped = new Map(definitions.map(experiment => [experiment.id, experiment]))
-
-// Group and member order are the suggested reading path, independent of titles.
-// Every discovered experiment must appear exactly once in this catalog.
-export const experimentGroups = [
-  {
-    id: 'foundations',
-    title: 'Foundations',
-    description: 'Start with reductions, spatial indexing and basic point rendering.',
-    experiments: ['center-mass', 'scalable-reduction', 'spatial-grid', 'point-rendering', 'point-styling', 'straight-links',
-      'smoothstep-coverage', 'curved-links'],
-  },
-  {
-    id: 'forces',
-    title: 'Cosmos forces',
-    description: 'Apply the building blocks to local neighbors, global repulsion, linked points and overlapping discs.',
-    experiments: ['neighborhood-forces', 'many-body', 'many-body-grid', 'workgroup-repulsion', 'weighted-links', 'collision',
-      'cluster-attraction', 'point-attractors', 'mouse-repulsion'],
-  },
-  {
-    id: 'combined',
-    title: 'Combined engine',
-    description: 'Follow independently evolving layouts, compose the forces and keep a complete frame on the GPU.',
-    experiments: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
-      'viewer-comparison', 'pilot-viewer', 'matched-layout'],
-  },
-  {
-    id: 'validation',
-    title: 'Validation and optimization',
-    description: 'Check production settings, measure GPU cost, then investigate bottlenecks and resource capacity.',
-    experiments: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'gpu-stage-profile', 'ribbon-generation', 'hub-springs', 'cell-aggregation', 'point-capacity'],
-  },
-].map(({ experiments: ids, ...group }) => ({
-  ...group,
-  experiments: ids.map(id => {
-    const experiment = ungrouped.get(id)
-    if (!experiment) throw new Error(`Unknown or already grouped experiment: ${id}`)
-    ungrouped.delete(id)
-    return experiment
-  }),
-}))
-
-if (ungrouped.size) throw new Error(`Assign experiments to a catalog group: ${[...ungrouped.keys()].join(', ')}`)
-
-export const experiments = experimentGroups.flatMap(group => group.experiments)
+export const experiments = definitions.sort((a, b) => a.title.localeCompare(b.title))
 
 export function findExperiment (id: string): ExperimentDefinition | undefined {
   return experiments.find(experiment => experiment.id === id)
+}
+
+const catalogTopics = [
+  {
+    id: 'rendering',
+    title: 'Rendering and interaction',
+    description: 'How points and links are drawn and selected.',
+    ids: ['point-rendering', 'point-styling', 'straight-links', 'smoothstep-coverage', 'curved-links', 'ribbon-generation'],
+  },
+  {
+    id: 'forces-motion',
+    title: 'Forces and motion',
+    description: 'The forces that shape and move graphs.',
+    ids: ['center-mass', 'neighborhood-forces', 'many-body', 'many-body-grid', 'workgroup-repulsion', 'weighted-links',
+      'collision', 'cluster-attraction', 'point-attractors', 'mouse-repulsion', 'hub-springs'],
+  },
+  {
+    id: 'whole-graphs',
+    title: 'Whole graphs and layouts',
+    description: 'Complete layouts, moving graphs and viewers.',
+    ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
+      'viewer-comparison', 'pilot-viewer', 'matched-layout'],
+  },
+  {
+    id: 'gpu-foundations',
+    title: 'GPU foundations',
+    description: 'Reductions, spatial indexing and memory.',
+    ids: ['scalable-reduction', 'spatial-grid', 'point-capacity', 'cell-aggregation'],
+  },
+  {
+    id: 'precision-performance',
+    title: 'Precision and performance',
+    description: 'Numerical accuracy, production checks and GPU cost.',
+    ids: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'gpu-stage-profile'],
+  },
+]
+
+const assigned = new Set<string>()
+export const experimentGroups = catalogTopics.map(({ ids, ...topic }) => ({
+  ...topic,
+  experiments: ids.map(id => {
+    const experiment = findExperiment(id)
+    if (!experiment || assigned.has(id)) throw new Error(`Unknown or duplicate catalog experiment: ${id}`)
+    assigned.add(id)
+    return experiment
+  }).sort((a, b) => a.title.localeCompare(b.title)),
+}))
+
+// Newly discovered studies remain visible until they are assigned a topic.
+const unassigned = experiments.filter(experiment => !assigned.has(experiment.id))
+if (unassigned.length) {
+  experimentGroups.push({ id: 'other', title: 'More experiments', description: 'Other studies in the lab.', experiments: unassigned })
 }

@@ -1,5 +1,6 @@
 import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createHubStudy, hubSummary, hubPairedWins, HUB_NORMAL_POLICY, type HubCase, type HubStudy, type HubCapture } from '../combined-layout/hub-study'
 import { createHubTrajectory, type HubTrajectory, type HubTrajectorySettings } from '../combined-layout/hub-trajectory'
@@ -221,6 +222,7 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
     experiment: 'hub-springs',
     devices: () => [study?.report.info, trajectory?.report.info].filter((s): s is string => Boolean(s)),
   })
+  compactRunControls(host, { diagnostics: true, settings: ['[data-control="pinned"]', '[data-control="decay"]'] })
   controls()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }

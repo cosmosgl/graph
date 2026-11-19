@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { validationContracts } from '../../runtime/validation'
 import { pick } from '../../gpu/rgba-readback'
 import { SOURCE_BYTE_PICKING_POLICY } from '../../gpu/source-alpha'
@@ -314,6 +315,11 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
     'Other color modes, curves, patterns, arrows, transitions, pointer-window behavior, wider devices and runtime GPU cost.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], runError, 'straight-ribbon full-frame comparison'),
   { experiment: 'straight-links', devices: () => Object.values(backends).map(b => b.info) })
+  compactRunControls(host, {
+    diagnostics: true,
+    settings: ['[data-dash-length]', '[data-dash-gap]', '[data-gradient]',
+      '[data-zoom]', '[data-ratio]', '[data-opacity]', '[data-scale]', '[data-order]'],
+  })
   for (const [lane, create] of [['webgl', createLinksWebGL], ['webgpu', createLinksWebGPU]] as const) {
     try {
       backends[lane] = await create(el<HTMLCanvasElement>(`[data-canvas="${lane}"]`))

@@ -7,32 +7,34 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-Home opens with the current investigation and its next action, then a feature coverage map derived from
-`src/docs/feature-inventory.md`. Counts describe bounded coverage, not migration completion. Feature rows
-link to methods, detailed limits and retained counterexamples. The experiment catalog can group the same
-studies by migration area or prerequisite reading order. The roadmap keeps the five-row task plan and
-still-open milestone checklists; these are different from the reading path.
+Home groups experiment cards by topic; each focused case opens directly from its group's card. The header
+links to the catalog, roadmap, feature coverage and learning guide; other references appear above the catalog.
+Header search finds human-facing experiment descriptions, recorded evidence, guides and references across
+the lab. Results link to the relevant case or section. Agent recipes, reproduction commands, shader code,
+raw captures and temporary live-run values are not indexed. Search loads its local index on first use.
+Coverage counts describe bounded evidence, not migration completion. Reviewed findings remain separate
+from this browser's live run.
 
-`migrationFocus` identifies one current experiment and research step. Its title, review date, conclusion
-and next action come from the experiment records. The header repeats that position on every page and
-marks the current navigation area. Reviewed findings remain separate from this browser's live run.
+Each experiment uses focused case pages. A case names one question, explains a default input,
+shows the live run and its results, and presents the recorded finding, scope and limits. When no
+finding has been recorded, the page says so. Group navigation makes other independent cases or
+topic peers discoverable. Links open human-readable method and evidence separately. Recorded-only
+cases are marked and do not initialize a live device. Optional advanced settings and checks use
+keyboard-accessible disclosures; the practical context and results remain visible.
 
-Each experiment is one complete document: question and current finding, live visualization,
-expanded settings and results, technical explanations, current and earlier findings, diagnostics,
-and references. A sticky contents menu sits on the right on wide screens and stays expanded after the live run, before explanations, on narrow screens. It includes article titles,
-evidence states and their top-level sections. The header links to Experiments, Roadmap, Feature coverage and Learn; there is no permanent catalog sidebar.
-
-All technical articles and investigations are embedded, with their source metadata and historical
-warnings intact. Shared comparison criteria appear once. Sources move into References with their
-annotations. Article headings have namespaced anchors, so repeated headings cannot collide.
-Old `/run`, `/evidence` and `/docs/page?section=heading` links land on the corresponding sections.
-Reading and section navigation preserve the running instance, canvas, controls and tick. Leaving
-for a shared reference pauses the instance; another experiment or Home releases it. Documentation
-remains readable when GPU initialization fails. All content stays expanded, without accordions.
+Agent recipes and agent-finding replay steps remain in their source folders and are not embedded in the app.
+Old human-facing article links still open their evidence. Opening evidence pauses the current run;
+returning to the same case retains its controls and state when the browser supports it. Switching
+cases, experiments or Home normally releases the prior run. Opening or closing search does not interrupt
+the run. Following a search result to another experiment retains the previous run in memory so returning
+to it restores its state; only one previous search run is kept. A browser that cannot move an embedded viewer
+without reloading it still uses the viewer's existing evidence-restoration fallback. Recorded findings remain
+readable if live setup fails.
 
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
-Every experiment includes **What we compare**, describing its reference, gates, checked population and limits. The contract is not a live verdict.
+Every experiment includes **What this compares**, describing its reference and how to interpret the result.
+Recorded scope and limits apply to the historical observation, not automatically to the current run.
 
 ## Run
 
@@ -69,10 +71,18 @@ spatial-grid encodings independent of the presentation palette.
 
 Create `src/experiments/<id>/experiment.ts` and export an `ExperimentDefinition`. Vite discovers experiment manifests
 through `import.meta.glob`; the demo and documentation remain lazy-loaded.
-Assign the experiment ID to exactly one group in `src/app/registry.ts`, in prerequisite order.
-That catalog drives both the homepage and sidebar: Foundations, Cosmos forces, Combined engine,
-then Validation and optimization. The registry rejects missing, duplicate and unknown assignments.
-This is a suggested reading path; the migration roadmap records research progress.
+The registry validates each manifest and adds the experiment to the catalog. Assign it to a topic in
+`src/app/registry.ts`; unassigned experiments appear under More experiments. The migration roadmap records
+research progress separately from the catalog.
+
+Add `ExperimentCase` entries and accept the selected case ID in `create` when cases use different live
+views. Each case defines a question, description, reference, acceptance rule and links to its own method
+or evidence. Set `recorded` to `null` when there is no historical result; otherwise include its observation,
+date, environment, scope and limits. Include the context needed to understand each case on its own,
+even when it also appears in another case. The shared group navigator makes related cases discoverable
+without imposing a reading order.
+A `recorded` case does not create a GPU instance. Provide an honest
+`scope` to `mountRunLayout` for the current case and keep historical measurements distinct from live output.
 
 An experiment should contain:
 
@@ -163,8 +173,9 @@ scroll container, with all rows visible. These rules apply to the whole lab, inc
 
 Every live experiment uses `src/runtime/run-layout.ts`, including the standalone link diagnostic.
 At 1,200px and wider, Configuration sits beside Run and its visualization/results. Smaller screens
-stack the same expanded content. The top summary always names the run state, passed checks,
-failures/unavailable backends and unchecked scope. It describes this browser session, not migration approval.
+stack the same content. The run summary names the run state, checks, failures/unavailable backends
+and unchecked scope when applicable. For a measurement without a pass budget, `showChecks: false`
+avoids inventing a verdict. The summary describes this browser session, not migration approval.
 Rendering-only demos and benchmarks do not acquire a numerical pass merely by completing.
 
 Author regions with `data-run-part="configuration|visualization|metrics|status|results|explanation|diagnostics"`
@@ -217,16 +228,10 @@ their separate meanings.
 
 ### Experiment navigation
 
-The Production and WebGPU viewers, Precision diagnostics and Karate Club pilot pages prototype an
-experience combining a live demonstration with recorded evidence. Their `recorded-summary.json` files summarize a
-named historical observation, including its environment, checks and limits;
-the linked findings remain the source. An `agent-recipe.md` beside each study
-describes a focused replay and the final account. Their live views open with the
-page; the recorded evidence and recipe remain readable if initialization fails.
-Precision diagnostics and the pilot automatically load small, reviewed investigation
-records from their `agent-findings/` directories. Their reproduction instructions
-remain expanded. A completed investigation can be inconclusive; record presence
-and schema validation do not establish a passing result or scientific correctness.
+Case records summarize named historical observations; linked findings
+remain the source. `agent-recipe.md` and `agent-findings/` retain replay and source information
+for research, but agent-facing instructions do not appear in the interface. A completed
+investigation can be inconclusive; record presence does not establish a scientific pass.
 Existing `/run` links and links to live controls, results or diagnostics still work.
 When a browser cannot preserve an embedded viewer while moving it, returning from
 a reference starts a fresh viewer. Completed viewer results are kept separately
@@ -239,12 +244,12 @@ grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim. The
 unknown pages, missing assessments and unreachable documents. An empty investigation list means
 no recorded matrix is published; local runs do not populate it.
 
-Base routes (`#/experiment`) open the full experiment document. Old `/run` routes resolve to that
-page; `/evidence` resolves to Recorded findings. Old `docs/page` URLs become `?section=doc-page`
-links, retaining the original heading slug after the page prefix. Article-local links use that prefix.
-Section changes scroll and focus the target without recreating or pausing the run. The contents menu
-tracks the section being read. Static-document table observers have their own lifetime and are
-excluded from per-tick live table refreshes.
+Base routes (`#/experiment`) open the default case when cases exist, otherwise the full experiment
+document. `?case=<id>` links to a focused case and `?case=<id>&evidence=<page>` opens its evidence.
+Old human-facing `/docs/page?section=heading` and `?section=doc-page-heading` links resolve to the
+corresponding article and heading. Agent-recipe links lead to recorded findings. Section changes within
+a case preserve the run. Static-document table observers have their own lifetime and are excluded from
+per-tick live table refreshes.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

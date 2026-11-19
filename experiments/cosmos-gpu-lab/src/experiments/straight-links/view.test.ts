@@ -83,5 +83,7 @@ it('keeps rejected controls visible and preserves the live ribbon and ID readout
   expect(host.querySelector('canvas')).toBe(canvas); inspect()
   expect(host.querySelector<HTMLSelectElement>('[data-variant]')!.value).toBe('visible')
   await checkReport('visible')
-  expect(host.querySelector('details')).toBeNull()
+  expect(host.querySelector('#run-configuration details summary')!.textContent).toBe('More settings')
+  expect(host.querySelector('#run-diagnostics details summary')!.textContent).toBe('Additional checks')
+  expect(host.querySelector('[data-compare]')!.closest('details')).toBeNull()
 }, 90000)

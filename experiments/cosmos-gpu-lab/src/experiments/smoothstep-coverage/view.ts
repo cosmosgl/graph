@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { Snapshot } from '../straight-links/backend'
 import { FIXED_INPUTS, fixedInputProbe, type FixedRow } from './fixed-input'
 import { compareLine, type Lane, type LineRun } from './line-study'
@@ -224,5 +225,6 @@ export async function createSmoothstepView (host: HTMLElement): Promise<Experime
   })
   mountRunLayout(host, () => summarizeRun(state, [], 'Other lines, caps, devices and production changes', [], error),
     { experiment: 'smoothstep-coverage', devices: () => devices })
+  compactRunControls(host, { diagnostics: true })
   return { destroy: (): void => { destroyed = true; disposeRunLayout(host) } }
 }

@@ -30,7 +30,7 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(element.getBoundingClientRect().height).toBeGreaterThan(0)
       expect(getComputedStyle(element).visibility).toBe('visible')
     }
-    expect(host.querySelector('#study-overview')!.getBoundingClientRect().top)
+    expect(host.querySelector('#recorded-findings')!.getBoundingClientRect().top)
       .toBeGreaterThanOrEqual(host.querySelector('[data-panels]')!.getBoundingClientRect().bottom)
     expect(control.snapshot().some((value, index) => index % 4 === 3 && value > 0)).toBe(true)
 

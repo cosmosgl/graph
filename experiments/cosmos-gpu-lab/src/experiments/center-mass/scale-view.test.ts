@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest'
-import { createCenterMassExperiment } from './view'
+import { createCenterMeasurementsExperiment } from './view'
 
-it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('runs and displays the scale study from the center experiment', async () => {
+it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('runs and displays both measurements from the center measurement case', async () => {
   const host = document.createElement('div')
   document.body.append(host)
-  const experiment = await createCenterMassExperiment(host)
+  const experiment = createCenterMeasurementsExperiment(host)
   try {
     const input = host.querySelector<HTMLInputElement>('[data-scale-counts]')!
     input.value = '257'

@@ -1,6 +1,7 @@
 import { setStatus, drawPoint } from '../../runtime/presentation'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView, type Backend, type View } from './backend'
@@ -343,6 +344,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     Object.keys(errors),
     runError,
     'complete tick comparisons'), { experiment: 'many-body', devices: () => Object.values(info) })
+  compactRunControls(host, { diagnostics: true })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

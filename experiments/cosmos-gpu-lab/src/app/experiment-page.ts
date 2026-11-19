@@ -5,6 +5,7 @@ import { addArticleSections, rewriteArticleLinks } from './article-sections'
 import { articleSectionId, experimentHref } from './router'
 import { researchMethodPages, type ResearchSummary } from './research'
 import { renderInvestigationContext } from './research-ui'
+import { unlinkOtherExperiments } from './independent-experiment'
 
 type Notes = { ready: Promise<void>; disposed: boolean; dispose(): void }
 const notes = new WeakMap<HTMLElement, Notes>()
@@ -20,35 +21,18 @@ export function renderExperimentContents (host: HTMLElement, experiment: Experim
   contents.setAttribute('aria-label', 'On this page'); contents.innerHTML = '<p>On this page</p><ul></ul>'
   host.querySelectorAll('.experiment-contents').forEach(node => node.remove())
   const targets: Array<{ link: HTMLAnchorElement; target: HTMLElement }> = []
-  const append = (list: HTMLElement, target: HTMLElement, label: string, state?: string): HTMLLIElement => {
+  const append = (list: HTMLElement, target: HTMLElement, label: string): HTMLLIElement => {
     const item = document.createElement('li'); const link = document.createElement('a'); link.textContent = label
     link.href = `${experimentHref(experiment.id)}?section=${encodeURIComponent(target.id)}`
-    if (state) { const note = document.createElement('small'); note.textContent = state; link.append(note) }
     item.append(link); list.append(item); targets.push({ link, target }); return item
   }
-  const sections = contentsSections.flatMap(([id, label]) => {
+  const sections = [...contentsSections.flatMap(([id, label]) => {
     const target = host.querySelector<HTMLElement>(`#${id}`)
     return target ? [{ id, label, target }] : []
-  }).sort((a, b) => a.target.compareDocumentPosition(b.target) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
-  for (const { id, label, target } of sections) {
-    const item = append(contents.querySelector('ul')!, target, target.dataset.sectionLabel ?? label)
-    const articles = target.querySelectorAll<HTMLElement>('.experiment-article')
-    if (!articles.length && id !== 'run-explanation') continue
-    const children = document.createElement('ul'); item.append(children)
-    if (id === 'run-explanation') {
-      for (const [section, name] of [['validation-contract', 'Reference and acceptance'], ['methods-and-alternatives', 'Methods and alternatives']]) {
-        const group = target.querySelector<HTMLElement>(`#${section === 'validation-contract' ? articleSectionId(section) : section}`)
-        if (group) append(children, group, name)
-      }
-    }
-    for (const article of articles) {
-      const entry = append(children, article, article.dataset.articleTitle!, article.dataset.evidenceState)
-      const headings = article.querySelectorAll<HTMLElement>('[data-heading-level="2"]')
-      if (!headings.length) continue
-      const sections = document.createElement('ul'); entry.append(sections)
-      for (const heading of headings) append(sections, heading, heading.dataset.sectionLabel ?? heading.childNodes[0]?.textContent?.trim() ?? '')
-    }
-  }
+  }), ...Array.from(host.querySelectorAll<HTMLElement>('.experiment-article'), target => ({
+    id: target.id, label: target.dataset.articleTitle ?? 'Evidence', target,
+  }))].sort((a, b) => a.target.compareDocumentPosition(b.target) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+  for (const { label, target } of sections) append(contents.querySelector('ul')!, target, target.dataset.sectionLabel ?? label)
   host.querySelector('.experiment-header')!.after(contents)
   let frame = 0
   const refresh = (): void => {
@@ -152,7 +136,7 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
     <div data-method-articles></div></section>
     <section class="recorded-findings" id="recorded-findings" aria-labelledby="recorded-findings-title">
       <h2 id="recorded-findings-title">Recorded findings</h2><div data-findings-articles></div>
-      <h3>Scope and next steps</h3><p>${record.scope}</p><p>${record.next}</p>
+      <h3>Scope</h3><p>${record.scope}</p>
       <p class="research-meta">Assessed variant: ${record.variant}. Reviewed ${record.reviewed}.</p>
       <section class="earlier-findings"><h3>Earlier investigations</h3><div data-earlier-articles></div></section>
     </section>
@@ -175,7 +159,7 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
   } else frame.append(content)
   const jobs: Promise<void>[] = []
   for (const id of researchMethodPages(record)) {
-    if (id === 'validation-contract' || id === record.evidence) continue
+    if (id === 'validation-contract' || id === 'agent-recipe' || id === record.evidence) continue
     const page = experiment.pages.find(page => page.id === id)!
     jobs.push(renderArticle(content.querySelector('[data-method-articles]')!, references, experiment, record, page))
   }
@@ -200,6 +184,7 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
     return pageOf(a) - pageOf(b)
   }))
   rewriteArticleLinks(host, experiment, record)
+  unlinkOtherExperiments(host, experiment)
 }
 
 export function mountExperimentNotes (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): Promise<void> {
