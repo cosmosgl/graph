@@ -242,10 +242,12 @@ This is the current task order. A closed investigation can retain failing cases;
    workloads reached 33.3 ms median frame intervals, and all 16 clicks met
    50 ms with cached highlights. The 33 ms frame gate remains open under
    the production envelope. [Drawing results](#/million-graph?section=doc-draw-cost)
-2. [ ] **Bring the composed forces into a representative interactive M3 workload.**
-   Extend the passed one-pixel screen to deeper zoom and more graph shapes.
-   Retain the strict failures and use same-input replay to diagnose any
-   visible layout change.
+2. [x] **Bring the composed forces into a representative interactive M3 workload.**
+   Five corrected layouts matched all 340 CPU checkpoints through 3.3× zoom,
+   including two hashed collision passes at 8,192 points. Same-input replays
+   traced the original failures to a pointer force difference amplified by
+   repulsion. The frame targets and full-force million-point run remain open.
+   [Interactive force results](#/integrated-webgpu?section=doc-composed-interaction)
 3. [ ] **Resolve the viewer API and color gaps.** Profile link paint at the
    remaining interior witnesses. Decide how production serves readback to
    selection and tracking callers. Run the host integration against a single

@@ -55,22 +55,22 @@ export const research: Record<string, ResearchSummary> = {
   collision: {
     comparison: 'Shared initial graph → exact collision or hashed neighbor slots → slot, force and position checks',
     question: 'Can WebGPU reproduce Cosmos collision both below and above the 4,096-point cutoff?',
-    conclusion: 'The hashed candidate matches the CPU model at 4,097 and 8,192 points. ' +
-      'The older exact candidate passes the composed matrix through 512 points.',
-    scope: 'Nine hashed passes compare all selected and empty slots, force and independent positions on M3. The large path still needs direct WebGL parity.',
+    conclusion: 'The hashed candidate matches WebGL slot IDs and passes the numeric checks at 4,097 and 8,192 points. ' +
+      'Two resident passes add 2.03 ms median in the frozen 8,192-point GPU tick.',
+    scope: 'Nine hashed passes compare all slots, forces and positions. The in-tick replay covers the frozen and moving 8,192-point communities on M3.',
     variant: 'Targeted exact collision and a separate f32 hash/slot implementation; luma 10.0.0-alpha.15 in the large study',
     reviewed: '2026-11-19',
     milestone: 'simulation',
     evidence: 'hashed-findings',
     method: 'method',
     methodPages: ['hashed-method'],
-    next: 'Compare the hashed candidate directly with production WebGL, then measure its cost in the full tick.',
-    reproduce: 'Use the hash and slot method to replay the 4,097- and 8,192-point fixtures. The live control still runs the exact route.',
+    next: 'Measure throughput and layout quality above 8,192 points with dense graphs and the production seed schedule.',
+    reproduce: 'Use the hash and slot method to replay both sizes. Choose Composed with collision in the integrated viewer to try it in a moving graph.',
     investigations: [
       {
         page: 'hashed-findings',
         state: 'Current evidence',
-        description: 'Nine bounded large collision passes on native M3, including dense bucket overflow and f32 ties.',
+        description: 'Production GLSL slot comparison, normal-tick integration and paired GPU cost on M3.',
       },
       { page: 'precision', state: 'Supporting investigation', description: 'Targeted correction, repeated independent matrix, ablations and paired GPU cost.' },
       {
@@ -89,14 +89,14 @@ export const research: Record<string, ResearchSummary> = {
   'combined-layout': {
     comparison: 'Shared initial graph → independently evolving WebGL / WebGPU / CPU → stage and whole-tick checks',
     question: 'How do the additional forces behave in a resident tick in production order?',
-    conclusion: 'Both composed layouts pass a 40-tick one-pixel screen on M3. Strict CPU trajectory failures remain.',
+    conclusion: 'Both community layouts pass the 40-tick one-pixel screen on M3. The integrated replay corrects the original pointer drift.',
     scope: 'Two communities workloads at 256 and 8,192 points, same-input replays, projected motion and frozen GPU cost with basic drawing.',
     variant: 'Corrected resident core with mouse, cluster and per-point attraction stages; luma 10.0.0-alpha.15',
     reviewed: '2026-11-19',
     milestone: 'simulation',
     evidence: 'force-composition',
     method: 'method',
-    next: 'Measure complete interactive frames with the composed forces and compare deeper zoom and representative graph shapes.',
+    next: 'Extend the corrected force set to large representative graphs and measure full viewer cost.',
     reproduce: 'Run the opt-in force composition study for the trajectory and frozen cost. The live control shows the resident core.',
     investigations: [
       {
@@ -304,13 +304,13 @@ export const milestones = [
   {
     id: 'simulation',
     title: 'Simulation',
-    position: 'Additional forces pass in isolation. At one million points, Four corners reaches a 50 ms median on persistent dense communities',
+    position: 'Corrected interactive forces match the CPU through 8,192 points. Four corners reaches 50 ms median on million-point dense communities',
     acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Confirm composed layout quality across longer runs, zoom and more graph shapes. Address the strict trajectory failures.',
-      'Compare the larger collision route with production WebGL and measure its integrated cost.',
+    gates: ['Confirm composed layout quality across longer runs and more graph shapes, retaining the native pointer failures.',
+      'Verify hashed collision above 8,192 points with the production scheduling and seed stream.',
       'Validate the supported force set in the million-point viewer and account for slow ticks on dense graphs and large hubs.'],
     evidence: [['mouse-repulsion', 'Mouse repulsion'], ['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'],
-      ['combined-layout', 'Combined forces'],
+      ['combined-layout', 'Combined forces'], ['integrated-webgpu', 'Interactive forces'],
       ['collision', 'Collision'], ['matched-layout', 'Matched layouts'], ['million-graph', 'Million-point Four corners']],
   },
   {
@@ -357,6 +357,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  step: 3,
-  experiment: 'combined-layout',
+  step: 4,
+  experiment: 'viewer-comparison',
 } as const
