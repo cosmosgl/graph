@@ -278,6 +278,14 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   const scrollPositions = new Map<string, number>()
   let previousPath: string | undefined
 
+  const focusCaseSection = (section: string | null): boolean => {
+    if (section === 'run-diagnostics') {
+      const tools = workspace.querySelector<HTMLDetailsElement>('.case-single-page #run-diagnostics > details')
+      if (tools) tools.open = true
+    }
+    return scrollToSection(workspace, section)
+  }
+
   const focusExperimentSection = (id: string): void => {
     const original = currentSection()
     const loading = workspace.querySelector('.unified-experiment[aria-busy="true"]')
@@ -304,8 +312,22 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       : undefined
     let caseSection = currentSection()
     let evidencePage = route.kind === 'experiment' ? route.evidencePage ?? route.pageId : undefined
+    if (route.kind === 'experiment' && definition?.singlePage && validPage) {
+      const { legacyCases, pageSections } = definition.singlePage
+      const legacySection = route.caseId && Object.hasOwn(legacyCases, route.caseId) ? legacyCases[route.caseId] : undefined
+      if (selectedCase || legacySection) {
+        const slug = caseSection ?? ''
+        const page = evidencePage ?? Object.keys(pageSections).sort((a, b) => b.length - a.length).find(id =>
+          slug === articleSectionId(id) || slug.startsWith(`${articleSectionId(id)}-`))
+        const inlineSection = page && Object.hasOwn(pageSections, page) ? pageSections[page] : legacySection
+        if (inlineSection) {
+          selectedCase = definition.cases![0]; caseSection = inlineSection; evidencePage = undefined
+          window.history.replaceState(null, '', caseHref(definition.id, selectedCase.id, inlineSection))
+        }
+      }
+    }
     if (route.kind === 'experiment' && selectedCase && definition) {
-      if (route.pageId) {
+      if (route.pageId && evidencePage) {
         caseSection = caseSection?.startsWith(`${articleSectionId(route.pageId)}-`)
           ? caseSection
           : articleSectionId(route.pageId, caseSection ?? undefined)
@@ -320,10 +342,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           caseSection === articleSectionId(link.page, link.section)))
         selectedCase = exact ?? candidates.find(item => item.kind === 'recorded') ?? candidates[0] ?? selectedCase
       }
-      if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'center-mass') {
-        selectedCase = definition.cases!.find(item => item.id === 'center-measurements')!
-        caseSection = 'case-live'
-      } else if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'point-styling') {
+      if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'point-styling') {
         selectedCase = definition.cases!.find(item => item.id === 'picking')!
       }
       if (caseSection === 'run-run') caseSection = 'case-live'
@@ -332,9 +351,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         evidencePage = undefined; caseSection = 'recorded-findings'
         window.history.replaceState(null, '', `${caseHref(definition.id, selectedCase.id)}&section=recorded-findings`)
       } else if (route.view === 'evidence' && !evidencePage && !caseSection) caseSection = 'recorded-findings'
-      if (mountedExperiment === definition.id && mountedCase === selectedCase.id && mountedEvidence === evidencePage) {
+      const needsMeasurements = definition.singlePage && caseSection === 'run-diagnostics' && run.id !== definition.id
+      if (!needsMeasurements && mountedExperiment === definition.id && mountedCase === selectedCase.id && mountedEvidence === evidencePage) {
         if (caseSection) {
-          if (!scrollToSection(workspace, caseSection) && evidencePage) scrollToSection(workspace, articleSectionId(evidencePage))
+          if (!focusCaseSection(caseSection) && evidencePage) scrollToSection(workspace, articleSectionId(evidencePage))
         } else window.scrollTo(0, 0)
         return
       }
@@ -534,10 +554,12 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       let opening: Promise<void> | undefined
       const openCase = (): Promise<void> => {
         if (opening) return opening
+        frame.stage.setAttribute('aria-busy', 'true')
         frame.retry.hidden = true; frame.retry.disabled = true; frame.status.textContent = 'Creating the live experiment…'
         opening = (async (): Promise<void> => {
           try {
-            await run.show(experiment, frame.slot, selectedCase!.id)
+            const deferComparison = !!experiment.singlePage && caseSection === 'run-diagnostics'
+            await run.show(experiment, frame.slot, selectedCase!.id, deferComparison ? { deferComparison } : undefined)
             if (version !== renderVersion || !frame.slot.isConnected) return
             const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
             if (layout) {
@@ -555,13 +577,25 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           } finally {
             if (version === renderVersion) {
               frame.stage.setAttribute('aria-busy', 'false')
-              if (caseSection) scrollToSection(workspace, caseSection)
+              if (caseSection) focusCaseSection(caseSection)
             }
           }
         })().finally(() => { opening = undefined })
         return opening
       }
       frame.retry.addEventListener('click', () => { openCase().catch(error => { frame.status.textContent = String(error) }) })
+      const readingEvidence = experiment.singlePage && (caseSection === 'recorded-findings' || caseSection === 'case-comparison' ||
+        experiment.singlePage.observations.some(item => item.id === caseSection))
+      if (readingEvidence && (run.id !== experiment.id || run.caseId !== selectedCase.id)) {
+        const start = document.createElement('button'); start.type = 'button'; start.textContent = 'Start the live comparison'
+        start.className = 'button-primary'; frame.slot.append(start)
+        start.addEventListener('click', () => {
+          start.remove(); caseSection = null
+          openCase().catch(error => { frame.status.textContent = String(error) })
+        })
+        frame.stage.setAttribute('aria-busy', 'false'); scrollToSection(workspace, caseSection)
+        return
+      }
       await openCase()
       return
     }

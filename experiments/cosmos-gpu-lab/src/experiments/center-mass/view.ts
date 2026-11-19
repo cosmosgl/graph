@@ -1,6 +1,6 @@
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import type { ExperimentInstance } from '../../runtime/experiment'
+import type { ExperimentInstance, ExperimentStartOptions } from '../../runtime/experiment'
 import type { BackendResult, CenterMassBackend } from './backend'
 import {
   advancePointState,
@@ -39,8 +39,9 @@ function centerDistance (left: Center, right: Center): number {
   return Math.hypot(left.x - right.x, left.y - right.y)
 }
 
-export async function createCenterMassExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+export async function createCenterMassExperiment (host: HTMLElement, { deferComparison = false }: ExperimentStartOptions = {}): Promise<ExperimentInstance> {
   let runError: string | undefined
+  host.classList.add('center-mass-run')
   host.innerHTML = `
     <section class="center-mass-demo">
       <div class="demo-toolbar"
@@ -50,6 +51,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           <p>Reset restores the same starting positions.</p>
         </div>
         <div class="controls">
+          <button class="button-primary" data-action="initialize" type="button" hidden
+      data-run-action="primary">Start the live comparison</button>
           <button class="button-primary" data-action="step" type="button" disabled
       data-run-action="primary">Step</button>
           <button data-action="play" type="button" disabled
@@ -107,9 +110,15 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       <p class="demo-note" data-run-part="visualization">
         This demo has no accuracy pass threshold. Tick time includes upload, execution, synchronization, readback and drawing.
       </p>
+      <details class="advanced-controls" data-run-part="diagnostics">
+        <summary>Run local measurements</summary>
+        <section data-center-scale></section>
+        <section data-center-once></section>
+      </details>
     </section>
   `
 
+  const startButton = element<HTMLButtonElement>(host, '[data-action="initialize"]')
   const stepButton = element<HTMLButtonElement>(host, '[data-action="step"]')
   const playButton = element<HTMLButtonElement>(host, '[data-action="play"]')
   const resetButton = element<HTMLButtonElement>(host, '[data-action="reset"]')
@@ -122,8 +131,17 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   let tick = 0
   let isPlaying = false
   let isRunning = false
+  let isMeasuring = false
+  let isInitializing = false
+  let started = false
   let destroyed = false
   let playTimer: number | undefined
+
+  const updateButtons = (): void => {
+    startButton.disabled = isInitializing || isMeasuring
+    playButton.disabled = !started || isMeasuring
+    stepButton.disabled = resetButton.disabled = playButton.disabled || isRunning
+  }
 
   const setStatus = (id: BackendSlot['id'], message: string, failed = false): void => {
     const status = element<HTMLElement>(host, `[data-status="${id}"]`)
@@ -142,10 +160,9 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   }
 
   const runTick = async (advance: boolean): Promise<void> => {
-    if (isRunning || destroyed) return
+    if (isRunning || isMeasuring || destroyed) return
     isRunning = true
-    stepButton.disabled = true
-    resetButton.disabled = true
+    updateButtons()
 
     try {
       if (advance) {
@@ -166,6 +183,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           results.set(slot.id, result)
           showResult(slot.id, result, cpuCenter)
         } catch (error) {
+          if (destroyed) return
           runError = String(error)
           slot.error = error instanceof Error ? error.message : String(error)
           setStatus(slot.id, 'Runtime error', true)
@@ -182,10 +200,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         : 'Unavailable'
     } finally {
       isRunning = false
-      if (!destroyed) {
-        stepButton.disabled = false
-        resetButton.disabled = false
-      }
+      if (!destroyed) updateButtons()
     }
   }
 
@@ -199,17 +214,24 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
     }, 120)
   }
 
+  const setPlayback = (playing: boolean): void => {
+    isPlaying = playing
+    playButton.textContent = playing ? 'Pause' : 'Play'
+    playButton.setAttribute('aria-pressed', String(playing))
+    if (!playing) window.clearTimeout(playTimer)
+  }
+
   stepButton.addEventListener('click', () => {
     runTick(true).catch(reportUnexpectedError)
   })
   playButton.addEventListener('click', () => {
-    isPlaying = !isPlaying
-    playButton.textContent = isPlaying ? 'Pause' : 'Play'
-    playButton.setAttribute('aria-pressed', String(isPlaying))
+    if (isMeasuring || destroyed) return
+    setPlayback(!isPlaying)
     if (isPlaying) element<HTMLElement>(host, '.run-primary-actions').scrollIntoView({ block: 'start' })
     schedulePlay()
   })
   resetButton.addEventListener('click', () => {
+    if (isRunning || isMeasuring || destroyed) return
     pointState = createPointState()
     tick = 0
     runTick(false).catch(reportUnexpectedError)
@@ -230,34 +252,71 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   ]
 
   mountRunLayout(host, () => summarizeRun(
-    isPlaying || isRunning ? 'Running' : slots.some(s => s.backend) ? 'Ready' : 'Preparing',
+    isMeasuring ? 'Measuring' : isPlaying || isRunning ? 'Running' : started ? 'Ready' : isInitializing ? 'Preparing' : 'Ready to start',
     [],
     'Center accuracy budget and rendered-pixel parity.',
     slots.filter(s => s.error).map(s => s.id),
     runError), {
     experiment: 'center-mass',
     devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []),
+    fixedOrder: true,
     showChecks: false,
     scope: 'The selected tick of one shared 8,192-point input; GPU centers are compared with the CPU average.',
   })
-  await Promise.all(constructors.map(async ({ slot, create }) => {
+  const visualization = element(host, '.run-visualization')
+  const guide = element(host, '[data-run-part="status"]')
+  const liveControls = [stepButton, playButton, resetButton]
+  const initialize = async (): Promise<void> => {
+    if (started || isInitializing || isMeasuring || destroyed) return
+    isInitializing = true; updateButtons()
+    startButton.textContent = 'Starting comparison…'
     try {
-      slot.backend = await create()
-      setStatus(slot.id, 'Ready')
-    } catch (error) {
-      runError = String(error)
-      slot.error = error instanceof Error ? error.message : String(error)
-      setStatus(slot.id, 'Unavailable', true)
-      element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
+      await Promise.all(constructors.map(async ({ slot, create }) => {
+        try {
+          const backend = await create()
+          if (destroyed) { backend.destroy(); return }
+          slot.backend = backend; setStatus(slot.id, 'Ready')
+        } catch (error) {
+          if (destroyed) return
+          runError = String(error)
+          slot.error = error instanceof Error ? error.message : String(error)
+          setStatus(slot.id, 'Unavailable', true)
+          element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
+        }
+      }))
+      if (destroyed) return
+      await runTick(false)
+      if (destroyed) return
+      started = true; startButton.hidden = true
+      guide.hidden = visualization.hidden = false
+      liveControls.forEach(control => { control.hidden = false })
+    } finally {
+      isInitializing = false
+      if (!destroyed) updateButtons()
     }
-  }))
-
-  await runTick(false)
-  playButton.disabled = false
+  }
+  const setMeasurement = (measuring: boolean): void => {
+    isMeasuring = measuring
+    updateButtons()
+  }
+  const begin = (): boolean => {
+    if (isMeasuring || isRunning || isInitializing || destroyed) return false
+    setPlayback(false)
+    setMeasurement(true)
+    return true
+  }
+  const end = (): void => { setMeasurement(false) }
+  const scale = mountCenterScale(element(host, '[data-center-scale]'), begin, end)
+  const once = mountCenterOnce(element(host, '[data-center-once]'), begin, end)
+  if (deferComparison) {
+    startButton.hidden = false
+    guide.hidden = visualization.hidden = true
+    liveControls.forEach(control => { control.hidden = true })
+    startButton.addEventListener('click', () => { initialize().catch(reportUnexpectedError) })
+  } else await initialize()
   return {
     pause (): void {
-      isPlaying = false; window.clearTimeout(playTimer)
-      playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
+      setPlayback(false); scale.pause(); once.pause()
     },
     destroy (): void {
       disposeRunLayout(host)
@@ -265,35 +324,9 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       destroyed = true
       isPlaying = false
       window.clearTimeout(playTimer)
+      scale.destroy(); once.destroy()
       for (const slot of slots) slot.backend?.destroy()
       host.replaceChildren()
-    },
-  }
-}
-
-export function createCenterMeasurementsExperiment (host: HTMLElement): ExperimentInstance {
-  host.innerHTML = `<p data-run-part="configuration">Each measurement has its own point count.</p>
-    <section data-run-part="visualization" data-center-scale></section>
-    <section data-run-part="visualization" data-center-once></section>`
-  let busy = false; let destroyed = false
-  const begin = (): boolean => {
-    if (busy || destroyed) return false
-    busy = true
-    return true
-  }
-  const end = (): void => { busy = false }
-  mountRunLayout(host, () => summarizeRun(busy ? 'Measuring' : 'Ready', [], 'Complete graph frames'), {
-    experiment: 'center-mass',
-    showChecks: false,
-    scope: 'The selected frozen-input center and force measurements; complete graph frames are not measured.',
-  })
-  const scale = mountCenterScale(element(host, '[data-center-scale]'), begin, end)
-  const once = mountCenterOnce(element(host, '[data-center-once]'), begin, end)
-  return {
-    pause (): void { scale.pause(); once.pause() },
-    destroy (): void {
-      if (destroyed) return
-      destroyed = true; scale.destroy(); once.destroy(); disposeRunLayout(host); host.replaceChildren()
     },
   }
 }

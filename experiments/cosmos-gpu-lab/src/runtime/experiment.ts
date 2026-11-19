@@ -76,15 +76,25 @@ export function caseEvidenceLinks (item: ExperimentCase): CaseEvidenceLink[] {
   return links.filter((link, index) => links.findIndex(other => other.page === link.page && other.section === link.section) === index)
 }
 
+export type SinglePageCase = {
+  observations: Array<{ id: string; title: string; date: string; evidence: string; limits: string }>;
+  related: string[];
+  legacyCases: Record<string, string>;
+  pageSections: Record<string, string>;
+}
+
+export type ExperimentStartOptions = { deferComparison?: boolean }
+
 export type ExperimentDefinition = {
   id: string;
   title: string;
   summary: string;
   tags: string[];
   cases?: ExperimentCase[];
+  singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
-  create: (host: HTMLElement, caseId?: string) => Promise<ExperimentInstance>;
+  create: (host: HTMLElement, caseId?: string, options?: ExperimentStartOptions) => Promise<ExperimentInstance>;
   pages: ExperimentPage[];
 }
 
@@ -94,6 +104,9 @@ export type ExperimentModule = {
 
 export function defineExperiment (definition: ExperimentDefinition): ExperimentDefinition {
   if (definition.pages.some(page => page.id === 'validation-contract')) throw new Error('Reserved validation-contract page id')
+  if (definition.singlePage && (definition.cases?.length !== 1 || !definition.cases[0].recorded)) {
+    throw new Error(`Expected one case with recorded evidence for ${definition.id}`)
+  }
   if (definition.study && (definition.study.record.experiment !== definition.id ||
     !definition.pages.some(page => page.id === definition.study!.record.sourcePage) ||
     !definition.pages.some(page => page.id === definition.study!.recipePage))) {

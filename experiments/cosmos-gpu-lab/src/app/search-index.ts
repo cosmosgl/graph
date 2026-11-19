@@ -183,6 +183,18 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
           text: publicText([item.recorded.conclusion, item.recorded.scope, item.recorded.limits, item.recorded.date, item.recorded.environment]),
         }))
       }
+      for (const observation of experiment.singlePage?.observations ?? []) {
+        entries.push(entry({
+          key: `${experiment.id}/${item.id}/${observation.id}`,
+          title: observation.title,
+          kind: 'Recorded evidence',
+          context: item.title,
+          href: caseHref(experiment.id, item.id, observation.id),
+          experimentId: experiment.id,
+          caseId: item.id,
+          text: publicText([observation.evidence, observation.limits, observation.date]),
+        }))
+      }
       return entries
     })
   }
@@ -231,6 +243,7 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
 }
 
 function publicPages (experiment: ExperimentDefinition): Array<{ page: ExperimentPage; item?: ExperimentCase }> {
+  if (experiment.singlePage) return []
   if (experiment.cases) {
     return experiment.cases.flatMap(item => caseEvidenceLinks(item).flatMap(link => {
       const page = experiment.pages.find(candidate => candidate.id === link.page)

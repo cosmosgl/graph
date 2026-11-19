@@ -21,12 +21,17 @@ function labeled (label: string, text: string): HTMLParagraphElement {
   return element
 }
 
+function topicFor (experiment: ExperimentDefinition): (typeof experimentGroups)[number] | undefined {
+  return experimentGroups.find(group => group.experiments.some(candidate => candidate.id === experiment.id))
+}
+
 function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase): HTMLElement | null {
   const others = experiment.cases?.filter(candidate => candidate.id !== item.id) ?? []
-  const group = !others.length ? experimentGroups.find(entry => entry.experiments.some(candidate => candidate.id === experiment.id)) : undefined
-  const peers = group?.experiments.filter(candidate => candidate.id !== experiment.id) ?? []
+  const group = others.length ? undefined : topicFor(experiment)
+  const peers = group?.experiments.filter(candidate => candidate.id !== experiment.id &&
+    (!experiment.singlePage || experiment.singlePage.related.includes(candidate.id))) ?? []
   if (!others.length && !peers.length) return null
-  const label = `Other experiments in ${others.length ? experiment.title : group!.title}`
+  const label = experiment.singlePage ? `More in ${group!.title}` : `Other experiments in ${others.length ? experiment.title : group!.title}`
   const nav = document.createElement('nav'); nav.className = 'case-navigation'; nav.setAttribute('aria-label', label)
   if (!others.length) nav.classList.add('case-group-navigation')
   const list = document.createElement('ul')
@@ -40,14 +45,28 @@ function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase)
     link.href = experimentHref(candidate.id); link.textContent = candidate.title
     entry.append(link); list.append(entry)
   }
-  nav.append(paragraph(label), list)
+  const heading = document.createElement(experiment.singlePage ? 'h2' : 'p'); heading.textContent = label
+  nav.append(heading, list)
   return nav
 }
 
 function recordedFinding (experiment: ExperimentDefinition, item: ExperimentCase): HTMLElement {
   const section = document.createElement('section'); section.className = 'case-recorded'
   section.id = 'recorded-findings'
-  const title = document.createElement('h2'); title.textContent = 'Recorded finding'; section.append(title)
+  const title = document.createElement('h2'); title.textContent = experiment.singlePage ? 'Recorded findings' : 'Recorded finding'; section.append(title)
+  if (item.recorded && experiment.singlePage) {
+    const list = document.createElement('ul'); list.className = 'case-observations'; list.setAttribute('aria-label', 'Evidence and limits')
+    for (const observation of experiment.singlePage.observations) {
+      const row = document.createElement('li'); row.id = observation.id
+      const name = document.createElement('div')
+      const heading = document.createElement('h3'); heading.textContent = observation.title
+      name.append(heading, paragraph(observation.date, 'case-meta'))
+      row.append(name, paragraph(observation.evidence), paragraph(observation.limits, 'case-observation-limits'))
+      list.append(row)
+    }
+    section.append(paragraph(item.recorded.conclusion), list)
+    return section
+  }
   if (item.recorded) {
     const finding = item.recorded
     section.append(paragraph(`${finding.date} · ${finding.environment}`, 'case-meta'), paragraph(finding.conclusion),
@@ -79,9 +98,19 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   host.querySelector('h1')!.textContent = item.title
   host.querySelector<HTMLElement>('.case-question')!.textContent = item.question
   host.querySelector<HTMLElement>('.case-description')!.textContent = item.description
-  host.querySelector('.case-header')!.append(renderReadiness(readinessFor(experiment.id, item)))
+  const header = host.querySelector('.case-header')!
+  if (experiment.singlePage) {
+    host.querySelector('.case-document')!.classList.add('case-single-page')
+    const topic = topicFor(experiment)
+    if (topic) {
+      const link = document.createElement('a'); link.className = 'case-topic-link'
+      link.href = `#/?section=catalog-${topic.id}`
+      const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
+      link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
+    }
+  } else header.append(renderReadiness(readinessFor(experiment.id, item)))
   const navigation = caseNavigation(experiment, item)
-  if (navigation && !navigation.classList.contains('case-group-navigation')) host.querySelector('.case-header')!.append(navigation)
+  if (navigation && !navigation.classList.contains('case-group-navigation')) header.append(navigation)
   const stage = host.querySelector<HTMLElement>('.case-stage')!
   if (item.kind !== 'recorded') {
     const intro = document.createElement('section'); intro.className = 'case-intro'; intro.id = 'case-live'

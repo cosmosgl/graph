@@ -1,18 +1,17 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
-import { centerMassCases } from './cases'
+import { centerMassCase, centerMassPage } from './cases'
 
 export const experiment = defineExperiment({
   id: 'center-mass',
-  title: 'Global center of mass',
+  title: 'Center of mass',
   summary: 'Compare center calculations and explore the cost and behavior of the center force.',
   tags: ['compute', 'reduction', 'WebGL', 'WebGPU'],
-  cases: centerMassCases,
-  create: async (host, caseId): Promise<ExperimentInstance> => {
+  cases: [centerMassCase],
+  singlePage: centerMassPage,
+  create: async (host, _caseId, options): Promise<ExperimentInstance> => {
     const module = await import('./view')
-    return caseId === 'center-measurements'
-      ? module.createCenterMeasurementsExperiment(host)
-      : module.createCenterMassExperiment(host)
+    return await module.createCenterMassExperiment(host, options)
   },
   pages: [
     {

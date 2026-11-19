@@ -1,4 +1,4 @@
-import type { ExperimentDefinition, ExperimentInstance } from './experiment'
+import type { ExperimentDefinition, ExperimentInstance, ExperimentStartOptions } from './experiment'
 
 type Run = {
   id: string; caseId?: string; host: HTMLElement; ready: Promise<ExperimentInstance>;
@@ -11,7 +11,7 @@ type MoveTarget = HTMLElement & { moveBefore?: (node: Node, child: Node | null) 
 export function createRetainedRun (disposePresentation: (host: HTMLElement) => void = (): void => {}): {
   readonly id: string | undefined;
   readonly caseId: string | undefined;
-  show(definition: ExperimentDefinition, parent: HTMLElement, caseId?: string): Promise<void>;
+  show(definition: ExperimentDefinition, parent: HTMLElement, caseId?: string, options?: ExperimentStartOptions): Promise<void>;
   hide(): void;
   destroy(): void;
   } {
@@ -48,7 +48,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
     get caseId (): string | undefined { return current?.caseId },
     hide,
     destroy,
-    async show (definition, parent, caseId): Promise<void> {
+    async show (definition, parent, caseId, options): Promise<void> {
       if (current?.id !== definition.id || current.caseId !== caseId) destroy()
       if (!current) {
         const host = document.createElement('div'); host.className = 'experiment-run'
@@ -56,7 +56,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
         host.innerHTML = '<div class="loading">Creating GPU devices…</div>'
         const run: Run = { id: definition.id, caseId, host, ready: undefined!, visible: true, retired: false }
         current = run; parent.append(host)
-        run.ready = Promise.resolve().then(async () => await definition.create(host, caseId)).then(instance => {
+        run.ready = Promise.resolve().then(async () => await definition.create(host, caseId, options)).then(instance => {
           if (run.retired) instance.destroy()
           else {
             const key = evidenceKey(run)

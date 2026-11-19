@@ -72,15 +72,25 @@ it('renders every case with its own context, live result and visible recorded fi
             expect(host.querySelector('h1')?.textContent, label).toBe(item.title)
             expect(host.querySelector('.case-question')?.textContent, label).toBe(item.question)
             const assessment = readinessFor(experiment.id, item)
-            const strip = host.querySelector<HTMLElement>('.case-readiness')!
-            expect(strip.textContent, label).toContain(`${assessment.area} · ${assessment.status}`)
-            expect(strip.textContent, label).toContain(assessment.next)
-            expect(strip.querySelectorAll('.readiness-evidence'), label).toHaveLength(assessment.evidence.length)
-            expect(strip.closest('details'), label).toBeNull()
             const finding = host.querySelector<HTMLElement>('.case-recorded')!
             expect(finding.closest('details'), label).toBeNull()
             expect(finding.textContent, label).toContain(item.recorded?.conclusion ?? 'No recorded finding is available')
-            expect(finding.querySelector('.case-evidence-links a'), label).not.toBeNull()
+            if (experiment.singlePage) {
+              expect(finding.querySelector('.case-evidence-links'), label).toBeNull()
+              expect(finding.querySelectorAll('.case-observations li'), label).toHaveLength(experiment.singlePage.observations.length)
+              for (const observation of experiment.singlePage.observations) {
+                const row = finding.querySelector(`#${observation.id}`)!
+                expect(row.textContent, label).toContain(observation.evidence)
+                expect(row.textContent, label).toContain(observation.limits)
+              }
+            } else {
+              const strip = host.querySelector<HTMLElement>('.case-readiness')!
+              expect(strip.textContent, label).toContain(`${assessment.area} · ${assessment.status}`)
+              expect(strip.textContent, label).toContain(assessment.next)
+              expect(strip.querySelectorAll('.readiness-evidence'), label).toHaveLength(assessment.evidence.length)
+              expect(strip.closest('details'), label).toBeNull()
+              expect(finding.querySelector('.case-evidence-links a'), label).not.toBeNull()
+            }
             if (item.kind === 'recorded') {
               expect(create, label).not.toHaveBeenCalled()
               expect(host.querySelector('canvas'), label).toBeNull()
