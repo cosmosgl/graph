@@ -87,7 +87,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       <div class="controls"><button data-action="benchmark"
       data-run-action="diagnostic">Run timing sweep</button>
         <button data-action="benchmark-stop" disabled
-      data-run-action="primary">Stop sweep</button>
+      data-run-action="diagnostic">Stop sweep</button>
       <button data-action="benchmark-export" disabled
       data-run-action="export">Export timing JSON</button></div>
       <p class="many-body-status" data-output="benchmark-status" role="status">

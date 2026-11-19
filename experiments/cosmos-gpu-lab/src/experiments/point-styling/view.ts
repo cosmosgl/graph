@@ -40,6 +40,7 @@ import {
 
 export async function createStylingView (host: HTMLElement, requestedCase?: string): Promise<ExperimentInstance> {
   let runError: string | undefined
+  const caseId = stylingCaseId(requestedCase)
   host.innerHTML = `<div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Renderer <select data-renderer><option value="production">Production control</option>
@@ -89,15 +90,16 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
       data-run-action="export">Export JSON</button></div>
     </div><p role="status"
       data-run-part="status">Creating luma devices…</p>
-    <section data-run-part="visualization"><p class="demo-note" data-legend></p>
+    <button type="button" class="button-primary" data-inspect-center
+      ${caseId === 'picking' ? 'data-run-action="primary"' : 'hidden'} disabled>Inspect center pixel</button>
+    <section data-run-part="visualization"><p class="demo-note" data-inspect-feedback aria-live="polite"></p>
+    <p class="demo-note" data-legend></p>
     <div class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'}</h2><span class="status" data-state="${name}">Starting…</span></div>
       <div class="styling-viewport"><canvas width="${WIDTH}" height="${HEIGHT}" data-canvas="${name}" aria-label="${name} styled points"></canvas>
         <span class="styling-cursor" data-cursor="${name}" hidden></span></div>
       <p data-pick="${name}" class="styling-pick">Move over a shape to inspect its ID</p><p class="demo-note" data-device="${name}"></p>
-    </article>`).join('')}</div>
-    <div class="controls"><button type="button" data-inspect-center disabled>Inspect center pixel</button></div>
-    <p data-inspect-feedback aria-live="polite"></p></section>
+    </article>`).join('')}</div></section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
     <section data-run-part="diagnostics" data-case-diagnostic="picking"><h3>Stored-alpha picking · bounded prototype</h3>
@@ -158,7 +160,6 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
       <p data-effects-progress>No rings and greyout sweep run.</p><div data-effects-results></div></section>
     <p class="demo-note" data-run-part="explanation" data-case-explanation></p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
-  const caseId = stylingCaseId(requestedCase)
   initializeStylingCase(host, caseId)
   el('[data-case-explanation]').textContent = {
     shapes: 'The selected scene is checked pixel by pixel against the other renderer and a CPU shape mask.',

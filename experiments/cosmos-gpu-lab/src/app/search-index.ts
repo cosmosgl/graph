@@ -9,6 +9,7 @@ import { research, researchMethodPages } from './research'
 import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
 import { headingSlug } from './sections'
 import { vocabularyTerms } from './vocabulary'
+import { readinessFor } from './readiness'
 
 export type SearchEntry = {
   key: string;
@@ -157,6 +158,7 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
   if (experiment.cases) {
     return experiment.cases.flatMap(item => {
       const base = caseHref(experiment.id, item.id)
+      const assessment = readinessFor(experiment.id, item)
       const entries = [entry({
         key: `${experiment.id}/${item.id}`,
         title: item.title,
@@ -165,7 +167,9 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
         href: base,
         experimentId: experiment.id,
         caseId: item.id,
-        text: publicText([item.question, item.description, item.tryIt, item.reference, item.acceptance]),
+        text: publicText([item.question, item.description, item.tryIt, item.reference, item.acceptance,
+          assessment.badge, assessment.finding, assessment.area, assessment.status,
+          ...assessment.evidence.map(result => result.text), assessment.next]),
       })]
       if (item.recorded) {
         entries.push(entry({

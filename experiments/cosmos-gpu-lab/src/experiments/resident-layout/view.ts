@@ -62,7 +62,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     <div class="controls"><button data-action="timing"
       data-run-action="diagnostic">Time resident frames</button>
       <button data-action="stop-timing" disabled
-      data-run-action="primary">Stop timing</button></div>
+      data-run-action="diagnostic">Stop timing</button></div>
     <p data-output="timing-status" role="status">Ready to measure the initial fixture.</p>
     <div data-output="timing" class="many-body-results"></div>
     </section>`

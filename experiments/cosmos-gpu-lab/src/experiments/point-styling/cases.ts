@@ -13,7 +13,7 @@ export const cases: ExperimentCase[] = [
     reference: 'Production WebGL, the WebGPU port and an independent CPU shape mask.',
     acceptance: 'IDs and shape masks must match exactly; color channels may differ by at most 2/255.',
     recorded: {
-      conclusion: 'The selected shape, overlap and default-setting configurations passed the original pixel checks on M3.',
+      conclusion: 'The selected shape, overlap and default-setting configurations passed the original pixel checks on one GPU.',
       date: '2026-11-12',
       environment: 'Apple M3 · Chrome 157 · luma 10.0.0-alpha.4',
       scope: '12 frozen configurations, including shapes, strokes, overlap, zoom and pixel ratio.',
@@ -27,11 +27,11 @@ export const cases: ExperimentCase[] = [
     kind: 'compare',
     question: 'Which point is selected where shapes overlap?',
     description: 'Both panels show the same overlapping points. Their readouts identify the point at the inspected pixel.',
-    tryIt: 'Move over either image, or use Inspect center pixel. Reverse the draw order and inspect the overlap again.',
+    tryIt: 'Press Inspect center pixel to compare the two point IDs. Change Draw order to Reversed and check again.',
     reference: 'Production host-picking IDs, the WebGPU ID image and an independent CPU shape mask.',
     acceptance: 'IDs and masks must match the selected picking rule; an invisible point must not claim a pixel.',
     recorded: {
-      conclusion: 'A stored-alpha prototype avoided invisible picks without changing color bytes in the bounded checks on M3 and SwiftShader.',
+      conclusion: 'A stored-alpha prototype avoided invisible picks without changing color bytes in bounded checks on one GPU and a software renderer.',
       date: '2026-11-16',
       environment: 'Apple M3 · inline Chromium 157; Linux SwiftShader · Chromium 151',
       scope: 'Selected alpha boundaries and overlapping points, including retained source-byte controls.',
@@ -49,7 +49,7 @@ export const cases: ExperimentCase[] = [
     reference: 'Production WebGL, the WebGPU port and independently sampled CPU image colors and picking masks.',
     acceptance: 'The selected rule requires exact IDs and masks, no invisible picks, and colors within 2/255.',
     recorded: {
-      conclusion: 'The source-byte candidate passed the declared 40-row image-atlas matrix on M3; production compatibility did not pass that matrix.',
+      conclusion: 'The source-byte candidate passed the 40-row image-atlas matrix on one GPU; production compatibility did not pass that matrix.',
       date: '2026-11-13',
       environment: 'Apple M3 · inline Chromium 157 · luma 10.0.0-alpha.4',
       scope: 'Four image fixtures, nearest and linear filtering, and five frozen display profiles.',
@@ -67,7 +67,8 @@ export const cases: ExperimentCase[] = [
     reference: 'Production and candidate GPU images, independent CPU colors and the unchanged scalar picking mask.',
     acceptance: 'Colors must stay within 2/255, IDs and masks must match exactly, and decorative rings must not change IDs.',
     recorded: {
-      conclusion: 'The pixel-distance overlay passed CPU color checks in 96 cases on M3 and SwiftShader; eight polygon-mask rows remained rejected.',
+      conclusion: 'The pixel-distance overlay passed CPU color checks in 96 cases on one GPU and a software renderer; ' +
+        'eight polygon-mask rows remained rejected.',
       date: '2026-11-16',
       environment: 'Apple M3 · inline Chromium 157; Linux SwiftShader · Chromium 151',
       scope: 'Four scenes, eight effect profiles and three views, including overlays and greyout.',

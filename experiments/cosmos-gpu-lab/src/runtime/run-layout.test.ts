@@ -9,14 +9,17 @@ it('preserves controls, listeners and canvas identity while separating diagnosti
   host = document.createElement('div'); document.body.append(host)
   host.innerHTML = `<p>Unclassified guidance stays in place.</p><div data-run-part="configuration"><select><option>128</option></select></div>
     <button data-run-action="primary">Step</button><button data-run-action="diagnostic">Trace</button>
-    <p data-run-part="status" role="status">Preparing</p><section data-run-part="visualization"><canvas></canvas></section>
-    <div data-run-part="results"></div>`
+    <p data-run-part="status" role="status">Preparing</p><section data-run-part="visualization"><canvas></canvas>
+      <button data-run-action="primary">Reset</button></section>
+    <div data-run-part="results"></div><section data-run-part="diagnostics">
+      <button data-run-action="diagnostic">Sweep</button><button data-run-action="diagnostic">Stop sweep</button></section>`
   const canvas = host.querySelector('canvas')!; const step = host.querySelector<HTMLButtonElement>('button')!
   let ticks = 0; let verdicts: boolean[] = []
   step.addEventListener('click', () => { ticks++; verdicts = [true, false]; host!.querySelector('[role="status"]')!.textContent = 'Tick complete' })
   mountRunLayout(host, () => summarizeRun('Ready', verdicts, 'Other inputs'))
-  expect(host.querySelector('.run-primary-actions button')).toBe(step)
-  expect(host.querySelector('.run-diagnostics button')!.textContent).toBe('Trace')
+  expect(Array.from(host.querySelectorAll('.run-primary-actions button'), button => button.textContent)).toEqual(['Step', 'Reset'])
+  expect(host.querySelector('.run-diagnostic-actions button')!.textContent).toBe('Trace')
+  expect(Array.from(host.querySelectorAll('[data-run-part="diagnostics"] button'), button => button.textContent)).toEqual(['Sweep', 'Stop sweep'])
   expect(host.querySelector('.run-visualization canvas')).toBe(canvas)
   expect(host.querySelector('details')).toBeNull()
   step.click()
@@ -24,6 +27,16 @@ it('preserves controls, listeners and canvas identity while separating diagnosti
   expect(host.querySelector('[data-run-summary-value="failed"]')!.textContent).toBe('1 failed checks')
   expect(ticks).toBe(1)
   expect(host.lastElementChild!.textContent).toBe('Unclassified guidance stays in place.')
+})
+
+it('puts the action and status before a preview with a fixed layout', () => {
+  host = document.createElement('div'); document.body.append(host)
+  host.innerHTML = `<button data-run-action="primary">Run</button><p data-run-part="status">Paused</p>
+    <section data-run-part="visualization"><iframe></iframe></section>`
+  mountRunLayout(host, () => summarizeRun('Paused', [], 'Unrun cases'), { experiment: 'viewer-comparison', fixedOrder: true })
+  const preview = host.querySelector('#run-run')!
+  expect(Array.from(preview.children, element => element.textContent)).toEqual(['Run', 'Paused', ''])
+  expect(preview.lastElementChild?.querySelector('iframe')).not.toBeNull()
 })
 
 it('never turns pending work or benchmark completion into a numerical pass', () => {

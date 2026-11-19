@@ -19,8 +19,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <label>Forces <select data-forces><option value="core">Core pilot</option><option value="composed">Composed forces</option>
       <option value="composed-collision">Composed with collision</option></select></label>
     <p>Karate Club uses its original 34 points and 78 weighted links.</p></div>
-    <div class="controls"><button data-action="step" data-run-action="primary">Step</button>
-    <button data-action="run" data-run-action="primary">Run</button><button data-action="pause" data-run-action="primary">Pause</button>
+    <div class="controls"><button class="button-primary" data-action="run" data-run-action="primary">Run</button>
+    <button data-action="pause" data-run-action="primary">Pause</button><button data-action="step" data-run-action="primary">Step</button>
     <button data-action="replace" data-run-action="primary">Replace graph / reset</button><button data-action="fit" data-run-action="primary">Fit</button></div>
     <p role="status" data-run-part="status">Creating the integrated WebGPU runtime…</p>
     <section data-run-part="visualization"><canvas width="960" height="600" aria-label="Interactive integrated WebGPU graph"
@@ -33,7 +33,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       <button data-action="update-targets">Update attractor targets</button><button data-action="clear-targets">Clear attractor targets</button></div>
       <p data-composition-status aria-live="polite"></p>
     </div></section>
-    <section data-run-part="results"><p data-device></p><div data-report></div></section>
+    <section data-run-part="results" data-report></section>
     <section data-run-part="diagnostics"><h3>Additional measurements</h3>
     <p>Run focused pixel, interaction and timing checks with the core pilot on this device.</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
@@ -67,13 +67,12 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   const captureFile = host.querySelector<HTMLInputElement>('[data-cooled-capture]')!
   const runtime = await createIntegrated(canvas)
   runtime.resize(960, 600, devicePixelRatio)
-  host.querySelector<HTMLElement>('[data-device]')!.textContent = runtime.info
   mountRunLayout(host, () => ({
     state: busy ? 'Evaluating' : runtime.running ? 'Running' : 'Paused',
     passed: checks,
     failed: failure || runtime.error || evidenceFailure || 'None recorded',
     unchecked: 'Strict pixel compatibility, physical display latency and full migration readiness.',
-  }), { experiment: 'integrated-webgpu', devices: () => [runtime.info] })
+  }), { experiment: 'integrated-webgpu', devices: () => [runtime.deviceLabel] })
   compactRunControls(host, { diagnostics: true })
   const pilotDiagnostics = host.querySelector<HTMLElement>('#run-diagnostics')!
   const update = (): void => {
@@ -87,10 +86,10 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     if (!busy) {
       const points = runtime.data.input.points.length / 4; const links = runtime.data.graph.links.length / 2
       const settings = runtime.composition?.settings
-      const forceLabel = settings ? 'composed forces' : runtime.springOptimization
+      const forceLabel = settings ? 'composed forces' : runtime.springOptimization === 'prefetch' ? 'core forces with hub prefetch' : 'core forces'
       const collisionLabel = settings?.collision ? ` · ${settings.hashedCollision ? 'hashed' : 'exact'} collision` : ''
       status.textContent = `${runtime.running ? 'Running' : 'Paused'} · tick ${runtime.tick} · ` +
-        `${points} points · ${links} links · ${forceLabel}${collisionLabel}${
+        `${points.toLocaleString()} points · ${links.toLocaleString()} links · ${forceLabel}${collisionLabel}${
           runtime.feedback.length
             ? ` · selected ${runtime.renderer.selected < 0 ? 'none' : runtime.renderer.selected}` +
             ` · last pick ${runtime.feedback.at(-1)!.ms.toFixed(1)} ms`
@@ -319,6 +318,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           pickReplayProtocol,
           feedbackAfterReplay: replayFeedbackStart === undefined ? [] : runtime.feedback.slice(replayFeedbackStart),
           recordedAt: new Date().toISOString(),
+          info: runtime.info,
           records,
         }, null, 2)
         const blob = new Blob([content], { type: 'application/json' })

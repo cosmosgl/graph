@@ -7,8 +7,9 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-Home groups experiment cards by topic; each focused case opens directly from its group's card. The header
-links to the catalog, roadmap, feature coverage and learning guide; other references appear above the catalog.
+Home groups case cards by topic. Each card opens a case and shows its recorded outcome or open question
+with a concise finding. The header links to the catalog, roadmap, feature coverage and learning guide;
+other references appear above the catalog.
 Header search finds human-facing experiment descriptions, recorded evidence, guides and references across
 the lab. Results link to the relevant case or section. Agent recipes, reproduction commands, shader code,
 raw captures and temporary live-run values are not indexed. Search loads its local index on first use.
@@ -21,6 +22,13 @@ finding has been recorded, the page says so. Group navigation makes other indepe
 topic peers discoverable. Links open human-readable method and evidence separately. Recorded-only
 cases are marked and do not initialize a live device. Optional advanced settings and checks use
 keyboard-accessible disclosures; the practical context and results remain visible.
+
+The readiness strip summarizes recorded evidence for the named case, not the current browser run or a
+formal production approval. A ready-to-integrate assessment would mean the candidate is ready to begin
+integration, not ready to ship. Unassessed work stays neutral; a slowdown is a warning, and a failed
+check or a candidate explicitly not adopted is shown as a failure. Keep earlier unexplained failures
+alongside later passing results. Case assessments live in `src/app/readiness/` and should be updated
+when their linked evidence changes.
 
 Agent recipes and agent-finding replay steps remain in their source folders and are not embedded in the app.
 Old human-facing article links still open their evidence. Opening evidence pauses the current run;

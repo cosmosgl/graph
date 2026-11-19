@@ -125,7 +125,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           <div class="controls"><button data-action="sweep"
       data-run-action="diagnostic">Run sweep</button>
             <button data-action="cancel-sweep" disabled
-      data-run-action="primary">Cancel sweep</button>
+      data-run-action="diagnostic">Cancel sweep</button>
             <button data-action="export-sweep" disabled
       data-run-action="export">Export sweep JSON</button></div>
         </div>

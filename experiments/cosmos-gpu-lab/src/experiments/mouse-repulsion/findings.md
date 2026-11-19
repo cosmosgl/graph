@@ -57,6 +57,12 @@ matched. The composed viewer uses this kernel. Its independent trajectories
 matched exactly on the four tested graphs.
 [Interactive results](#/integrated-webgpu?section=doc-composed-interaction)
 
+In a later composed-force check on the same GPU, the original pointer
+arithmetic failed the one-pixel screen on two 8,192-point graphs. The
+corrected pointer path then matched the CPU at all 340 checkpoints across
+five graphs, including a collision case. Full-frame responsiveness and
+other devices remain separate questions.
+
 The correctness and timing captures are `captures/mouse-expanded-check-mwnfws3f/`
 and `captures/mouse-expanded-cost-mwnfyh8c/`. Their source archive hashes are
 `f8442eaad1b539e5763d310285fd9c076ab91c8eb217ee4404e5a0769388e621` and

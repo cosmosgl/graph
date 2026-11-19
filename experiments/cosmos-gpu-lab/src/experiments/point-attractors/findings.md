@@ -76,10 +76,13 @@ frames with the accepted forces.
 have a bounded correctness baseline at the existing gates. Further arithmetic
 optimization is deferred until complete-frame cost shows it is needed.
 
-Clusters and attractors are not yet supported in the integrated pilot. Compose
-accepted forces in production order, then check independently evolving layouts
-and complete-frame cost. Long cooling/reheating, live production setters,
-transitions, broader coordinates/strengths and other devices remain open.
+At the time of this isolated study, clusters and attractors were not yet part
+of the integrated viewer. A later composed-force study added both. Its earlier
+native pointer path failed the one-pixel screen on two 8,192-point graphs;
+the corrected pointer path matched the CPU at all 340 checkpoints across five
+graphs. This was a separate combined check, not evidence that the isolated
+attractor caused the original failure. Complete-frame cost, live production
+setters, long cooling/reheating and other devices remain open.
 
 This result preserves the historical 68.2-ms and 100.4-ms pilot picking failures
 and production-color differences. Strict full compatibility is not established;

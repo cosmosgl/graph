@@ -17,7 +17,7 @@ type SavedSession = {
 
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div class="controls">
-    <button data-action="run" data-run-action="primary">Run both</button>
+    <button class="button-primary" data-action="run" data-run-action="primary">Run both</button>
     <button data-action="pause" data-run-action="primary">Pause both</button>
     <button data-action="fit" data-run-action="primary">Fit both</button></div>
     <p role="status" data-run-part="status">Creating production WebGL and candidate WebGPU viewers…</p>
@@ -66,7 +66,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: failure || `${records.filter(r => report(r).verdict === 'Fail').length} failed checks`,
     unchecked: 'Full compatibility and migration readiness',
   }),
-  { experiment: 'viewer-comparison', visualFirst: true, devices: () => [gl?.info, gpu?.info].filter(Boolean) })
+  { experiment: 'viewer-comparison', fixedOrder: true, devices: () => [gl?.info, gpu?.info].filter(Boolean) })
   compactRunControls(host, { diagnostics: true })
   host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
   const panel = glHost.parentElement!

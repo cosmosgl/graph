@@ -47,7 +47,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       data-run-part="configuration">
         <div>
           <p class="eyebrow">Starting case</p>
-          <p>${POINT_COUNT.toLocaleString('en-US')} deterministic points, shared by both GPUs and the CPU.</p>
+          <p>Reset restores the same starting positions.</p>
         </div>
         <div class="controls">
           <button class="button-primary" data-action="step" type="button" disabled
@@ -59,7 +59,13 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         </div>
       </div>
 
-      <p class="demo-note" data-run-part="status">Yellow square: each GPU's calculated center. Compare its error with the CPU average.</p>
+      <p class="demo-note" data-run-part="status">Each yellow square marks a GPU center. Errors are distances to the CPU center.</p>
+
+      <section class="summary center-readout" aria-label="Center errors" aria-live="polite" data-run-part="visualization">
+        <span>Tick <strong data-output="tick">0</strong></span>
+        <span>WebGL error <strong data-output="webgl-error">—</strong></span>
+        <span>WebGPU error <strong data-output="webgpu-error">—</strong></span>
+      </section>
 
       <section
       data-run-part="visualization" class="backend-panels">
@@ -74,7 +80,6 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           <canvas data-canvas="webgl" width="420" height="320" role="img" aria-label="WebGL points and calculated center"></canvas>
           <dl>
             <div><dt>Center</dt><dd data-output="webgl-center">—</dd></div>
-            <div><dt>Error vs CPU</dt><dd data-output="webgl-error">—</dd></div>
             <div><dt>Tick + readback</dt><dd data-output="webgl-time">—</dd></div>
           </dl>
         </article>
@@ -90,21 +95,17 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           <canvas data-canvas="webgpu" width="420" height="320" role="img" aria-label="WebGPU points and calculated center"></canvas>
           <dl>
             <div><dt>Center</dt><dd data-output="webgpu-center">—</dd></div>
-            <div><dt>Error vs CPU</dt><dd data-output="webgpu-error">—</dd></div>
             <div><dt>Tick + readback</dt><dd data-output="webgpu-time">—</dd></div>
           </dl>
         </article>
       </section>
 
-      <section class="summary" aria-live="polite" data-run-part="visualization">
-        <span>Tick <strong data-output="tick">0</strong></span>
+      <div class="summary" data-run-part="visualization">
         <span>CPU center <strong data-output="cpu-center">—</strong></span>
         <span>Difference between GPU centers <strong data-output="backend-delta">—</strong></span>
-      </section>
-
+      </div>
       <p class="demo-note" data-run-part="visualization">
-        Error is the distance from the CPU center; this demo has no pass threshold. Tick time includes upload,
-        execution, synchronization, readback and drawing, so it is not an isolated GPU benchmark.
+        This demo has no accuracy pass threshold. Tick time includes upload, execution, synchronization, readback and drawing.
       </p>
     </section>
   `
@@ -271,7 +272,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
 }
 
 export function createCenterMeasurementsExperiment (host: HTMLElement): ExperimentInstance {
-  host.innerHTML = `<p data-run-part="configuration">Choose a point count in either measurement below.</p>
+  host.innerHTML = `<p data-run-part="configuration">Each measurement has its own point count.</p>
     <section data-run-part="visualization" data-center-scale></section>
     <section data-run-part="visualization" data-center-once></section>`
   let busy = false; let destroyed = false
