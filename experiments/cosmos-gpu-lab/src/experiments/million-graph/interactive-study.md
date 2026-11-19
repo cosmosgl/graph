@@ -67,6 +67,9 @@ and production rendering remain outside it.
 
 ### Environment and evidence
 
+The recorded runs used automatic framing on each tick before the first pan.
+The live demo now fits once at startup and on each press of Fit.
+
 Visible Chrome 157 on the user's Apple M3 reported Apple `metal-3` WebGPU
 with `fallback: false` and luma 10.0.0-alpha.15. The full canvas was visible
 at 961 × 541 CSS px inside a 1,280 × 900 viewport at DPR 2. Each lane records

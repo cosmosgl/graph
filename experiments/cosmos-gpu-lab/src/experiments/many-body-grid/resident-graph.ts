@@ -251,10 +251,11 @@ export async function createResidentGraph (
       },
       fit (): void {
         healthy()
-        autoFit = true
-        viewBounds.prepare(0)
+        // Center the padding around the graph and keep this view for later ticks.
+        viewBounds.prepare(0, [0.5, 0.5])
         compute(pass => viewBounds.encode(pass, positions[current]))
         device.submit()
+        autoFit = false
       },
       pick (x, y): Promise<number | null> {
         healthy()

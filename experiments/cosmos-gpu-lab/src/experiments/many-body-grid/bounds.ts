@@ -28,7 +28,10 @@ fn div(a: f32, b: f32) -> f32 { return div_fp64(vec2f(a, 0.), vec2f(b, 0.)).x; }
 // One parallel min/max pass per level, then ONE invocation for frame arithmetic.
 // Fixed per-level uniforms avoid queue writes changing earlier encoded dispatches.
 export async function createGpuBounds (device: Device, count: number, finest: number, box: Buffer, ledger?: BufferLedger, capacity = count): Promise<{
-  resize(count: number, finest: number): void; prepare(tick: number): void; encode(pass: ComputePass, positions: Buffer): void; destroy(): void;
+  resize(count: number, finest: number): void;
+  prepare(tick: number, jitter?: readonly [number, number]): void;
+  encode(pass: ComputePass, positions: Buffer): void;
+  destroy(): void;
 }> {
   const scope = resourceScope(ledger); const own = scope.own
   try {
@@ -64,7 +67,7 @@ export async function createGpuBounds (device: Device, count: number, finest: nu
       bindingLayout([['extrema', 'read-only-storage'], ['params', 'uniform'], ['box', 'storage']])))
     return {
       resize,
-      prepare (tick): void { const { jitter } = frameSamples(tick); params.write(new Float32Array([finest, ...jitter, 0])) },
+      prepare (tick, jitter = frameSamples(tick).jitter): void { params.write(new Float32Array([finest, ...jitter, 0])) },
       encode (pass, positions): void {
         let values = positions
         for (const level of levels.slice(0, activeLevels)) {

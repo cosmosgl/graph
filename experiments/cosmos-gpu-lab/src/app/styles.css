@@ -1986,6 +1986,31 @@ button[data-action="play"][aria-pressed="true"] {
   .result-context dl > div, .source-fields > div { grid-template-columns: minmax(0, 1fr); gap: 3px; margin-bottom: 12px; }
 }
 
+.million-graph .run-workbench { gap: 24px; }
+.million-graph .run-primary-actions > button { min-height: 40px; }
+.million-graph .run-primary-actions > .button-primary:not(:disabled) { color: #17212c; background: var(--accent); border-color: transparent; }
+.million-graph .run-primary-actions > .button-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.million-graph #run-run:focus-visible { outline: 1px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+.million-graph-view { margin: 0; }
+.million-graph-surface { overflow: hidden; border: 1px solid #ffffff1f; border-radius: 8px; background: #1c2129; }
+.million-graph-surface > canvas { display: block; width: 100%; touch-action: none; }
+.million-graph-view figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; margin-top: 8px;
+  color: var(--text-secondary); font-size: var(--type-meta); }
+.million-graph-view figcaption:not(:has(> :not([hidden]))) { display: none; }
+.million-graph-view [data-status] { color: var(--text-primary); }
+.million-graph .run-settings > h2 { font-size: 18px; margin-bottom: 12px; }
+.million-graph .million-graph-settings { align-items: start; grid-template-columns: minmax(0, 1fr); margin: 0; }
+.million-graph-settings label { color: var(--text-primary); }
+.million-graph-settings select { height: 40px; }
+.million-graph #run-results { margin-top: 0; }
+.million-graph .run-overview { margin-bottom: 12px; }
+@media (min-width: 550px) and (max-width: 1199px) {
+  .million-graph .million-graph-settings { grid-template-columns: minmax(90px, 0.72fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+}
+@media (min-width: 1200px) {
+  .million-graph #run-results { margin-top: 24px; }
+}
+
 /* One document and one contents rail, with the catalog available in the header. */
 .lab-header { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
   background: #1e2229; border-bottom: 1px solid var(--control-border); padding-inline: max(0px, calc((100vw - 1360px) / 2)); }

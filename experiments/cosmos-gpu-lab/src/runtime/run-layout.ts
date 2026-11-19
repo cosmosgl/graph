@@ -11,18 +11,20 @@ export type RunSummary = {
 
 type Dispose = () => void
 const presentations = new WeakMap<HTMLElement, Dispose>()
-type RunContext = { experiment: string; devices?: () => string[]; visualFirst?: boolean }
+type RunContext = { experiment: string; devices?: () => string[]; visualFirst?: boolean; scope?: string; showChecks?: boolean }
 
 // Regions and action roles are authored by each view. Never classify prose by
 // its DOM position, or infer numerical acceptance from a status message.
 export function mountRunLayout (host: HTMLElement, read: () => RunSummary, context?: RunContext): void {
   presentations.get(host)?.()
   const opened = new Date().toISOString()
+  const showChecks = context?.showChecks !== false
+  const keys: Array<keyof RunSummary> = showChecks ? ['state', 'passed', 'failed', 'unchecked'] : ['state']
   const frame = document.createElement('div'); frame.className = 'run-layout integrated-run'
   frame.innerHTML = `<section class="run-overview" aria-label="Current local run"
       data-run-summary>
-    <p class="run-source">Live results · session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>
-    <dl>${['state', 'passed', 'failed', 'unchecked'].map((key, i) =>
+    ${showChecks ? `<p class="run-source">Live results · session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>` : ''}
+    <dl>${keys.map((key, i) =>
     `<div><dt>${['Run state', 'Passed', 'Failed / unavailable', 'Unchecked'][i]}</dt><dd
       data-run-summary-value="${key}"></dd></div>`).join('')}</dl>
     <div
@@ -35,7 +37,8 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
       data-run-devices>Not reported</dd></div>
           <div><dt>Scope</dt><dd
       data-run-scope></dd></div></dl>
-          <p>Pass / Fail refer to the named check. Unchecked means no check ran; Unavailable means a result could not be obtained.</p></div>
+          ${showChecks ? '<p>Pass / Fail refer to the named check. Unchecked means no check ran; Unavailable means a result could not be obtained.</p>' : ''}
+        </div>
         <div class="controls run-export-actions"></div></section></div></div>
     <section class="run-explanation" id="run-explanation"><h2>Explanation</h2></section>
     <section class="run-diagnostics" id="run-diagnostics" aria-label="Diagnostics"><h2>Diagnostics</h2>
@@ -107,14 +110,14 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   }
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
-  slot('[data-run-scope]').textContent = context
+  slot('[data-run-scope]').textContent = context?.scope ?? (context
     ? `${validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'} ` +
-      'Sweeps use their own row parameters. This session does not approve the overall migration.'
-    : 'Only the inputs and checks explicitly named below; no overall migration approval.'
+      'Use the settings listed in each benchmark table. This session does not approve the overall migration.'
+    : 'Only the inputs and checks explicitly named below; no overall migration approval.')
   const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references, .study-overview' })
   const refresh = (): void => {
     const values = read()
-    for (const key of ['state', 'passed', 'failed', 'unchecked'] as const) {
+    for (const key of keys) {
       const output = slot(`[data-run-summary-value="${key}"]`)
       if (output.textContent !== values[key]) output.textContent = values[key]
     }
@@ -124,8 +127,13 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
       if (hint.hidden !== hidden) hint.hidden = hidden
       if (hint.textContent !== label) hint.textContent = label
     }
-    const devices = [...new Set(context?.devices?.().filter(Boolean) ?? [])].join(' · ') || 'Not reported by this experiment yet'
-    if (slot('[data-run-devices]').textContent !== devices) slot('[data-run-devices]').textContent = devices
+    const devices = [...new Set(context?.devices?.().filter(Boolean) ?? [])].join(' · ')
+    const deviceOutput = slot('[data-run-devices]')
+    const deviceRow = deviceOutput.parentElement!
+    const hideDevice = !showChecks && !devices
+    if (deviceRow.hidden !== hideDevice) deviceRow.hidden = hideDevice
+    const deviceText = devices || 'Not reported by this experiment yet'
+    if (deviceOutput.textContent !== deviceText) deviceOutput.textContent = deviceText
     tables.refresh()
   }
   // Read typed experiment state after batched UI updates. The observer is only a
