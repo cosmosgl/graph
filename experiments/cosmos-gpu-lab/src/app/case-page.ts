@@ -4,7 +4,7 @@ import { addArticleSections } from './article-sections'
 import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
 import { readinessFor } from './readiness'
-import { renderReadiness } from './readiness/presentation'
+import { readinessBadge, renderReadiness } from './readiness/presentation'
 import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
@@ -31,21 +31,23 @@ function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase)
   const peers = group?.experiments.filter(candidate => candidate.id !== experiment.id &&
     (!experiment.singlePage || experiment.singlePage.related.includes(candidate.id))) ?? []
   if (!others.length && !peers.length) return null
-  const label = experiment.singlePage ? `More in ${group!.title}` : `Other experiments in ${others.length ? experiment.title : group!.title}`
+  const label = `More in ${group?.title ?? experiment.title}`
   const nav = document.createElement('nav'); nav.className = 'case-navigation'; nav.setAttribute('aria-label', label)
   if (!others.length) nav.classList.add('case-group-navigation')
   const list = document.createElement('ul')
-  for (const candidate of others) {
+  const destinations = [
+    ...others.map(candidate => ({ parent: experiment, target: candidate, href: caseHref(experiment.id, candidate.id) })),
+    ...peers.map(peer => ({ parent: peer, target: peer.cases?.[0], href: experimentHref(peer.id) })),
+  ]
+  for (const { parent, target, href } of destinations) {
     const entry = document.createElement('li'); const link = document.createElement('a')
-    link.href = caseHref(experiment.id, candidate.id); link.textContent = candidate.title
+    link.href = href; link.className = 'case-nav-link'
+    const title = document.createElement('span'); title.className = 'case-nav-title'; title.textContent = target?.title ?? parent.title
+    const assessment = target && readinessFor(parent.id, target)
+    link.append(title, readinessBadge(assessment?.badge ?? 'Not assessed', assessment?.tone ?? 'neutral'))
     entry.append(link); list.append(entry)
   }
-  for (const candidate of peers) {
-    const entry = document.createElement('li'); const link = document.createElement('a')
-    link.href = experimentHref(candidate.id); link.textContent = candidate.title
-    entry.append(link); list.append(entry)
-  }
-  const heading = document.createElement(experiment.singlePage ? 'h2' : 'p'); heading.textContent = label
+  const heading = document.createElement('h2'); heading.textContent = label
   nav.append(heading, list)
   return nav
 }
@@ -109,9 +111,9 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
       link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
     }
   } else header.append(renderReadiness(readinessFor(experiment.id, item)))
-  const navigation = caseNavigation(experiment, item)
-  if (navigation && !navigation.classList.contains('case-group-navigation')) header.append(navigation)
   const stage = host.querySelector<HTMLElement>('.case-stage')!
+  const navigation = caseNavigation(experiment, item)
+  if (navigation) stage.after(navigation)
   if (item.kind !== 'recorded') {
     const intro = document.createElement('section'); intro.className = 'case-intro'; intro.id = 'case-live'
     const heading = document.createElement('h2'); heading.textContent = 'Try it'; intro.append(heading)
@@ -128,7 +130,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const heading = document.createElement('h2'); heading.textContent = 'What this compares'
   comparison.append(heading, labeled('Reference', item.reference), labeled('How to read the result', item.acceptance))
   stage.append(comparison)
-  if (navigation?.classList.contains('case-group-navigation')) stage.append(navigation)
   return { stage, slot, recorded, comparison, status, retry }
 }
 
@@ -207,12 +208,9 @@ export async function renderCaseEvidence (
   back.href = caseHref(experiment.id, item.id); back.textContent = `← ${item.title}`
   host.querySelector<HTMLElement>('.case-meta')!.textContent = `${item.title} · Evidence`
   host.querySelector('h1')!.textContent = page.title
-  const navigation = caseNavigation(experiment, item)
-  if (navigation) {
-    if (navigation.classList.contains('case-group-navigation')) host.querySelector('[data-evidence-content]')!.after(navigation)
-    else host.querySelector('.case-evidence-page header')!.after(navigation)
-  }
   const target = host.querySelector<HTMLElement>('[data-evidence-content]')!
+  const navigation = caseNavigation(experiment, item)
+  if (navigation) target.after(navigation)
   target.id = articleSectionId(page.id)
   if (page.kind === 'markdown') {
     const { renderMarkdown } = await import('./markdown')
