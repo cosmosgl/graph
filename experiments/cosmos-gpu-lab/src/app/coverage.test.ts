@@ -6,8 +6,14 @@ import { migrationFocus } from './research'
 it('indexes all inventory features without treating partial curves as unstarted or a parked sub-study as the whole experiment', () => {
   expect(coverage).toHaveLength(37)
   expect(coverage.find(row => row.name === 'Curved links')?.status).toBe('Partial')
-  expect(coverage.find(row => row.name === 'Per-point attractors')).toMatchObject({ status: 'Partial', experiments: ['point-attractors'] })
-  expect(coverage.find(row => row.name === 'Cluster attraction')).toMatchObject({ status: 'Partial', experiments: ['cluster-attraction'] })
+  expect(coverage.find(row => row.name === 'Per-point attractors')).toMatchObject({
+    status: 'Partial',
+    experiments: ['point-attractors', 'integrated-webgpu'],
+  })
+  expect(coverage.find(row => row.name === 'Cluster attraction')).toMatchObject({
+    status: 'Partial',
+    experiments: ['cluster-attraction', 'integrated-webgpu'],
+  })
   expect(experimentRole('weighted-links')).not.toBe('Parked')
   expect(experimentRole(migrationFocus.experiment)).toBe('Current investigation')
   expect(() => parseCoverage(inventory.replace('**Partial.**', '**Unclassified.**'))).toThrow('Unclassified inventory feature')
