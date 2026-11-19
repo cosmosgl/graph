@@ -141,8 +141,8 @@ LAB_NATIVE_VISIBLE=1 LAB_DENSE_GRID_PROFILE=1 \
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/resident-dense-communities.test.ts
 ```
 
-The live example exposes **Persistent dense communities** under
-**Starting positions**. Select 1,000,000 points and run each mode with
+In the live example, choose **Dense communities** under **Starting layout**.
+Select 1,000,000 points and run each mode with
 the same starting layout to view the behavior on the current device.
 
 The recorded run used visible Chrome 157, luma.gl 10.0.0-alpha.15,
