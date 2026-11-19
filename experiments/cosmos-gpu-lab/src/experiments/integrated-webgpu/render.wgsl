@@ -1,4 +1,4 @@
-struct Params { camera: vec4f, viewport: vec4f, region: vec4f, state: vec4f, linkColor: vec4f }
+struct Params { camera: vec4f, viewport: vec4f, region: vec4f, state: vec4f, linkColor: vec4f, linkVisibility: vec4f }
 struct Style { color: vec4f, size: vec4f }
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
 @group(0) @binding(1) var<storage, read> styles: array<Style>;
@@ -29,6 +29,13 @@ fn coverage(v: Vertex) -> f32 { return 1.0 - smoothstep(v.radius - 0.5,v.radius 
   if (coverage(v) < 0.5 || v.color.a <= 0.0) { discard; }
   return vec4f(vec3f(f32(v.id & 255u),f32((v.id >> 8u) & 255u),f32((v.id >> 16u) & 255u)) / 255.0,1);
 }
+fn linkOpacity(worldDelta: vec2f) -> f32 {
+  if (params.linkVisibility.w == 0.0) { return params.linkColor.a; }
+  let distance = length(worldDelta) * params.camera.w;
+  let near = params.linkVisibility.x;
+  let far = params.linkVisibility.y;
+  return params.linkColor.a * max(params.linkVisibility.z, (distance - far) / (near - far));
+}
 @vertex fn linkVertex(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
   let edge = links[i]; let a = positions[edge.x]; let b = positions[edge.y];
   let sa = screen(a.xy); let sb = screen(b.xy); let d = sb - sa; let len = length(d);
@@ -36,7 +43,7 @@ fn coverage(v: Vertex) -> f32 { return 1.0 - smoothstep(v.radius - 0.5,v.radius 
   let corners = array<vec2f,4>(vec2f(0,-1),vec2f(0,1),vec2f(1,-1),vec2f(1,1));
   let c = corners[v]; var out: Vertex;
   out.position = clip(mix(sa,sb,c.x) + n * c.y * params.state.y * 0.5 * params.viewport.z);
-  out.color = params.linkColor;
+  out.color = vec4f(params.linkColor.rgb, linkOpacity(b.xy - a.xy));
   if (a.w > 0.5 || b.w > 0.5 || len <= 0.00001 || params.state.y <= 0.0 || params.linkColor.a <= 0.0) { out.position = vec4f(2,2,2,1); }
   return out;
 }

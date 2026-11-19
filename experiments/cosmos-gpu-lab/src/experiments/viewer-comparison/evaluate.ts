@@ -3,7 +3,7 @@ import { nextFrame, type Integrated } from '../integrated-webgpu/runtime'
 import { percentiles } from '../integrated-webgpu/evaluate'
 import { fit, validateFrame } from '../integrated-webgpu/validation'
 import { stress, stressPairs } from '../matched-layout/metrics'
-import { styles } from './styles'
+import { LINK_VISIBILITY, styles } from './styles'
 import type { Production } from './production'
 export const protocol = 'Karate Club 34 points / 78 weighted links; seed 29471, default corrected candidate and matched core-force settings. ' +
   'Equal measured CSS panel widths × 320 px at actual DPR. Public host-driven frames, one GPU completion in flight. ' +
@@ -19,6 +19,7 @@ export type PaintComparison = {
   productionInvisiblePicks: number; candidateInvisiblePicks: number; nonempty: boolean; geometry: number[]; maxColorError: number;
   camera: [number, number, number];
   smoothLinks?: true;
+  distanceOpacity?: true;
   colorAttribution?: ColorAttribution;
 }
 function colorError (a: Uint8Array, b: Uint8Array, offset: number): number {
@@ -71,7 +72,7 @@ export async function assessViewers (
 // Same frozen candidate geometry and camera, using production's public setters and host drawing.
 // This does not replace independently evolved layout-quality comparison.
 export async function comparePaint (
-  gl: Production, gpu: Integrated, { attributeLayers = false, smoothLinks = false } = {}
+  gl: Production, gpu: Integrated, { attributeLayers = false, smoothLinks = false, distanceOpacity = false } = {}
 ): Promise<PaintComparison> {
   const positions = (await gpu.backend.read()).positions
   const w = gpu.canvas.width / gpu.renderer.ratio; const h = gpu.canvas.height / gpu.renderer.ratio
@@ -80,12 +81,14 @@ export async function comparePaint (
   gl.graph.render(undefined, 0); gl.graph.pause()
   gl.graph.setViewTransform({ k: c.zoom, x: w / 2 - c.zoom * (c.x + w / 2), y: h / 2 + c.zoom * (c.y - h / 2) }, [w, h])
   await gl.frame(false)
-  const a = gl.snapshot(); const ai = gl.snapshot(true); const b = await gpu.renderer.snapshot({ smoothLinks })
+  const paint = { smoothLinks, linkDistanceOpacity: distanceOpacity ? LINK_VISIBILITY : undefined }
+  const a = gl.snapshot(); const ai = gl.snapshot(true); const b = await gpu.renderer.snapshot(paint)
   if (a.length !== b.color.length) throw new Error('Paired render attachment sizes differ')
   const result: PaintComparison = {
     geometry: Array.from(positions),
     camera: [c.x, c.y, c.zoom],
     ...(smoothLinks ? { smoothLinks: true } : {}),
+    ...(distanceOpacity ? { distanceOpacity: true } : {}),
     maxColorError: 0,
     samples: 0,
     boundarySamples: 0,
@@ -99,7 +102,7 @@ export async function comparePaint (
   const layers = attributeLayers
     ? {
       points: [gl.snapshot(false, { links: false }), await gpu.renderer.snapshotColor({ links: false })],
-      links: [gl.snapshot(false, { points: false }), await gpu.renderer.snapshotColor({ points: false, smoothLinks })],
+      links: [gl.snapshot(false, { points: false }), await gpu.renderer.snapshotColor({ points: false, ...paint })],
     }
     : undefined
   const attribution: ColorAttribution | undefined = layers

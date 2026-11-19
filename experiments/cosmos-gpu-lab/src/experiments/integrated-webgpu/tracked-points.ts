@@ -25,7 +25,7 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
 }
 `
 
-type TrackedPositions = { array: Float32Array; map: Map<number, [number, number]> }
+export type TrackedPositions = { array: Float32Array; map: ReadonlyMap<number, [number, number]> }
 
 export async function createTrackedPoints (device: Device): Promise<{
   read(positions: PositionSource, indices: readonly number[]): Promise<TrackedPositions>;
@@ -42,7 +42,7 @@ export async function createTrackedPoints (device: Device): Promise<{
   return {
     async read (positions, indices): Promise<TrackedPositions> {
       if (positions.device !== device) throw new Error('Tracked positions belong to another device')
-      const map: TrackedPositions['map'] = new Map()
+      const map = new Map<number, [number, number]>()
       if (!indices.length) return { array: new Float32Array(), map }
 
       // The request keeps its own indices and output so overlapping reads can finish independently.

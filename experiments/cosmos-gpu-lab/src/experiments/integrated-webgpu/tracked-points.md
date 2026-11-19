@@ -25,6 +25,10 @@ needs a policy for serving latest or cached positions through the synchronous
 tracker API, suppressing stale results after removal, scheduling overlays, and
 sampling labels in screen space. [WebGPU buffer mapping](https://www.w3.org/TR/webgpu/#buffer-mapping)
 
+The [live graph readback study](#/integrated-webgpu?section=doc-readback) tests
+an async fresh snapshot and a synchronous latest-completed cache on the same
+layout and validates how the cache drops removed IDs.
+
 ## M3 result
 
 All eight requests matched exactly on 19 November 2026 in visible Chrome

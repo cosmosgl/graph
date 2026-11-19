@@ -23,7 +23,7 @@ struct SmoothLinkVertex {
   var out: SmoothLinkVertex;
   out.position = clip(mix(sa, sb, corner.x) + n * corner.y * quadWidth);
   out.across = corner.y;
-  out.color = vec4f(params.linkColor.rgb, params.linkColor.a * min(width / ramp, 1.0));
+  out.color = vec4f(params.linkColor.rgb, linkOpacity(b.xy - a.xy) * min(width / ramp, 1.0));
   out.smoothing = ramp / quadWidth;
   if (a.w > 0.5 || b.w > 0.5 || len <= 0.00001 || width <= 0.0 || params.linkColor.a <= 0.0) {
     out.position = vec4f(2, 2, 2, 1);

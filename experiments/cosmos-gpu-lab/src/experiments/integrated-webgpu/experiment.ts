@@ -34,5 +34,11 @@ export const experiment = defineExperiment({
       title: 'Tracked point readback',
       load: async (): Promise<string> => (await import('./tracked-points.md?raw')).default,
     },
+    {
+      kind: 'markdown',
+      id: 'readback',
+      title: 'Selection and tracked labels',
+      load: async (): Promise<string> => (await import('./readback.md?raw')).default,
+    },
   ],
 })

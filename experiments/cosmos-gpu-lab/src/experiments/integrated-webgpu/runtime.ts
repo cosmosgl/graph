@@ -9,6 +9,7 @@ import { DEFAULT_STRENGTH } from '../mouse-repulsion/data'
 import type { MouseArithmetic } from '../mouse-repulsion/webgpu'
 import { createRenderer } from './renderer'
 import { composeWorkload, workload, type IntegratedForceMode, type Workload } from './data'
+import type { createIntegratedReadback, ViewerReadback } from './readback'
 export type IntegratedSpring = 'hoist' | 'prefetch'
 export type FrameTimestamps = { query: QuerySet; offset: number } | { scope: ComputeScope; draw: RenderPassProps }
 export type FrameTrace = { encodeSimulationMs: number; encodeDrawMs: number; completionWaitMs: number }
@@ -21,6 +22,8 @@ export type IntegratedForceStep = {
 }
 type IntegratedOptions = {
   forces?: IntegratedForceMode; decay?: number; mouseArithmetic?: MouseArithmetic;
+  readback?: boolean;
+  onDeviceError?(error: Error): unknown;
   onForceStep?(step: IntegratedForceStep): void | Promise<void>;
 }
 export const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
@@ -32,10 +35,12 @@ export async function createIntegrated (
   readonly forceMode: IntegratedForceMode; readonly composition?: CompositionFixture;
   readonly tick: number; readonly alpha: number; readonly running: boolean; readonly destroyed: boolean;
   readonly error: string; readonly info: string; feedback: Feedback[]; intervals: number[];
+  readonly readback?: ViewerReadback;
   frame(simulate?: boolean, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void>;
   pause(clearPointer?: boolean): void; resume(): void; step(): Promise<void>;
   pick(x: number, y: number, start?: number): Promise<number | null>;
   drag(id: number, x: number, y: number, release?: boolean): void;
+  patchPositions(first: number, positions: Float32Array): void;
   pan(dx: number, dy: number): void; zoom(factor: number, x: number, y: number): void;
   replace(kind: Workload, count: number, springOptimization?: IntegratedSpring, forces?: IntegratedForceMode): Promise<void>;
   replaceClusters(channels: ClusterChannels): void; replaceAttractors(channels: AttractorChannels): void;
@@ -49,7 +54,7 @@ export async function createIntegrated (
   let composition = composeWorkload(data, forceMode)
   const decay = options.decay ?? 5000
   if (!Number.isInteger(decay) || decay < 1 || decay > 5000) throw new Error('Invalid integrated cooling schedule')
-  const device = await createDevice('webgpu', canvas, true)
+  const device = await createDevice('webgpu', canvas, true, options.onDeviceError)
   const makeBackend = async (
     next: ReturnType<typeof workload>, nextComposition: CompositionFixture | undefined, optimization: IntegratedSpring = 'hoist'
   ): Promise<Awaited<ReturnType<typeof createCombinedWebGPU>>> => {
@@ -75,10 +80,15 @@ export async function createIntegrated (
   }
   let backend!: Awaited<ReturnType<typeof createCombinedWebGPU>>
   let renderer: ReturnType<typeof createRenderer> | undefined
+  let readback: Awaited<ReturnType<typeof createIntegratedReadback>> | undefined
   try {
     backend = await makeBackend(data, composition)
     renderer = createRenderer(() => backend.positionSource!(), data.graph, canvas)
     const drawing = renderer
+    if (options.readback) {
+      const { createIntegratedReadback } = await import('./readback')
+      readback = await createIntegratedReadback(() => backend.positionSource!(), canvas, drawing, () => tick, data.input.points)
+    }
     let raf = 0; let generation = 0; let lastFrame = 0; let pending: Promise<void> = Promise.resolve()
     let press: { pointer: number; x: number; y: number; id: number | null; token: number; ready: boolean } | undefined
     let secondary: { pointer: number; x: number; y: number } | undefined
@@ -124,6 +134,7 @@ export async function createIntegrated (
       const forceTick = tick; const forceAlpha = alpha; const forceComposition = composition
       const forceScale = drawing.camera.zoom * drawing.ratio
       if (simulate || pausedMouse) backend.setMouseRepulsion?.(mouse)
+      let moved = simulate
       if (simulate) {
         if (timestamps && 'scope' in timestamps) backend.stepProfiledTick!(alpha, tick, timestamps.scope)
         else {
@@ -135,7 +146,7 @@ export async function createIntegrated (
         }
         tick++; alpha = cool(alpha, decay)
         if (mouse) alpha = Math.max(alpha, 0.1)
-      } else if (mouse) backend.stepAdditionalForce!('mouse', alpha)
+      } else if (mouse) moved = backend.stepAdditionalForce!('mouse', alpha)
       const simulated = trace ? performance.now() : 0
       drawing.draw(timestamps && 'scope' in timestamps
         ? timestamps.draw
@@ -144,6 +155,7 @@ export async function createIntegrated (
             timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset + 2, endTimestampIndex: timestamps.offset + 3,
           }
           : undefined)
+      if (moved) readback?.moved()
       const drawn = trace ? performance.now() : 0
       // Bound the queue to one completed frame. This pacing cost is included in normal frame intervals.
       await waitForGpu(device)
@@ -167,6 +179,7 @@ export async function createIntegrated (
       canvas,
       get backend (): Awaited<ReturnType<typeof createCombinedWebGPU>> { return backend },
       renderer: drawing,
+      readback: readback?.api,
       feedback,
       intervals,
       get springOptimization (): IntegratedSpring { return springOptimization },
@@ -218,7 +231,12 @@ export async function createIntegrated (
       },
       drag (id: number, x: number, y: number, release = false): void {
         healthy(); const [wx, wy] = api.world(x, y)
-        backend.patchPositions!(id, new Float32Array([wx, wy, release ? data.input.points[id * 4 + 2] : 1, 0]))
+        api.patchPositions(id, new Float32Array([wx, wy, release ? data.input.points[id * 4 + 2] : 1, 0]))
+      },
+      patchPositions (first: number, positions: Float32Array): void {
+        healthy()
+        if (replacing) throw new Error('Integrated graph update already in progress')
+        backend.patchPositions!(first, positions); readback?.patched(first, positions)
         if (!running) drawing.draw()
       },
       pan (dx: number, dy: number): void {
@@ -239,6 +257,8 @@ export async function createIntegrated (
         const next = workload(nextKind, nextCount); const nextComposition = composeWorkload(next, nextForces)
         const wasRunning = running
         replacing = true
+        readback?.beginReplacement()
+        let replaced = false
         try {
           api.pause(true); generation++; press = undefined; await pending; healthy()
           const candidate = await makeBackend(next, nextComposition, optimization)
@@ -246,9 +266,11 @@ export async function createIntegrated (
           const previous = backend; backend = candidate; previous.destroy()
           data = next; composition = nextComposition; forceMode = nextForces
           springOptimization = optimization; tick = 0; alpha = 1; drawing.camera = { x: 0, y: 0, zoom: 2 }
+          replaced = true
           await api.frame(false)
         } finally {
           replacing = false
+          readback?.endReplacement(replaced ? next.input.points : undefined)
           if (wasRunning && !destroyed && !error) api.resume()
         }
       },
@@ -277,7 +299,7 @@ export async function createIntegrated (
       },
       destroy (): void {
         if (destroyed) return
-        destroyed = true; generation++; abort.abort(); api.pause(true); drawing.destroy(); backend.destroy(); device.destroy()
+        destroyed = true; generation++; abort.abort(); api.pause(true); readback?.destroy(); drawing.destroy(); backend.destroy(); device.destroy()
       },
     }
     canvas.addEventListener('pointerdown', event => {
@@ -327,6 +349,6 @@ export async function createIntegrated (
     }, { ...listener, passive: false })
     await api.frame(false)
     return api
-  } catch (e) { renderer?.destroy(); backend?.destroy(); device.destroy(); throw e }
+  } catch (e) { readback?.destroy(); renderer?.destroy(); backend?.destroy(); device.destroy(); throw e }
 }
 export type Integrated = Awaited<ReturnType<typeof createIntegrated>>

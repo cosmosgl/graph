@@ -71,7 +71,10 @@ export const cases: ExperimentCase[] = [
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'Fixed edge cases and a 257-point fixture with pan, zoom and irregular polygon boundaries.',
       limits: 'Production pointer wiring, arbitrary near-edge rounding and large-query cost remain open; WebGPU readback is asynchronous.',
-      evidence: [{ label: 'Rectangle and polygon selection evidence', page: 'selection' }],
+      evidence: [
+        { label: 'Rectangle and polygon selection evidence', page: 'selection' },
+        { label: 'Live graph readback', page: 'readback' },
+      ],
     },
   },
   {
@@ -88,7 +91,10 @@ export const cases: ExperimentCase[] = [
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'A 257-point chain with availability changes, shrink and regrowth.',
       limits: 'The synchronous production tracker contract and end-to-end label latency remain unresolved.',
-      evidence: [{ label: 'Tracked position evidence', page: 'tracked-points' }],
+      evidence: [
+        { label: 'Tracked position evidence', page: 'tracked-points' },
+        { label: 'Live graph readback', page: 'readback' },
+      ],
     },
   },
 ]

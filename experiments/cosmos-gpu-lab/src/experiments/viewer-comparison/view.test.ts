@@ -70,11 +70,20 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(host.querySelector('[data-results]')!.textContent).toContain('style A')
       expect(check.disabled).toBe(false)
     }, { timeout: 30000 })
+    const additionalChecks = host.querySelector<HTMLDetailsElement>('#run-diagnostics .advanced-controls')!
+    additionalChecks.querySelector('summary')!.click()
+    expect(additionalChecks.open).toBe(true)
     const paint = host.querySelector<HTMLButtonElement>('[data-action="paint"]')!
     paint.click()
     await vi.waitFor(() => {
       expect(host.querySelector('[data-results]')!.textContent).toContain('Same-geometry paint · karate · style A')
       expect(paint.disabled).toBe(false)
+    }, { timeout: 30000 })
+    const corrected = host.querySelector<HTMLButtonElement>('[data-action="paint-corrected-links"]')!
+    corrected.click()
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-results]')!.textContent).toContain('Corrected link paint · karate · style A')
+      expect(corrected.disabled).toBe(false)
     }, { timeout: 30000 })
     host.querySelector<HTMLButtonElement>('[data-action="chain"]')!.click()
     await vi.waitFor(() => {
@@ -92,9 +101,22 @@ it('shows real graphs on load and keeps the viewer working after reference navig
     await vi.waitFor(() => expect(capture).toHaveBeenCalledOnce())
     const result = JSON.parse(await (capture.mock.calls[0][0] as Blob).text())
     expect(result.records.find((row: { action: string }) => row.action === 'updates').candidatePixels.paintedSamples).toBeGreaterThan(0)
-    expect(result.records.filter((row: { action: string }) => row.action === 'same-geometry-paint')
-      .map(({ scene, pointCount, linkCount }: { scene: string; pointCount: number; linkCount: number }) => ({ scene, pointCount, linkCount })))
-      .toEqual([{ scene: 'karate', pointCount: 34, linkCount: 78 }, { scene: 'chain', pointCount: 32, linkCount: 31 }])
+    const paints = result.records.filter((row: { action: string }) => row.action === 'same-geometry-paint')
+    expect(paints).toHaveLength(3)
+    expect(paints[0]).toMatchObject({ scene: 'karate', pointCount: 34, linkCount: 78, nonempty: true })
+    expect(paints[1]).toMatchObject({
+      scene: 'karate',
+      pointCount: 34,
+      linkCount: 78,
+      nonempty: true,
+      smoothLinks: true,
+      distanceOpacity: true,
+      geometry: paints[0].geometry,
+      camera: paints[0].camera,
+      samples: paints[0].samples,
+      boundarySamples: paints[0].boundarySamples,
+    })
+    expect(paints[2]).toMatchObject({ scene: 'chain', pointCount: 32, linkCount: 31 })
 
     host.querySelector<HTMLButtonElement>('[data-action="run"]')!.click()
     await vi.waitFor(() => expect(control.tick).toBeGreaterThan(0), { timeout: 15000 })
