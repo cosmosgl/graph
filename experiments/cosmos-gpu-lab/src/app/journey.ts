@@ -26,10 +26,10 @@ export const journeySteps = [
     number: 3,
     id: 'missing-forces',
     title: 'Remaining forces and collision scope',
-    status: 'Isolated forces pass. Composition has retained failures',
-    position: 'Mouse repulsion, clusters and attractors pass in isolation. Composed trajectories and larger collision integration still need acceptance.',
+    status: 'Interactive force study complete',
+    position: 'Five M3 layouts match the CPU through 8,192 points and 3.3× zoom. Frame pacing and the full force set at one million points remain open.',
     exit: 'Declared behavior, numerical accuracy, layout quality and cost for the supported force set.',
-    href: '#/combined-layout?section=doc-force-composition',
+    href: '#/integrated-webgpu?section=doc-composed-interaction',
   },
   {
     number: 4,
