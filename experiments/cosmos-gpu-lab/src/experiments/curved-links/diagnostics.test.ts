@@ -25,16 +25,21 @@ it('captures the isolated default bow without changing ordinary images', async (
 }, 120000)
 it('uses the color faces for a separate picking candidate while retaining the folded baseline', async () => {
   const source = fixture('limits'); const scene = { ...source, links: [source.links[3]] }
+  const cases: Array<{ ratio: number; x: number; y: number }> = [
+    { ratio: 1, x: 275, y: 95 },
+    { ratio: 2, x: 558, y: 187 },
+  ]
   const gl = await createCurvesWebGL(document.createElement('canvas')); let gpu: Awaited<ReturnType<typeof createCurvesWebGPU>> | undefined
   try {
     gpu = await createCurvesWebGPU(document.createElement('canvas'))
-    for (const ratio of [1, 2]) {
+    for (const { ratio, x, y } of cases) {
       for (const blend of [true, false]) {
         const settings = { ...DEFAULTS, zoom: 0.5, scaleOnZoom: false, opacity: 0.35, ratio, blend }
         const images = []
         for (const backend of [gl, gpu]) {
           const baseline = await backend.render(scene, settings, 'visible', false)
           const front = await backend.render(scene, settings, 'front', false)
+          expect(pick(front, x, y)).toBe(0)
           expect(front.color).toEqual(baseline.color)
           let rejected = 0
           for (let i = 0; i < baseline.ids.length; i += 4) {
