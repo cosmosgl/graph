@@ -3,13 +3,14 @@ import { createStylingView } from './view'
 
 it('replays stored-alpha picking without changing the live scene and exports its separate policy', async () => {
   const host = document.createElement('div'); document.body.append(host)
-  const instance = await createStylingView(host)
+  const instance = await createStylingView(host, 'picking')
   try {
     const canvas = host.querySelector('canvas')!
     const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
     const renderer = host.querySelector<HTMLSelectElement>('[data-renderer]')!
     const before = [fixture.value, renderer.value, canvas.width, canvas.height]
     const replay = host.querySelector<HTMLButtonElement>('[data-stored-alpha]')!
+    expect(replay.closest<HTMLElement>('[data-case-diagnostic]')!.hidden).toBe(false)
     expect(replay.disabled).toBe(false); replay.click()
     expect(fixture.disabled).toBe(true)
     await vi.waitFor(() => expect(host.querySelector('[data-stored-progress]')!.textContent).toContain('Pass · 6 live rows'), { timeout: 20000 })
@@ -32,7 +33,7 @@ it('replays stored-alpha picking without changing the live scene and exports its
 
 it('cancels a cost sweep and exports complete rows without changing the live scene', async () => {
   const host = document.createElement('div'); document.body.append(host)
-  const instance = await createStylingView(host)
+  const instance = await createStylingView(host, 'picking')
   try {
     const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
     const before = fixture.value
@@ -60,7 +61,7 @@ it('cancels a cost sweep and exports complete rows without changing the live sce
 
 it('cancels a filtered comparison and exports complete rows without changing the live scene', async () => {
   const host = document.createElement('div'); document.body.append(host)
-  const instance = await createStylingView(host)
+  const instance = await createStylingView(host, 'picking')
   try {
     const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
     const before = fixture.value

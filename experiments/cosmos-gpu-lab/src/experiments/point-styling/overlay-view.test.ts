@@ -11,7 +11,7 @@ it('exports the selected overlay candidate and retains it across production and 
   const host = document.createElement('div'); document.body.append(host)
   let instance: Awaited<ReturnType<typeof createStylingView>> | undefined
   try {
-    instance = await createStylingView(host)
+    instance = await createStylingView(host, 'effects')
     const select = async (selector: string, value: string): Promise<void> => {
       const control = host.querySelector<HTMLSelectElement>(selector)!
       control.value = value; control.dispatchEvent(new Event('change'))
@@ -25,9 +25,9 @@ it('exports the selected overlay candidate and retains it across production and 
       return JSON.parse(await exported!.text())
     }
     const overlay = host.querySelector<HTMLSelectElement>('[data-overlay-arithmetic]')!
-    expect(overlay.disabled).toBe(true)
-    await select('[data-fixture]', 'point-effects')
-    await select('[data-effects-scene]', 'overlap')
+    expect(overlay.closest('label')!.hidden).toBe(false)
+    expect(overlay.disabled).toBe(false)
+    expect(host.querySelector<HTMLSelectElement>('[data-effects-scene]')!.value).toBe('overlap')
     await select('[data-overlay-arithmetic]', 'pixels')
     const selected = await report()
     expect(selected.settings.overlayArithmetic).toBe('pixels')

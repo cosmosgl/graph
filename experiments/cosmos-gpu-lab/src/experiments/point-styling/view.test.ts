@@ -11,7 +11,7 @@ let instance: ExperimentInstance | undefined
 afterEach(() => { instance?.destroy(); host?.remove() })
 
 it('exposes decoded-source failures and restores the selected path after cancellation', async () => {
-  host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
+  host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host, 'images')
   const select = async (selector: string, value: string): Promise<void> => {
     const control = host!.querySelector<HTMLSelectElement>(selector)!
     control.value = value; control.dispatchEvent(new Event('change'))
@@ -43,13 +43,13 @@ it('exposes decoded-source failures and restores the selected path after cancell
   await select('[data-image-filter]', 'linear')
   expect(host.querySelector('[data-decode-audit]')!.textContent).not.toContain('Fail')
   expect(host.querySelector('[data-isolation-audit]')!.textContent).not.toContain('Fail')
-  await select('[data-fixture]', 'shapes')
+  await select('[data-fixture]', 'atlas-images')
   expect(decoder.disabled).toBe(true); expect(host.querySelector('details')).toBeNull()
 }, 90000)
 
 it('steps live image updates and preserves image state and canvases across sweep cancellation', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'images')
   const select = host.querySelector<HTMLSelectElement>('[data-fixture]')!
   select.value = 'atlas-dynamic'; select.dispatchEvent(new Event('change'))
   await vi.waitFor(() => expect(select.disabled).toBe(false), { timeout: 20000 })
@@ -88,7 +88,7 @@ it('steps live image updates and preserves image state and canvases across sweep
 
 it('exposes source-texel addressing and retains the clamped control verdict', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'images')
   const select = async (selector: string, value: string): Promise<void> => {
     const element = host!.querySelector<HTMLSelectElement>(selector)!
     element.value = value; element.dispatchEvent(new Event('change'))
@@ -109,7 +109,7 @@ it('exposes source-texel addressing and retains the clamped control verdict', as
 
 it('keeps non-square atlas settings and live canvases when cancelling the packing sweep', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'images')
   const select = async (selector: string, value: string): Promise<void> => {
     const element = host!.querySelector<HTMLSelectElement>(selector)!
     element.value = value; element.dispatchEvent(new Event('change'))
@@ -136,7 +136,7 @@ it('keeps non-square atlas settings and live canvases when cancelling the packin
 
 it('labels tile isolation separately and preserves the selected policy after cancellation', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'images')
   const select = async (selector: string, value: string): Promise<void> => {
     const element = host!.querySelector<HTMLSelectElement>(selector)!
     element.value = value; element.dispatchEvent(new Event('change'))
@@ -203,7 +203,7 @@ it('labels candidate geometry separately from production compatibility and repla
 
 it('keeps invisible foreground rejection visible and cancels a sweep without changing the live canvas', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'picking')
   const canvas = host.querySelector('canvas')!
   const select = async (selector: string, value: string): Promise<void> => {
     const element = host!.querySelector<HTMLSelectElement>(selector)!
@@ -241,7 +241,7 @@ it('keeps invisible foreground rejection visible and cancels a sweep without cha
 
 it('shows atlas checks and retains a cancelled row without changing the live fixture', async () => {
   host = document.createElement('div'); document.body.append(host)
-  instance = await createStylingView(host)
+  instance = await createStylingView(host, 'images')
   const select = async (selector: string, value: string): Promise<void> => {
     const element = host!.querySelector<HTMLSelectElement>(selector)!
     element.value = value; element.dispatchEvent(new Event('change'))
@@ -275,7 +275,7 @@ it('keeps ring boundary failures visible and preserves the selected scene across
   const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   try {
-    host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
+    host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host, 'effects')
     const select = async (selector: string, value: string): Promise<void> => {
       const control = host!.querySelector<HTMLSelectElement>(selector)!
       control.value = value; control.dispatchEvent(new Event('change'))
@@ -308,7 +308,7 @@ it('keeps ring boundary failures visible and preserves the selected scene across
       checkCpuColors(report)
       return report
     }
-    await select('[data-fixture]', 'point-effects')
+    await select('[data-effects-scene]', 'shapes')
     expect(host.querySelector<HTMLSelectElement>('[data-renderer]')!.value).toBe('eligibility')
     const rejected = await checkAudit('normalized')
     // Non-vacuous rejection check: the deliberately rejected fixture must not
