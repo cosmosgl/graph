@@ -13,7 +13,9 @@ points in the same coarse cell a shared push. **Four corners** blends four
 pushes according to each point's position inside that cell. Both options rebuild
 the shared values every tick and keep the nearby forces individual.
 
-The live view is a separate research prototype. It does not test picking,
-dragging, production styles or all Cosmos forces, and it does not validate each
-live tick against WebGL. See the recorded findings for the M3 measurements and
-remaining accuracy differences.
+Drag the canvas to pan, use the wheel to zoom and click a point to highlight
+it. Fit returns to the GPU's automatic framing. The recorded M3 view tests
+pan, zoom and picks while the graph moves and reports frame intervals
+separately from synchronized ticks. The prototype uses basic circles and solid
+links. Production styles, point dragging and the full force set remain open.
+[Moving graph interaction](#/million-graph?section=doc-interactive-study)

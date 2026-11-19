@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import { labBrowser } from './browser-provider.mjs'
 import { writeLabArtifact } from './scripts/artifacts.mjs'
+import { residentInput } from './scripts/resident-input.mjs'
 
 // Local research checks use the current machine's native browser/GPU.
 // Keep the legacy flag for existing native-only tests and historical reproduction commands.
@@ -60,6 +61,7 @@ export default defineConfig({
       'src/experiments/weighted-links/**/*.test.ts',
       'src/experiments/many-body/**/*.test.ts',
       'src/experiments/many-body-grid/**/*.test.ts',
+      'src/experiments/million-graph/**/*.test.ts',
       'src/experiments/repulsion-trajectories/**/*.test.ts',
       'src/experiments/combined-layout/**/*.test.ts',
       'src/experiments/center-mass/**/*.test.ts',
@@ -81,6 +83,6 @@ export default defineConfig({
     ],
     testTimeout: 60000,
     maxWorkers: 1,
-    browser: { ...labBrowser(true), commands: { writeLabArtifact } },
+    browser: { ...labBrowser(true), commands: { writeLabArtifact, residentInput } },
   },
 })
