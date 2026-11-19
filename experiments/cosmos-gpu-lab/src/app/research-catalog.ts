@@ -15,6 +15,34 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   })
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
+    'million-graph': entry('million-graph', {
+      conclusion: 'Four corners improves median and p95 tick time on the persistent dense fixture. Drawing dominates the expanded profile on M3.',
+      reviewed: '2026-11-19',
+      variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
+      comparison: 'Matched moving graphs, synchronized tick time, point drift and cell-edge motion',
+      milestone: 'simulation',
+      method: 'overview',
+      evidence: 'dense-communities',
+      next: 'Measure drawing, presented frames, picking and memory in a complete viewer with persistent communities and high-degree hubs.',
+      reproduce: 'Choose starting positions and distant repulsion under Configuration, then press Run graph.',
+      investigations: [
+        { page: 'dense-communities', state: 'Current evidence', description: 'Persistent dense communities, cell-crossing motion and stage timestamps.' },
+        { page: 'cell-field', state: 'Supporting investigation', description: 'Three solvers on two million-point inputs, including density and edge checks.' },
+        { page: 'results', state: 'Supporting investigation', description: 'Initial M3 hierarchy, replay and moving-frame measurements.' },
+      ],
+    }),
+    'mouse-repulsion': entry('mouse-repulsion', {
+      conclusion: 'The isolated pointer force passed the native M3 matrix through 8,192 points, including release and the paused execution gate.',
+      reviewed: '2026-11-19',
+      variant: 'Production GLSL, WebGPU pointer force and independent CPU reference',
+      comparison: 'CSS pointer coordinates, world-space force, integration and running and paused behavior',
+      milestone: 'simulation',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Review the combined-force results for independent layout quality and full viewer responsiveness.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Pointer mapping, minimum distance, hold and release.' }],
+    }),
     'point-attractors': entry('point-attractors', {
       conclusion: 'Per-point targets and live updates pass through 8,192 points on M3. Corrected WebGPU costs more than WebGL in the isolated force timings.',
       reviewed: '2026-11-18',
@@ -24,7 +52,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'method',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Preserve the attractor baseline. Validate mouse repulsion next, then compose accepted forces and measure complete-frame cost.',
+      next: 'Use the combined-force evidence to evaluate complete-frame cost, live target setters and longer layouts.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Isolated attractor investigation; full-frame cost remains unchecked.' }],
     }),
     'cluster-attraction': entry('cluster-attraction', {
@@ -37,24 +65,31 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'method',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Preserve the cluster and attractor baselines. Validate mouse repulsion before composing accepted forces and measuring full frames.',
-      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded isolated cluster investigation; combined forces remain unchecked.' }],
+      next: 'Keep the isolated baseline and test the composed candidate in the interactive viewer with production setters.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Isolated cluster aggregation, force and live membership validation.' }],
     }),
     'center-mass': entry('center-mass', {
-      conclusion: 'Both reductions produced centers close to the CPU sum in the recorded 8,192-point smoke run; no production accuracy budget is agreed.',
-      variant: 'Additive WebGL blend and two-stage WebGPU reduction; luma 10.0.0-alpha.4. Historical GPU identity was not recorded.',
-      comparison: 'Shared moving positions → WebGL blend / WebGPU reduction → compare with the CPU sum',
+      conclusion: 'The M3 linear center-force candidate is promising at scale, but the strict 8,192-point trajectory comparison fails.',
+      variant: 'Historical WebGL blend and two-stage reduction; newer recursive high/low and opt-in linear force on luma 10.0.0-alpha.15.',
+      comparison: 'CPU / WebGL / recursive WebGPU center → force cost and strict checks → independent graph trajectories',
       milestone: 'execution',
       method: 'overview',
-      evidence: 'results',
-      methodPages: ['algorithm', 'implementation', 'correctness', 'performance', 'limitations', 'references'],
-      next: 'Agree a center-accuracy budget and validate the reduction when composed with the center force.',
-      reproduce: 'Step or Play the same 8,192 moving points above. Read absolute CPU error and ' +
-        'backend delta; elapsed time includes readback and drawing.',
+      evidence: 'scale-findings',
+      methodPages: ['algorithm', 'implementation', 'correctness', 'performance', 'scale-method', 'limitations', 'references'],
+      next: 'Compare visible trajectories with the refined force and measure center cost in the large resident graph.',
+      reproduce: 'Use Step or Play for the original 8,192-point demo. In Diagnostics, run the separate M3 scale study and export its checks.',
       investigations: [{
         page: 'results',
-        state: 'Current evidence',
+        state: 'Historical baseline',
         description: 'Initial correctness smoke run with explicitly incomplete environment metadata.',
+      }, {
+        page: 'scale-findings',
+        state: 'Current evidence',
+        description: 'M3 scale, force cost and bounded independent-layout results; strict trajectory differences remain.',
+      }, {
+        page: 'once-findings',
+        state: 'Supporting investigation',
+        description: 'Computing the center once preserved tested results, with no clear M3 timing benefit.',
       }],
     }),
     'scalable-reduction': entry('scalable-reduction', {
@@ -145,14 +180,34 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         { page: 'timing', state: 'Supporting investigation', description: 'Batched native M3 timing sweeps with checks outside the measured interval.' },
       ],
     }),
+    'workgroup-repulsion': entry('workgroup-repulsion', {
+      conclusion: 'A lab-only million-point graph now builds its hierarchy on the GPU; strict replay and viewer coverage remain open.',
+      reviewed: '2026-11-18',
+      variant: 'Workgroup-memory variant of the hierarchical global repulsion experiment on luma WebGPU.',
+      comparison: 'Same positions → production WebGL / workgroup WebGPU / CPU → structure, force and integration checks',
+      milestone: 'simulation',
+      method: 'overview',
+      evidence: 'moving-million',
+      next: 'Test dense graphs, visual and interaction quality, and strict replay differences before integrating the existing viewer.',
+      reproduce: 'Workgroup memory is selected by default. Press Step + validate to compare the live outputs.',
+      investigations: [
+        { page: 'moving-million', state: 'Current evidence', description: 'A synthetic moving million-point graph with a GPU-built hierarchy.' },
+        { page: 'force-speed', state: 'Supporting investigation', description: 'GPU target grouping, faster arithmetic, timings and accuracy limits.' },
+        {
+          page: 'direct-alternatives',
+          state: 'Supporting investigation',
+          description: 'Workgroup memory removes the large contribution buffer in bounded checks.',
+        },
+      ],
+    }),
     'many-body-grid': entry('many-body-grid', {
-      conclusion: 'Refined, stored far-field contributions pass the documented dense CPU checks. The inline baseline retains its strict-reference failures.',
+      conclusion: 'Workgroup scratch matches stored force in bounded M3 checks; an isolated million-point force takes hundreds of milliseconds.',
       variant: 'Production hierarchical GLSL and luma WebGPU variants; bounded Apple M3 evidence.',
       comparison: 'Shared positions and sampling policy → hierarchy and force variants → CPU compatibility and separate approximation error',
       milestone: 'simulation',
       method: 'overview',
       evidence: 'far-field',
-      next: 'Judge independent trajectories and precision cost before promoting a candidate; port parity is separate from approximation quality.',
+      next: 'Optimize the million-point force and replace dense full-source scans, then test composed million-point behavior.',
       reproduce: 'Use the clustered 8,192/16,384-point, eight-sample precise cases. Compare ' +
         'centroid/far-field variants in Diagnostics; retain the failing inline control.',
       investigations: [
@@ -163,6 +218,12 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
           'original budget.',
         },
         { page: 'precision-cost', state: 'Supporting investigation', description: 'Stored versus streamed contribution cost on matched frozen inputs.' },
+        { page: 'chunked-memory', state: 'Supporting investigation', description: 'Bounded scratch and million-point memory investigation.' },
+        {
+          page: 'direct-alternatives',
+          state: 'Supporting investigation',
+          description: 'Workgroup scratch preserves bounded results; isolated million-point force cost remains high.',
+        },
         {
           page: 'centroids',
           state: 'Supporting investigation',
@@ -215,46 +276,56 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'pilot-viewer': entry('pilot-viewer', {
-      conclusion: 'The M3 explorer works, but a wider run records a 100.4-ms running pick and fails responsiveness. ' +
-        'A four-block narrower follow-up passes without reproducing the stall; its cause remains unknown. Production colors remain rejected.',
-      reviewed: '2026-11-18',
+      conclusion: 'Wider DPR 1 and DPR 2 controls pass all 320 picks on M3. The historical 100.4-ms and 68.2-ms failures remain unexplained.',
+      reviewed: '2026-11-19',
       variant: 'Existing corrected luma WebGPU runtime with a bounded Karate Club explorer',
       comparison: 'Explore the real graph → verify identity and updates → measure complete frames and feedback',
       milestone: 'integration',
       method: 'scope',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Run one declared normal/traced/traced/normal control near the historical wider canvas size. ' +
-        'The narrower follow-up did not reproduce the stall or establish a fix. Keep the 50-ms gate unchanged.',
+      next: 'Keep the 50-ms gate and use the recorded frame and pick phases if the intermittent delay recurs in a representative integrated workload.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {
-      conclusion: 'Small M3 viewers pass frame, update and running-picking checks; layouts look similar after Fit. ' +
-        'Same-geometry interior colors still differ, so strict compatibility is rejected.',
-      reviewed: '2026-11-18',
+      conclusion: 'Link edge smoothing removes most edge differences on M3. All 557 link-only interior color failures remain.',
+      reviewed: '2026-11-19',
       variant: 'Unchanged production Graph / luma v9 versus integrated corrected luma v10 core',
       comparison: 'Same topology and supplied styles → independent layouts and running interaction → bounded workflow checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
       methodPages: ['agent-recipe'],
-      next: 'Follow the bounded pilot viewer and its reopened responsiveness investigation; retain these production color failures.',
+      next: 'Replay the isolated link witnesses to compare paint inputs and fragment output at the same interior pixels.',
       reproduce: 'The live viewers show a new local run. The agent recipe specifies a focused same-geometry paint comparison.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',
-      reviewed: '2026-11-18',
+      reviewed: '2026-11-19',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Follow the pilot viewer: the practical trial has reproduced a running-pick stall with request phases recorded.',
+      next: 'Bring the asynchronous selection and tracking probes into the Graph contract and retain the original timing failures.',
       reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
         'or the current session’s assessment; keep the native tab visible.',
-      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
+      investigations: [
+        { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
+        { page: 'host-ownership', state: 'Supporting investigation', description: 'Borrowed luma device, shared draw pass and explicit checkpoint restart.' },
+        {
+          page: 'selection',
+          state: 'Supporting investigation',
+          description: 'Native rectangle and polygon selection parity and the remaining asynchronous readback contract.',
+        },
+        {
+          page: 'tracked-points',
+          state: 'Supporting investigation',
+          description: 'Compact readback of moving GPU positions and ordered snapshots across updates.',
+        },
+      ],
     }),
     'resident-layout': entry('resident-layout', {
       conclusion: 'Resident execution and edits are demonstrated in isolation. ' +

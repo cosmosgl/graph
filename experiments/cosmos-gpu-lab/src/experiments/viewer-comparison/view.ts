@@ -33,7 +33,9 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     Completed results stay in this tab; export JSON to keep them after closing it.</p>`}
     <section data-run-part="results"><div data-results>No assessment yet.</div><div data-recovered-results></div></section>
     <section data-run-part="diagnostics"><div class="controls"><button data-action="assess">Assess early and cooled viewers</button>
-    <button data-action="paint">Compare same-geometry paint</button><button data-action="check">Check current updates</button>
+    <button data-action="paint">Compare same-geometry paint</button><button data-action="paint-layers">Attribute paint differences</button>
+    <button data-action="paint-link-smoothing">Test link edge smoothing</button>
+    <button data-action="check">Check current updates</button>
     <button data-action="cancel">Cancel assessment</button><button data-action="export">Export JSON</button></div>
     <p>${protocol}</p><p>Style A: six-pixel blue circles, width-1.25 grey links at opacity 0.45.
     Style B: every third point coral and ten pixels, alpha 0.35 (point 0 alpha 0); width-2.5 coral links at opacity 0.7.
@@ -247,7 +249,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         await create()
         record({ action: 'recreate', oldCanvasDetached: !old.isConnected, candidateReady: !gpu.destroyed }); await check()
       }
-      if (name === 'paint') {
+      if (name === 'paint' || name === 'paint-layers' || name === 'paint-link-smoothing') {
         playing = false; gl.graph.pause(); gpu.pause(); style()
         record({
           action: 'same-geometry-paint',
@@ -255,7 +257,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           pointCount: gpu.data.input.points.length / 4,
           linkCount: gpu.data.graph.links.length / 2,
           style: alternate ? 'B' : 'A',
-          ...await comparePaint(gl, gpu),
+          ...await comparePaint(gl, gpu, { attributeLayers: name !== 'paint', smoothLinks: name === 'paint-link-smoothing' }),
         })
       }
       if (name === 'check') await check()
@@ -293,7 +295,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         a.click(); URL.revokeObjectURL(url)
       }
     } catch (e) { failure = String(e); record({ error: failure, action: name }); playing = false; failed = true } finally {
-      if (!['run', 'pause', 'assess', 'paint'].includes(name) && !dead && !failed && visible && pauseGeneration === startedAt) playing = wasPlaying
+      if (!['run', 'pause', 'assess', 'paint', 'paint-layers', 'paint-link-smoothing'].includes(name) &&
+        !dead && !failed && visible && pauseGeneration === startedAt) playing = wasPlaying
       busy = false; if (!dead) { update(); if (viewportQueued) queueViewport(); else schedule() }
     }
   }

@@ -1,6 +1,7 @@
 // Built from the unchanged workspace engine; its imports resolve root luma v9.
 import type { Graph } from '../../../../../dist/index.js'
 import { workload } from '../integrated-webgpu/data'
+import type { PaintLayers } from '../integrated-webgpu/renderer'
 import { graphPalette, graphRgba } from '../../runtime/palette'
 import { styles, type Scene } from './styles'
 const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
@@ -8,7 +9,7 @@ export async function createProduction (host: HTMLDivElement): Promise<{
   graph: Graph; canvas: HTMLCanvasElement; info: string; tick: number; readonly selected: number | undefined; errors: string[];
   feedback: { kind: string; id?: number; ms: number }[];
   replace(scene: Scene): Promise<void>; style(alternate: boolean): void; frame(simulate: boolean): Promise<void>;
-  positions(): Float32Array; fit(): void; snapshot(ids?: boolean): Uint8Array; destroy(): void;
+  positions(): Float32Array; fit(): void; snapshot(ids?: boolean, layers?: PaintLayers): Uint8Array; destroy(): void;
 }> {
   let count = 34; let alternate = false; let selected: number | undefined; let tick = 0; let dead = false
   const errors: string[] = []
@@ -106,13 +107,13 @@ export async function createProduction (host: HTMLDivElement): Promise<{
         return result
       },
       fit (): void { graph.fitView(0, 0.1, false) },
-      snapshot (ids = false): Uint8Array {
+      snapshot (ids = false, layers?: PaintLayers): Uint8Array {
         const device = graph.simulation.device!; const { width, height } = canvas
         const texture = device.createTexture({ width, height, format: 'rgba8unorm' })
         const framebuffer = device.createFramebuffer({ width, height, colorAttachments: [texture], depthStencilAttachment: 'depth24plus' })
         try {
           const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0], clearDepth: 1 })
-          graph.drawToRenderPass(pass, ids ? { links: false, picking: { alpha: 1 } } : undefined); pass.end(); device.submit()
+          graph.drawToRenderPass(pass, ids ? { links: false, picking: { alpha: 1 } } : layers); pass.end(); device.submit()
           const raw = device.readPixelsToArrayWebGL(framebuffer) as Uint8Array; const out = new Uint8Array(raw.length)
           for (let y = 0; y < height; y++) out.set(raw.subarray((height - 1 - y) * width * 4, (height - y) * width * 4), y * width * 4)
           return out

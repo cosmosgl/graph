@@ -1,6 +1,6 @@
 # Limitations and next questions
 
-## Current limits
+## Original demo limits
 
 - The WebGPU reduction supports at most 65,536 points because it uses exactly two reduction levels.
 - Every tick reads the result back to JavaScript.
@@ -9,6 +9,10 @@
 - Only an unweighted center is implemented; every point contributes a mass of one.
 - Device-loss recovery is not implemented.
 - The saved result is an illustrative smoke run, not a cross-device benchmark.
+
+The separate [M3 scale study](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
+uses the newer recursive GPU-resident center force and reports its own limits;
+it does not change these historical demo boundaries.
 
 ## Migration questions exposed by the experiment
 

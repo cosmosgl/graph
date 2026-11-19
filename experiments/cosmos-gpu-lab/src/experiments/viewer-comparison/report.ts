@@ -45,9 +45,16 @@ export function report (value: unknown): Report {
   }
   if (r.action === 'resize') return { name: 'Resize delivery', verdict: 'Recorded', detail: `Settled after ${r.frames} animation opportunities.` }
   const scene = typeof r.scene === 'string' ? ` · ${r.scene}` : ''
+  const paint = r.smoothLinks === true ? 'Smoothed links' : 'Same-geometry paint'
+  const layers = r.colorAttribution as Record<string, { count: number }> | undefined
   return {
-    name: r.pixelAudit ? `${r.backend} · CPU pixel audit` : `Same-geometry paint${scene} · style ${r.style}`,
+    name: r.pixelAudit ? `${r.backend} · CPU pixel audit` : `${paint}${scene} · style ${r.style}`,
     verdict: verdict(pixelPass(pixels)),
-    detail: `${detail}${r.productionInvisiblePicks !== undefined ? ` · production invisible picks ${r.productionInvisiblePicks}` : ''}`,
+    detail: detail + (r.productionInvisiblePicks !== undefined ? ` · production invisible picks ${r.productionInvisiblePicks}` : '') +
+      (typeof r.boundaryColorFailures === 'number' ? ` · excluded edge color differences ${r.boundaryColorFailures}` : '') +
+      (layers
+        ? ` · Failing pixels by layer · points ${layers.points.count} · links ${layers.links.count}` +
+          ` · both ${layers.both.count} · composed ${layers.composed.count}`
+        : ''),
   }
 }

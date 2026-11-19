@@ -8,6 +8,18 @@ export const experiment = defineExperiment({
   pages: [
     {
       kind: 'markdown',
+      id: 'direct-alternatives',
+      title: 'Direct and workgroup alternatives',
+      load: async (): Promise<string> => (await import('./docs/direct-alternatives.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'chunked-memory',
+      title: 'Bounded repulsion scratch',
+      load: async (): Promise<string> => (await import('./docs/chunked-memory.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'precision-cost',
       title: 'Precision cost',
       load: async (): Promise<string> => (await import('./docs/precision-cost.md?raw')).default,

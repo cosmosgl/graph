@@ -101,6 +101,23 @@ itself a source snapshot. The original historical pilot measurements have no
 independently preserved exact source snapshot; do not retroactively label them
 as clean-revision replays.
 
+## Wider replay at DPR 2
+
+An explicit standalone control can use installed Chrome through Playwright.
+Serve the frozen Lab build on loopback. Open the pilot in a foreground Chrome
+window with a 1,280 × 900 CSS viewport and device scale factor 2. Before
+starting the four blocks, record the actual browser, Apple native adapter,
+visibility, displayed canvas and backing attachment. Proceed when the logical
+canvas is 961 × 541 and the actual attachment is 1,922 × 1,082. If the page
+allocates a different canvas width, adjust the viewport before measuring and
+record the actual setting used.
+
+Use **Investigate picking latency** once, with the same normal, traced,
+traced, normal blocks and original 33 ms frame and 50 ms feedback rules.
+Retain the real JSON download and record that the browser was standalone.
+This matches the historical attachment size. Inline browser scheduling and
+host activity are independent variables. Keep earlier misses in the report.
+
 ## Publish and review
 
 Add one record to `pilot-viewer/agent-findings/`; files load automatically. Follow

@@ -49,6 +49,24 @@ export const experiment = defineExperiment({
     },
     {
       kind: 'markdown',
+      id: 'scale-method',
+      title: 'M3 scale study',
+      load: async (): Promise<string> => (await import('./docs/scale-method.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'scale-findings',
+      title: 'M3 scale findings',
+      load: async (): Promise<string> => (await import('./docs/scale-findings.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'once-findings',
+      title: 'Center calculated once',
+      load: async (): Promise<string> => (await import('./docs/once-findings.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'limitations',
       title: 'Limitations',
       load: async (): Promise<string> => (await import('./docs/limitations.md?raw')).default,

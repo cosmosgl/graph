@@ -45,6 +45,11 @@ const guidance: Record<string, Guidance> = {
     quality: 'Controls the hierarchical approximation; compatibility and approximation error are separate.',
     slots: 'Sampling budget within each cell; more samples add work.',
   },
+  'workgroup-repulsion': {
+    quality: 'Controls the hierarchical approximation; compatibility and approximation error are separate.',
+    slots: 'Sampling budget within each cell; more samples add work.',
+    'far-mode': 'Workgroup memory is the candidate; the other modes are comparison controls.',
+  },
   'repulsion-trajectories': {
     quality: 'Hierarchical approximation used by independently evolving layouts.',
     slots: 'Sample budget per cell; keep it fixed when comparing trajectories.',

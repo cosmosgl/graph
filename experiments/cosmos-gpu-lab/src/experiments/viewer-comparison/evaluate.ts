@@ -12,6 +12,21 @@ export const protocol = 'Karate Club 34 points / 78 weighted links; seed 29471, 
   'resize, recreation; actual picking and dragging during running. Frame target ≥95% ≤33 ms; feedback ≤50 ms. ' +
   'Exact point IDs and original one-device-pixel / two-byte rendering rules remain unchanged.'
 export type FrameRow = { backend: string; window: string; intervals: number[]; p95: number; within33: number; pass: boolean }
+type ColorWitness = { x: number; y: number; colors: number[][]; points: number[][]; links: number[][] }
+type ColorAttribution = Record<'points' | 'links' | 'both' | 'composed', { count: number; witness?: ColorWitness }>
+export type PaintComparison = {
+  samples: number; boundarySamples: number; boundaryColorFailures: number; interiorIdFailures: number; interiorColorFailures: number;
+  productionInvisiblePicks: number; candidateInvisiblePicks: number; nonempty: boolean; geometry: number[]; maxColorError: number;
+  camera: [number, number, number];
+  smoothLinks?: true;
+  colorAttribution?: ColorAttribution;
+}
+function colorError (a: Uint8Array, b: Uint8Array, offset: number): number {
+  return Math.max(
+    Math.abs(a[offset] - b[offset]), Math.abs(a[offset + 1] - b[offset + 1]),
+    Math.abs(a[offset + 2] - b[offset + 2]), Math.abs(a[offset + 3] - b[offset + 3])
+  )
+}
 export async function assessViewers (
   gl: Production, gpu: Integrated, guard: () => void, progress: (s: string) => void, record: (row: unknown) => void
 ): Promise<void> {
@@ -55,10 +70,9 @@ export async function assessViewers (
 }
 // Same frozen candidate geometry and camera, using production's public setters and host drawing.
 // This does not replace independently evolved layout-quality comparison.
-export async function comparePaint (gl: Production, gpu: Integrated): Promise<{
-  samples: number; boundarySamples: number; interiorIdFailures: number; interiorColorFailures: number;
-  productionInvisiblePicks: number; candidateInvisiblePicks: number; nonempty: boolean; geometry: number[]; maxColorError: number;
-}> {
+export async function comparePaint (
+  gl: Production, gpu: Integrated, { attributeLayers = false, smoothLinks = false } = {}
+): Promise<PaintComparison> {
   const positions = (await gpu.backend.read()).positions
   const w = gpu.canvas.width / gpu.renderer.ratio; const h = gpu.canvas.height / gpu.renderer.ratio
   const c = gpu.renderer.camera
@@ -66,18 +80,33 @@ export async function comparePaint (gl: Production, gpu: Integrated): Promise<{
   gl.graph.render(undefined, 0); gl.graph.pause()
   gl.graph.setViewTransform({ k: c.zoom, x: w / 2 - c.zoom * (c.x + w / 2), y: h / 2 + c.zoom * (c.y - h / 2) }, [w, h])
   await gl.frame(false)
-  const a = gl.snapshot(); const ai = gl.snapshot(true); const b = await gpu.renderer.snapshot()
+  const a = gl.snapshot(); const ai = gl.snapshot(true); const b = await gpu.renderer.snapshot({ smoothLinks })
   if (a.length !== b.color.length) throw new Error('Paired render attachment sizes differ')
-  const result = {
+  const result: PaintComparison = {
     geometry: Array.from(positions),
+    camera: [c.x, c.y, c.zoom],
+    ...(smoothLinks ? { smoothLinks: true } : {}),
     maxColorError: 0,
     samples: 0,
     boundarySamples: 0,
+    boundaryColorFailures: 0,
     interiorIdFailures: 0,
     interiorColorFailures: 0,
     productionInvisiblePicks: 0,
     candidateInvisiblePicks: 0,
     nonempty: a.some((v, i) => i % 4 === 3 && v > 0) && b.color.some((v, i) => i % 4 === 3 && v > 0),
+  }
+  const layers = attributeLayers
+    ? {
+      points: [gl.snapshot(false, { links: false }), await gpu.renderer.snapshotColor({ links: false })],
+      links: [gl.snapshot(false, { points: false }), await gpu.renderer.snapshotColor({ points: false, smoothLinks })],
+    }
+    : undefined
+  const attribution: ColorAttribution | undefined = layers
+    ? { points: { count: 0 }, links: { count: 0 }, both: { count: 0 }, composed: { count: 0 } }
+    : undefined
+  if (layers && Object.values(layers).flat().some(layer => layer.length !== a.length)) {
+    throw new Error('Isolated paint attachment sizes differ')
   }
   const points = Array.from({ length: positions.length / 4 }, (_, i) => {
     const [x, y] = gpu.screen(positions[i * 4], positions[i * 4 + 1])
@@ -102,12 +131,32 @@ export async function comparePaint (gl: Production, gpu: Integrated): Promise<{
         boundary = along >= -1 && along <= length + 1 && across <= half + 1 &&
         (Math.abs(across - half) <= 1 || Math.abs(along) <= 1 || Math.abs(along - length) <= 1)
       }
-      result.samples++; if (boundary) { result.boundarySamples++; continue }
+      const error = colorError(a, b.color, o)
+      result.samples++
+      if (boundary) {
+        result.boundarySamples++
+        if (error > 2) result.boundaryColorFailures++
+        continue
+      }
       if (idA !== idB) result.interiorIdFailures++
-      const colorError = Math.max(...[0, 1, 2, 3].map(k => Math.abs(a[o + k] - b.color[o + k])))
-      result.maxColorError = Math.max(result.maxColorError, colorError)
-      if (colorError > 2) result.interiorColorFailures++
+      result.maxColorError = Math.max(result.maxColorError, error)
+      if (error <= 2) continue
+      result.interiorColorFailures++
+      if (layers && attribution) {
+        const pointsDiffer = colorError(layers.points[0], layers.points[1], o) > 2
+        const linksDiffer = colorError(layers.links[0], layers.links[1], o) > 2
+        let group = attribution.composed
+        if (pointsDiffer && linksDiffer) group = attribution.both
+        else if (pointsDiffer) group = attribution.points
+        else if (linksDiffer) group = attribution.links
+        group.count++
+        if (!group.witness) {
+          const rgba = (pair: Uint8Array[]): number[][] => pair.map(bytes => Array.from(bytes.subarray(o, o + 4)))
+          group.witness = { x, y, colors: rgba([a, b.color]), points: rgba(layers.points), links: rgba(layers.links) }
+        }
+      }
     }
   }
+  if (attribution) result.colorAttribution = attribution
   return result
 }

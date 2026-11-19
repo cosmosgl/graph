@@ -21,6 +21,11 @@ changing the result enough to affect simulation behavior?
 The visualization is deliberately minimal. It exists to expose the compute path, not to reproduce the complete Cosmos
 renderer.
 
+The original comparison remains available above. The separate M3 scale study
+in Diagnostics tests the newer recursive center force and an opt-in linear
+candidate; see its [method](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
+and [findings](#/center-mass?section=doc-scale-findings-m3-center-force-scale-findings).
+
 ## Result shape
 
 Both paths accumulate the same four values:

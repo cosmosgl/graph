@@ -14,6 +14,7 @@ import { gridReference, comparePresent, approximationError, integrate } from './
 import { compareStructure } from './validation'
 import { createGridWebGL } from './webgl'
 import { createGridWebGPU } from './webgpu'
+import type { CentroidMode } from './centroids'
 import type { GridBackend } from './backend'
 function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): void {
   const ctx = canvas.getContext('2d')!
@@ -24,8 +25,11 @@ function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): 
       (1 - (points[i + 1] - view[1]) * view[3]) * canvas.height / 2, points[i + 2] > 0.5)
   }
 }
-export async function createGridExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+export async function createGridExperiment (host: HTMLElement, options: {
+  initialFarMode?: 'inline' | 'workgroup-local'; experimentId?: 'many-body-grid' | 'workgroup-repulsion';
+} = {}): Promise<ExperimentInstance> {
   let runError: string | undefined
+  const experimentId = options.experimentId ?? 'many-body-grid'
   host.innerHTML = `
     <p class="demo-note"
       data-run-part="explanation">Matched inputs: both GPUs build their own hierarchy and samples, using shared CPU bounds, shifts and seeds.
@@ -41,7 +45,18 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <label>Far-field quality <select data-control="quality">
         <option value="precise">Precise · 5×5 shell</option>
         <option value="balanced">Balanced · 3×3 shell</option></select></label>
+      <label>WebGPU repulsion <select data-control="far-mode">
+        <option value="inline">Inline baseline</option>
+        <option value="streamed">Stored contributions</option>
+        <option value="refined">Direct accumulation</option>
+        <option value="workgroup-local" ${options.initialFarMode === 'workgroup-local' ? 'selected' : ''}>Workgroup memory</option>
+        <option value="native-far">Native far arithmetic · experimental</option>
+        <option value="native-near">Native near arithmetic · experimental</option>
+        <option value="native-both">Native far + near · experimental</option>
+        <option value="factorized-both">Factorized far + near · experimental</option></select></label>
     </div>
+    <p class="demo-note" data-run-part="configuration">Changing the WebGPU repulsion mode resets the view.
+      Compare centroid pass uses the Inline baseline.</p>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step" class="button-primary"
       data-run-action="primary">Step + validate</button>
       <button data-action="centroids"
@@ -68,7 +83,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${name} hierarchical positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">Each tick starts from CPU-model positions. Blue circles are free, yellow squares pinned; absent points are hidden.
-      GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.</p>
+      GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.
+      This view supports up to 16,384 points; it does not run the separate million-point force test.</p>
     <div class="many-body-results" data-output="results"
       data-run-part="results"></div>
     <div class="many-body-results" data-output="approximation"></div>
@@ -87,6 +103,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const fixture = el<HTMLSelectElement>('[data-control="fixture"]'); const count = el<HTMLSelectElement>('[data-control="count"]')
   const slots = el<HTMLSelectElement>('[data-control="slots"]'); const quality = el<HTMLSelectElement>('[data-control="quality"]')
+  const farMode = el<HTMLSelectElement>('[data-control="far-mode"]')
   const canvas = (name: string): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
   const status = el('[data-output="status"]')
   let input = createFixture('uniform', 8192); let cpu = input.points; let tick = 0; let busy = false; let stopped = false; let destroyed = false
@@ -99,6 +116,9 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
     el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!rows.length && !timingRows.length)
     count.disabled = busy || ['edge-cases', 'boundary'].includes(fixture.value)
+    const centroidButton = el<HTMLButtonElement>('[data-action="centroids"]')
+    centroidButton.disabled = busy || farMode.value !== 'inline'
+    centroidButton.title = farMode.value === 'inline' ? '' : 'Select Inline baseline to run this comparison'
   }
   const cleanup = (): void => { lanes.splice(0).forEach(l => l.backend.destroy()) }
   const render = (): void => {
@@ -132,11 +152,28 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       const old = canvas(name); const fresh = old.cloneNode() as HTMLCanvasElement; old.replaceWith(fresh)
       setStatus(el(`[data-status="${name}"]`), 'Starting…')
       try {
-        const backend = await (name === 'WebGL' ? createGridWebGL : createGridWebGPU)(fresh, input, PARAMETERS, frame)
+        const nativeFar = farMode.value === 'native-far' || farMode.value === 'native-both'
+        const nativeNear = farMode.value === 'native-near' || farMode.value === 'native-both'
+        const factorized = farMode.value === 'factorized-both'
+        const gpuMode: CentroidMode = factorized
+          ? 'workgroup-factorized-far'
+          : nativeFar
+            ? 'workgroup-native-far'
+            : nativeNear ? 'workgroup-local' : farMode.value as CentroidMode
+        const backend = name === 'WebGL'
+          ? await createGridWebGL(fresh, input, PARAMETERS, frame)
+          : await createGridWebGPU(fresh, input, PARAMETERS, frame, gpuMode, factory => factory,
+            farMode.value === 'inline'
+              ? {}
+              : {
+                aggregation: 'cached-small',
+                nearArithmetic: factorized ? 'factorized' : nativeNear ? 'native' : 'refined',
+              })
         if (destroyed) { backend.destroy(); return }
         lanes.push({ name, backend, positions: cpu })
         setStatus(el(`[data-status="${name}"]`), 'Ready')
-        el(`[data-info="${name}"]`).textContent = backend.info
+        const selectedMode = farMode.selectedOptions[0].textContent
+        el(`[data-info="${name}"]`).textContent = name === 'WebGPU' ? `${selectedMode} · ${backend.info}` : backend.info
       } catch (error) {
         runError = String(error)
         errors[name] = error instanceof Error ? error.message : String(error)
@@ -337,7 +374,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls() }
   }
-  for (const control of [fixture, count, slots, quality]) control.addEventListener('change', () => { task(setup) })
+  for (const control of [fixture, count, slots, quality, farMode]) control.addEventListener('change', () => { task(setup) })
   el('[data-action="centroids"]').addEventListener('click', () => { task(async () => { await step(false, true) }) })
   el('[data-action="trace"]').addEventListener('click', () => { task(async () => { await step(true) }) })
   el('[data-action="step"]').addEventListener('click', () => { task(async () => { await step() }) })
@@ -396,11 +433,12 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
   el('[data-action="export"]').addEventListener('click', () => {
     const capture = {
       schemaVersion: 1,
-      experiment: 'many-body-grid',
+      experiment: experimentId,
       recordedAt: new Date().toISOString(),
       browser: navigator.userAgent,
       fixture: fixture.value,
       count: input.points.length / 4,
+      webgpuFarField: farMode.value,
       parameters: PARAMETERS,
       tolerance: TOLERANCE,
       devices: Object.fromEntries(lanes.map(l => [l.name, l.backend.info])),
@@ -420,7 +458,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     'Approximation quality is separate from port compatibility; unrun inputs.',
     Object.keys(errors),
     runError,
-    'complete tick comparisons'), { experiment: 'many-body-grid', devices: () => lanes.map(l => l.backend.info) })
+    'complete tick comparisons'), { experiment: experimentId, devices: () => lanes.map(l => l.backend.info) })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

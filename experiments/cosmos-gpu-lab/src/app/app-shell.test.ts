@@ -55,6 +55,13 @@ it('puts feature coverage and the current action before a regroupable catalog wi
     expect(section.closest('details,[hidden]')).toBeNull()
   }
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
+  const simulation = host.querySelector('#catalog-simulation')!.closest('section')!
+  const workgroup = simulation.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!
+  expect(workgroup.textContent).toContain('Workgroup repulsion')
+  expect(workgroup.getAttribute('href')).toBe('#/workgroup-repulsion')
+  const million = simulation.querySelector<HTMLAnchorElement>('[data-experiment-id="million-graph"]')!
+  expect(million.textContent).toContain('Million-point moving graph')
+  expect(million.getAttribute('href')).toBe('#/million-graph')
   expect(host.querySelector(`[data-decision="focus"] a[href="#/${migrationFocus.experiment}"]`)).not.toBeNull()
   expect(host.querySelectorAll('#feature-map tbody tr')).toHaveLength(coverage.length)
   expect(Array.from(host.querySelectorAll('.experiment-card[data-current]'), card => card.getAttribute('href')))
@@ -62,9 +69,22 @@ it('puts feature coverage and the current action before a regroupable catalog wi
   const grouping = host.querySelector<HTMLSelectElement>('[data-catalog-grouping]')!
   grouping.value = 'reading'; grouping.dispatchEvent(new Event('change'))
   expect(host.querySelector('#catalog-foundations')).not.toBeNull()
+  expect(host.querySelector('#catalog-forces')!.closest('section')!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull()
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
   expect(host.querySelector(`[data-decision="next"] a[href="#/roadmap?section=journey-${currentStep.id}"]`)).not.toBeNull()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
+})
+
+it('opens the workgroup repulsion experiment from the catalog', async () => {
+  const { create } = mockRun('workgroup-repulsion')
+  window.history.replaceState(null, '', '#/')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull())
+  host.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe('Workgroup repulsion'))
+  await vi.waitFor(() => expect(host!.querySelector('#doc-direct-alternatives')).not.toBeNull())
+  await vi.waitFor(() => expect(host!.querySelector('#doc-force-speed')?.textContent).toContain('GPU order + native force'))
+  expect(create).toHaveBeenCalledOnce()
 })
 
 it('keeps the current step consistent on the roadmap and resolves feature-row links without starting a device', async () => {

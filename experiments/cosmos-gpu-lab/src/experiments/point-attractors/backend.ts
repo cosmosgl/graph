@@ -3,7 +3,7 @@ import { Model } from '@luma.gl/engine'
 import { bindingLayout, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { describeEnvironment } from '../../gpu/force-preview'
-import { createRoundedKernel, roundedArithmetic, roundedIntegrationSource } from '../combined-layout/spring-precision'
+import { createRoundedKernel, roundedIntegrationSource } from '../combined-layout/spring-precision'
 import { createWebGL } from '../many-body/webgl'
 import { createWebGPU } from '../many-body/webgpu'
 import type { Snapshot } from '../many-body/reference'
@@ -12,7 +12,7 @@ import { measureBatch, timestamps, type Measurement, type TimestampWrites } from
 import forceFrag from '../../../../../src/modules/ForceAttractor/force-attractor.frag?raw'
 import quadVert from '../../../../../src/modules/Shared/quad.vert?raw'
 import { SETTINGS, packAttractors, validate, type AttractorInput } from './data'
-import forceSource from './force.wgsl?raw'
+import { createAttractorWebGPU } from './webgpu'
 export type Api = 'webgl' | 'webgpu'
 export type AttractorBackend = Backend & {
   updateAttractors(input: AttractorInput): void;
@@ -68,19 +68,16 @@ export async function createBackend (api: Api, canvas: HTMLCanvasElement, input:
     : await createWebGPU(canvas, input, settings, 'direct', async ({ device, positions, forces }) => {
       const scope = resourceScope(); const own = scope.own
       try {
-        const attractors = own(upload(device, new Float32Array(count * 4)))
-        const params = own(upload(device, new Float32Array([count, settings.alpha, settings.strength, 0]), Buffer.UNIFORM))
+        const attractor = own(await createAttractorWebGPU(device, count, forces))
+        attractor.prepare(settings.alpha, settings.strength)
         const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, settings.friction, settings.referenceLength, 0, 0]), Buffer.UNIFORM))
-        const force = own(await createRoundedKernel(device, roundedArithmetic + forceSource, bindingLayout([
-          ['positions', 'read-only-storage'], ['attractors', 'read-only-storage'], ['forces', 'storage'], ['params', 'uniform'],
-        ])))
         const integrate = own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
-        update = (values): void => { attractors.write(values) }
+        update = attractor.update
         const encode = (source: number, timing: TimestampWrites, shared?: ComputePass): void => {
           const pass = shared ?? device.beginComputePass(timing)
-          try { force.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions: positions[source], attractors, forces, params } }) } finally { if (!shared) pass.end() }
+          try { attractor.encode(pass, positions[source]) } finally { if (!shared) pass.end() }
         }
         measure = (operations): Promise<Measurement> => measureBatch(device, operations, (query, first, last) => encode(0, timestamps(query, first, last)))
         environment = (): ReturnType<AttractorBackend['environment']> => describeEnvironment(device, canvas)

@@ -163,3 +163,72 @@ panel size and DPR for a direct comparison. The raw local capture is in
 `captures/chain-paint-investigation-20261118T091319Z-89050/`. Its two paint rows
 predate fixture labels: their preceding update rows and geometry lengths identify
 Karate and chain. Future paint exports include the fixture and point/link counts.
+
+## Link layer attribution
+
+A 19 November 2026 native Chrome 157 check on Apple M3 reproduced both strict
+interior color failures and isolated every failing pixel to the link draw. The
+production viewer used WebGL 2 through ANGLE Metal with luma 9.3.6. The candidate
+used Apple WebGPU (`metal-3`, `fallback: false`) with luma 10.0.0-alpha.15.
+
+The fresh 34-point, 78-link Karate Club fixture stayed at tick zero. Both panels
+were 960 × 320 CSS pixels at DPR 2, with 1920 × 640 attachments. For each style
+the control compared both layers with the original one-device-pixel boundary and
+2/255 interior RGBA tolerance. The replay held the geometry and camera fixed and
+matched the control's full result before measuring points-only and links-only.
+
+| Style | Boundary pixels | Interior color failures | Maximum error | Link-only failures among these pixels |
+|---|---:|---:|---:|---:|
+| A | 67,102 | 88 | 35/255 | 88 |
+| B | 68,177 | 469 | 56/255 | 469 |
+
+Both styles passed the original exact interior IDs and invisible-pick checks.
+Each of the 557 failing pixels stayed within tolerance with only the points
+drawn. For example, at device pixel (1021, 99) in style B, both the full and
+links-only images read RGBA `[217, 96, 83, 234]` in production and
+`[166, 74, 64, 178]` in WebGPU. The points-only images read transparent black
+there. This locates the observed discrepancy in the link draw. The mechanism
+inside the link pipeline and production color acceptance remain open.
+
+Use **Attribute paint differences** beside **Compare same-geometry paint** to
+repeat the controls. The [agent recipe](#/viewer-comparison?section=doc-agent-recipe)
+describes the check. A focused native browser regression passed for the control
+equivalence and layer attribution. On the frozen source, after building the
+production UMD, run it with:
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_PAINT_LAYERS=1 LAB_ARTIFACT_RUN=paint-layers-20261119-r1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/paint-layers.test.ts
+```
+
+The local capture, witnesses, analysis and frozen source are in
+`captures/paint-layers-20261119-i59nfoxp/`. The source archive SHA-256 is
+`f6fe23f4eba9b570ba8774e5a2bbad7b59984527203cbb5c4226cc0ebf77c42e`.
+
+## Straight-link edge smoothing
+
+One visible Chrome 157 replay on 19 November 2026 compared the original
+WebGPU links with the opt-in one-device-pixel coverage ramp used by the
+production straight-link shader. The same M3, native adapters, 960 × 320
+CSS panels, DPR 2 and frozen Karate Club camera and positions were used.
+Each style compared 1,228,800 pixels at an unchanged 2/255 color tolerance.
+
+| Style | Excluded edge differences, hard → smoothed | Interior differences, hard → smoothed | Maximum interior error |
+|---|---:|---:|---:|
+| A | 30,265 → 832 | 88 → 88 | 35/255 |
+| B | 29,125 → 1,083 | 469 → 469 | 56/255 |
+
+Smoothing removed about 96–97% of over-tolerance edge differences. Those
+pixels are outside the original interior gate. All 557 interior failures
+persisted in the isolated link draws, with the same first witnesses. Exact
+interior IDs and invisible-pick checks passed throughout. The strict
+production color gate still fails. The cause of the interior differences
+remains unresolved.
+
+**Test link edge smoothing** uses that shader only for the diagnostic
+capture. The normal display and its original paint control still use the
+default shader. The [agent recipe](#/viewer-comparison?section=doc-agent-recipe-compare-straight-link-edge-smoothing)
+repeats the paired check. The focused native test passed for equal geometry,
+camera and geometric boundary and exercised the candidate on both styles.
+Raw results, the declared protocol and the source archive are in
+`captures/viewer-link-smoothing-20261119-k36ve6q1/`. The source archive
+SHA-256 is `83aabf23fe67a88e171d39f54c37ec93be95cd5b2e964b6ce9c33457c6430787`.

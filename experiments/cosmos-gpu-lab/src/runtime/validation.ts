@@ -9,6 +9,20 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'million-graph': {
+    question: 'Can a moving million-point graph share distant repulsion while preserving its layout and reducing full-frame time?',
+    reference: 'Per-point WebGPU and a repeat on identical inputs, an analytic distant mass, and earlier scalar hierarchy checks.',
+    acceptance: 'Exact topology, membership, flags and fixed positions. Record timing, pixel drift, density changes, and movement at cell edges.',
+    coverage: 'Million-point chains with uniform and clustered starts, 200 ticks on M3, frozen edge probes and moving point samples.',
+    limits: 'The two clusters disperse. Persistent communities, interaction and production styles remain open. Live runs show timing only.',
+  },
+  'mouse-repulsion': {
+    question: 'Does WebGPU match Cosmos mouse repulsion and its independent execution gate?',
+    reference: 'Production ForceMouse GLSL and an independent CPU force and integration reference.',
+    acceptance: 'Use existing force and position tolerances with exact fixed-point state. Retain the measured legacy result at exact coincidence.',
+    coverage: 'Twelve edge cases plus deterministic 1,024- and 8,192-point inputs. Check pan, zoom, resize, running, paused and released pointer behavior.',
+    limits: 'The isolated study covers the pointer force and integration. Full-frame costs and remaining forces need a composed run.',
+  },
   'point-attractors': {
     question: 'Can WebGPU preserve Cosmos per-point target/strength rules and live updates at useful cost?',
     reference: 'Unchanged production attractor GLSL and integrator; independent raw-channel CPU reference.',
@@ -111,9 +125,10 @@ export const validationContracts: Record<string, ValidationContract> = {
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',
     reference: 'Mathematical reference: JavaScript double-precision sum of the uploaded float32 coordinates.',
-    acceptance: 'Inspect absolute center error and count; no requirement for identical sum bits and no production accuracy budget yet.',
-    coverage: 'The current shared point snapshot; results and device conditions are recorded separately.',
-    limits: 'A small center error does not establish center-force composition or long-run layout quality.',
+    acceptance: 'The original demo reports center error and count. The M3 study retains its named strict sum and force checks; ' +
+      'visual quality is assessed separately.',
+    coverage: 'The original moving snapshot and the separately recorded M3 scale, frame and trajectory workloads.',
+    limits: 'Finite or close centers do not establish long-run layout quality or million-point complete-graph readiness.',
   },
   'scalable-reduction': {
     question: 'Can hierarchical reduction keep large inputs and outputs on the GPU?',
@@ -163,6 +178,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     acceptance: 'Existing structure/force/integration gates; selected identities exact. Approximation error is reported separately from port error.',
     coverage: 'Port checks cover the selected arrays; approximation checks use up to 64 deterministic targets.',
     limits: 'CPU and GPU share algorithm policies; agreement does not independently validate those policies or layout quality.',
+  },
+  'workgroup-repulsion': {
+    question: 'Can small GPU workgroup memory replace the large temporary repulsion buffer?',
+    reference: 'The hierarchical WebGL and float32 CPU controls, plus the stored WebGPU force in the recorded investigation.',
+    acceptance: 'Keep structure, force and integration checks unchanged; record strict failures separately from layout observations.',
+    coverage: 'Live same-input checks through 16,384 points; recorded bounded trajectories and an isolated million-point force.',
+    limits: 'The million-point force uses a prebuilt grid. Full-graph performance and a scalable GPU grid builder are not established.',
   },
   'weighted-links': {
     question: 'Are edge semantics, ordered spring updates and integration between directions preserved?',

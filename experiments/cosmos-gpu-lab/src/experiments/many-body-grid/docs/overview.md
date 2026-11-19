@@ -65,6 +65,11 @@ primitives, but must preserve membership, selection semantics and acceptable sum
 describes the broader tradeoff between direct and hierarchical methods. Cosmos's grid-shell and sampled-neighbor model is
 not a drop-in Barnes–Hut tree: changing the approximation requires its own quality comparison.
 
+The [bounded scratch investigation](#/many-body-grid?section=doc-chunked-memory-bounded-repulsion-scratch)
+reduces temporary far-field memory and tests a separate million-point spatial
+index. It does not yet replace this hierarchy builder or establish a
+million-point graph.
+
 ## Two exact references, two different questions
 
 The UI evaluates up to 64 evenly spaced target indices against **every present source**:

@@ -1,7 +1,8 @@
 import division from './divide-by-count.wgsl?raw'
 import { replaceOnce } from './trace'
 import type { Structure } from './data'
-export type CentroidMode = 'inline' | 'stored' | 'corrected' | 'materialized' | 'refined' | 'streamed'
+export type CentroidMode = 'inline' | 'stored' | 'corrected' | 'materialized' | 'refined' | 'streamed' | 'chunked' | 'workgroup' | 'workgroup-local' |
+  'workgroup-native-far' | 'workgroup-factorized-far'
 // A separate dispatch makes the rounded centroid a storage value before subtraction.
 export function storedCentroidShader (shader: string, corrected = false): string {
   let source = replaceOnce(shader,
