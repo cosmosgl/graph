@@ -1,5 +1,6 @@
 import {
-  Buffer, luma, type Device, type CanvasContext, type BindingDeclaration, type PrimitiveTopology, type RenderPipelineParameters, type TextureFormatColor,
+  Buffer, luma, type Device, type CanvasContext, type Framebuffer, type BindingDeclaration, type PrimitiveTopology,
+  type RenderPipelineParameters, type TextureFormatColor,
 } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { webgl2Adapter } from '@luma.gl/core/webgl'
@@ -72,10 +73,10 @@ export async function waitForGpu (device: Device, timeoutMs = 5000): Promise<voi
 // Storage-buffer renderers have no vertex attributes but still require a luma VertexArray.
 export function createStorageRenderer (
   device: Device, source: string, topology: PrimitiveTopology, bindings: BindingDeclaration[],
-  parameters: RenderPipelineParameters = {}, canvasContext?: CanvasContext
+  parameters: RenderPipelineParameters = {}, canvasContext?: CanvasContext, framebuffer?: Framebuffer
 ): { kernel: RenderKernel; vertexArray: ReturnType<Device['createVertexArray']>; destroy(): void } {
   const shaderLayout = { attributes: [], bindings }
-  const target = (canvasContext ?? (device as WebGPUDevice).canvasContext)!.getCurrentFramebuffer()
+  const target = framebuffer ?? (canvasContext ?? (device as WebGPUDevice).canvasContext)!.getCurrentFramebuffer()
   const kernel = new RenderKernel(device, {
     vertexSource: source,
     fragmentSource: source,
@@ -83,7 +84,7 @@ export function createStorageRenderer (
     fragmentEntryPoint: 'fragmentMain',
     topology,
     shaderLayout,
-    parameters: { depthWriteEnabled: false, depthCompare: 'always', ...parameters },
+    parameters: target.depthStencilAttachment ? { depthWriteEnabled: false, depthCompare: 'always', ...parameters } : parameters,
     colorAttachmentFormats: [target.colorAttachments[0].texture.format as TextureFormatColor],
   })
   const vertexArray = device.createVertexArray({ shaderLayout, bufferLayout: [] })

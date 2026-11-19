@@ -35,6 +35,7 @@ it.each(['clusters', 'persistent-communities'])('draws, runs and resets the resi
     await change('[data-count]', '65536')
     await change('[data-distribution]', start)
     await change('[data-force]', 'four-corners')
+    if (start === 'persistent-communities') await change('[data-drawing]', 'coverage')
     const devicesBeforeRun = createDevice.mock.calls.length
     const force = find<HTMLSelectElement>('[data-force]')
     play.click()

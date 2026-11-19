@@ -18,6 +18,27 @@ to check whether the result holds in a fresh browser session.
 
 ## Native M3 findings
 
+### Reduced drawing replay
+
+The matched one-million-point replay compared Standard and Reduced drawing
+on the full 961 × 541 CSS canvas at DPR 2. Both used Four corners, the
+fixed camera at startup, and the same trusted pan, wheel and click sequence.
+
+| Workload | Median frame interval | Picks within 50 ms | Slowest pick |
+| --- | ---: | ---: | ---: |
+| Dense | 50.0 → 33.3 ms | 1/8 → 8/8 | 62.9 → 44.5 ms |
+| Hub | 50.0 → 33.3 ms | 0/8 → 8/8 | 80.5 → 43.4 ms |
+
+All picked IDs matched the expected results. Each candidate pick used the
+cached scene to paint its highlight. Only 18/48 dense and 10/48 hub steady
+intervals met 33 ms, with p95 near 50 ms. Peak sampled luma allocation rose
+from 154.3 to 189.5 MiB. This is one session with opaque points and basic links.
+The results and exact source are in `captures/resident-coverage-m3-cf134e46/`.
+Set `VITE_LAB_RESIDENT_RENDER_CANDIDATES=1` on the reproduction command to
+repeat these four lanes. [Drawing and pixel checks](#/million-graph?section=doc-draw-cost)
+
+### Standard drawing sweep
+
 **Both workloads met the steady-frame and pick targets at 196,608 points
 in two sessions.** Across those four lanes, 191 of 192 steady intervals
 met 33 ms and all 32 clicks met 50 ms. The heaviest pick took 45.6 ms.

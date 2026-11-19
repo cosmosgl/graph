@@ -15,6 +15,10 @@ points in the same coarse cell a shared push. **Four corners** blends four
 pushes according to each point's position inside that cell. Both options rebuild
 the shared values every tick and keep the nearby forces individual.
 
+Choose **Reduced drawing** to skip points that later points completely cover.
+This mode also uses the rendered scene to update a picked point's color.
+[Drawing results](#/million-graph?section=doc-draw-cost)
+
 Drag the canvas to pan, use the wheel to zoom and click a point to highlight
 it. Fit frames the current positions once. The recorded M3 view tests
 pan, zoom and picks while the graph moves and reports frame intervals

@@ -24,6 +24,8 @@ const viewports = [
   { name: 'wide', width: 961, height: 541, pixelRatio: 2 },
 ] as const
 const cameras = ['fit', 'community'] as const
+const drawCost = import.meta.env.VITE_LAB_RESIDENT_DRAW_COST === '1'
+const renderCandidates = import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
 const pointCount = 1000000
 const freezeTick = 50
 const coolingTicks = 200
@@ -127,7 +129,7 @@ function summarize (samples: Sample[], layer: Layer): {
   }
 }
 
-it.skipIf(import.meta.env.VITE_LAB_RESIDENT_DRAW_COST !== '1')('separates frozen million-point drawing costs on visible native Chrome', async () => {
+it.skipIf(!drawCost || renderCandidates)('separates frozen million-point drawing costs on visible native Chrome', async () => {
   const runId: string = import.meta.env.LAB_RUN_ID
   const source: string = import.meta.env.LAB_SOURCE_REVISION
   const snapshot: string = import.meta.env.LAB_SOURCE_SNAPSHOT
@@ -252,3 +254,256 @@ it.skipIf(import.meta.env.VITE_LAB_RESIDENT_DRAW_COST !== '1')('separates frozen
     expect(failures).toEqual([])
   } finally { document.removeEventListener('visibilitychange', visibility) }
 }, 180000)
+
+type DrawVariant = { variant: string; pointCulling?: boolean; cachedHighlight?: boolean }
+const drawVariants: DrawVariant[] = [
+  { variant: 'point-culling', pointCulling: true },
+  { variant: 'cached-highlight', cachedHighlight: true },
+  { variant: 'combined', pointCulling: true, cachedHighlight: true },
+]
+type ProbePixel = [x: number, y: number]
+type FrozenDrawCheck = {
+  points: Uint8ClampedArray;
+  scene: Uint8ClampedArray;
+  highlights: Uint8ClampedArray[];
+  probes: ProbePixel[];
+  picks: Array<number | null>;
+  selectedIds: Array<number | null>;
+  cachedUpdates: boolean[];
+}
+
+// Choose pixels from the direct renderer, including background and a mix of
+// visible pinned and ordinary points. Keep those coordinates for every lane.
+function pickProbes (scene: Uint8ClampedArray, width: number, height: number): ProbePixel[] {
+  const probes: ProbePixel[] = [[0, 0]]
+  for (const color of [graphRgba.point, graphRgba.pinned]) {
+    const bytes = color.map(channel => Math.round(channel * 255))
+    let chosen = 0
+    for (let y = 2; y < height - 2 && chosen < 4; y += 3) {
+      for (let x = 2; x < width - 2 && chosen < 4; x += 3) {
+        const offset = (y * width + x) * 4
+        if (!bytes.every((value, channel) => scene[offset + channel] === value)) continue
+        if (probes.some(([px, py]) => Math.hypot(x - px, y - py) <= 12)) continue
+        probes.push([x, y]); chosen++
+      }
+    }
+  }
+  return probes
+}
+
+async function checkFrozenDraw (graph: ResidentGraph, canvas: HTMLCanvasElement, reference: FrozenDrawCheck | undefined): Promise<FrozenDrawCheck> {
+  const copy = document.createElement('canvas')
+  copy.width = canvas.width; copy.height = canvas.height
+  const context = copy.getContext('2d', { willReadFrequently: true })!
+  const capture = (): Uint8ClampedArray => {
+    context.drawImage(canvas, 0, 0)
+    return context.getImageData(0, 0, copy.width, copy.height).data
+  }
+  graph.select(null)
+  graph.redraw('points')
+  const points = capture()
+  await waitForGpu(graph.device, 30000)
+  graph.redraw()
+  const scene = capture()
+  await waitForGpu(graph.device, 30000)
+  const probes = reference?.probes ?? pickProbes(scene, canvas.width, canvas.height)
+  const picks: Array<number | null> = []
+  for (const [x, y] of probes) picks.push(await graph.pick(x, y))
+  const firstTwo = [...new Set(picks.filter(id => id !== null))].slice(0, 2)
+  const selectedIds = reference?.selectedIds ?? [...firstTwo, null]
+  const highlights: Uint8ClampedArray[] = []
+  const cachedUpdates: boolean[] = []
+  for (const id of selectedIds) {
+    graph.select(id)
+    cachedUpdates.push(graph.redrawHighlight())
+    highlights.push(capture())
+    await waitForGpu(graph.device, 30000)
+  }
+  return { points, scene, highlights, probes, picks, selectedIds, cachedUpdates }
+}
+
+function wrongPixels (expected: Uint8ClampedArray, actual: Uint8ClampedArray): number {
+  let mismatches = 0
+  for (let offset = 0; offset < expected.length; offset += 4) if (different(expected, actual, offset)) mismatches++
+  return mismatches
+}
+
+type DrawSample = { operation: 'points' | 'both' | 'highlight'; completionMs: number; submitMs: number; cached?: boolean }
+
+async function measureFrozenDraw (
+  graph: ResidentGraph, selectedIds: Array<number | null>, samples: DrawSample[], visible: () => void
+): Promise<void> {
+  const measure = async (operation: DrawSample['operation'], draw: () => boolean | void): Promise<void> => {
+    visible()
+    const started = performance.now()
+    const cached = draw()
+    const submitted = performance.now()
+    await waitForGpu(graph.device, 30000)
+    const completionMs = performance.now() - started
+    samples.push({ operation, completionMs, submitMs: submitted - started, ...(typeof cached === 'boolean' ? { cached } : {}) })
+    visible()
+  }
+  graph.select(null)
+  for (const layer of ['points', 'both'] as const) {
+    graph.redraw(layer)
+    await waitForGpu(graph.device, 30000)
+  }
+  for (let sample = 0; sample < 16; sample++) {
+    const order = sample % 2 ? ['both', 'points'] as const : ['points', 'both'] as const
+    for (const layer of order) await measure(layer, () => { graph.redraw(layer) })
+  }
+  // Start from a complete render. Selection changes are included in the
+  // timed path, while pixel/ID readback happens outside the timed window.
+  graph.redraw()
+  await waitForGpu(graph.device, 30000)
+  for (let sample = 0; sample < 16; sample++) {
+    await measure('highlight', () => {
+      graph.select(selectedIds[sample % selectedIds.length])
+      return graph.redrawHighlight()
+    })
+  }
+}
+
+it.skipIf(!drawCost || !renderCandidates)('compares frozen million-point draw and highlight candidates', async () => {
+  const runId: string = import.meta.env.LAB_RUN_ID
+  const source: string = import.meta.env.LAB_SOURCE_REVISION
+  const snapshot: string = import.meta.env.LAB_SOURCE_SNAPSHOT
+  if (!/^[a-z0-9][a-z0-9-]{0,100}$/.test(runId) || !source || !snapshot) throw new Error('Record the source revision and a fresh snapshot capture')
+  let hidden = document.visibilityState !== 'visible'
+  const visibility = (): void => { hidden ||= document.visibilityState !== 'visible' }
+  const visible = (): void => {
+    if (hidden || document.visibilityState !== 'visible' || navigator.userAgent.includes('HeadlessChrome')) {
+      throw new Error('Keep the native Chrome benchmark continuously visible')
+    }
+  }
+  document.addEventListener('visibilitychange', visibility)
+  try {
+    visible()
+    const webgl = await createDevice('webgl', document.createElement('canvas'), false)
+    const webglInfo = webgl.info
+    webgl.destroy()
+    const fixture = createDenseCommunities(pointCount)
+    const base = {
+      runId,
+      source,
+      snapshot,
+      luma: luma.VERSION,
+      browser: navigator.userAgent,
+      browserDpr: window.devicePixelRatio,
+      webgl: webglInfo,
+      pointCount,
+      links: fixture.graph.links.length / 2,
+      seed: 29471,
+      freezeTick,
+      coolingTicks,
+      timing: 'Performance clock before submission through the GPU fence for the complete operation',
+    }
+    await writeArtifact('render-candidates-freeze', { ...base, status: 'running' })
+    const frozen = await freeze(fixture, visible).catch(async error => {
+      await writeArtifact('render-candidates-freeze', { ...base, status: 'failed', error: String(error) })
+      throw error
+    })
+    await writeArtifact('render-candidates-freeze', { ...base, ...frozen, status: 'complete' })
+    const failures: string[] = []
+    for (const viewport of viewports) {
+      const references = new Map<typeof cameras[number], FrozenDrawCheck>()
+      const order = [
+        { variant: 'baseline' },
+        ...(viewport.name === 'small' ? drawVariants : [...drawVariants].reverse()),
+        { variant: 'baseline-repeat' },
+      ]
+      for (const { variant, ...options } of order) {
+        const canvas = makeCanvas(viewport)
+        let graph: ResidentGraph | undefined
+        try {
+          graph = await createResidentGraph(canvas, fixture.input, fixture.graph, 'four-corners', {
+            ...options, pixelRatio: viewport.pixelRatio, picking: true,
+          })
+          expect(graph.device.info.fallback).toBe(false)
+          const { left, top, right, bottom, width, height } = canvas.getBoundingClientRect()
+          expect([width, height]).toEqual([viewport.width, viewport.height])
+          expect(left >= 0 && top >= 0 && right <= window.innerWidth && bottom <= window.innerHeight).toBe(true)
+          const [minX, minY, side] = frozen.view
+          const zoom = viewport.height / (side * 1.1)
+          const context = {
+            ...base,
+            viewport,
+            variant,
+            options,
+            adapter: graph.device.info,
+            fitView: frozen.view,
+            css: [width, height],
+            backing: [canvas.width, canvas.height],
+            browserViewport: [window.innerWidth, window.innerHeight],
+          }
+          for (const name of cameras) {
+            const artifact = `render-candidates-${viewport.name}-${name}-${variant}`
+            const camera = name === 'fit' ? { x: minX + side / 2, y: minY + side / 2, zoom } : { x: 3200, y: 0, zoom: zoom * 3 }
+            const record: Record<string, unknown> = { ...context, camera, status: 'started' }
+            try {
+              graph.setCamera(camera)
+              await waitForGpu(graph.device, 30000)
+              const viewBefore = Array.from(await graph.readView())
+              const reference = references.get(name)
+              const actual = await checkFrozenDraw(graph, canvas, reference)
+              const drawnPoints = await graph.readDrawnPointCount()
+              const expected = reference ?? actual
+              const pixelMismatches = {
+                points: wrongPixels(expected.points, actual.points),
+                scene: wrongPixels(expected.scene, actual.scene),
+                highlights: actual.highlights.map((frame, i) => wrongPixels(expected.highlights[i], frame)),
+              }
+              Object.assign(record, {
+                viewBefore,
+                drawnPoints,
+                pixelMismatches,
+                probes: actual.probes,
+                picks: actual.picks,
+                selectedIds: actual.selectedIds,
+                cachedUpdates: actual.cachedUpdates,
+              })
+              const samples: DrawSample[] = []
+              record.samples = samples
+              await measureFrozenDraw(graph, actual.selectedIds, samples, visible)
+              const positionMismatches = positionBitMismatches(await graph.readPositions(), fixture.input.points)
+              const viewAfter = Array.from(await graph.readView())
+              Object.assign(record, { viewAfter, positionMismatches })
+              record.summary = Object.fromEntries((['points', 'both', 'highlight'] as const).map(operation => {
+                const rows = samples.filter(sample => sample.operation === operation)
+                return [operation, {
+                  count: rows.length,
+                  medianMs: percentile(rows.map(sample => sample.completionMs), 0.5),
+                  p95Ms: percentile(rows.map(sample => sample.completionMs), 0.95),
+                }]
+              }))
+              expect(reference !== undefined || variant === 'baseline').toBe(true)
+              expect(pixelMismatches).toEqual({ points: 0, scene: 0, highlights: actual.highlights.map(() => 0) })
+              expect(actual.picks).toEqual(expected.picks)
+              expect(actual.picks[0]).toBeNull()
+              expect(actual.selectedIds).toHaveLength(3)
+              expect(wrongPixels(actual.scene, actual.highlights[0])).toBeGreaterThan(0)
+              expect(wrongPixels(actual.highlights[0], actual.highlights[1])).toBeGreaterThan(0)
+              expect(wrongPixels(actual.scene, actual.highlights[2])).toBe(0)
+              expect(actual.cachedUpdates.every(cached => cached === !!options.cachedHighlight)).toBe(true)
+              expect(samples.filter(sample => sample.operation === 'highlight').every(sample => sample.cached === !!options.cachedHighlight)).toBe(true)
+              expect(positionMismatches).toBe(0)
+              expect(viewAfter).toEqual(viewBefore)
+              expect(drawnPoints).toBeGreaterThan(0)
+              if (options.pointCulling && name === 'fit') expect(drawnPoints).toBeLessThan(pointCount - 1)
+              if (variant === 'baseline') references.set(name, actual)
+              record.status = 'complete'
+            } catch (error) {
+              failures.push(`${artifact} ${String(error)}`)
+              record.status = 'failed'; record.error = String(error)
+            } finally { await writeArtifact(artifact, record) }
+          }
+        } catch (error) {
+          const artifact = `render-candidates-${viewport.name}-${variant}-setup-failure`
+          failures.push(`${artifact} ${String(error)}`)
+          await writeArtifact(artifact, { ...base, status: 'failed', viewport, variant, options, error: String(error) })
+        } finally { graph?.destroy(); canvas.remove() }
+      }
+    }
+    expect(failures).toEqual([])
+  } finally { document.removeEventListener('visibilitychange', visibility) }
+}, 240000)

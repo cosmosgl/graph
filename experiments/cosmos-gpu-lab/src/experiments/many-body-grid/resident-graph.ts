@@ -17,7 +17,10 @@ import { createGpuBounds } from './bounds'
 import { layout } from './data'
 import { createResidentHierarchy } from './resident-hierarchy'
 import type { DistantForce } from './resident-cell-field'
+import { createResidentHighlight, RESIDENT_OWNER_WGSL } from './resident-highlight'
 import { createResidentPicker } from './resident-picker'
+import { createResidentPointCulling } from './resident-point-culling'
+import { residentProjection } from './resident-projection'
 
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
@@ -26,48 +29,48 @@ const gravitySource = `
 @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x < u32(params.x)) { forces[gid.x] = vec4f(-positions[gid.x].xy * (params.y * params.z * 0.1), 0., 0.); }
 }`
-const projection = `
-@group(0) @binding(1) var<storage, read> view: vec4f;
-@group(0) @binding(2) var<uniform> display: vec4f;
-fn project(point: vec2f) -> vec2f {
-  let center = view.xy + vec2f(view.z * 0.5);
-  return (point - center) * vec2f(2. / (view.z * 1.1 * (display.x / display.y)), 2. / (view.z * 1.1));
-}
-`
-const pointsSource = `
+const pointColor = `
+  let color = select(vec3f(${graphRgb.point}), vec3f(${graphRgb.pinned}), input.flags.x > 0.5);
+  return vec4f(select(color, vec3f(${graphRgb.coral}), input.flags.y > 0.5), 1.);`
+const pointsSource = (compacted: boolean, owners: boolean): string => `
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
-${projection}
+${residentProjection}
+${compacted ? '@group(0) @binding(3) var<storage, read> visibleIds: array<u32>;' : ''}
+${owners ? RESIDENT_OWNER_WGSL : ''}
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) uv: vec2f,
   @location(1) @interpolate(flat) flags: vec2f,
+  ${owners ? '@location(2) @interpolate(flat) owner: u32,' : ''}
 }
-@vertex fn vertexMain(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
+@vertex fn vertexMain(@builtin(vertex_index) v: u32, @builtin(instance_index) instance: u32) -> Vertex {
+  let i = ${compacted ? 'visibleIds[instance]' : 'instance'};
   let corners = array<vec2f,6>(vec2f(-1.,-1.),vec2f(1.,-1.),vec2f(-1.,1.),vec2f(-1.,1.),vec2f(1.,-1.),vec2f(1.,1.));
   let p = positions[i]; var out: Vertex; out.position = vec4f(3.,3.,0.,1.);
   if (p.w <= 0.5) { out.position = vec4f(project(p.xy) + corners[v] * (5. * display.z / display.xy), 0., 1.); }
-  out.uv = corners[v]; out.flags = vec2f(p.z, select(0., 1., f32(i) == display.w)); return out;
+  out.uv = corners[v]; out.flags = vec2f(p.z, select(0., 1., f32(i) == display.w));
+  ${owners ? 'out.owner = residentOwnerPoint(i, p.z);' : ''}
+  return out;
 }
-@fragment fn fragmentMain(input: Vertex) -> @location(0) vec4f {
+@fragment fn fragmentMain(input: Vertex) -> @location(0) ${owners ? 'u32' : 'vec4f'} {
   if (input.flags.x <= 0.5 && dot(input.uv, input.uv) > 1.) { discard; }
-  let color = select(vec3f(${graphRgb.point}), vec3f(${graphRgb.pinned}), input.flags.x > 0.5);
-  return vec4f(select(color, vec3f(${graphRgb.coral}), input.flags.y > 0.5), 1.);
+  ${owners ? 'return input.owner;' : pointColor}
 }`
-const linksSource = `
+const linksSource = (owners: boolean): string => `
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
-${projection}
+${residentProjection}
 @group(0) @binding(3) var<storage, read> links: array<u32>;
 @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
   let a = positions[links[(i / 2u) * 2u]]; let b = positions[links[(i / 2u) * 2u + 1u]];
   if (a.w > 0.5 || b.w > 0.5) { return vec4f(3.,3.,0.,1.); }
   return vec4f(project(select(a.xy, b.xy, i % 2u == 1u)), 0., 1.);
 }
-@fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(${graphRgb.link}, 1.); }
+@fragment fn fragmentMain() -> @location(0) ${owners ? 'u32 { return 1u;' : `vec4f { return vec4f(${graphRgb.link}, 1.);`} }
 `
 
 export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
-type ResidentOptions = { pixelRatio?: number; picking?: boolean }
+type ResidentOptions = { pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean }
 export type ResidentMotionSample = { points: Float32Array; normalized: Float32Array; fieldBox: Float32Array; view: Float32Array }
 export const RESIDENT_STAGES = ['gravity', 'bounds and normalization', 'hierarchy and cell field', 'repulsion', 'springs and camera', 'draw'] as const
 type ResidentStageTimestamps = (stage: typeof RESIDENT_STAGES[number]) => TimestampWrites
@@ -94,6 +97,8 @@ export async function createResidentGraph (
   readonly topologyMs: number;
   frame(tick: number, alpha: number, draw?: boolean, timestamps?: ResidentStageTimestamps, gridTimestamps?: GridPassTimestamps): void;
   redraw(layers?: ResidentLayers, timestamps?: TimestampWrites): void;
+  redrawHighlight(timestamps?: TimestampWrites): boolean;
+  readDrawnPointCount(): Promise<number>;
   readView(): Promise<Float32Array>;
   setCamera(camera: ResidentCamera): void;
   fit(): void;
@@ -150,14 +155,24 @@ export async function createResidentGraph (
         ]),
       },
     }))
-    const pointRenderer = own(createStorageRenderer(device, pointsSource, 'triangle-list', bindingLayout([
-      ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'],
-    ])))
-    const lineRenderer = own(createStorageRenderer(device, linksSource, 'line-list', bindingLayout([
+    const culling = options.pointCulling
+      ? own(await createResidentPointCulling(device, count, viewBuffer, display, width, height, pointsSource(false, true)))
+      : undefined
+    const highlight = options.cachedHighlight ? own(createResidentHighlight(device, width, height, display)) : undefined
+    const pointBindings = bindingLayout(culling
+      ? [
+        ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['visibleIds', 'read-only-storage'],
+      ]
+      : [['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform']])
+    const pointRenderer = own(createStorageRenderer(
+      device, pointsSource(!!culling, !!highlight), 'triangle-list', pointBindings, {}, undefined, highlight?.framebuffer
+    ))
+    const lineRenderer = own(createStorageRenderer(device, linksSource(!!highlight), 'line-list', bindingLayout([
       ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['links', 'read-only-storage'],
-    ])))
+    ]), {}, undefined, highlight?.framebuffer))
     await waitForGpu(device, 30000)
     let current = 0; let destroyed = false; let autoFit = true
+    let highlightValid = false; let drewPoints = false
     const healthy = (): void => { if (destroyed || device.isLost || failure) throw new Error(failure || 'GPU graph unavailable') }
     const move = (pass: ComputePass): void => {
       integrate.dispatch(pass, {
@@ -186,7 +201,22 @@ export async function createResidentGraph (
       }
     }
     const paint = (layers: ResidentLayers, timestamps?: TimestampWrites): void => {
-      const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false, ...timestamps })
+      const withPoints = layers === 'points' || layers === 'both'
+      const filtered = withPoints && culling
+      const { timestampQuerySet, beginTimestampIndex, endTimestampIndex } = timestamps ?? {}
+      const begin = filtered ? undefined : beginTimestampIndex
+      const end = highlight ? undefined : endTimestampIndex
+      if (filtered) {
+        filtered.encode(positions[current], beginTimestampIndex === undefined ? undefined : { timestampQuerySet, beginTimestampIndex })
+      }
+      const pass = device.beginRenderPass({
+        framebuffer: highlight?.framebuffer,
+        clearColor: highlight ? [0, 0, 0, 0] : graphRgba.background,
+        clearDepth: false,
+        timestampQuerySet: begin === undefined && end === undefined ? undefined : timestampQuerySet,
+        beginTimestampIndex: begin,
+        endTimestampIndex: end,
+      })
       const bindings = { positions: positions[current], view: viewBuffer, display }
       try {
         if (layers === 'links' || layers === 'both') {
@@ -196,7 +226,13 @@ export async function createResidentGraph (
             bindings: { ...bindings, links: topology.links },
           })
         }
-        if (layers === 'points' || layers === 'both') {
+        if (filtered) {
+          pointRenderer.kernel.drawIndirect(pass, {
+            vertexArray: pointRenderer.vertexArray,
+            indirectBuffer: filtered.drawArgs,
+            bindings: { ...bindings, visibleIds: filtered.visibleIds },
+          })
+        } else if (withPoints) {
           pointRenderer.kernel.draw(pass, {
             vertexArray: pointRenderer.vertexArray,
             vertexCount: 6,
@@ -205,6 +241,9 @@ export async function createResidentGraph (
           })
         }
       } finally { pass.end() }
+      highlight?.present(endTimestampIndex === undefined ? undefined : { timestampQuerySet, endTimestampIndex })
+      highlightValid = !!highlight && layers === 'both'
+      drewPoints = withPoints
     }
     return {
       device,
@@ -213,6 +252,7 @@ export async function createResidentGraph (
       topologyMs: topology.buildMs,
       frame (tick, alpha, draw = true, timestamps, gridTimestamps): void {
         healthy(); hierarchy.prepare(tick, alpha)
+        highlightValid = false
         const updateView = draw && autoFit
         if (updateView) viewBounds.prepare(tick)
         gravityParams.write(new Float32Array([count, alpha, GRAVITY, 0]))
@@ -241,6 +281,18 @@ export async function createResidentGraph (
         device.submit()
       },
       redraw (layers = 'both', timestamps): void { healthy(); paint(layers, timestamps); device.submit() },
+      redrawHighlight (timestamps): boolean {
+        healthy()
+        const cached = !!highlight && highlightValid
+        if (cached) highlight.present(timestamps)
+        else paint('both', timestamps)
+        device.submit()
+        return cached
+      },
+      async readDrawnPointCount (): Promise<number> {
+        healthy()
+        return drewPoints ? (await culling?.drawnCount() ?? count) : 0
+      },
       readView (): Promise<Float32Array> { healthy(); return readFloats(viewBuffer) },
       setCamera ({ x, y, zoom }): void {
         healthy()
@@ -248,6 +300,7 @@ export async function createResidentGraph (
         const side = height / (ratio * zoom * 1.1)
         viewBuffer.write(new Float32Array([x - side * 0.5, y - side * 0.5, side, 0]))
         autoFit = false
+        highlightValid = false
       },
       fit (): void {
         healthy()
@@ -256,6 +309,7 @@ export async function createResidentGraph (
         compute(pass => viewBounds.encode(pass, positions[current]))
         device.submit()
         autoFit = false
+        highlightValid = false
       },
       pick (x, y): Promise<number | null> {
         healthy()

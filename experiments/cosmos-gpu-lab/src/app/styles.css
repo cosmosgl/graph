@@ -1889,7 +1889,7 @@ button[data-action="play"][aria-pressed="true"] {
 .million-graph #run-results { margin-top: 0; }
 .million-graph .run-overview { margin-bottom: 12px; }
 @media (min-width: 550px) and (max-width: 1199px) {
-  .million-graph .million-graph-settings { grid-template-columns: minmax(90px, 0.72fr) minmax(0, 1.4fr) minmax(0, 1fr); }
+  .million-graph .million-graph-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 1200px) {
   .million-graph #run-results { margin-top: 24px; }
