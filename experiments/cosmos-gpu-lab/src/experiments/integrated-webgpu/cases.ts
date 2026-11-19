@@ -7,7 +7,7 @@ export const cases: ExperimentCase[] = [
     kind: 'explore',
     question: 'Can one WebGPU graph simulate, draw and respond to interaction?',
     description: 'This 1,024-point graph combines the core forces with circles, straight links and point picking.',
-    tryIt: 'Press Run, then click or drag a point. To try all forces, choose Composed with collision and click Replace graph / reset.',
+    tryIt: 'Press Run to start the layout, then select a point. The graph highlights it in yellow.',
     reference: 'The recorded evaluation checks sampled pixels, point identity and complete-frame and interaction timing.',
     acceptance: 'The live graph is an exploratory session. Its appearance alone does not establish the recorded timing or pixel checks.',
     recorded: {

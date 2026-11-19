@@ -8,6 +8,7 @@ import { experimentGroups, experiments, findExperiment } from './registry'
 import { migrationFocus, research } from './research'
 import { journeySteps } from './journey'
 import { articleSectionId, readRoute } from './router'
+import { readinessFor } from './readiness'
 
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
@@ -49,7 +50,7 @@ it('shows topic cards and the global search without starting GPU work', async ()
   const count = experiments.reduce((total, experiment) => total + (experiment.cases?.length ?? 1), 0)
   const links = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[data-experiment-id]'))
   expect(links).toHaveLength(count)
-  expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length)
+  expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(count)
   for (const group of experimentGroups) expect(host.querySelector(`#catalog-${group.id}`)?.textContent).toBe(group.title)
   for (const experiment of experiments) {
     if (!experiment.cases) {
@@ -59,6 +60,9 @@ it('shows topic cards and the global search without starting GPU work', async ()
     for (const item of experiment.cases) {
       const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}?case=${item.id}"]`)
       expect(link?.textContent).toContain(item.title)
+      const assessment = readinessFor(experiment.id, item)
+      expect(link?.querySelector('.readiness-badge')?.textContent).toContain(assessment.badge)
+      expect(link?.querySelector('.experiment-card-finding')?.textContent).toContain(assessment.finding)
       if (item.kind === 'recorded') expect(link?.textContent).toContain('Recorded study')
     }
   }

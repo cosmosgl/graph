@@ -24,7 +24,7 @@ it('runs only addition on the selected default input and clears results when the
   expect(host.querySelector<HTMLSelectElement>('[data-records]')!.value).toBe('1024')
   expect(host.querySelector('[data-input-description]')!.textContent).toContain('the exact sum is 512')
   host.querySelector<HTMLButtonElement>('[data-run]')!.click()
-  await vi.waitFor(() => expect(host.querySelector('[data-status]')!.textContent).toContain('Comparison complete'))
+  await vi.waitFor(() => expect(host.querySelector('[data-status]')!.textContent).toBe('1 of 3 WebGPU methods reached the exact sum of 512.'))
   expect(productionGravity).not.toHaveBeenCalled()
   const [points, values, path] = vi.mocked(nativeDiagnostics).mock.calls[0]
   expect(points).toHaveLength(0); expect(values).toHaveLength(1024); expect(path).toBe('addition')
@@ -50,7 +50,7 @@ it('runs only gravity and clears an unavailable GPU result on a successful retry
   await vi.waitFor(() => expect(host.querySelector('[data-status]')!.textContent).toContain('Partial comparison'))
   expect(host.querySelector('[data-results]')!.textContent).toContain('WebGPU unavailable')
   run.click()
-  await vi.waitFor(() => expect(host.querySelector('[data-status]')!.textContent).toContain('Comparison complete'))
+  await vi.waitFor(() => expect(host.querySelector('[data-status]')!.textContent).toContain('of 2 GPU paths matched the legacy model within tolerance'))
   const [points, values, path] = vi.mocked(nativeDiagnostics).mock.calls[1]
   expect(points).toHaveLength(257 * 4); expect(values).toHaveLength(0); expect(path).toBe('gravity')
   expect(host.querySelector('[data-results]')!.textContent).toContain('WGSL Cartesian')

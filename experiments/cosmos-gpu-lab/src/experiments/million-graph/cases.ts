@@ -7,11 +7,12 @@ export const cases: ExperimentCase[] = [
     kind: 'explore',
     question: 'How does a large graph move and respond to interaction on the GPU?',
     description: 'A dense-community graph updates and draws on WebGPU. Start with 65,536 points and increase the count up to one million.',
-    tryIt: 'Press Run graph, then drag to pan, scroll to zoom or click a point.',
+    tryIt: 'Press Run graph, then pan or select a point. The status shows the selected point ID.',
     reference: 'The recorded interaction study compares frame and picking times with its stated responsiveness targets.',
     acceptance: 'The live view shows a new session; it does not automatically measure those timing targets.',
     recorded: {
-      conclusion: 'Both tested workloads met the frame and pick targets at 196,608 points in two sessions; both missed them at one million.',
+      conclusion: 'Both workloads met the frame and pick targets at 196,608 points in two sessions. At one million, standard drawing ' +
+        'missed both targets; reduced drawing met all 16 sampled pick targets but still missed the steady-frame target.',
       date: 'Not recorded',
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'Dense-community and high-degree graphs, using the four-corner distant-force option.',
@@ -45,10 +46,11 @@ export const cases: ExperimentCase[] = [
     reference: 'Matching camera and graph positions across separately timed draw layers.',
     acceptance: 'Paint and state checks accompany GPU timestamps; simulation and display presentation are outside the timing.',
     recorded: {
-      conclusion: 'On the wide fitted view, points alone took 16.71 ms and links alone 7.55 ms median GPU time.',
+      conclusion: 'On the wide frozen view, reduced drawing lowered the median draw time from 24.5 to 13.7 ms. ' +
+        'The tested images and pick IDs still matched.',
       date: 'Not recorded',
       environment: 'Apple M3, Chrome 157, luma 10.0.0-alpha.15.',
-      scope: 'One frozen dense-community graph, four camera and attachment combinations, and 256 timed draws.',
+      scope: 'One frozen million-point dense-community graph, with fitted and zoomed views, pixel checks and GPU-fenced timing.',
       limits: 'These isolated draw passes do not establish moving-frame or production-renderer cost on other graphs or devices.',
       evidence: [{ label: 'Point and link drawing evidence', page: 'draw-cost' }],
     },

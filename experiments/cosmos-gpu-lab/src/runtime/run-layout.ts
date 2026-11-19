@@ -12,7 +12,7 @@ export type RunSummary = {
 type Dispose = () => void
 const presentations = new WeakMap<HTMLElement, Dispose>()
 type RunContext = {
-  experiment: string; devices?: () => string[]; visualFirst?: boolean; scope?: string; showChecks?: boolean; resultsFirst?: boolean;
+  experiment: string; devices?: () => string[]; fixedOrder?: boolean; scope?: string; showChecks?: boolean; resultsFirst?: boolean;
 }
 
 // Regions and action roles are authored by each view. Never classify prose by
@@ -55,7 +55,8 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     explanation: slot('#run-explanation'),
     status: slot('[data-run-slot="status"]'),
   }
-  const regions = Array.from(host.querySelectorAll<HTMLElement>('[data-run-part], [data-run-section]'))
+  const regions = host.querySelectorAll<HTMLElement>('[data-run-part], [data-run-section]')
+  const actions = host.querySelectorAll<HTMLElement>('[data-run-action]')
   for (const region of regions) {
     const name = region.dataset.runPart ?? (region.dataset.runSection === 'run' ? 'visualization' : region.dataset.runSection)!
     const destination = destinations[name]
@@ -63,17 +64,18 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     if (name === 'status') region.setAttribute('aria-live', 'polite')
     destination.append(region)
   }
-  for (const button of frame.querySelectorAll<HTMLElement>('[data-run-action]')) {
+  for (const button of actions) {
     const role = button.dataset.runAction!
     const destination = slot(role === 'primary' ? '.run-primary-actions' : role === 'export' ? '.run-export-actions' : '.run-diagnostic-actions')
     // Keep diagnostic tools beside their own diagnostic settings when authored together.
     if (role === 'diagnostic' && button.closest('[data-run-part="diagnostics"], [data-run-section="diagnostics"]')) continue
     destination.append(button)
   }
-  // An action may live outside an explicitly grouped region.
-  for (const button of Array.from(host.querySelectorAll<HTMLElement>('[data-run-action]'))) {
-    const role = button.dataset.runAction!
-    slot(role === 'primary' ? '.run-primary-actions' : role === 'export' ? '.run-export-actions' : '.run-diagnostic-actions').append(button)
+  const tick = frame.querySelector('.tick-counter')
+  if (tick) {
+    const toolbar = tick.parentElement!
+    slot('.run-primary-actions').append(tick)
+    if (!toolbar.children.length) toolbar.remove()
   }
   for (const empty of frame.querySelectorAll('.controls')) if (!empty.children.length) empty.remove()
   const diagnostics = slot('#run-diagnostics')
@@ -92,25 +94,18 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     slot('#run-results > h2').after(...results)
   }
   slot('.run-visualization').before(slot('[data-run-slot="status"]'))
-  if (context?.visualFirst) slot('#run-run').prepend(slot('.run-visualization'))
-  const tick = frame.querySelector('.tick-counter')
-  if (tick) {
-    const toolbar = tick.parentElement!
-    slot('.run-primary-actions').append(tick)
-    if (!toolbar.children.length) toolbar.remove()
-  }
   const workbench = slot('.run-workbench'); const display = slot('.run-display')
   const settings = slot('.run-settings'); const visualization = slot('#run-run'); const results = slot('#run-results')
   const wide = window.matchMedia('(min-width: 1200px)')
   // Move the original nodes so visual, keyboard and reading order agree at
   // both sizes. Settings never push the narrow-screen canvas out of reach.
   const reflow = (): void => {
-    if (wide.matches && !context?.visualFirst) {
+    if (wide.matches && !context?.fixedOrder) {
       display.append(visualization, results); workbench.replaceChildren(display, settings)
     } else workbench.replaceChildren(visualization, settings, results)
   }
-  // The visual-first viewer uses an iframe, which reloads if reparented after setup.
-  reflow(); if (!context?.visualFirst) wide.addEventListener('change', reflow)
+  // Viewer iframes reload if reparented after setup.
+  reflow(); if (!context?.fixedOrder) wide.addEventListener('change', reflow)
   // Study pages own the navigation targets while their live view is loading.
   if (host.hasAttribute('data-study-run')) {
     visualization.id = 'run-live-viewer'; explanation.id = 'run-live-explanation'

@@ -3,6 +3,8 @@ import { caseEvidenceLinks } from '../runtime/experiment'
 import { addArticleSections } from './article-sections'
 import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
+import { readinessFor } from './readiness'
+import { renderReadiness } from './readiness/presentation'
 import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
@@ -77,6 +79,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   host.querySelector('h1')!.textContent = item.title
   host.querySelector<HTMLElement>('.case-question')!.textContent = item.question
   host.querySelector<HTMLElement>('.case-description')!.textContent = item.description
+  host.querySelector('.case-header')!.append(renderReadiness(readinessFor(experiment.id, item)))
   const navigation = caseNavigation(experiment, item)
   if (navigation && !navigation.classList.contains('case-group-navigation')) host.querySelector('.case-header')!.append(navigation)
   const stage = host.querySelector<HTMLElement>('.case-stage')!

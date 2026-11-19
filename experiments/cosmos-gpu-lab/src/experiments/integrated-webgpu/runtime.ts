@@ -34,7 +34,7 @@ export async function createIntegrated (
   readonly springOptimization: IntegratedSpring; readonly data: ReturnType<typeof workload>;
   readonly forceMode: IntegratedForceMode; readonly composition?: CompositionFixture;
   readonly tick: number; readonly alpha: number; readonly running: boolean; readonly destroyed: boolean;
-  readonly error: string; readonly info: string; feedback: Feedback[]; intervals: number[];
+  readonly error: string; readonly deviceLabel: string; readonly info: string; feedback: Feedback[]; intervals: number[];
   readonly readback?: ViewerReadback;
   frame(simulate?: boolean, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void>;
   pause(clearPointer?: boolean): void; resume(): void; step(): Promise<void>;
@@ -175,6 +175,7 @@ export async function createIntegrated (
         })
       }
     }
+    const deviceLabel = describeDevice(device)
     const api = {
       canvas,
       get backend (): Awaited<ReturnType<typeof createCombinedWebGPU>> { return backend },
@@ -191,7 +192,8 @@ export async function createIntegrated (
       get running (): boolean { return running },
       get destroyed (): boolean { return destroyed },
       get error (): string { return error },
-      info: `${describeDevice(device)} · ${JSON.stringify(device.info)} · ${navigator.userAgent}`,
+      deviceLabel,
+      info: `${deviceLabel} · ${JSON.stringify(device.info)} · ${navigator.userAgent}`,
       frame (simulate = running, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void> {
         return renderFrame(simulate, trace, timestamps)
       },

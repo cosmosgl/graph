@@ -175,11 +175,18 @@ export function createPrecisionView (host: HTMLElement, caseId: string = 'additi
           }
         } catch (error) { current.errors.webgpu = String(error) }
         if (destroyed) return
-        render(); status.textContent = Object.keys(current.errors).length
-          ? 'Partial comparison. Unavailable GPU paths are listed below; CPU results are not GPU validation.'
-          : isAddition
-            ? 'Comparison complete. Compare each result with the exact sum.'
-            : 'Comparison complete. Inspect mathematical error and legacy compatibility separately.'
+        render()
+        if (Object.keys(current.errors).length) {
+          status.textContent = 'Partial comparison. See Live results for available results and missing GPU paths.'
+        } else if (isAddition) {
+          const gpuSums = current.sums.filter(row => !row.name.startsWith('CPU'))
+          const exactCount = gpuSums.filter(row => row.value === row.exact).length
+          status.textContent = `${exactCount} of ${gpuSums.length} WebGPU methods reached the exact sum of ${sumNumber(sums!.exact)}.`
+        } else {
+          const gpuResults = current.gravity.slice(1)
+          const compatible = gpuResults.filter(row => row.legacyCompatibility.valid).length
+          status.textContent = `${compatible} of ${gpuResults.length} GPU paths matched the legacy model within tolerance. See Live results for force errors.`
+        }
       } catch (error) { runError = String(error); if (!destroyed) status.textContent = `Comparison failed: ${String(error)}` } finally {
         busy = false
         if (!destroyed) {

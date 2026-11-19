@@ -9,6 +9,7 @@ export default defineConfig({
     include: [
       'src/app/**/*.test.ts', 'src/runtime/**/*.test.ts',
       'src/experiments/performance-lab/view.test.ts', 'src/experiments/cell-aggregation/view.test.ts',
+      'src/experiments/precision-diagnostics/view.test.ts',
     ],
     setupFiles: ['./src/testing/no-gpu.ts'],
     testTimeout: 60000,

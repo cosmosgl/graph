@@ -24,6 +24,12 @@ order, transparent images, and pixel ratios 1 and 2. The two Linux failures are
 retained for the earlier mathematical source-byte control; the prototype does not
 turn those failures into passes.
 
+In a separate 1,024-point cost comparison, filtering work to points near the
+pick reduced request time for sparse overlap. When all points overlapped the
+region, the filtered prototype still took roughly 300 ms on WebGPU in the
+recorded native run. These are bounded request timings, not end-to-end pointer
+latency; exact colors and IDs passed the paired cases.
+
 This is a bounded correctness prototype, not a scalable production picking
 implementation. It supports regions up to 64 × 64 pixels and at most 1,024
 points, with multiple passes per point. The checks do not establish production

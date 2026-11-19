@@ -26,13 +26,14 @@ export const cases: ExperimentCase[] = [
     question: 'Does the hashed collision path select the same neighbors as the CPU?',
     description: 'This recorded study checks the separate hash-and-slot path used above the small-graph cutoff.',
     reference: 'An independent CPU model of the hash buckets, selected slots, collision force and positions.',
-    acceptance: 'Slot IDs and positions are compared exactly; forces use the documented component tolerance.',
+    acceptance: 'CPU slot IDs and positions are compared exactly; forces and WebGL comparisons use the recorded component tolerances.',
     recorded: {
-      conclusion: 'All nine WebGPU passes matched the CPU slot IDs and positions at 4,097 and 8,192 points.',
+      conclusion: 'All nine WebGPU passes matched the CPU slot IDs and positions. In a separate comparison, WebGL and WebGPU selected ' +
+        'identical slots and passed the force and position checks.',
       date: '2026-11-19',
       environment: 'Apple M3, native Chrome 157, luma 10.0.0-alpha.15.',
-      scope: 'Nine isolated passes, including an overloaded bucket and a hash-boundary case.',
-      limits: 'Direct WebGL parity, complete-frame cost and other devices were not established.',
+      scope: 'Nine isolated passes at 4,097 and 8,192 points, including an overloaded bucket and a hash-boundary case.',
+      limits: 'Force and position comparisons use the existing tolerance. Sustained dense layouts, presentation cost and other devices remain open.',
       evidence: [{ label: 'Hashed collision evidence', page: 'hashed-findings' }, { label: 'Hash and slot method', page: 'hashed-method' }],
     },
   },

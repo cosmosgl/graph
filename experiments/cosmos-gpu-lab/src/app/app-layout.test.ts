@@ -8,7 +8,8 @@ const initial = window.location.href
 afterEach(() => { shell?.destroy(); host?.remove(); vi.restoreAllMocks(); window.history.replaceState(null, '', initial) })
 it('keeps the styled experiment cards within the page at the current browser width', async () => {
   window.history.replaceState(null, '', '#/'); host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length))
+  const count = experiments.reduce((total, experiment) => total + (experiment.cases?.length ?? 1), 0)
+  await vi.waitFor(() => expect(host!.querySelectorAll('.experiment-grid > li')).toHaveLength(count))
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
   expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })

@@ -6,7 +6,7 @@ export const cases: ExperimentCase[] = [{
   kind: 'compare',
   question: 'How do the two viewers behave on the same small graph?',
   description: 'Explore the Karate Club graph in the production WebGL viewer and the experimental WebGPU viewer.',
-  tryIt: 'Press Run both, then select or drag a point in each viewer. Use Compare corrected link paint under Additional checks to check frozen colors.',
+  tryIt: 'Press Run both. Select a point in each viewer and compare which points are highlighted.',
   reference: 'The existing production viewer, using the same graph and supplied point and link styles.',
   acceptance: 'The live views are for exploration. Separate recorded checks cover frame intervals, picking and fixed-position pixels.',
   recorded: {
@@ -31,7 +31,7 @@ export const cases: ExperimentCase[] = [{
     date: '19 November 2026',
     environment: 'Apple M3, native Chrome 157; production WebGL and experimental WebGPU.',
     scope: 'Frozen Karate Club geometry and two styles, with point-only, link-only, smoothing and distance-opacity controls.',
-    limits: 'Two styles at one camera on M3. Results for other adapters, styles and moving layouts are still open.',
+    limits: 'Two styles at one camera on one GPU. Results for other adapters, styles and moving layouts are still open.',
     evidence: [{ label: 'Link-color evidence', page: 'link-color-evidence' }],
   },
 }]

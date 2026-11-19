@@ -3,9 +3,7 @@ import { runScaleCount, scaleLimit, type CenterScaleResult } from './scale-study
 
 export function mountCenterScale (host: HTMLElement, begin: () => boolean, end: () => void): { pause(): void; destroy(): void } {
   host.innerHTML = `
-    <h3>Center force at larger sizes</h3>
-    <p>Compare the current GPU-resident center reduction and force with a CPU sum and the older WebGL blend.
-      Timings are isolated GPU work, not a complete graph frame.</p>
+    <h3>Center-force scale study</h3>
     <label>Point counts <input data-scale-counts type="text" value="8192"></label>
     <div class="controls">
       <button data-scale-run type="button">Run scale study</button>

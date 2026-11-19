@@ -14,7 +14,7 @@ export const cases: ExperimentCase[] = [{
     date: '2026-11-18',
     environment: 'Apple M3, inline Chromium 157, luma 10.0.0-alpha.15.',
     scope: 'Nine isolated inputs with sampled trajectories and target updates.',
-    limits: 'Combined-force cost, long cooling runs and production setter behavior were not established.',
+    limits: 'The isolated timings do not establish the attractor’s full-frame cost, long cooling runs or production setter behavior.',
     evidence: [{ label: 'Attraction comparison evidence', page: 'findings' }, { label: 'How per-point attraction works', page: 'method' }],
   },
 }]

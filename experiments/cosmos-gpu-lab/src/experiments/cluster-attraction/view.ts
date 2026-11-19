@@ -15,7 +15,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <label>Points<select data-control="count"><option>1024</option><option>8192</option></select></label>
     <p class="demo-note">Cluster attraction only. Each group moves toward its own center; “targets” uses supplied positions.
     Semantics uses eight points, including pinned, absent and unassigned points. Pinned points are squares.</p></div>
-    <button data-action="step" data-run-action="primary">Step and check</button>
+    <button class="button-primary" data-action="step" data-run-action="primary">Step and check</button>
     <button data-action="run" data-run-action="primary">Run</button>
     <button data-action="stop" data-run-action="primary">Stop</button>
     <button data-action="reset" data-run-action="primary">Reset</button>
@@ -84,6 +84,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   const step = async (): Promise<void> => {
     busy = true; controls()
     try {
+      const previousPassed = passed; const previousFailed = failed
       const expectedCpu = reference(input, cpu); cpu = expectedCpu.positions
       const rows: string[] = []
       for (const api of ['webgl', 'webgpu'] as const) {
@@ -98,6 +99,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           .map(c => `<td>${c.valid ? 'Pass' : `Fail (${c.failures})`}</td>`).join('')}</tr>`)
       }
       tick++; draw()
+      const stepPassed = passed - previousPassed; const stepFailed = failed - previousFailed
+      status.textContent += ` · ${stepPassed}/${stepPassed + stepFailed} checks passed this step`
       output.innerHTML = `<table><caption>Tick ${tick} · existing numerical gates</caption><thead><tr><th>Backend</th><th>Group sums</th>
         <th>Force</th><th>Position</th><th>Independent trajectory</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
     } catch (e) { error = String(e); status.textContent = error } finally { busy = false; controls() }
@@ -154,7 +157,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: error || (failed ? `${failed} failed checks` : 'None recorded'),
     unchecked: 'Unsampled ticks; combined forces; complete frame cost; production integration',
   }),
-  { experiment: 'cluster-attraction', visualFirst: true, devices: () => Object.values(backends).map(b => b.info) })
+  { experiment: 'cluster-attraction', fixedOrder: true, devices: () => Object.values(backends).map(b => b.info) })
   compactRunControls(host, { diagnostics: true })
   await initialize()
   return {

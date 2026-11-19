@@ -5,6 +5,25 @@ import { createAppShell } from './app-shell'
 import { renderCaseEvidence } from './case-page'
 import { experiments } from './registry'
 import { articleSectionId } from './router'
+import { caseAssessments, readinessFor } from './readiness'
+
+it('keeps each readiness assessment scoped to an existing case', () => {
+  const keys = experiments.flatMap(experiment => (experiment.cases ?? []).map(item => `${experiment.id}/${item.id}`))
+  expect(Object.keys(caseAssessments).sort()).toEqual(keys.sort())
+  for (const key of keys) {
+    const assessment = caseAssessments[key]
+    expect(assessment.badge.trim(), key).not.toMatch(/^(?:needs review)?$/i)
+    expect(assessment.finding.trim(), key).not.toBe('')
+    expect(assessment.evidence.length, key).toBeGreaterThan(0)
+    expect(assessment.next.trim(), key).not.toBe('')
+    expect([assessment.badge, assessment.finding, assessment.status, assessment.next,
+      ...assessment.evidence.map(item => item.text)].join(' '), key).not.toMatch(/\bM3\b|agent[- ]recipe/i)
+    if (assessment.tone === 'fail') {
+      expect(assessment.evidence.some(item => item.tone === 'fail') || assessment.status === 'Not adopted', key).toBe(true)
+    }
+    if (assessment.tone === 'pass') expect(assessment.evidence.some(item => item.tone === 'pass'), key).toBe(true)
+  }
+})
 
 it('gives every experiment a practical case and accessible human-facing evidence', () => {
   for (const experiment of experiments) {
@@ -26,6 +45,7 @@ it('gives every experiment a practical case and accessible human-facing evidence
         for (const field of [item.recorded.conclusion, item.recorded.date, item.recorded.environment, item.recorded.scope, item.recorded.limits]) {
           expect(field.trim().length, label).toBeGreaterThan(0)
         }
+        expect(`${item.recorded.conclusion} ${item.recorded.limits}`, label).not.toMatch(/\bM3\b/)
       }
     }
   }
@@ -51,6 +71,12 @@ it('renders every case with its own context, live result and visible recorded fi
             await vi.waitFor(() => expect(host.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
             expect(host.querySelector('h1')?.textContent, label).toBe(item.title)
             expect(host.querySelector('.case-question')?.textContent, label).toBe(item.question)
+            const assessment = readinessFor(experiment.id, item)
+            const strip = host.querySelector<HTMLElement>('.case-readiness')!
+            expect(strip.textContent, label).toContain(`${assessment.area} · ${assessment.status}`)
+            expect(strip.textContent, label).toContain(assessment.next)
+            expect(strip.querySelectorAll('.readiness-evidence'), label).toHaveLength(assessment.evidence.length)
+            expect(strip.closest('details'), label).toBeNull()
             const finding = host.querySelector<HTMLElement>('.case-recorded')!
             expect(finding.closest('details'), label).toBeNull()
             expect(finding.textContent, label).toContain(item.recorded?.conclusion ?? 'No recorded finding is available')

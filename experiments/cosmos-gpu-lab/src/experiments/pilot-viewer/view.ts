@@ -10,7 +10,7 @@ import { member, pointSize } from './members'
 import { investigateLatency, latencyProtocol, type LatencyBlock } from './latency'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div class="controls">
-    <button data-action="run" data-run-action="primary">Run</button>
+    <button class="button-primary" data-action="run" data-run-action="primary">Run</button>
     <button data-action="pause" data-run-action="primary">Pause</button>
     <button data-action="fit" data-run-action="primary">Fit graph</button>
     <button data-action="reset" data-run-action="primary">Reset Karate Club</button></div>
@@ -50,7 +50,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     passed: `${rows.filter(row => row.pass).length} named checks`,
     failed: failure || r.error || `${rows.filter(row => !row.pass).length} failed checks`,
     unchecked: 'Larger graphs and feedback outside the named checks.',
-  }), { experiment: 'pilot-viewer', visualFirst: true, devices: () => [r.info] })
+  }), { experiment: 'pilot-viewer', fixedOrder: true, devices: () => [r.info] })
   compactRunControls(host, { diagnostics: true })
   host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
   const record = (checks: Check[], capture: unknown): void => {

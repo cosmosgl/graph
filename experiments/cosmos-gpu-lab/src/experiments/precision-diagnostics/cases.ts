@@ -6,7 +6,7 @@ export const precisionCases: ExperimentCase[] = [{
   kind: 'demonstrate',
   question: 'Can changing the order of additions change the result?',
   description: 'CPU and WebGPU add the same numbers one at a time, in groups, and as a tree. Compare each answer with the exact sum.',
-  tryIt: 'Run the default cancellation input, then compare the three addition methods with the exact answer.',
+  tryIt: 'Press Compare sums with the default 1,024 numbers. See which addition orders get the exact sum of 512.',
   reference: 'The exact integer sum and CPU float32 models of the same three addition orders.',
   acceptance: 'Results are observations: no accuracy or production pass threshold is assigned.',
   recorded: {
@@ -24,7 +24,7 @@ export const precisionCases: ExperimentCase[] = [{
   kind: 'compare',
   question: 'How accurately do the gravity calculations reproduce the intended force?',
   description: 'Compare the same frozen points using production WebGL, two WebGPU formulas, and a CPU model.',
-  tryIt: 'Run the default 257 points and compare mathematical error with legacy compatibility.',
+  tryIt: 'Press Compare gravity with the default 257 points. Look for the largest force error and any failed compatibility checks in the table.',
   reference: 'The intended linear gravity law in double precision, and the existing float32 CPU polar model for compatibility.',
   acceptance: 'Legacy compatibility uses absolute 2e-5 plus relative 3e-5 per force component; mathematical accuracy has no pass budget.',
   recorded: {

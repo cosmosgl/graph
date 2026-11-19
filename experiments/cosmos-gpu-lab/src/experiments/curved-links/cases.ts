@@ -10,7 +10,7 @@ export const cases: ExperimentCase[] = [{
   reference: 'Production WebGL and an independent triangle-strip mask are controls for the WebGPU candidate.',
   acceptance: 'Color, source visibility and picking checks are reported separately. Boundary mismatches remain failures.',
   recorded: {
-    conclusion: 'On M3, dashed and dotted curves preserved color and source visibility. Only 4 of 24 cases passed all gates; all four had zero opacity.',
+    conclusion: 'On one GPU, dashed and dotted curves preserved color and source visibility. Only 4 of 24 cases passed all gates; all four had zero opacity.',
     date: '2026-11-17',
     environment: 'Apple M3, Chromium 157, luma.gl 10.0.0-alpha.15.',
     scope: 'Frozen curved-link pattern fixtures and the recorded color and picking gates.',

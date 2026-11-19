@@ -23,6 +23,8 @@ import { renderStudyOverview } from './study-overview'
 import { checkAgentFindingLinks, renderAgentFindings } from './agent-findings'
 import { renderCaseEvidence, renderCaseFrame } from './case-page'
 import { mountGlobalSearch } from './global-search'
+import { readinessFor } from './readiness'
+import { readinessBadge } from './readiness/presentation'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -49,8 +51,8 @@ function renderHome (host: HTMLElement): void {
     heading.append(title, description)
     const grid = document.createElement('ul'); grid.className = 'experiment-grid'
     for (const experiment of group.experiments) {
-      const card = document.createElement('li'); card.className = 'experiment-item'
       if (!experiment.cases) {
+        const card = document.createElement('li'); card.className = 'experiment-item'
         const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
         link.dataset.experimentId = experiment.id
         const title = document.createElement('h4'); title.textContent = experiment.title
@@ -62,32 +64,22 @@ function renderHome (host: HTMLElement): void {
         card.append(link); grid.append(card)
         continue
       }
-      if (experiment.cases.length === 1) {
-        const item = experiment.cases[0]
+      for (const item of experiment.cases) {
+        const assessment = readinessFor(experiment.id, item)
+        const card = document.createElement('li'); card.className = 'experiment-item'
         const link = document.createElement('a'); link.className = 'experiment-card'; link.href = caseHref(experiment.id, item.id)
         link.dataset.experimentId = experiment.id; link.dataset.caseId = item.id
+        const heading = document.createElement('div'); heading.className = 'experiment-card-heading'
         const title = document.createElement('h4'); title.textContent = item.title
-        const question = document.createElement('p'); question.textContent = item.question
-        link.append(title, question)
+        heading.append(title, readinessBadge(assessment.badge, assessment.tone))
+        const finding = document.createElement('p'); finding.className = 'experiment-card-finding'
         if (item.kind === 'recorded') {
-          const note = document.createElement('span'); note.className = 'catalog-meta'; note.textContent = 'Recorded study'; link.append(note)
+          const note = document.createElement('span'); note.className = 'catalog-recorded'; note.textContent = 'Recorded study · '
+          finding.append(note)
         }
+        finding.append(document.createTextNode(assessment.finding)); link.append(heading, finding)
         card.append(link); grid.append(card)
-        continue
       }
-      const article = document.createElement('article'); article.className = 'experiment-card experiment-card-group'
-      const meta = document.createElement('span'); meta.className = 'catalog-meta'; meta.textContent = `${experiment.cases.length} experiments`
-      const title = document.createElement('h4'); title.textContent = experiment.title
-      const summary = document.createElement('p'); summary.textContent = experiment.summary
-      const list = document.createElement('ul'); list.className = 'catalog-cases'
-      for (const item of experiment.cases) {
-        const element = document.createElement('li'); const link = document.createElement('a')
-        link.href = caseHref(experiment.id, item.id); link.dataset.experimentId = experiment.id; link.dataset.caseId = item.id
-        const label = document.createElement('span'); label.textContent = item.title; link.append(label)
-        if (item.kind === 'recorded') { const note = document.createElement('small'); note.textContent = 'Recorded study'; link.append(note) }
-        element.append(link); list.append(element)
-      }
-      article.append(meta, title, summary, list); card.append(article); grid.append(card)
     }
     section.append(heading, grid); catalog.append(section)
   }

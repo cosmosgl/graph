@@ -13,6 +13,7 @@ it('indexes published experiments, evidence, guides and feature coverage with di
   expect(storedAlpha.some(result => result.href.startsWith('#/point-styling?case=picking&evidence=picking-evidence'))).toBe(true)
   expect(searchIndex(index, 'ping pong buffers').some(result => result.href === '#/learn/8')).toBe(true)
   expect(searchIndex(index, 'prefix sum').some(result => result.href === '#/vocabulary/scan')).toBe(true)
+  expect(searchIndex(index, 'dense requests expensive').some(result => result.href === '#/point-styling?case=picking')).toBe(true)
   expect(index.entries.some(result => /agent[-_ ]recipe/i.test(`${result.title} ${result.context} ${result.heading} ${result.text}`))).toBe(false)
   expect(searchIndex(index, 'agent recipe')).toHaveLength(0)
 })

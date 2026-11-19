@@ -10,7 +10,7 @@ export const cases: ExperimentCase[] = [{
   reference: 'Production WebGL and an independent scalar mask are controls for the WebGPU rendering and picking candidate.',
   acceptance: 'Color, visibility and picking checks are reported separately. Edge mismatches remain failures.',
   recorded: {
-    conclusion: 'On M3, 14 of 24 dashed and dotted cases passed; boundary failures kept the candidate from passing the full check.',
+    conclusion: 'On one GPU, 14 of 24 dashed and dotted cases passed; boundary failures kept the candidate from passing the full check.',
     date: '2026-11-17',
     environment: 'Apple M3, Chromium 157, luma.gl 10.0.0-alpha.15.',
     scope: 'Frozen line fixtures, including patterns, color and picking checks.',
