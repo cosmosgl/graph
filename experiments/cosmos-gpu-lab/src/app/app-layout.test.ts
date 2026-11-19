@@ -5,13 +5,13 @@ import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-l
 import { createAppShell } from './app-shell'
 import { renderCaseFrame } from './case-page'
 import { experiments, findExperiment } from './registry'
+import { readinessFor } from './readiness'
 let host: HTMLElement | undefined; let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
 afterEach(() => { shell?.destroy(); host?.remove(); vi.restoreAllMocks(); window.history.replaceState(null, '', initial) })
 it('keeps the styled experiment cards within the page at the current browser width', async () => {
   window.history.replaceState(null, '', '#/'); host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  const count = experiments.reduce((total, experiment) => total + (experiment.cases?.length ?? 1), 0)
-  await vi.waitFor(() => expect(host!.querySelectorAll('.experiment-grid > li')).toHaveLength(count))
+  await vi.waitFor(() => expect(host!.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length))
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
   expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })
@@ -45,9 +45,10 @@ it('keeps Quick jump editable on a phone and shows experiment mini cards among t
     await vi.waitFor(() => expect(options()).toHaveLength(4), { timeout: 20000 })
     expect(window.location.hash).toBe('#/')
     const [experiment, finding] = options()
-    const catalog = host.querySelector(`.experiment-card[href="${experiment.getAttribute('href')}"]`)!
     expect(experiment.querySelector('.case-nav-title')?.textContent).toBe('Point picking')
-    expect(experiment.querySelector('.readiness-badge')?.outerHTML).toBe(catalog.querySelector('.readiness-badge')!.outerHTML)
+    expect(experiment.hash).toBe('#/point-styling?section=try-picking')
+    const picking = findExperiment('point-styling')!.cases!.find(item => item.id === 'picking')!
+    expect(experiment.querySelector('.readiness-badge')?.textContent).toContain(readinessFor('point-styling', picking).badge)
     expect(finding.querySelector('.global-search-kind')?.textContent).toBe('Recorded finding')
     expect(finding.querySelector('.readiness-badge')).toBeNull()
     expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0)
@@ -154,19 +155,17 @@ it('keeps the same button dimensions across the experiment pages', () => {
   host = document.createElement('main'); host.className = 'workspace'; document.body.append(host)
   const sizes: Array<{ width: number; height: number }> = []
   for (const experiment of experiments) {
-    for (const item of experiment.cases ?? []) {
-      renderCaseFrame(host, experiment, item)
-      for (const link of host.querySelectorAll('.case-nav-link')) {
-        const { width, height } = link.getBoundingClientRect()
-        sizes.push({ width, height })
-      }
+    renderCaseFrame(host, experiment)
+    for (const link of host.querySelectorAll('.case-nav-link')) {
+      const { width, height } = link.getBoundingClientRect()
+      sizes.push({ width, height })
     }
   }
   expect(sizes.length).toBeGreaterThan(50)
   expect(sizes.every(size => size.width === sizes[0].width && size.height === sizes[0].height)).toBe(true)
 })
 
-it('keeps the graph before its finding and returns from evidence without rebuilding it', async () => {
+it('reveals detailed evidence below the graph and focuses its heading without rebuilding the run', async () => {
   const create = vi.spyOn(findExperiment('curved-links')!, 'create').mockImplementation(async stage => {
     stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>
       <button data-run-action="primary">Compare</button><section data-run-part="visualization" class="backend-panels styling-panels">
@@ -182,15 +181,15 @@ it('keeps the graph before its finding and returns from evidence without rebuild
   const finding = host.querySelector('#recorded-findings')!
   expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
-  host.querySelector<HTMLAnchorElement>('.case-evidence-links a')!.click()
+  host.querySelector<HTMLDetailsElement>('.case-evidence-detail')!.open = true
   const id = 'doc-case-evidence-what-was-compared'
   await vi.waitFor(() => expect(host!.querySelector(`#${id}`)).not.toBeNull())
   host.querySelector<HTMLAnchorElement>(`#${id} .section-permalink`)!.click()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe(id))
   const header = host.querySelector('.lab-header')!.getBoundingClientRect()
   expect(host.querySelector(`#${id}`)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(header.bottom - 1)
-  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(host.querySelector('canvas')).toBe(canvas)
+  expect(host.querySelector('#recorded-findings')).toBe(finding)
   expect(create).toHaveBeenCalledTimes(1)
   expect(host.querySelector<HTMLInputElement>('.experiment-run input')!.value).toBe('custom')
 })

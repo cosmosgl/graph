@@ -1,12 +1,26 @@
 import type { ExperimentCase, ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
-import { caseEvidenceLinks } from '../runtime/experiment'
+import { disposeDocumentTables, presentDocumentTables } from '../runtime/result-tables'
 import { addArticleSections } from './article-sections'
 import { experimentMiniCard } from './experiment-mini-card'
+import { caseEvidencePages, evidencePageAt, findingSection, isReaderPage, startingCase } from './experiment-route'
 import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
 import { readinessFor } from './readiness'
-import { renderReadiness } from './readiness/presentation'
-import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
+import { recordedObservations } from './readiness/presentation'
+import { articleSectionId, experimentHref } from './router'
+
+type CaseFrame = {
+  stage: HTMLElement;
+  slot: HTMLElement;
+  recorded: HTMLElement;
+  comparison: HTMLElement;
+  status: HTMLElement;
+  retry: HTMLButtonElement;
+  start: HTMLButtonElement;
+  chooser: HTMLSelectElement;
+  openEvidence: (section: string) => Promise<string | undefined>;
+  setLiveCase: (active: ExperimentCase) => void;
+}
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
   const element = document.createElement('p')
@@ -15,35 +29,19 @@ function paragraph (text: string, className?: string): HTMLParagraphElement {
   return element
 }
 
-function labeled (label: string, text: string): HTMLParagraphElement {
-  const element = paragraph(text)
-  const title = document.createElement('strong'); title.textContent = `${label}: `
-  element.prepend(title)
-  return element
-}
-
 function topicFor (experiment: ExperimentDefinition): (typeof experimentGroups)[number] | undefined {
   return experimentGroups.find(group => group.experiments.some(candidate => candidate.id === experiment.id))
 }
 
-function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase): HTMLElement | null {
-  const others = experiment.cases?.filter(candidate => candidate.id !== item.id) ?? []
-  const group = others.length ? undefined : topicFor(experiment)
-  const peers = group?.experiments.filter(candidate => candidate.id !== experiment.id &&
-    (!experiment.singlePage || experiment.singlePage.related.includes(candidate.id))) ?? []
-  if (!others.length && !peers.length) return null
-  const label = `More in ${group?.title ?? experiment.title}`
-  const nav = document.createElement('nav'); nav.className = 'case-navigation'; nav.setAttribute('aria-label', label)
-  if (!others.length) nav.classList.add('case-group-navigation')
+function groupNavigation (experiment: ExperimentDefinition, topic: ReturnType<typeof topicFor>): HTMLElement | undefined {
+  const peers = topic?.experiments.filter(candidate => candidate.id !== experiment.id) ?? []
+  if (!topic || !peers.length) return undefined
+  const label = `More in ${topic.title}`
+  const nav = document.createElement('nav'); nav.className = 'case-navigation case-group-navigation'; nav.setAttribute('aria-label', label)
   const list = document.createElement('ul')
-  const destinations = [
-    ...others.map(candidate => ({ parent: experiment, target: candidate, href: caseHref(experiment.id, candidate.id) })),
-    ...peers.map(peer => ({ parent: peer, target: peer.cases?.[0], href: experimentHref(peer.id) })),
-  ]
-  for (const { parent, target, href } of destinations) {
+  for (const peer of peers) {
     const entry = document.createElement('li')
-    const assessment = target && readinessFor(parent.id, target)
-    entry.append(experimentMiniCard(target?.title ?? parent.title, href, assessment))
+    entry.append(experimentMiniCard(peer.title, experimentHref(peer.id), readinessFor(peer.id, startingCase(peer))))
     list.append(entry)
   }
   const heading = document.createElement('h2'); heading.textContent = label
@@ -51,85 +49,43 @@ function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase)
   return nav
 }
 
-function recordedFinding (experiment: ExperimentDefinition, item: ExperimentCase): HTMLElement {
-  const section = document.createElement('section'); section.className = 'case-recorded'
-  section.id = 'recorded-findings'
-  const title = document.createElement('h2'); title.textContent = experiment.singlePage ? 'Recorded findings' : 'Recorded finding'; section.append(title)
-  if (item.recorded && experiment.singlePage) {
-    const list = document.createElement('ul'); list.className = 'case-observations'; list.setAttribute('aria-label', 'Evidence and limits')
-    for (const observation of experiment.singlePage.observations) {
-      const row = document.createElement('li'); row.id = observation.id
-      const name = document.createElement('div')
-      const heading = document.createElement('h3'); heading.textContent = observation.title
-      name.append(heading, paragraph(observation.date, 'case-meta'))
-      row.append(name, paragraph(observation.evidence), paragraph(observation.limits, 'case-observation-limits'))
-      list.append(row)
-    }
-    section.append(paragraph(item.recorded.conclusion), list)
-    return section
-  }
-  if (item.recorded) {
-    const finding = item.recorded
-    section.append(paragraph(`${finding.date} · ${finding.environment}`, 'case-meta'), paragraph(finding.conclusion),
-      labeled('Scope', finding.scope), labeled('Limits', finding.limits))
-  } else {
-    section.append(paragraph('No recorded finding is available for this case yet.'))
-  }
-  const evidenceLinks = caseEvidenceLinks(item)
-  if (evidenceLinks.length) {
-    const links = document.createElement('nav'); links.className = 'case-evidence-links'
-    links.setAttribute('aria-label', item.recorded ? 'Evidence' : 'Method and evidence')
-    for (const evidence of evidenceLinks) {
-      const link = document.createElement('a'); link.textContent = evidence.label
-      link.href = caseEvidenceHref(experiment.id, item.id, evidence.page, evidence.section)
-      links.append(link)
-    }
-    section.append(links)
-  }
-  return section
+function findingRow (title: string, date: string, id: string): { row: HTMLLIElement; name: HTMLDivElement } {
+  const row = document.createElement('li'); row.id = id
+  const name = document.createElement('div')
+  const heading = document.createElement('h3'); heading.textContent = title
+  name.append(heading)
+  if (date) name.append(paragraph(date, 'case-meta'))
+  row.append(name)
+  return { row, name }
 }
 
-export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefinition, item: ExperimentCase): {
-  stage: HTMLElement; slot: HTMLElement; recorded: HTMLElement; comparison: HTMLElement; status: HTMLElement; retry: HTMLButtonElement;
-} {
-  host.innerHTML = `<div class="case-document"><header class="case-header"><p class="case-kind"></p><h1></h1>
-    <p class="case-question"></p><p class="case-description"></p></header>
-    <section class="case-stage" aria-busy="true"></section></div>`
-  host.querySelector<HTMLElement>('.case-kind')!.textContent = item.kind === 'recorded' ? 'Recorded study' : ''
-  host.querySelector('h1')!.textContent = item.title
-  host.querySelector<HTMLElement>('.case-question')!.textContent = item.question
-  host.querySelector<HTMLElement>('.case-description')!.textContent = item.description
-  const header = host.querySelector('.case-header')!
+function recordedFindings (experiment: ExperimentDefinition): HTMLElement {
+  const section = document.createElement('section'); section.className = 'case-recorded'; section.id = 'recorded-findings'
+  const heading = document.createElement('h2'); heading.textContent = 'Recorded findings'; section.append(heading)
+  const list = document.createElement('ul'); list.className = 'case-observations'; list.setAttribute('aria-label', 'Evidence and limits')
   if (experiment.singlePage) {
-    host.querySelector('.case-document')!.classList.add('case-single-page')
-    const topic = topicFor(experiment)
-    if (topic) {
-      const link = document.createElement('a'); link.className = 'case-topic-link'
-      link.href = `#/?section=catalog-${topic.id}`
-      const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
-      link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
+    section.append(paragraph(startingCase(experiment).recorded!.conclusion))
+    for (const observation of experiment.singlePage.observations) {
+      const { row } = findingRow(observation.title, observation.date, observation.id)
+      row.append(paragraph(observation.evidence), paragraph(observation.limits, 'case-observation-limits'))
+      list.append(row)
     }
-  } else header.append(renderReadiness(readinessFor(experiment.id, item)))
-  const stage = host.querySelector<HTMLElement>('.case-stage')!
-  const navigation = caseNavigation(experiment, item)
-  if (navigation) stage.after(navigation)
-  if (item.kind !== 'recorded') {
-    const intro = document.createElement('section'); intro.className = 'case-intro'; intro.id = 'case-live'
-    const heading = document.createElement('h2'); heading.textContent = 'Try it'; intro.append(heading)
-    if (item.tryIt) intro.append(paragraph(item.tryIt))
-    stage.append(intro)
+  } else {
+    for (const item of experiment.cases!) {
+      const { row, name } = findingRow(item.title, item.recorded?.date ?? '', findingSection(item))
+      const result = document.createElement('div')
+      result.append(paragraph(item.recorded?.conclusion ?? 'No recorded finding is available yet.'),
+        recordedObservations(readinessFor(experiment.id, item).evidence))
+      const limits = document.createElement('div'); limits.className = 'case-observation-limits'
+      if (item.recorded) {
+        name.append(paragraph(item.recorded.environment, 'case-meta'))
+        limits.append(paragraph(item.recorded.scope), paragraph(item.recorded.limits))
+      } else limits.append(paragraph(item.acceptance))
+      row.append(result, limits); list.append(row)
+    }
   }
-  const status = paragraph('', 'case-load-status'); status.setAttribute('role', 'status')
-  const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry live experiment'; retry.hidden = true
-  const slot = document.createElement('div'); slot.className = 'case-live-slot'
-  const recorded = recordedFinding(experiment, item)
-  if (item.kind !== 'recorded') stage.append(status, retry, slot)
-  stage.append(recorded)
-  const comparison = document.createElement('section'); comparison.className = 'case-comparison'; comparison.id = 'case-comparison'
-  const heading = document.createElement('h2'); heading.textContent = 'What this compares'
-  comparison.append(heading, labeled('Reference', item.reference), labeled('How to read the result', item.acceptance))
-  stage.append(comparison)
-  return { stage, slot, recorded, comparison, status, retry }
+  section.append(list)
+  return section
 }
 
 // Agent replay instructions stay in the source files. The human-readable
@@ -198,39 +154,119 @@ function removeReproductionInstructions (host: HTMLElement): void {
   }
 }
 
-export async function renderCaseEvidence (
-  host: HTMLElement, experiment: ExperimentDefinition, item: ExperimentCase, page: ExperimentPage
+export async function renderEvidenceContent (
+  target: HTMLElement, experiment: ExperimentDefinition, page: ExperimentPage
 ): Promise<void> {
-  host.innerHTML = `<div class="case-evidence-page"><p><a data-back></a></p><header><p class="case-meta"></p><h1></h1></header>
-    <div data-evidence-content><p>Loading evidence…</p></div></div>`
-  const back = host.querySelector<HTMLAnchorElement>('[data-back]')!
-  back.href = caseHref(experiment.id, item.id); back.textContent = `← ${item.title}`
-  host.querySelector<HTMLElement>('.case-meta')!.textContent = `${item.title} · Evidence`
-  host.querySelector('h1')!.textContent = page.title
-  const target = host.querySelector<HTMLElement>('[data-evidence-content]')!
-  const navigation = caseNavigation(experiment, item)
-  if (navigation) target.after(navigation)
-  target.id = articleSectionId(page.id)
+  if (!isReaderPage(experiment, page)) return
+  const connected = target.isConnected
+  // Load into a detached container so a cancelled navigation cannot leave table observers behind.
+  const content = document.createElement('div')
   if (page.kind === 'markdown') {
     const { renderMarkdown } = await import('./markdown')
-    await renderMarkdown(target, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 1 })
-    addArticleSections(target, experiment.id, page.id)
-    removeReproductionInstructions(target)
-    // A document's own h1 duplicates the page title above; keep its old anchor.
-    const title = target.querySelector<HTMLElement>('[data-heading-level="1"]')
-    if (title) { host.querySelector('h1')!.id = title.id; title.remove() }
+    await renderMarkdown(content, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 2, tables: false })
+    addArticleSections(content, experiment.id, page.id)
+    removeReproductionInstructions(content)
+    content.querySelector('[data-heading-level="1"]')?.remove()
   } else {
     const { renderReport } = await import('./report')
-    renderReport(target, await page.load(), experiment.id)
+    renderReport(content, await page.load(), experiment.id)
   }
-  // Old in-document links still go through the experiment router.
-  for (const link of target.querySelectorAll<HTMLAnchorElement>('a[href^="#/"]')) {
-    const href = link.getAttribute('href')!
-    if (href === experimentHref(experiment.id)) link.href = caseHref(experiment.id, item.id)
-    else if (href.startsWith(`${experimentHref(experiment.id)}?`)) {
-      const params = new URLSearchParams(href.split('?')[1])
-      if (!params.has('case')) { params.set('case', item.id); link.href = `${experimentHref(experiment.id)}?${params}` }
+  if (connected && !target.isConnected) { disposeDocumentTables(content); return }
+  unlinkOtherExperiments(content, experiment)
+  target.replaceChildren(...Array.from(content.childNodes))
+  disposeDocumentTables(content)
+  presentDocumentTables(target)
+}
+
+function evidenceDisclosures (recorded: HTMLElement, experiment: ExperimentDefinition): (section: string) => Promise<string | undefined> {
+  const area = document.createElement('section'); area.className = 'case-evidence'
+  const heading = document.createElement('h3'); heading.textContent = 'Detailed evidence'; area.append(heading)
+  type EvidenceBlock = { disclosure: HTMLDetailsElement; load: () => Promise<void> }
+  const documents = new Map<string, EvidenceBlock>()
+  const add = (page: ExperimentPage): EvidenceBlock => {
+    const existing = documents.get(page.id)
+    if (existing) return existing
+    if (!area.parentElement) recorded.append(area)
+    const disclosure = document.createElement('details'); disclosure.className = 'advanced-controls case-evidence-detail'
+    const summary = document.createElement('summary'); summary.textContent = page.title
+    const content = document.createElement('div'); content.id = articleSectionId(page.id); content.dataset.evidenceContent = ''
+    let ready: Promise<void> | undefined
+    const load = (): Promise<void> => {
+      if (!ready) {
+        const status = paragraph('Loading evidence…'); status.setAttribute('role', 'status'); content.replaceChildren(status)
+        ready = renderEvidenceContent(content, experiment, page).catch(() => {
+          content.replaceChildren(paragraph('Evidence could not load.'))
+          const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry evidence'
+          retry.addEventListener('click', () => { load().catch(() => {}) }); content.append(retry)
+          ready = undefined
+        })
+      }
+      return ready
     }
+    disclosure.addEventListener('toggle', () => { if (disclosure.open) load().catch(() => {}) })
+    disclosure.append(summary, content); area.append(disclosure)
+    const block = { disclosure, load }; documents.set(page.id, block)
+    return block
   }
-  unlinkOtherExperiments(target, experiment, item, page.id)
+  for (const page of caseEvidencePages(experiment)) add(page)
+  return async (section): Promise<string | undefined> => {
+    const page = evidencePageAt(experiment, section)
+    if (!page || !isReaderPage(experiment, page)) return undefined
+    const block = add(page); block.disclosure.open = true
+    await block.load()
+    return articleSectionId(page.id)
+  }
+}
+
+export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefinition): CaseFrame {
+  const item = startingCase(experiment)
+  host.innerHTML = `<div class="case-document case-single-page"><header class="case-header"><p class="case-kind"></p><h1></h1>
+    <p class="case-question"></p><p class="case-description"></p></header><section class="case-stage" aria-busy="false"></section></div>`
+  const header = host.querySelector('.case-header')!
+  const question = header.querySelector<HTMLElement>('.case-question')!
+  const description = header.querySelector<HTMLElement>('.case-description')!
+  header.querySelector('h1')!.textContent = experiment.title
+  header.querySelector<HTMLElement>('.case-kind')!.textContent = item.kind === 'recorded' ? 'Recorded study' : ''
+  const topic = topicFor(experiment)
+  if (topic) {
+    const link = document.createElement('a'); link.className = 'case-topic-link'; link.href = `#/?section=catalog-${topic.id}`
+    const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
+    link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
+  }
+
+  const stage = host.querySelector<HTMLElement>('.case-stage')!
+  const navigation = groupNavigation(experiment, topic)
+  if (navigation) stage.after(navigation)
+  const intro = document.createElement('section'); intro.className = 'case-intro'; intro.id = 'case-live'
+  const title = document.createElement('h2'); title.textContent = 'Try it'
+  const instruction = paragraph('')
+  intro.append(title, instruction)
+  const chooser = document.createElement('select')
+  const liveCases = experiment.cases!.filter(candidate => candidate.kind !== 'recorded')
+  if (liveCases.length > 1) {
+    for (const candidate of liveCases) {
+      const option = document.createElement('option'); option.value = candidate.id; option.textContent = candidate.title; chooser.append(option)
+    }
+    const label = document.createElement('label'); label.className = 'case-chooser'
+    label.append(document.createTextNode('Case'), chooser); intro.insertBefore(label, instruction)
+  }
+  const slot = document.createElement('div'); slot.className = 'case-live-slot'
+  const status = paragraph('', 'case-load-status'); status.setAttribute('role', 'status')
+  const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry live experiment'; retry.hidden = true
+  const start = document.createElement('button'); start.type = 'button'; start.textContent = 'Start the live comparison'
+  start.className = 'button-primary'; start.hidden = true
+  if (item.kind !== 'recorded') stage.append(intro, status, start, retry, slot)
+  const recorded = recordedFindings(experiment)
+  const openEvidence = evidenceDisclosures(recorded, experiment)
+  const comparison = document.createElement('section'); comparison.className = 'case-comparison'; comparison.id = 'case-comparison'
+  comparison.innerHTML = '<h2>What this compares</h2><dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
+  const [reference, acceptance] = comparison.querySelectorAll('dd')
+  const setLiveCase = (active: ExperimentCase): void => {
+    question.textContent = active.question; description.textContent = active.description
+    instruction.textContent = active.tryIt ?? ''; chooser.value = active.id
+    reference.textContent = active.reference; acceptance.textContent = active.acceptance
+  }
+  setLiveCase(item)
+  stage.append(recorded, comparison)
+  return { stage, slot, recorded, comparison, status, retry, start, chooser, openEvidence, setLiveCase }
 }

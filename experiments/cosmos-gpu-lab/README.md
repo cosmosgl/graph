@@ -7,40 +7,33 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-Home groups case cards by topic. Each card opens a case and shows its recorded outcome or open question
+Home groups experiment cards by topic. Each card opens the experiment and shows a recorded outcome or open question
 with a concise finding. The header links to the catalog, roadmap, feature coverage and learning guide;
 other references appear above the catalog.
 Focus the search field on the right of the header to see three suggested experiments. Type to find
 experiments, recorded evidence, guides and references. Quick jump shows the top four matches.
 Experiment mini cards carry the same readiness badge as their related links. The × clears the query and restores the suggestions.
 Use the arrow keys and Enter to open a result, or Escape to dismiss the list and keep the query.
-Results link to the relevant case or section. Agent recipes, reproduction commands, shader code,
+Results jump to the relevant example or evidence on the experiment page. Agent recipes, reproduction commands, shader code,
 raw captures and temporary live-run values are not indexed. Search loads its local index when you first type a query.
 Coverage counts describe bounded evidence, not migration completion. Reviewed findings remain separate
 from this browser's live run.
 
-Each experiment uses focused case pages. A case names one question, explains a default input,
-shows the live run and its results, and presents the recorded finding, scope and limits. When no
-finding has been recorded, the page says so. Group navigation makes other independent cases or
-topic peers discoverable. Links open human-readable method and evidence separately. Recorded-only
-cases are marked and do not initialize a live device. Optional advanced settings and checks use
-keyboard-accessible disclosures; the practical context and results remain visible.
+Each experiment starts with a practical example and shows its recorded findings, evidence, scope and limits
+on the same page. When several live examples are available, the **Case** selector changes the run while the
+findings stay in place. Open a document under **Detailed evidence** to read the underlying measurements and methods.
+The topic link returns to the matching catalogue group, and the row below the content lists the other experiments in that group.
+Recorded-only studies and direct evidence links can be read before a live device starts.
 
-Center of mass presents its starting comparison, recorded evidence and limits on one page. Old case
-and evidence URLs and search results jump to the relevant section. Local measurements are available
-under **Run local measurements**. The topic link returns to **Forces and motion** in the catalog.
-
-The readiness strip summarizes recorded evidence for the named case, not the current browser run or a
-formal production approval. A ready-to-integrate assessment would mean the candidate is ready to begin
+The catalogue badge summarizes recorded evidence for a named check. A ready-to-integrate assessment would mean the candidate is ready to begin
 integration, not ready to ship. Unassessed work stays neutral; a slowdown is a warning, and a failed
 check or a candidate explicitly not adopted is shown as a failure. Keep earlier unexplained failures
 alongside later passing results. Case assessments live in `src/app/readiness/` and should be updated
 when their linked evidence changes.
 
 Agent recipes and agent-finding replay steps remain in their source folders and are not embedded in the app.
-Old human-facing article links still reach their evidence. Opening a separate evidence page pauses the current run;
-returning to the same case retains its controls and state when the browser supports it. Switching
-cases, experiments or Home normally releases the prior run. Opening or closing search does not interrupt
+Old case and evidence URLs jump to the relevant section. Reading evidence keeps the active run and controls in place.
+Switching live cases, experiments or Home normally releases the prior run. Opening or closing search does not interrupt
 the run. Following a search result to another experiment retains the previous run in memory so returning
 to it restores its state; only one previous search run is kept. A browser that cannot move an embedded viewer
 without reloading it still uses the viewer's existing evidence-restoration fallback. Recorded findings remain

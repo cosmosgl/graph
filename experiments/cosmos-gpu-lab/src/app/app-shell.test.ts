@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { Mock, MockInstance } from 'vitest'
 import type { ExperimentDefinition } from '../runtime/experiment'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-layout'
-import { validationContracts } from '../runtime/validation'
+import { caseEvidenceLinks } from '../runtime/experiment'
 import { createAppShell } from './app-shell'
+import { startingCase } from './experiment-route'
 import { experimentGroups, experiments, findExperiment } from './registry'
 import { migrationFocus, research } from './research'
 import { journeySteps } from './journey'
@@ -47,24 +48,18 @@ it('shows topic cards and the global search without starting GPU work', async ()
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.experiment-catalog')).not.toBeNull())
-  const count = experiments.reduce((total, experiment) => total + (experiment.cases?.length ?? 1), 0)
   const links = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[data-experiment-id]'))
-  expect(links).toHaveLength(count)
-  expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(count)
+  expect(links).toHaveLength(experiments.length)
+  expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length)
   for (const group of experimentGroups) expect(host.querySelector(`#catalog-${group.id}`)?.textContent).toBe(group.title)
   for (const experiment of experiments) {
-    if (!experiment.cases) {
-      expect(host.querySelector(`.experiment-card[href="#/${experiment.id}"]`)).not.toBeNull()
-      continue
-    }
-    for (const item of experiment.cases) {
-      const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}?case=${item.id}"]`)
-      expect(link?.textContent).toContain(item.title)
-      const assessment = readinessFor(experiment.id, item)
-      expect(link?.querySelector('.readiness-badge')?.textContent).toContain(assessment.badge)
-      expect(link?.querySelector('.experiment-card-finding')?.textContent).toContain(assessment.finding)
-      if (item.kind === 'recorded') expect(link?.textContent).toContain('Recorded study')
-    }
+    const item = startingCase(experiment)
+    const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}"]`)
+    expect(link?.querySelector('h4')?.textContent).toBe(experiment.title)
+    const assessment = readinessFor(experiment.id, item)
+    expect(link?.querySelector('.readiness-badge')?.textContent).toContain(assessment.badge)
+    expect(link?.querySelector('.experiment-card-finding')?.textContent).toContain(assessment.finding)
+    if (item.kind === 'recorded') expect(link?.textContent).toContain('Recorded study')
   }
   expect(host.querySelector('[data-catalog-grouping], .lab-position')).toBeNull()
   expect(host.querySelector('form[role="search"] label[for="lab-search"]')!.textContent).toBe('Search the lab')
@@ -90,12 +85,12 @@ it('opens a suggested experiment from an empty search field with the keyboard', 
   input.focus()
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
   const active = document.getElementById(input.getAttribute('aria-activedescendant')!)!
-  expect(active.getAttribute('href')).toBe('#/precision-diagnostics?case=gravity-accuracy')
+  expect(active.getAttribute('href')).toBe('#/precision-diagnostics?section=try-gravity-accuracy')
   expect(active.querySelector('.readiness-badge')).not.toBeNull()
   expect(create).not.toHaveBeenCalled()
   input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
   await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1))
-  expect(window.location.hash).toBe('#/precision-diagnostics?case=gravity-accuracy')
+  expect(window.location.hash).toBe('#/precision-diagnostics?section=try-gravity-accuracy')
   expect(input.value).toBe('')
 })
 
@@ -105,9 +100,9 @@ it('opens the workgroup repulsion experiment from the catalog', async () => {
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull())
   host.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe('Compare workgroup repulsion'))
+  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe(findExperiment('workgroup-repulsion')!.title))
   expect(host.querySelector('.case-question')!.textContent).toContain('workgroup buffer')
-  expect(host.querySelector('.case-evidence-links a')!.textContent).toContain('evidence')
+  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
   expect(create).toHaveBeenCalledOnce()
 })
 
@@ -190,7 +185,7 @@ it('keeps the recorded result readable and offers retry when live setup fails', 
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.cases![0].recorded!.conclusion)
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
-  const retry = host.querySelector<HTMLButtonElement>('.case-stage button')!
+  const retry = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
   expect(retry.hidden).toBe(false); retry.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create).toHaveBeenCalledTimes(2)
@@ -207,7 +202,7 @@ it('keeps the selected case finding and retry available when live setup fails', 
   expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
   expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.singlePage!.observations[1].limits)
   expect(host.textContent).not.toContain('Instructions for agents')
-  const retry = host.querySelector<HTMLButtonElement>('.case-stage button')!
+  const retry = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
   expect(retry.hidden).toBe(false); retry.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create).toHaveBeenCalledTimes(2)
@@ -223,7 +218,7 @@ it('keeps the trajectory finding visible with an opt-in live comparison from the
   expect(host.querySelector('#center-trajectories')!.textContent).toContain('failed the strict position comparison from tick 10')
   expect(host.querySelector('canvas')).toBeNull()
   expect(create).not.toHaveBeenCalled()
-  const start = host.querySelector<HTMLButtonElement>('.case-live-slot > button')!
+  const start = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
   expect(start.textContent).toBe('Start the live comparison'); start.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create.mock.calls[0][1]).toBe('center-comparison')
@@ -259,7 +254,7 @@ for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
     expect(finding.textContent).toContain(item.recorded!.conclusion)
     expect(finding.textContent).toContain(item.recorded!.scope)
     expect(finding.textContent).toContain(item.recorded!.limits)
-    expect(finding.querySelector('.case-evidence-links a')).not.toBeNull()
+    expect(finding.querySelector('.case-evidence-detail summary')).not.toBeNull()
     expect(host.textContent).not.toContain('Instructions for agents')
     expect(host.querySelector('#doc-agent-recipe')).toBeNull()
   })
@@ -282,8 +277,11 @@ it('opens the recorded pilot latency investigation without creating a GPU device
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain('100.4 ms')
   expect(host.querySelector('.case-recorded')!.textContent).toContain('remain unexplained')
-  host.querySelector<HTMLAnchorElement>('.case-evidence-links a')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('.case-evidence-page h1')?.textContent).toBe('Selection feedback evidence'))
+  const experiment = findExperiment('pilot-viewer')!
+  const archived = experiment.cases!.find(item => item.id === 'selection-feedback')!
+  const doc = articleSectionId(caseEvidenceLinks(archived)[0].page)
+  await route(`#/pilot-viewer?section=${doc}`, () => expect(document.activeElement?.id).toBe(doc))
+  expect(host.querySelector(`#${doc}`)?.closest('details')?.open).toBe(true)
   expect(host.textContent).not.toContain('Instructions for agents')
   expect(create).not.toHaveBeenCalled()
 })
@@ -302,11 +300,11 @@ it('keeps the finding and evidence available while delayed live setup fails', as
   const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
   expect(new Set(ids).size).toBe(ids.length)
   expect(host.querySelector('.case-recorded')!.textContent).toContain(findExperiment('viewer-comparison')!.cases![0].recorded!.conclusion)
-  expect(host.querySelector('.case-evidence-links a')).not.toBeNull()
+  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
   rejectSetup(new Error('Delayed setup failure'))
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Delayed setup failure'))
-  expect(host.querySelector('.case-evidence-links a')).not.toBeNull()
+  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
 })
 
@@ -344,45 +342,40 @@ it('keeps one recorded result when returning to the retained live viewer', async
 for (const [id, caseId] of [
   ['precision-diagnostics', 'gravity-accuracy'],
   ['point-styling', 'picking'],
+  ['performance-lab', 'center-reduction'],
 ]) {
-  it(`opens the ${id} ${caseId} case with its own context and finding`, async () => {
-    const { create } = mockRun(id)
+  it(`switches the ${id} live case without replacing the experiment findings`, async () => {
+    const { create, destroy } = mockRun(id)
     const experiment = findExperiment(id)!
     const item = experiment.cases!.find(entry => entry.id === caseId)!
+    const first = startingCase(experiment)
     window.history.replaceState(null, '', `#/${id}?case=${caseId}`)
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-    expect(host.querySelector('h1')!.textContent).toBe(item.title)
+    expect(host.querySelector('h1')!.textContent).toBe(experiment.title)
     expect(host.querySelector('.case-question')!.textContent).toBe(item.question)
-    expect(host.querySelector('.case-description')!.textContent).toBe(item.description)
     expect(host.querySelector('.case-intro')!.textContent).toContain(item.tryIt)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.reference)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.acceptance)
-    expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
-    expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.limits)
-    expect(host.querySelector('#run-results')!.compareDocumentPosition(host.querySelector('.case-recorded')!) &
-      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const diagnostics = host.querySelector('#run-diagnostics')
-    if (diagnostics) {
-      expect(host.querySelector('.case-comparison')!.compareDocumentPosition(diagnostics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    }
-    const navigation = host.querySelector<HTMLElement>('.case-navigation')!
-    expect(navigation.getAttribute('aria-label')).toBe(`More in ${experiment.title}`)
-    expect(navigation.querySelectorAll('a')).toHaveLength(experiment.cases!.length - 1)
-    expect(host.querySelector('.lab-navigation a')!.getAttribute('href')).toBe('#/?section=experiment-catalog')
-    for (const other of experiment.cases!.filter(entry => entry.id !== caseId)) {
-      const link = navigation.querySelector(`a[href="#/${id}?case=${other.id}"]`)!
-      const assessment = readinessFor(id, other)
-      expect(link.querySelector('.case-nav-title')!.textContent).toBe(other.title)
-      expect(link.querySelector('.readiness-badge')!.textContent).toContain(assessment.badge)
-      expect(link.querySelector('.readiness-badge')!.getAttribute('data-tone')).toBe(assessment.tone)
-    }
-    expect(navigation.querySelector(`a[href="#/${id}?case=${caseId}"]`)).toBeNull()
-    expect(host.querySelector('canvas')).not.toBeNull()
-    expect(host.querySelector('#doc-agent-recipe, .study-finding-reproduction')).toBeNull()
-    expect(host.textContent).not.toContain('Instructions for agents')
-    expect(create).toHaveBeenCalledTimes(1)
+    const lookup = host.querySelector('.case-recorded')!
+    expect(lookup.querySelectorAll('.case-observations > li')).toHaveLength(experiment.cases!.length)
+    if (item.recorded) expect(lookup.querySelector(`#finding-${caseId}`)!.textContent).toContain(item.recorded.limits)
+    expect(host.querySelector('#run-results')!.compareDocumentPosition(lookup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const details = lookup.querySelector('details')!
+    details.open = true
+    const chooser = host.querySelector<HTMLSelectElement>('.case-chooser select')!
+    expect(chooser.value).toBe(caseId)
+    expect(create).toHaveBeenCalledOnce()
     expect(create.mock.calls[0][1]).toBe(caseId)
+    expect(window.location.hash).toBe(`#/${id}?section=try-${caseId}`)
+    chooser.value = first.id; chooser.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+    expect(create.mock.calls[1][1]).toBe(first.id)
+    expect(destroy).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('.case-question')!.textContent).toBe(first.question)
+    expect(host.querySelector('.case-recorded')).toBe(lookup)
+    expect(details.open).toBe(true)
+    expect(host.querySelector(`.case-group-navigation a[href^="#/${id}"]`)).toBeNull()
   })
 }
 
@@ -422,13 +415,13 @@ it('keeps the current run intact while searching and restores it after visiting 
   const search = host.querySelector<HTMLInputElement>('#lab-search')!
   search.value = 'gravity force accuracy'; search.dispatchEvent(new Event('input'))
   expect(original.pause).not.toHaveBeenCalled(); expect(original.destroy).not.toHaveBeenCalled()
-  const selector = '.global-search-results a[href="#/precision-diagnostics?case=gravity-accuracy"]'
+  const selector = '.global-search-results a[href="#/precision-diagnostics?section=try-gravity-accuracy"]'
   await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull(), { timeout: 20000 })
   expect(host.querySelector('canvas')).toBe(canvas); expect(setting.value).toBe('kept setting')
   search.focus()
   expect(search.getAttribute('aria-activedescendant')).toBe(host.querySelector(selector)!.id)
   search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-  await vi.waitFor(() => expect(host!.querySelector('h1')?.textContent).toBe('Gravity force accuracy'))
+  await vi.waitFor(() => expect(host!.querySelector('h1')?.textContent).toBe(findExperiment('precision-diagnostics')!.title))
   await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(1))
   expect(original.pause).toHaveBeenCalled(); expect(original.destroy).not.toHaveBeenCalled()
   window.history.back()
@@ -451,7 +444,7 @@ it('keeps the current run intact while searching and restores it after visiting 
   host.querySelector<HTMLAnchorElement>(selector)!.click()
   await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(2))
   search.value = 'center of mass'; search.dispatchEvent(new Event('input'))
-  const originalSelector = '.global-search-results a[href="#/center-mass?case=center-comparison"]'
+  const originalSelector = '.global-search-results a[href="#/center-mass"]'
   await vi.waitFor(() => expect(host!.querySelector(originalSelector)).not.toBeNull())
   host.querySelector<HTMLAnchorElement>(originalSelector)!.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
@@ -477,7 +470,7 @@ it('restores completed evidence after searching away from an embedded viewer tha
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
     const search = host.querySelector<HTMLInputElement>('#lab-search')!
     search.value = 'gravity force accuracy'; search.dispatchEvent(new Event('input'))
-    const selector = '.global-search-results a[href="#/precision-diagnostics?case=gravity-accuracy"]'
+    const selector = '.global-search-results a[href="#/precision-diagnostics?section=try-gravity-accuracy"]'
     await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull(), { timeout: 20000 })
     host.querySelector<HTMLAnchorElement>(selector)!.click()
     await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(1))
@@ -491,20 +484,19 @@ it('restores completed evidence after searching away from an embedded viewer tha
   }
 }, 30000)
 
-it('destroys the previous run when switching to a separate recorded case', async () => {
-  const { create, destroy } = mockRun('viewer-comparison')
-  window.history.replaceState(null, '', '#/viewer-comparison?case=compare-viewers')
+it('opens a recorded viewer bookmark on the same page and preserves a running comparison', async () => {
+  const { create, pause, destroy } = mockRun('viewer-comparison')
+  window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  host.querySelector<HTMLAnchorElement>('.case-navigation a[href="#/viewer-comparison?case=link-color-evidence"]')!.click()
-  await vi.waitFor(() => {
-    expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false')
-    expect(host!.querySelector('h1')?.textContent).toBe('Investigate link-color differences')
-  })
-  expect(destroy).toHaveBeenCalledTimes(1)
+  const canvas = host.querySelector('canvas')!
+  await route('#/viewer-comparison?case=link-color-evidence', () =>
+    expect(document.activeElement?.id).toBe('finding-link-color-evidence'))
+  expect(host.querySelector('h1')?.textContent).toBe('Production and WebGPU viewers')
+  expect(host.querySelector('canvas')).toBe(canvas)
   expect(create).toHaveBeenCalledTimes(1)
-  expect(host.querySelector('canvas')).toBeNull()
-  expect(host.querySelector('.case-navigation a[href="#/viewer-comparison?case=compare-viewers"]')).not.toBeNull()
+  expect(pause).not.toHaveBeenCalled()
+  expect(destroy).not.toHaveBeenCalled()
 })
 
 it('keeps the Forces and motion peers discoverable from the center case', async () => {
@@ -514,10 +506,12 @@ it('keeps the Forces and motion peers discoverable from the center case', async 
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const peers = host.querySelector('.case-group-navigation')!
   expect(peers.getAttribute('aria-label')).toBe('More in Forces and motion')
-  expect(Array.from(peers.querySelectorAll('a'), link => link.getAttribute('href'))).toEqual(['#/cluster-attraction', '#/point-attractors'])
+  expect(Array.from(peers.querySelectorAll('a'), link => link.getAttribute('href'))).toEqual(
+    experimentGroups.find(group => group.id === 'forces-motion')!.experiments.filter(item => item.id !== 'center-mass').map(item => `#/${item.id}`)
+  )
   const attractors = findExperiment('point-attractors')!.cases![0]
   const attractorLink = peers.querySelector('a[href="#/point-attractors"]')!
-  expect(attractorLink.querySelector('.case-nav-title')?.textContent).toBe(attractors.title)
+  expect(attractorLink.querySelector('.case-nav-title')?.textContent).toBe(findExperiment('point-attractors')!.title)
   expect(attractorLink.querySelector('.readiness-badge')?.textContent).toContain(readinessFor('point-attractors', attractors).badge)
   const group = host.querySelector<HTMLAnchorElement>('.case-topic-link')!
   expect(group.getAttribute('href')).toBe('#/?section=catalog-forces-motion'); group.click()
@@ -525,59 +519,3 @@ it('keeps the Forces and motion peers discoverable from the center case', async 
   expect(host.querySelectorAll('.experiment-card[data-experiment-id="center-mass"]')).toHaveLength(1)
   expect(create).toHaveBeenCalledTimes(1)
 })
-
-for (const { id } of experiments.filter(experiment => !experiment.cases)) {
-  it(`keeps ${id} on one visible page and preserves its run through sections, aliases and articles`, async () => {
-    const { create, pause, destroy } = mockRun(id)
-    const definition = findExperiment(id)!
-    window.history.replaceState(null, '', `#/${id}`)
-    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-    await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-    await vi.waitFor(() => expect(host!.querySelector('.experiment-run canvas')).not.toBeNull())
-    const canvas = host.querySelector('canvas')!; const input = host.querySelector('.experiment-run input')!
-    const findings = host.querySelector('[data-recorded-report]')!
-    expect(host.querySelector('.research-conclusion')!.textContent).toBe(definition.study?.record.conclusion ?? research[id].conclusion)
-    expect(host.querySelector('.experiment-role')).toBeNull()
-    for (const article of host.querySelectorAll<HTMLElement>('.experiment-article')) {
-      expect(host.querySelector(`.experiment-contents a[href$="section=${article.id}"]`)).not.toBeNull()
-    }
-    expect(host.querySelector('.experiment-contents ul ul')).toBeNull()
-    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
-    expect(host.querySelectorAll('main nav')).toHaveLength(1)
-    expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
-    expect(host.querySelectorAll('main h1')).toHaveLength(1)
-    expect(host.querySelector('.experiment-run')!.textContent).toContain('Original guidance.')
-    for (const value of Object.values(validationContracts[id]).slice(1)) expect(host.textContent).toContain(value)
-    for (const page of definition.pages) {
-      if (page.id === 'agent-recipe') expect(host.querySelector(`#${articleSectionId(page.id)}`)).toBeNull()
-      else expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
-    }
-    const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
-    expect(new Set(ids).size).toBe(ids.length)
-    for (const link of host.querySelectorAll<HTMLAnchorElement>('.experiment-contents a')) {
-      const section = new URLSearchParams(link.hash.split('?')[1]).get('section')
-      expect(host.querySelector(`#${section}`)).not.toBeNull()
-    }
-    if (!research[id].evidence) expect(findings.textContent).toContain('No recorded measurement matrix')
-    else expect(findings.querySelector('article')).not.toBeNull()
-    host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
-    const pausesBeforeSection = pause.mock.calls.length
-    host.querySelector<HTMLAnchorElement>('.experiment-contents a[href$="section=run-explanation"]')!.click()
-    await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-explanation'))
-    expect(create).toHaveBeenCalledTimes(1); expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
-    await route(`#/${id}/docs/${research[id].method}`, () => expect(document.activeElement?.id).toBe(articleSectionId(research[id].method)))
-    expect(window.location.hash).toBe(`#/${id}?section=${articleSectionId(research[id].method)}`)
-    expect(host.querySelector('.page-tabs,.method-topics,.research-breadcrumb')).toBeNull()
-    expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
-    await route(`#/${id}/run?section=run-results`, () => expect(document.activeElement?.id).toBe('run-results'))
-    expect(window.location.hash).toBe(`#/${id}?section=run-results`)
-    expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('.experiment-run input')).toBe(input)
-    expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
-    await route(`#/${id}/evidence`, () => expect(document.activeElement?.id).toBe('recorded-findings'))
-    expect(window.location.hash).toBe(`#/${id}?section=recorded-findings`)
-    expect(host.querySelector('[data-recorded-report]')).toBe(findings)
-    expect(create).toHaveBeenCalledTimes(1)
-    await route('#/?section=experiment-catalog', () => expect(document.activeElement?.id).toBe('experiment-catalog'))
-    expect(destroy).toHaveBeenCalledTimes(1)
-  })
-}

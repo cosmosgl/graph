@@ -1,12 +1,13 @@
 import { expect, it } from 'vitest'
+import { disposeDocumentTables } from '../runtime/result-tables'
 import { findExperiment } from './registry'
-import { renderCaseEvidence, renderCaseFrame } from './case-page'
+import { renderEvidenceContent, renderCaseFrame } from './case-page'
 
 it('keeps findings and provenance readable while leaving replay instructions in the source', async () => {
   const experiment = findExperiment('center-mass')!
   const host = document.createElement('div'); document.body.append(host)
   try {
-    await renderCaseEvidence(host, experiment, experiment.cases![0], {
+    await renderEvidenceContent(host, experiment, {
       kind: 'markdown',
       id: 'example',
       title: 'Evidence',
@@ -49,7 +50,7 @@ The original failure remains relevant.`,
     expect(host.textContent).not.toContain('abcd1234')
     expect(host.querySelector('#doc-example-historical-failure')).not.toBeNull()
     expect(host.querySelector('#doc-example-source-and-reproduction')).not.toBeNull()
-  } finally { host.remove() }
+  } finally { disposeDocumentTables(host); host.remove() }
 })
 
 it('keeps a method available without inventing a finding and shows the experiment group', () => {
@@ -68,10 +69,9 @@ it('keeps a method available without inventing a finding and shows the experimen
   }
   const experiment = { ...source, cases: [item] }
   const host = document.createElement('div')
-  renderCaseFrame(host, experiment, item)
+  renderCaseFrame(host, experiment)
   expect(host.querySelector('.case-recorded')!.textContent).toContain('No recorded finding is available')
-  expect(host.querySelector<HTMLAnchorElement>('.case-evidence-links a')?.hash)
-    .toBe(`#/point-rendering?case=comparison&evidence=${source.pages[0].id}`)
+  expect(host.querySelector('.case-evidence-detail summary')?.textContent).toBe(source.pages[0].title)
   const group = host.querySelector<HTMLElement>('.case-group-navigation')!
   expect(group.getAttribute('aria-label')).toBe('More in Rendering and interaction')
   expect(group.querySelector('a[href="#/straight-links"]')).not.toBeNull()

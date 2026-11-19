@@ -1,12 +1,13 @@
 import { experimentMiniCard } from './experiment-mini-card'
 import { readinessFor } from './readiness'
 import { findExperiment } from './registry'
-import { caseHref } from './router'
+import { liveCaseSection, startingCase } from './experiment-route'
+import { experimentHref, experimentSectionHref } from './router'
 import type { SearchIndex, SearchResult } from './search-index'
 
 type SearchModule = typeof import('./search-index')
-type SearchNavigation = { experimentId?: string; caseId?: string }
-type QuickJumpResult = Pick<SearchResult, 'title' | 'kind' | 'href' | 'experimentId' | 'caseId' | 'readiness'>
+type SearchNavigation = { experimentId?: string }
+type QuickJumpResult = Pick<SearchResult, 'title' | 'kind' | 'href' | 'experimentId' | 'readiness'>
   & Partial<Pick<SearchResult, 'heading' | 'context' | 'snippet'>>
 const previewLimit = 4
 const suggestedExperiments = [
@@ -14,20 +15,20 @@ const suggestedExperiments = [
   ['precision-diagnostics', 'gravity-accuracy'],
   ['viewer-comparison', 'compare-viewers'],
 ].flatMap(([experimentId, caseId]) => {
-  const item = findExperiment(experimentId)?.cases?.find(candidate => candidate.id === caseId)
-  if (!item) return []
+  const experiment = findExperiment(experimentId)
+  const item = experiment?.cases?.find(candidate => candidate.id === caseId)
+  if (!experiment || !item) return []
   return [{
     title: item.title,
     kind: 'Experiment',
-    href: caseHref(experimentId, caseId),
+    href: item === startingCase(experiment) ? experimentHref(experimentId) : experimentSectionHref(experimentId, liveCaseSection(item)),
     experimentId,
-    caseId,
     readiness: readinessFor(experimentId, item),
   }]
 })
 
 function searchResultLink (result: QuickJumpResult, terms: RegExp | undefined, expanded: boolean): HTMLAnchorElement {
-  const experiment = result.kind === 'Experiment'
+  const experiment = result.kind === 'Experiment' || result.kind === 'Live case'
   const link = experiment ? experimentMiniCard(result.title, result.href, result.readiness) : document.createElement('a')
   link.classList.add('global-search-result')
   link.href = result.href
@@ -222,7 +223,7 @@ export function mountGlobalSearch (header: HTMLElement, onNavigate: (target: Sea
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a') : null
     const result = link && results[links.indexOf(link)]
     if (!result) return
-    onNavigate({ experimentId: result.experimentId, caseId: result.caseId })
+    onNavigate({ experimentId: result.experimentId })
     dismiss()
   }, { signal })
   document.addEventListener('keydown', event => {

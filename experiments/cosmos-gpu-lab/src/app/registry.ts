@@ -13,6 +13,7 @@ function validateExperiments (definitions: ExperimentDefinition[]): void {
     if (experiment.pages.length === 0) {
       throw new Error(`Experiment ${experiment.id} has no documentation`)
     }
+    if (!experiment.cases?.length) throw new Error(`Experiment ${experiment.id} has no starting case`)
 
     const pageIds = new Set<string>()
     for (const page of experiment.pages) {

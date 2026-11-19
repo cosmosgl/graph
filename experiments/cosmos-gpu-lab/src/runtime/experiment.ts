@@ -78,7 +78,6 @@ export function caseEvidenceLinks (item: ExperimentCase): CaseEvidenceLink[] {
 
 export type SinglePageCase = {
   observations: Array<{ id: string; title: string; date: string; evidence: string; limits: string }>;
-  related: string[];
   legacyCases: Record<string, string>;
   pageSections: Record<string, string>;
 }
