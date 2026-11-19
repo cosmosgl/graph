@@ -73,7 +73,7 @@ it('keeps a method available without inventing a finding and shows the experimen
   expect(host.querySelector<HTMLAnchorElement>('.case-evidence-links a')?.hash)
     .toBe(`#/point-rendering?case=comparison&evidence=${source.pages[0].id}`)
   const group = host.querySelector<HTMLElement>('.case-group-navigation')!
-  expect(group.getAttribute('aria-label')).toBe('Other experiments in Rendering and interaction')
+  expect(group.getAttribute('aria-label')).toBe('More in Rendering and interaction')
   expect(group.querySelector('a[href="#/straight-links"]')).not.toBeNull()
   expect(group.querySelector('a[href="#/point-rendering"]')).toBeNull()
 })

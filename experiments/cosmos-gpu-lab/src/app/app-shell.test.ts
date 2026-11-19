@@ -350,11 +350,15 @@ for (const [id, caseId] of [
       expect(host.querySelector('.case-comparison')!.compareDocumentPosition(diagnostics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     }
     const navigation = host.querySelector<HTMLElement>('.case-navigation')!
-    expect(navigation.getAttribute('aria-label')).toBe(`Other experiments in ${experiment.title}`)
+    expect(navigation.getAttribute('aria-label')).toBe(`More in ${experiment.title}`)
     expect(navigation.querySelectorAll('a')).toHaveLength(experiment.cases!.length - 1)
     expect(host.querySelector('.lab-navigation a')!.getAttribute('href')).toBe('#/?section=experiment-catalog')
     for (const other of experiment.cases!.filter(entry => entry.id !== caseId)) {
-      expect(navigation.querySelector(`a[href="#/${id}?case=${other.id}"]`)!.textContent).toBe(other.title)
+      const link = navigation.querySelector(`a[href="#/${id}?case=${other.id}"]`)!
+      const assessment = readinessFor(id, other)
+      expect(link.querySelector('.case-nav-title')!.textContent).toBe(other.title)
+      expect(link.querySelector('.readiness-badge')!.textContent).toContain(assessment.badge)
+      expect(link.querySelector('.readiness-badge')!.getAttribute('data-tone')).toBe(assessment.tone)
     }
     expect(navigation.querySelector(`a[href="#/${id}?case=${caseId}"]`)).toBeNull()
     expect(host.querySelector('canvas')).not.toBeNull()
@@ -492,6 +496,10 @@ it('keeps the Forces and motion peers discoverable from the center case', async 
   const peers = host.querySelector('.case-group-navigation')!
   expect(peers.getAttribute('aria-label')).toBe('More in Forces and motion')
   expect(Array.from(peers.querySelectorAll('a'), link => link.getAttribute('href'))).toEqual(['#/cluster-attraction', '#/point-attractors'])
+  const attractors = findExperiment('point-attractors')!.cases![0]
+  const attractorLink = peers.querySelector('a[href="#/point-attractors"]')!
+  expect(attractorLink.querySelector('.case-nav-title')?.textContent).toBe(attractors.title)
+  expect(attractorLink.querySelector('.readiness-badge')?.textContent).toContain(readinessFor('point-attractors', attractors).badge)
   const group = host.querySelector<HTMLAnchorElement>('.case-topic-link')!
   expect(group.getAttribute('href')).toBe('#/?section=catalog-forces-motion'); group.click()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('catalog-forces-motion'))
