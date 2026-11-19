@@ -1,10 +1,11 @@
 import type { ExperimentCase, ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
 import { caseEvidenceLinks } from '../runtime/experiment'
 import { addArticleSections } from './article-sections'
+import { experimentMiniCard } from './experiment-mini-card'
 import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
 import { readinessFor } from './readiness'
-import { readinessBadge, renderReadiness } from './readiness/presentation'
+import { renderReadiness } from './readiness/presentation'
 import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
@@ -40,12 +41,10 @@ function caseNavigation (experiment: ExperimentDefinition, item: ExperimentCase)
     ...peers.map(peer => ({ parent: peer, target: peer.cases?.[0], href: experimentHref(peer.id) })),
   ]
   for (const { parent, target, href } of destinations) {
-    const entry = document.createElement('li'); const link = document.createElement('a')
-    link.href = href; link.className = 'case-nav-link'
-    const title = document.createElement('span'); title.className = 'case-nav-title'; title.textContent = target?.title ?? parent.title
+    const entry = document.createElement('li')
     const assessment = target && readinessFor(parent.id, target)
-    link.append(title, readinessBadge(assessment?.badge ?? 'Not assessed', assessment?.tone ?? 'neutral'))
-    entry.append(link); list.append(entry)
+    entry.append(experimentMiniCard(target?.title ?? parent.title, href, assessment))
+    list.append(entry)
   }
   const heading = document.createElement('h2'); heading.textContent = label
   nav.append(heading, list)
