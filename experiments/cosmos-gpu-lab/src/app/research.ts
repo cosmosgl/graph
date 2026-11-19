@@ -53,20 +53,26 @@ export const research: Record<string, ResearchSummary> = {
     reproduce: 'This page is a retained research record. Recorded findings describe the original conditions and optional command-line reproduction.',
   },
   collision: {
-    comparison: 'Shared initial graph → WebGL / WebGPU / CPU → shared-input or independent collision checks',
-    question: 'Can WebGPU preserve collision behavior when composed with the other Cosmos forces?',
-    conclusion: 'The targeted correction passes all 1,700 tick and 1,700 independent trajectory gates in the recorded M3 matrix.',
-    scope: 'Selected isolated and combined fixtures through 512 points; zero measured pointwise drift. This is bounded compatibility evidence.',
-    variant: 'Targeted collision distance + contributions; corrected high/low center; luma 10.0.0-alpha.4; M3 / Chromium 157',
-    reviewed: BASELINE_REVIEWED,
+    comparison: 'Shared initial graph → exact collision or hashed neighbor slots → slot, force and position checks',
+    question: 'Can WebGPU reproduce Cosmos collision both below and above the 4,096-point cutoff?',
+    conclusion: 'The hashed candidate matches the CPU model at 4,097 and 8,192 points. ' +
+      'The older exact candidate passes the composed matrix through 512 points.',
+    scope: 'Nine hashed passes compare all selected and empty slots, force and independent positions on M3. The large path still needs direct WebGL parity.',
+    variant: 'Targeted exact collision and a separate f32 hash/slot implementation; luma 10.0.0-alpha.15 in the large study',
+    reviewed: '2026-11-19',
     milestone: 'simulation',
-    evidence: 'precision',
+    evidence: 'hashed-findings',
     method: 'method',
-    next: 'Validate larger collision workloads, broader inputs/devices and the production precision/cost policy.',
-    reproduce: 'Use Recorded control above: dense 512-point star, combined independent layouts, four collision passes, 300 ' +
-      'cooling ticks, targeted arithmetic and high/low center.',
+    methodPages: ['hashed-method'],
+    next: 'Compare the hashed candidate directly with production WebGL, then measure its cost in the full tick.',
+    reproduce: 'Use the hash and slot method to replay the 4,097- and 8,192-point fixtures. The live control still runs the exact route.',
     investigations: [
-      { page: 'precision', state: 'Current evidence', description: 'Targeted correction, repeated independent matrix, ablations and paired GPU cost.' },
+      {
+        page: 'hashed-findings',
+        state: 'Current evidence',
+        description: 'Nine bounded large collision passes on native M3, including dense bucket overflow and f32 ties.',
+      },
+      { page: 'precision', state: 'Supporting investigation', description: 'Targeted correction, repeated independent matrix, ablations and paired GPU cost.' },
       {
         page: 'findings',
         state: 'Supporting investigation',
@@ -82,23 +88,26 @@ export const research: Record<string, ResearchSummary> = {
   },
   'combined-layout': {
     comparison: 'Shared initial graph → independently evolving WebGL / WebGPU / CPU → stage and whole-tick checks',
-    question: 'Do repulsion, ordered springs, gravity and cooling converge consistently when each backend evolves independently?',
-    conclusion: 'The refined-gravity candidate passes the documented 8,192-point chain, communities and star checks at unchanged compatibility tolerances.',
-    scope: 'Selected force settings, own-input checkpoints and full-strength probes. These runs do not include the newer ' +
-      'collision workload or prove broad layout quality.',
-    variant: 'Refined gravity + rounded steps (trig); luma 10.0.0-alpha.4; Apple M3',
-    reviewed: BASELINE_REVIEWED,
+    question: 'How do the additional forces behave in a resident tick in production order?',
+    conclusion: 'Both composed layouts pass a 40-tick one-pixel screen on M3. Strict CPU trajectory failures remain.',
+    scope: 'Two communities workloads at 256 and 8,192 points, same-input replays, projected motion and frozen GPU cost with basic drawing.',
+    variant: 'Corrected resident core with mouse, cluster and per-point attraction stages; luma 10.0.0-alpha.15',
+    reviewed: '2026-11-19',
     milestone: 'simulation',
-    evidence: 'gravity-trig',
+    evidence: 'force-composition',
     method: 'method',
-    next: 'Broaden remaining force coverage and quality/runtime acceptance; keep the corrected collision envelope separate.',
-    reproduce: 'Use Recorded control above (8,192-point communities, refined gravity, 100 cooling ticks). The current evidence ' +
-      'lists the larger 8,192-point matrix and exact measurement settings.',
+    next: 'Measure complete interactive frames with the composed forces and compare deeper zoom and representative graph shapes.',
+    reproduce: 'Run the opt-in force composition study for the trajectory and frozen cost. The live control shows the resident core.',
     investigations: [
       {
         page: 'gravity-trig',
-        state: 'Current evidence',
+        state: 'Supporting investigation',
         description: 'Refined gravity closes the communities whole-tick discrepancy; includes the final 8,192-point matrix and bounded cost.',
+      },
+      {
+        page: 'force-composition',
+        state: 'Current evidence',
+        description: 'Resident production-order comparison, first failed ticks with stage replays, and cost with basic drawing.',
       },
       {
         page: 'tick-rounding',
@@ -247,6 +256,7 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
+    methodPages: ['transition-method'],
     next: 'Integrate basic circles and point picking first. Advanced styles and exact-edge research are parked; ' +
       'practical visibility and latency remain required.',
     reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
@@ -272,12 +282,10 @@ export const research: Record<string, ResearchSummary> = {
         detail: 'CPU diamond ties and original-color preservation failures remain; matching GPU IDs is insufficient.',
       },
     ],
-    investigations: [{
-      page: 'method',
-      state: 'Current evidence',
-      description: 'Styling/picking method, bounded native matrix and rejected visibility/coverage ' +
-      'controls.',
-    }],
+    investigations: [
+      { page: 'method', state: 'Current evidence', description: 'Styling and picking matrix with retained visibility and coverage failures.' },
+      { page: 'transition-findings', state: 'Supporting investigation', description: 'Exact point position, fill, size and exit checkpoints on M3.' },
+    ],
   },
 }
 
@@ -287,46 +295,49 @@ export const milestones = [
   {
     id: 'execution',
     title: 'GPU execution and resources',
-    position: 'Resident execution and bounded resizing demonstrated',
+    position: 'Resident resizing, host ownership and explicit restart tested on M3',
     acceptance: 'Host ownership, recovery and the production dependency',
-    gates: ['Choose a pinned luma package family for the complete engine.', 'Verify borrowed resource ownership, cleanup and recovery after device loss.'],
-    evidence: [['resident-layout', 'Resident execution'], ['point-capacity', 'Point capacity']],
+    gates: ['Choose a shared luma package family for the complete engine and deck.gl.',
+      'Verify full viewer recovery after unplanned device loss, including pending reads and interactions.'],
+    evidence: [['resident-layout', 'Resident execution'], ['point-capacity', 'Point capacity'], ['integrated-webgpu', 'Host ownership']],
   },
   {
     id: 'simulation',
     title: 'Simulation',
-    position: 'Selected composed-force cases through 8,192 points; collision through 512',
+    position: 'Additional forces pass in isolation. At one million points, Four corners reaches a 50 ms median on persistent dense communities',
     acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Preserve the bounded cluster/attractor baselines; validate mouse repulsion, then compose accepted forces in production order.',
-      'Validate the larger collision route and representative graph families at unchanged declared gates.',
-      'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
-    evidence: [['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'], ['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
+    gates: ['Confirm composed layout quality across longer runs, zoom and more graph shapes. Address the strict trajectory failures.',
+      'Compare the larger collision route with production WebGL and measure its integrated cost.',
+      'Test the complete million-point viewer, including high-degree hubs, and account for slow ticks.'],
+    evidence: [['mouse-repulsion', 'Mouse repulsion'], ['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'],
+      ['combined-layout', 'Combined forces'],
+      ['collision', 'Collision'], ['matched-layout', 'Matched layouts'], ['million-graph', 'Million-point Four corners']],
   },
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
+    position: 'Selection IDs match on bounded M3 fixtures. Link color and additional styles remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
     gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
       'Integrate circles and solid straight links first; defer advanced styles and review parked boundary failures before full readiness.',
-      'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
+      'Validate transitions, remaining styles and pointer behavior. Resolve the selection readback API before production integration.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {
     id: 'integration',
     title: 'Library and embedding',
-    position: 'Representative M3 explorer works; a 100.4-ms running pick fails responsiveness',
+    position: 'Wider DPR 1 and standalone DPR 2 replays pass on M3. Historical inline picks still exceed 50 ms',
     acceptance: 'Complete Graph and host contracts',
     gates: ['Attribute the representative viewer’s running-pick delay, retaining the unchanged 50-ms target and recorded phases.',
       'Keep the documented first-pilot scope bounded; production color compatibility and large-star performance remain rejected.',
-      'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
+      'Connect production setters, tracking and selection to asynchronous GPU reads. Verify deck integration on a shared dependency family.'],
     evidence: [['pilot-viewer', 'Representative pilot'], ['viewer-comparison', 'Production comparison'], ['point-capacity', 'Resident updates']],
   },
   {
     id: 'production',
     title: 'Production acceptance',
-    position: 'Bounded local measurements available',
+    position: 'Production runs on WebGL. M3 running-pick latency and strict color compatibility remain unresolved',
     acceptance: 'Agreed quality/performance budgets and native support matrix',
     gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
       'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
@@ -336,7 +347,10 @@ export const milestones = [
 
 export const mainOpenIssues = [
   { text: 'Complete production force/rendering coverage and the Graph/host contracts.', href: '#/feature-inventory' },
-  { text: 'Establish larger graph behavior and an affordable precision policy.', href: '#/roadmap?section=milestone-simulation' },
+  {
+    text: 'Measure presented frames, picking and memory in the integrated million-point viewer.',
+    href: '#/roadmap?section=milestone-simulation',
+  },
   { text: 'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.', href: '#/roadmap?section=milestone-production' },
 ] as const
 
@@ -344,5 +358,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 3,
-  experiment: 'point-attractors',
+  experiment: 'combined-layout',
 } as const

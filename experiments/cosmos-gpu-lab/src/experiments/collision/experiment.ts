@@ -20,5 +20,17 @@ export const experiment = defineExperiment({
       load: async (): Promise<string> => (await import('./trajectories.md?raw')).default,
     },
     { kind: 'markdown', id: 'findings', title: 'Center-sum correction', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
+    {
+      kind: 'markdown',
+      id: 'hashed-method',
+      title: 'Hash and slot selection method',
+      load: async (): Promise<string> => (await import('./hashed-method.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'hashed-findings',
+      title: 'Collision at 4,097 and 8,192 points',
+      load: async (): Promise<string> => (await import('./hashed-findings.md?raw')).default,
+    },
   ],
 })

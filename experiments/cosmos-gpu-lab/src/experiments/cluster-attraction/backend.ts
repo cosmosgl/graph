@@ -1,9 +1,9 @@
 import { Buffer, Texture, UniformStore, type ComputePass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { bindingLayout, readFloats, upload } from '../../gpu/luma'
+import { bindingLayout, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { describeEnvironment } from '../../gpu/force-preview'
-import { createRoundedKernel, roundedArithmetic, roundedIntegrationSource } from '../combined-layout/spring-precision'
+import { createRoundedKernel, roundedIntegrationSource } from '../combined-layout/spring-precision'
 import { createWebGL } from '../many-body/webgl'
 import { createWebGPU } from '../many-body/webgpu'
 import type { Backend } from '../many-body/backend'
@@ -13,9 +13,8 @@ import aggregateFrag from '../../../../../src/modules/Clusters/calculate-centerm
 import forceFrag from '../../../../../src/modules/Clusters/force-cluster.frag?raw'
 import quadVert from '../../../../../src/modules/Shared/quad.vert?raw'
 import type { ClusterSnapshot } from './reference'
-import { SETTINGS, grouping, validate, type ClusterInput } from './data'
-import reduction from './reduce.wgsl?raw'
-import forceSource from './force.wgsl?raw'
+import { SETTINGS, validate, type ClusterInput } from './data'
+import { createClusterWebGPU } from './webgpu'
 export { replaceCanvas } from '../../gpu/force-preview'
 export type Api = 'webgl' | 'webgpu'
 export type ClusterBackend = Omit<Backend, 'read'> & {
@@ -128,42 +127,18 @@ export async function createBackend (api: Api, canvas: HTMLCanvasElement, input:
     : await createWebGPU(canvas, input, SETTINGS, 'direct', async ({ device, positions, forces }) => {
       const scope = resourceScope(); const own = scope.own
       try {
-        const capacity = Math.ceil(count / 256) + groups
-        const storage = (bytes: number): Buffer => own(device.createBuffer({ byteLength: Math.max(32, bytes), usage: Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST }))
-        const members = storage(count * 4); const chunks = storage(capacity * 16); const ranges = storage(groups * 16)
-        const partials = storage(capacity * 32); const dummy = storage(32); const sums = storage(groups * 16)
-        const membership = storage(count * 4); const targets = storage(groups * 16); const strengths = storage(count * 4)
-        const params = own(upload(device, new Float32Array([count, SETTINGS.alpha, SETTINGS.strength, 0]), Buffer.UNIFORM))
+        const cluster = own(await createClusterWebGPU(device, input, forces))
+        cluster.prepare(SETTINGS.alpha, SETTINGS.strength)
         const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, SETTINGS.friction, SETTINGS.referenceLength, 0, 0]), Buffer.UNIFORM))
-        const bindings = bindingLayout([['points', 'read-only-storage'], ['members', 'read-only-storage'], ['ranges', 'read-only-storage'],
-          ['previous', 'read-only-storage'], ['partials', 'storage'], ['aggregates', 'storage']])
-        const reduce = own(await createRoundedKernel(device, reduction.replaceAll('SOURCE_POINTS', 'true'), bindings))
-        const finish = own(await createRoundedKernel(device, reduction.replaceAll('SOURCE_POINTS', 'false'), bindings))
-        const force = own(await createRoundedKernel(device, roundedArithmetic + forceSource, bindingLayout([
-          ['positions', 'read-only-storage'], ['aggregates', 'read-only-storage'], ['membership', 'read-only-storage'], ['targets', 'read-only-storage'],
-          ['strengths', 'read-only-storage'], ['forces', 'storage'], ['params', 'uniform'],
-        ])))
         const integrate = own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
-        let chunkCount = 0
-        update = (next): void => {
-          const index = grouping(next); chunkCount = index.chunks.length / 4
-          if (index.members.byteLength) members.write(index.members)
-          if (index.chunks.byteLength) chunks.write(index.chunks)
-          ranges.write(index.ranges); targets.write(next.targets)
-          if (count) { membership.write(next.membership); strengths.write(next.strengths) }
-        }
-        update(input)
+        update = cluster.update
         const encode = (source: number, timing: TimestampWrites, shared?: ComputePass): void => {
           const pass = shared ?? device.beginComputePass(timing)
-          try {
-            if (chunkCount) reduce.dispatch(pass, { x: chunkCount, bindings: { points: positions[source], members, ranges: chunks, previous: dummy, partials, aggregates: sums } })
-            finish.dispatch(pass, { x: groups, bindings: { points: positions[source], members, ranges, previous: partials, partials: dummy, aggregates: sums } })
-            if (count) force.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions: positions[source], aggregates: sums, membership, targets, strengths, forces, params } })
-          } finally { if (!shared) pass.end() }
+          try { cluster.encode(pass, positions[source]) } finally { if (!shared) pass.end() }
         }
-        readAggregates = (): Promise<Float32Array> => readFloats(sums, groups * 16)
+        readAggregates = cluster.readAggregates
         measure = (operations): Promise<Measurement> => measureBatch(device, operations, (query, first, last) => encode(0, timestamps(query, first, last)))
         environment = (): ReturnType<ClusterBackend['environment']> => describeEnvironment(device, canvas)
         return {

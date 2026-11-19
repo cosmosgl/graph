@@ -61,13 +61,15 @@ export const experimentGroups = [
     id: 'forces',
     title: 'Cosmos forces',
     description: 'Apply the building blocks to local neighbors, global repulsion, linked points and overlapping discs.',
-    experiments: ['neighborhood-forces', 'many-body', 'many-body-grid', 'weighted-links', 'collision', 'cluster-attraction', 'point-attractors'],
+    experiments: ['neighborhood-forces', 'many-body', 'many-body-grid', 'workgroup-repulsion', 'weighted-links', 'collision',
+      'cluster-attraction', 'point-attractors', 'mouse-repulsion'],
   },
   {
     id: 'combined',
     title: 'Combined engine',
     description: 'Follow independently evolving layouts, compose the forces and keep a complete frame on the GPU.',
-    experiments: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'integrated-webgpu', 'viewer-comparison', 'pilot-viewer', 'matched-layout'],
+    experiments: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
+      'viewer-comparison', 'pilot-viewer', 'matched-layout'],
   },
   {
     id: 'validation',

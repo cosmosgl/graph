@@ -50,5 +50,10 @@ export const experiment = defineExperiment({
     id: 'gravity-trig',
     title: 'Refined gravity and final 8,192-point matrix',
     load: async (): Promise<string> => (await import('./docs/gravity-trig.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'force-composition',
+    title: 'Mouse repulsion, clusters and attractors',
+    load: async (): Promise<string> => (await import('./docs/force-composition.md?raw')).default,
   }],
 })

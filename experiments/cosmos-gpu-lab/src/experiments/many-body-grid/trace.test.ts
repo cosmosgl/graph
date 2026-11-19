@@ -41,6 +41,17 @@ for (const create of [createGridWebGL, createGridWebGPU]) {
   }
 }
 
+it('replays the workgroup candidate without changing its force', async context => {
+  const probe = await deviceForTest(); probe?.destroy(); if (!probe) { context.skip(); return }
+  const input = createFixture('uniform', 65); const frame = frameFor(input.points, 0, 8)
+  const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frame,
+    'workgroup-local', factory => factory, { aggregation: 'cached-small', nearArithmetic: 'refined' })
+  try {
+    backend.step(); const normal = await backend.read(); const replay = await backend.diagnose!()
+    expect(comparePresent({ ...normal, forces: replay.forces }, normal, input.points).valid).toBe(true)
+  } finally { backend.destroy() }
+})
+
 it('reports the worst error relative to the fixed budget and rejects missing or non-finite stages', () => {
   const points = new Float32Array(8)
   const expected = { stage: new Float32Array([1000, 0, 0, 0, 0, 0, 0, 0]) }

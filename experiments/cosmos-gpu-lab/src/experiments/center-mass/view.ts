@@ -12,6 +12,8 @@ import {
 } from './point-state'
 import { createWebGLCenterMass } from './webgl/backend'
 import { createWebGPUCenterMass } from './webgpu/backend'
+import { mountCenterScale } from './scale-view'
+import { mountCenterOnce } from './center-once-view'
 
 type BackendSlot = {
   id: 'webgl' | 'webgpu';
@@ -104,6 +106,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         Yellow square = GPU-computed center. Timing includes upload, execution, synchronization,
         readback and drawing; use the Results and Performance sections for interpretation.
       </p>
+      <section data-run-part="diagnostics" data-center-scale></section>
+      <section data-run-part="diagnostics" data-center-once></section>
     </section>
   `
 
@@ -119,6 +123,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   let tick = 0
   let isPlaying = false
   let isRunning = false
+  let scaleRunning = false
   let destroyed = false
   let playTimer: number | undefined
 
@@ -139,7 +144,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   }
 
   const runTick = async (advance: boolean): Promise<void> => {
-    if (isRunning || destroyed) return
+    if (isRunning || scaleRunning || destroyed) return
     isRunning = true
     stepButton.disabled = true
     resetButton.disabled = true
@@ -246,9 +251,24 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
 
   await runTick(false)
   playButton.disabled = false
+  const beginStudy = (): boolean => {
+    if (isRunning || scaleRunning || destroyed) return false
+    scaleRunning = true; isPlaying = false; window.clearTimeout(playTimer)
+    playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
+    stepButton.disabled = true; playButton.disabled = true; resetButton.disabled = true
+    return true
+  }
+  const endStudy = (): void => {
+    scaleRunning = false
+    stepButton.disabled = false; playButton.disabled = false; resetButton.disabled = false
+  }
+  const scale = mountCenterScale(element(host, '[data-center-scale]'), beginStudy, endStudy)
+  const once = mountCenterOnce(element(host, '[data-center-once]'), beginStudy, endStudy)
 
   return {
     pause (): void {
+      scale.pause()
+      once.pause()
       isPlaying = false; window.clearTimeout(playTimer)
       playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
     },
@@ -256,6 +276,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
+      scale.destroy()
+      once.destroy()
       isPlaying = false
       window.clearTimeout(playTimer)
       for (const slot of slots) slot.backend?.destroy()

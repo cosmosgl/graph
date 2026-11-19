@@ -79,3 +79,51 @@ new question, inputs, reference and agreed gates. Save a separate capture and
 explain how it differs from this focused replay. Follow the Lab's
 [validation workflow](#/validation-workflow) and
 `experiments/cosmos-gpu-lab/AGENTS.md`; retain negative and incomplete results.
+
+## Find where an interior color error appears
+
+Plan declared on 19 November 2026. Use fresh Karate Club positions at tick zero
+with native WebGL and WebGPU. Use one displayed viewport, equal panels and a
+fixed DPR. Run styles A and B with the usual full draw first. Keep the same
+geometry, camera and style for the layer checks. The original one-device-pixel
+boundary, exact IDs, invisible-pick check and 2/255 interior color tolerance
+apply to the full draw.
+
+For each style, choose **Compare same-geometry paint**, then **Attribute paint
+differences**. The second action repeats the full draw and records isolated
+point and link color attachments. Check that the two full results agree before
+interpreting the layer counts. Every full interior color failure belongs to one
+of four groups:
+
+- **Points** exceeds 2/255 with points alone.
+- **Links** exceeds 2/255 with links alone.
+- **Both** exceeds 2/255 in each isolated layer.
+- **Composed** exceeds 2/255 when both layers are drawn together and stays
+  within tolerance in each isolated layer.
+
+The point and link counts exclude pixels in the both group. Each populated
+group retains one coordinate and the paired RGBA bytes from the full, point
+and link draws. These controls localize the differences on the frozen inputs.
+Shader attribution and viewer parity require further evidence.
+Export JSON once after both styles. Save the exact source, generated production
+control checksum, actual adapters, browser, viewport and DPR with the capture.
+
+## Compare straight-link edge smoothing
+
+Run **Attribute paint differences** and then **Test link edge smoothing** on
+fresh Karate Club at style A. Toggle to style B and repeat. Keep the same camera
+and frozen position buffer in each pair. Use 960 × 320 CSS panels at DPR 2 on
+visible native Chrome on the M3. The optional WebGPU paint pass applies the
+blended straight-link study's one-device-pixel coverage ramp and scales opacity
+for widths below one device pixel. Both A and B exercise the coverage ramp.
+
+The unchanged comparator excludes a one-device-pixel geometric boundary and
+requires exact interior point IDs, no invisible picks, and interior RGBA within
+2/255 per channel. Compare the excluded edge color count separately. That count
+diagnoses the width ramp. The earlier interior failures could persist because
+the ramp lies inside the excluded boundary. Keep the production color gate
+open unless the original interior criteria pass, and preserve earlier evidence.
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_PAINT_LINK_SMOOTHING=1 LAB_ARTIFACT_RUN=viewer-link-smoothing-20261119-r1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/paint-layers.test.ts
+```

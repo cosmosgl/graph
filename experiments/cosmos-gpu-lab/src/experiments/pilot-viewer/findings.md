@@ -5,10 +5,12 @@ window, one running pick took **100.4 ms**, exceeding the unchanged 50-ms target
 Both measured frame windows, exact-identity checks and sampled CPU pixel audits pass.
 The earlier production interior-color failures remain rejected separately.
 
-**Follow-up:** one planned four-block investigation at a narrower size did not
-reproduce the stall. Its 160 picks and 1,200 frame intervals passed, but no cause
-or fix was established. The [new finding](#/pilot-viewer?section=study-finding-picking-latency)
-retains the source, local evidence and expanded reproduction instructions.
+The wider controls passed all four blocks at
+[DPR 1](#/pilot-viewer?section=study-finding-pilot-wider-control) and
+[DPR 2](#/pilot-viewer?section=study-finding-pilot-wider-dpr2), with maximum
+running picks of 32.3 and 20.0 ms respectively. The
+[earlier narrow control](#/pilot-viewer?section=study-finding-picking-latency)
+also passed. The historical latency failures remain unresolved.
 
 Recorded **18 November 2026** on the user's Apple M3, in the visible inline browser.
 The reported WebGPU adapter was Apple, `metal-3`, `fallback: false`, Chromium 157.
@@ -209,3 +211,65 @@ without repeating the measured investigation. Typecheck, targeted lint, build an
 finding-schema checks pass. No other browser was substituted.
 Schema validation checks required information, not the correctness of the
 interpretation. Another agent has not independently rerun this investigation.
+
+## Wider-window control
+
+On 19 November 2026, Apple M3 and visible inline Chromium 157 ran one declared
+normal → traced → traced → normal sequence. WebGPU reported Apple, Metal 3 and
+`fallback: false` with luma 10.0.0-alpha.15. The 1,280 × 900 viewport override
+displayed a 961.203125 × 540.671875 CSS-pixel canvas. Its logical size and
+attachment were both 961 × 541 at DPR 1. The historical wider failure used
+1,922 × 1,082 device pixels at DPR 2.
+
+| Block | Frame p95 / maximum, ms | Intervals within 33 ms | Paused pick max, ms | Running pick max, ms | Drag max, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 · normal | 17.6 / 33.4 | 299/300 | 17.6 | 17.8 | 17.9 |
+| 2 · traced | 17.6 / 33.3 | 299/300 | 17.6 | 17.9 | 17.4 |
+| 3 · traced | 17.6 / 17.7 | 300/300 | 18.2 | 17.6 | 17.6 |
+| 4 · normal | 18.6 / 18.6 | 300/300 | 18.6 | 32.3 | 18.8 |
+
+All four blocks met the frame gate and completed 40 picks each within 50 ms.
+Exact IDs, camera, drag pin, pause, resume and resize passed. Four CPU pixel
+audits checked 2,093 samples each with zero interior ID or color errors and
+zero invisible picks. The slowest running pick returned member 33 in block 4.
+It spent 11.1 ms through readback, 5.3 ms completing the highlight and 15.9 ms
+awaiting the next animation opportunity. The traced blocks had maximum
+animation callback gaps of 22.6 and 18.2 ms and timer gaps of 18.5 and 17.5 ms.
+
+Responsiveness passed for this DPR 1 control. The historical 100.4 ms and
+68.2 ms events and their causes remain unresolved. Strict same-geometry color
+compatibility has its own retained failures. The raw export, per-block report,
+declared protocol, dependency versions and source archive are stored in
+`captures/pilot-wider-20261119-bk47ugag/`. All 1,014 archived source files matched
+the frozen build directory after the run. [Replay instructions](#/pilot-viewer?section=doc-agent-recipe)
+
+## Wider-window replay at DPR 2
+
+On 19 November 2026, one visible standalone Playwright Chrome 157.0.8103.79
+session on the M3 ran normal → traced → traced → normal once. The adapter
+reported Apple WebGPU, `metal-3`, `fallback: false` with luma
+10.0.0-alpha.15. A 1,280 × 900 CSS viewport displayed the canvas at
+961.203125 × 540.671875 CSS pixels. The 961 × 541 logical size and
+1,922 × 1,082 attachment at DPR 2 match the original wider measurement.
+
+| Block | Frame p95 / maximum, ms | Intervals within 33 ms | Paused pick max, ms | Running pick max, ms | Drag max, ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 · normal | 17.6 / 17.7 | 300/300 | 17.7 | 19.4 | 17.8 |
+| 2 · traced | 17.6 / 17.7 | 300/300 | 20.1 | 20.0 | 17.8 |
+| 3 · traced | 17.6 / 17.7 | 300/300 | 17.9 | 17.7 | 17.7 |
+| 4 · normal | 17.6 / 17.7 | 300/300 | 18.2 | 17.9 | 17.8 |
+
+All 160 picks met the 50 ms gate. Both normal blocks passed independently
+of tracing. Exact IDs and camera, drag pin, pause, resume and resize passed.
+The four CPU audits checked 2,093 samples each with zero interior ID or color
+errors and zero invisible picks. The slowest traced running pick took
+1.3 ms through readback, 2.0 ms through highlight completion and 16.7 ms
+waiting for the next animation opportunity.
+
+The 100.4 and 68.2 ms events did not recur in this control. Their causes and
+repeatable responsiveness in the historical inline browser remain open.
+Production color compatibility remains a separate failed gate. The raw
+download, driver, source archive and per-block analysis are in
+`captures/pilot-wider-dpr2-20261119-b2qktw79/`. The source archive SHA-256
+is `533a75b86ca5ca1b14d5557be0cdbb6be36b50122f2544718fddbebade20105b`.
+[Replay instructions](#/pilot-viewer?section=doc-agent-recipe-wider-replay-at-dpr-2)

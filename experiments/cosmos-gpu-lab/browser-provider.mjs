@@ -16,7 +16,7 @@ export function labBrowser (gpu) {
     })
   }
   return {
-    enabled: true, headless: !inline, connectTimeout: inline ? 180000 : 60000,
+    enabled: true, headless: !inline && process.env.LAB_NATIVE_VISIBLE !== '1', connectTimeout: inline ? 180000 : 60000,
     screenshotFailures: false, provider, instances: [{ browser: 'chromium' }],
   }
 }

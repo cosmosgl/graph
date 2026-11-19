@@ -20,6 +20,7 @@ type Gate = { valid: boolean; stages: Array<{ stage: string; forceFailures: numb
 type Trial = { block: number; round: number; warmup: boolean; api: Api; center: number; timing: Measurement; valid: boolean; mismatchedFrames: number }
 export type CenterCostReport = {
   centerReduction?: CenterReduction;
+  centerForceVariant?: 'refined' | 'linear';
   settings: Settings; alpha: number; tick: number; samples: number; strength: number; recordedAt: string; browser: string;
   policy: { warmups: number; samples: number; frames: number; blocks: number }; status: string;
   input: Float32Array;
@@ -59,7 +60,8 @@ export function centerCostSummary (report: CenterCostReport, api: Api, block: nu
 }
 export async function measureCenterCost (
   settings: Settings, frozen: Float32Array, alpha: number, tick: number, samples: number,
-  progress: (text: string) => void, cancelled: () => boolean, policy: CenterCostReport['policy'] = CENTER_COST_POLICY
+  progress: (text: string) => void, cancelled: () => boolean, policy: CenterCostReport['policy'] = CENTER_COST_POLICY,
+  centerForceVariant: 'refined' | 'linear' = 'refined'
 ): Promise<CenterCostReport> {
   if (![policy.warmups, policy.samples, policy.frames, policy.blocks].every(Number.isInteger) || policy.warmups < 0 || policy.samples < 2 ||
     policy.frames < 1 || policy.frames > 64 || policy.blocks < 1 || policy.blocks > 4) throw new Error('Invalid center timing policy')
@@ -70,6 +72,7 @@ export async function measureCenterCost (
   input.points = frozen.slice(); graph.points = input.points
   const report: CenterCostReport = {
     centerReduction: DEFAULT_CENTER_REDUCTION,
+    centerForceVariant,
     settings: { ...settings },
     alpha,
     tick,
@@ -110,7 +113,12 @@ export async function measureCenterCost (
       config.backend = api === 'webgl'
         ? await createCombinedWebGL(canvas, graph, input, { forceSettings: parameters, repulsionPolicy: 'production' })
         : await createCombinedWebGPU(canvas, graph, input, 'trig', {
-          forceSettings: parameters, repulsionPolicy: 'production', gpuBounds: true, gridAggregation: 'cached-small', springOptimization: 'prefetch',
+          forceSettings: parameters,
+          repulsionPolicy: 'production',
+          gpuBounds: true,
+          gridAggregation: 'cached-small',
+          springOptimization: 'prefetch',
+          centerForceVariant,
         })
       const b = config.backend; report.devices[api] = b.info
       for (const center of [0, strength]) {

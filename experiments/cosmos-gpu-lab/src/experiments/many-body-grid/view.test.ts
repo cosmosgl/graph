@@ -47,14 +47,18 @@ function fake (input: Input, p: Parameters, initial: Frame, bad: boolean, render
 async function ready (page: HTMLElement): Promise<void> {
   await vi.waitFor(() => expect(page.querySelector<HTMLButtonElement>('[data-action="step"]')!.disabled).toBe(false))
 }
-async function mount (options: { missing?: boolean; badBoth?: boolean; renderFailure?: boolean; badReplay?: boolean } = {}): Promise<HTMLDivElement> {
+async function mount (options: {
+  missing?: boolean; badBoth?: boolean; renderFailure?: boolean; badReplay?: boolean; initialWorkgroup?: boolean;
+} = {}): Promise<HTMLDivElement> {
   vi.mocked(createGridWebGL).mockImplementation(async (_canvas, input, p, frame) => fake(input, p, frame, Boolean(options.badBoth), false))
   vi.mocked(createGridWebGPU).mockImplementation(async (_canvas, input, p, frame) => {
     if (options.missing) throw new Error('No test adapter')
     return fake(input, p, frame, Boolean(options.badBoth), Boolean(options.renderFailure), Boolean(options.badReplay))
   })
   host = document.createElement('div'); document.body.append(host)
-  instance = await createGridExperiment(host)
+  instance = await createGridExperiment(host, options.initialWorkgroup
+    ? { initialFarMode: 'workgroup-local', experimentId: 'workgroup-repulsion' }
+    : {})
   const fixture = host.querySelector<HTMLSelectElement>('[data-control="fixture"]')!
   fixture.value = 'edge-cases'; fixture.dispatchEvent(new Event('change'))
   await ready(host)
@@ -84,6 +88,53 @@ it('retains the other panels and export after a rendering failure', async () => 
   expect(page.querySelector('[data-info="WebGPU"]')!.textContent).toContain('Test context lost')
   expect(page.querySelector('[data-output="status"]')!.textContent).not.toMatch(/^Passed/)
   expect(page.querySelector<HTMLButtonElement>('[data-action="export"]')!.disabled).toBe(false)
+})
+
+it('runs the selected workgroup repulsion and keeps inline-only diagnostics separate', async () => {
+  const page = await mount()
+  const mode = page.querySelector<HTMLSelectElement>('[data-control="far-mode"]')!
+  mode.value = 'workgroup-local'; mode.dispatchEvent(new Event('change')); await ready(page)
+  const call = vi.mocked(createGridWebGPU).mock.calls.at(-1)!
+  expect(call[4]).toBe('workgroup-local')
+  expect(call[6]).toMatchObject({ aggregation: 'cached-small', nearArithmetic: 'refined' })
+  expect(page.querySelector('[data-info="WebGPU"]')!.textContent).toContain('Workgroup memory')
+  expect(page.querySelector<HTMLButtonElement>('[data-action="centroids"]')!.disabled).toBe(true)
+  await step(page)
+  expect(page.querySelector('[data-status="WebGPU"]')!.textContent).toBe('Pass')
+  mode.value = 'inline'; mode.dispatchEvent(new Event('change')); await ready(page)
+  expect(page.querySelector<HTMLButtonElement>('[data-action="centroids"]')!.disabled).toBe(false)
+})
+
+it('starts the dedicated workgroup example in the workgroup mode', async () => {
+  const page = await mount({ initialWorkgroup: true })
+  expect(page.querySelector<HTMLSelectElement>('[data-control="far-mode"]')!.value).toBe('workgroup-local')
+  expect(vi.mocked(createGridWebGPU).mock.calls.at(-1)![4]).toBe('workgroup-local')
+  await step(page)
+  let captured: Blob | undefined
+  const url = vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { captured = blob as Blob; return 'blob:test' })
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  try {
+    page.querySelector<HTMLButtonElement>('[data-action="export"]')!.click()
+    const result = JSON.parse(await captured!.text())
+    expect(result.experiment).toBe('workgroup-repulsion')
+    expect(result.webgpuFarField).toBe('workgroup-local')
+  } finally { url.mockRestore(); click.mockRestore() }
+})
+
+it('routes native arithmetic selections to the matching experimental kernels', async () => {
+  const page = await mount({ initialWorkgroup: true })
+  const mode = page.querySelector<HTMLSelectElement>('[data-control="far-mode"]')!
+  for (const [selection, far, near] of [
+    ['native-far', 'workgroup-native-far', 'refined'],
+    ['native-near', 'workgroup-local', 'native'],
+    ['native-both', 'workgroup-native-far', 'native'],
+    ['factorized-both', 'workgroup-factorized-far', 'factorized'],
+  ]) {
+    mode.value = selection; mode.dispatchEvent(new Event('change')); await ready(page)
+    const call = vi.mocked(createGridWebGPU).mock.calls.at(-1)!
+    expect(call[4]).toBe(far)
+    expect(call[6]).toMatchObject({ aggregation: 'cached-small', nearArithmetic: near })
+  }
 })
 
 it('shows a useful precision trace and keeps the original verdict', async () => {

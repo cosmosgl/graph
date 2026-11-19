@@ -7,12 +7,22 @@ import { graphRgba } from '../../runtime/palette'
 import type { PositionSource } from '../many-body/backend'
 import type { GraphInput } from '../weighted-links/data'
 import source from './render.wgsl?raw'
+import linkSmoothing from './link-smoothing.wgsl?raw'
 export type Camera = { x: number; y: number; zoom: number }
+export type PaintLayers = { links?: boolean; points?: boolean }
+type PaintOptions = { smoothLinks?: boolean }
+const entries = {
+  point: ['pointVertex', 'pointColor'],
+  link: ['linkVertex', 'linkColor'],
+  id: ['pointVertex', 'pointId'],
+  smoothLink: ['smoothLinkVertex', 'smoothLinkColor'],
+}
 export function createRenderer (position: () => PositionSource, graph: GraphInput, canvas: HTMLCanvasElement): {
   camera: Camera; styles: Float32Array; selected: number; ratio: number;
   linkStyle: { color: number[]; width: number }; setLinkStyle(color: number[], width: number): void;
   draw(timestamps?: ComputePassProps): void; pick(x: number, y: number): Promise<number | null>;
-  snapshot(): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }>;
+  snapshot(options?: PaintOptions): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }>;
+  snapshotColor(layers: PaintLayers & PaintOptions): Promise<Uint8Array>;
   replace(graph: GraphInput): void; setStyle(index: number, color: number[], size: number): void;
   destroy(): void;
 } {
@@ -29,14 +39,15 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout: layout, bufferLayout: [] }))
     const pickTarget = scope.own(target(device, 1, 1))
     const kernels = new Map<string, RenderKernel>()
-    const kernel = (format: TextureFormatColor, mode: 'point' | 'link' | 'id', depth = false): RenderKernel => {
+    const kernel = (format: TextureFormatColor, mode: keyof typeof entries, depth = false): RenderKernel => {
       const key = `${format}:${mode}:${depth}`; let value = kernels.get(key)
       if (!value) {
+        const code = mode === 'smoothLink' ? `${source}\n${linkSmoothing}` : source
         value = scope.own(new RenderKernel(device, {
-          vertexSource: source,
-          fragmentSource: source,
-          vertexEntryPoint: mode === 'link' ? 'linkVertex' : 'pointVertex',
-          fragmentEntryPoint: mode === 'id' ? 'pointId' : mode === 'link' ? 'linkColor' : 'pointColor',
+          vertexSource: code,
+          fragmentSource: code,
+          vertexEntryPoint: entries[mode][0],
+          fragmentEntryPoint: entries[mode][1],
           topology: 'triangle-strip',
           shaderLayout: layout,
           colorAttachmentFormats: [format],
@@ -50,7 +61,10 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       }
       return value
     }
-    const render = (framebuffer: Framebuffer, ids: boolean, origin = [0, 0], transparent = false, timestamps?: ComputePassProps): void => {
+    const render = (
+      framebuffer: Framebuffer, ids: boolean, origin = [0, 0], transparent = false, timestamps?: ComputePassProps,
+      layers?: PaintLayers & PaintOptions
+    ): void => {
       const { camera, ratio, selected } = api
       params.write(new Float32Array([camera.x, camera.y, camera.zoom * ratio, 0,
         canvas.width, canvas.height, ratio, 0, ...origin, framebuffer.width, framebuffer.height, selected, api.linkStyle.width, 0, 0, ...api.linkStyle.color]))
@@ -60,10 +74,12 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       const bindings = { positions: position().buffer, styles: styleBuffer, links: linkBuffer, params }
       const format = framebuffer.colorAttachments[0].texture.format as TextureFormatColor
       try {
-        if (!ids && edges) {
-          kernel(format, 'link', !!framebuffer.depthStencilAttachment).draw(pass, { vertexArray, vertexCount: 4, instanceCount: edges, bindings })
+        if (!ids && edges && layers?.links !== false) {
+          kernel(format, layers?.smoothLinks ? 'smoothLink' : 'link', !!framebuffer.depthStencilAttachment).draw(pass, {
+            vertexArray, vertexCount: 4, instanceCount: edges, bindings,
+          })
         }
-        if (position().count) {
+        if (position().count && layers?.points !== false) {
           kernel(format, ids ? 'id' : 'point', !!framebuffer.depthStencilAttachment).draw(pass, {
             vertexArray, vertexCount: 4, instanceCount: position().count, bindings,
           })
@@ -105,10 +121,10 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
         const id = bytes[0] + bytes[1] * 256 + bytes[2] * 65536
         return id ? id - 1 : null
       },
-      async snapshot (): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }> {
+      async snapshot (options?: PaintOptions): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }> {
         const color = target(device, canvas.width, canvas.height); const ids = target(device, canvas.width, canvas.height)
         try {
-          render(color.framebuffer, false, [0, 0], true); render(ids.framebuffer, true)
+          render(color.framebuffer, false, [0, 0], true, undefined, options); render(ids.framebuffer, true)
           return {
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
@@ -116,6 +132,13 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
             height: canvas.height,
           }
         } finally { color.destroy(); ids.destroy() }
+      },
+      async snapshotColor (layers: PaintLayers & PaintOptions): Promise<Uint8Array> {
+        const color = target(device, canvas.width, canvas.height)
+        try {
+          render(color.framebuffer, false, [0, 0], true, undefined, layers)
+          return await pixels(device, color.texture, color.framebuffer)
+        } finally { color.destroy() }
       },
       destroy (): void { styleBuffer?.destroy(); linkBuffer?.destroy(); scope.destroy() },
     }

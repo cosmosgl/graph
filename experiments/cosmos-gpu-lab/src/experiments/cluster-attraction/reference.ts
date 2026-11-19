@@ -3,7 +3,7 @@ import { compareArray, type Snapshot } from '../many-body/reference'
 import { SETTINGS, type ClusterInput } from './data'
 const f = Math.fround
 export type ClusterSnapshot = Snapshot & { aggregates: Float32Array }
-export function reference (input: ClusterInput, points = input.points): ClusterSnapshot {
+export function reference (input: ClusterInput, points = input.points, settings = SETTINGS): ClusterSnapshot {
   // Independent scalar group sums; does not consume the candidate's grouped index.
   const sums = new Float64Array(input.targets.length)
   for (let i = 0; i < input.membership.length; i++) {
@@ -22,11 +22,11 @@ export function reference (input: ClusterInput, points = input.points): ClusterS
     const dx = f(x - points[p]); const dy = f(y - points[p + 1])
     const distance = f(Math.sqrt(f(f(dx * dx) + f(dy * dy))))
     if (distance > 0) {
-      const magnitude = f(f(f(f(SETTINGS.alpha) * distance) * f(SETTINGS.strength)) * input.strengths[i])
+      const magnitude = f(f(f(f(settings.alpha) * distance) * f(settings.strength)) * input.strengths[i])
       forces[p] = f(magnitude * f(dx / distance)); forces[p + 1] = f(magnitude * f(dy / distance))
     }
   }
-  return { aggregates, forces, positions: integrate(points, forces, SETTINGS) }
+  return { aggregates, forces, positions: integrate(points, forces, settings) }
 }
 export function compare (actual: ClusterSnapshot, expected: ClusterSnapshot, input: Float32Array): {
   valid: boolean; aggregates: ReturnType<typeof compareArray>; forces: ReturnType<typeof compareArray>; positions: ReturnType<typeof compareArray>;

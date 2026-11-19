@@ -6,7 +6,12 @@ import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { contributionShader } from './contributions'
 import { verifyCountDivision } from './division-check'
-import { streamedFarShader, refinedFarShader, materializedFarShader } from './far-shader'
+import {
+  streamedFarShader, refinedFarShader, materializedFarShader, chunkedFarShader, workgroupFarShader, workgroupLocalFarShader, workgroupNativeFarShader,
+  workgroupFactorizedFarShader,
+} from './far-shader'
+import { factorizedNearShader } from './factorized-pair'
+import { DEFAULT_FAR_CHUNK_SIZE } from './far-resources'
 import { refinedNearShader } from './near-shader'
 import { storedCentroidShader, type CentroidMode } from './centroids'
 import { gpuTraceShader, replaceOnce, stageNames } from './trace'
@@ -30,17 +35,26 @@ export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
   options: WebGPUOptions & {
-    gpuBounds?: boolean; aggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined'; maxSamples?: number; occupancy?: boolean;
+    gpuBounds?: boolean; aggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined' | 'factorized'; maxSamples?: number; occupancy?: boolean;
+    farChunkSize?: number;
   } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const maxSamples = options.maxSamples ?? initial.slots
   if (!Number.isInteger(maxSamples) || maxSamples < initial.slots || maxSamples > 64) throw new Error('Invalid sample capacity')
-  const streamed = centroidMode === 'streamed'
-  if (streamed) sourceShader = streamedFarShader(sourceShader)
+  const chunked = centroidMode === 'chunked'
+  const streamed = centroidMode === 'streamed' || chunked
+  const chunkSize = options.farChunkSize ?? DEFAULT_FAR_CHUNK_SIZE
+  if (!Number.isSafeInteger(chunkSize) || chunkSize < 1) throw new Error('Invalid far-field chunk size')
+  if (streamed) sourceShader = chunked ? chunkedFarShader(sourceShader) : streamedFarShader(sourceShader)
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
+  if (centroidMode === 'workgroup') sourceShader = workgroupFarShader(sourceShader)
+  if (centroidMode === 'workgroup-local') sourceShader = workgroupLocalFarShader(sourceShader)
+  if (centroidMode === 'workgroup-native-far') sourceShader = workgroupNativeFarShader(sourceShader)
+  if (centroidMode === 'workgroup-factorized-far') sourceShader = workgroupFactorizedFarShader(sourceShader)
   if (centroidMode === 'materialized') sourceShader = materializedFarShader(sourceShader)
   if (options.nearArithmetic === 'refined') sourceShader = refinedNearShader(sourceShader)
+  if (options.nearArithmetic === 'factorized') sourceShader = factorizedNearShader(sourceShader)
   if (options.gpuBounds) sourceShader = replaceOnce(sourceShader, 'var<uniform> box:', 'var<storage, read> box:')
   const cachedCells = options.aggregation === 'cached-cells' || options.aggregation === 'cached-small'
   if (cachedCells) sourceShader = cachedCellShader(sourceShader, aggregationLimit(options.aggregation!))
@@ -58,11 +72,23 @@ export async function createGridWebGPU (
     try {
       let count = initialCount; let l = layout(count)
       const allocated = layout(capacity)
+      if (chunked && Math.min(capacity, chunkSize) * 800 >
+        Math.min(Number(device.limits.maxStorageBufferBindingSize), Number(device.limits.maxBufferSize))) {
+        throw new Error('Far-field scratch exceeds the device buffer limit')
+      }
       if (centroidMode !== 'inline' && centroidMode !== 'stored') verifyDivision = (): ReturnType<typeof verifyCountDivision> => verifyCountDivision(device)
       const storage = (bytes: number): Buffer => own(device.createBuffer({ byteLength: Math.max(16, bytes), usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-      const farContributions = centroidMode === 'materialized' || streamed ? storage(capacity * (streamed ? 1 : allocated.sizes.length) * 100 * 8) : undefined
+      const farContributions = centroidMode === 'materialized' || streamed
+        ? storage((chunked ? Math.min(capacity, chunkSize) : capacity) * (streamed ? 1 : allocated.sizes.length) * 100 * 8)
+        : undefined
       const farSums = streamed ? storage(capacity * allocated.sizes.length * 8) : undefined
       const levelQueries = streamed ? allocated.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
+      const chunks = chunked
+        ? Array.from({ length: Math.ceil(capacity / chunkSize) }, (_, i) => ({
+          start: i * chunkSize,
+          params: own(upload(device, new Uint32Array([i * chunkSize, Math.min(chunkSize, capacity - i * chunkSize), 0, 0]), Buffer.UNIFORM)),
+        }))
+        : []
       const heads = storage(allocated.cells * 4); const links = storage(allocated.sizes.length * capacity * 4)
       const pointCells = cachedCells ? storage(allocated.sizes.length * capacity * 4) : undefined
       const aggregates = storage(allocated.cells * 16); const slots = storage(allocated.finest ** 2 * maxSamples * 8)
@@ -89,6 +115,7 @@ export async function createGridWebGPU (
           { name: 'farLevel', location: 13, type: 'uniform', group: 0 },
           { name: 'farSums', location: 14, type: 'storage', group: 0 })
       }
+      if (chunked) bindings.push({ name: 'farChunk', location: 16, type: 'uniform', group: 0 })
       if (pointCells) bindings.push({ name: 'pointCells', location: 15, type: 'storage', group: 0 })
       const forceNames = [
         'positions', 'samples', 'aggregates', 'slots', 'forces', 'levels', 'params', 'box',
@@ -102,9 +129,12 @@ export async function createGridWebGPU (
         ...(centroids ? [['aggregates', 'params', 'centroids']] : []),
         ...(farContributions
           ? [['positions', 'aggregates', 'levels', 'params', 'box', 'centroids', 'farContributions',
-            ...(streamed ? ['farLevel'] : [])]]
+            ...(streamed ? ['farLevel'] : []), ...(chunked ? ['farChunk'] : [])]]
           : []),
-        ...(streamed ? [['positions', 'levels', 'params', 'box', 'centroids', 'farContributions', 'farLevel', 'farSums']] : []),
+        ...(streamed
+          ? [['positions', 'levels', 'params', 'box', 'centroids', 'farContributions', 'farLevel', 'farSums',
+            ...(chunked ? ['farChunk'] : [])]]
+          : []),
         forceNames,
       ]
       const kernels: Kernel[] = []
@@ -168,7 +198,7 @@ export async function createGridWebGPU (
           }
         } finally { temporary.reverse().forEach(r => r.destroy()) }
       }
-      if (centroids && !farContributions) {
+      if (centroids && !farContributions && !centroidMode.startsWith('workgroup')) {
         readContributions = async (target): ReturnType<NonNullable<GridBackend['readContributions']>> => {
           if (lastSource < 0 || target < 0 || target >= count || !Number.isInteger(target)) throw new Error('Invalid contribution target or unstepped backend')
           const temporary: Array<{ destroy(): void }> = []
@@ -232,16 +262,23 @@ export async function createGridWebGPU (
           lastSource = source
           const sizes = [l.cells, count, l.cells, l.finest ** 2,
             ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), ...(streamed ? [count] : []), count]
-          const dispatches = kernels.flatMap<{ i: number; farLevel?: Buffer }>((_, i) => {
+          const dispatches = kernels.flatMap<{ i: number; farLevel?: Buffer; farChunk?: Buffer; workItems?: number }>((_, i) => {
             if (streamed && entryPoints[i] === 'accumulateMain') return []
             if (streamed && entryPoints[i] === 'farMain') {
+              if (chunked) {
+                return levelQueries.slice(0, l.sizes.length).flatMap(farLevel =>
+                  chunks.filter(chunk => chunk.start < count).flatMap(chunk => [
+                    { i, farLevel, farChunk: chunk.params, workItems: Math.min(chunkSize, count - chunk.start) },
+                    { i: i + 1, farLevel, farChunk: chunk.params, workItems: Math.min(chunkSize, count - chunk.start) },
+                  ]))
+              }
               return levelQueries.slice(0, l.sizes.length).flatMap(farLevel => [{ i, farLevel }, { i: i + 1, farLevel }])
             }
             return [{ i, farLevel: undefined }]
           }).filter(d => sizes[d.i] > 0)
-          const dispatch = (pass: ComputePass, { i, farLevel }: typeof dispatches[number]): void => {
+          const dispatch = (pass: ComputePass, { i, farLevel, farChunk, workItems }: typeof dispatches[number]): void => {
             kernels[i].dispatch(pass, {
-              x: Math.ceil(sizes[i] / 64),
+              x: Math.ceil((workItems ?? sizes[i]) / 64),
               bindings: Object.fromEntries(Object.entries({
                 positions: positions[source],
                 samples,
@@ -257,6 +294,7 @@ export async function createGridWebGPU (
                 ...(centroids ? { centroids } : {}),
                 ...(farContributions ? { farContributions } : {}),
                 ...(streamed ? { farLevel, farSums } : {}),
+                ...(chunked ? { farChunk } : {}),
               }).filter(([name]) => used[i].includes(name))),
             })
             if (entryPoints[i] === 'aggregate' && occupancyRequested) {

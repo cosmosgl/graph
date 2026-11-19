@@ -19,8 +19,8 @@ it('derives visible counts and method links from the inventory and retains every
   expect(host.querySelector('[href="#/curved-links"]')!.textContent).toContain('color-face')
   renderCoverageSummary(host)
   expect(host.textContent).toContain('1 covered in isolation')
-  expect(host.textContent).toContain('28 partial')
-  expect(host.textContent).toContain('8 needs validation')
+  expect(host.textContent).toContain('32 partial')
+  expect(host.textContent).toContain('4 needs validation')
   expect(host.textContent).toContain('not a completion percentage')
 })
 it('distinguishes the ordered current investigation from still-open migration workstreams', () => {

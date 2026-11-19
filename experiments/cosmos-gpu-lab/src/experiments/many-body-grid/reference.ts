@@ -50,12 +50,14 @@ function centroidDelta (position: number, sum: number, mass: number, arithmetic:
 }
 export function gridReference (
   input: Input, points: Float32Array, p: Parameters, frame: Frame, structure: Structure, trace?: Trace,
-  arithmetic: CentroidArithmetic = 'rounded', storedCentroids?: Float32Array
+  arithmetic: CentroidArithmetic = 'rounded', storedCentroids?: Float32Array, targets?: readonly number[]
 ): Snapshot {
   if (storedCentroids && storedCentroids.length !== structure.aggregates.length) throw new Error('Centroid layout mismatch')
   const count = points.length / 4; const l = layout(count); const cells = l.finest ** 2
   const forces = new Float32Array(points.length)
-  for (let target = 0; target < count; target++) {
+  for (let index = 0; index < (targets?.length ?? count); index++) {
+    const target = targets?.[index] ?? index
+    if (!Number.isInteger(target) || target < 0 || target >= count) throw new Error('Invalid target index')
     const offset = target * 4; if (points[offset + 3] > 0.5) continue
     const x = points[offset]; const y = points[offset + 1]
     let far: Vec = [0, 0]

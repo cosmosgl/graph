@@ -1,8 +1,8 @@
 **A full Cosmos WebGPU backend is technically credible. We have a bounded integrated prototype through public luma APIs; production adoption still needs complete feature, integration and performance acceptance.**
 
-Roadmap reviewed **18 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
+Roadmap reviewed **19 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
 
-The destination is **full WebGPU simulation and rendering sharing resident GPU state**. Reduced device coverage is acceptable. The current WebGL engine supplies the behavioral reference; a permanent WebGL fallback is not a requirement for the destination.
+The destination is **full WebGPU simulation and rendering sharing resident GPU state**. Reduced device coverage is acceptable. The current WebGL engine supplies the behavioral reference.
 
 **Research workflow:** run focused checks on the current machine's native GPU.
 The lab is not a production package and has no required CI checks or manual
@@ -19,13 +19,91 @@ gravity and bounded cancellation sums without changing historical gates or selec
 policy. Independent candidate integration, runtime adaptation and agreed quality budgets remain
 acceptance work.
 
+### Million-point Four corners on M3
+
+The [million-point study](#/million-graph?section=doc-cell-field-m3-result)
+ran 200 ticks with one million points and 999,999 links in native Chrome on
+the M3. The lab prototype rebuilt the hierarchy on the GPU each tick and ran
+gravity, repulsion, link springs and basic drawing at 480 × 340. Timings
+cover submission through GPU completion and end before browser presentation.
+
+| Starting layout | Per point median / p95 | Four corners median / p95 | Layout difference at tick 200 (p95) |
+| --- | ---: | ---: | ---: |
+| Evenly spread | 47.1 / 58.0 ms | **38.4 / 61.6 ms** | 0.78 px |
+| Two dense clusters | 46.3 / 56.6 ms | **36.9 / 53.5 ms** | 0.40 px |
+
+Each timing is the median of the corresponding statistic from three runs.
+Layout difference measures displacement from the per-point layout for 4,096
+tracked point IDs in the same camera. The median tick fell by about 9 ms on
+each input. The evenly spread run had a higher p95, the starting clusters
+dispersed quickly, and frozen probes still found force jumps across dense
+cell edges.
+
+### Persistent dense communities on M3
+
+A second [million-point study](#/million-graph?section=doc-dense-communities)
+used 999,990 local links and pinned community anchors. All free points stayed
+in their original neighborhoods at ticks 50, 100 and 200. Four corners passed
+the declared one-pixel layout check, with **0.58 px** settled p95 displacement
+and **0.013 px** excess p95 motion at late cell crossings.
+
+| Native replay | Per point median / p95 | Four corners median / p95 |
+| --- | ---: | ---: |
+| Normal run A | 55.0 / 75.9 ms | **50.1 / 63.0 ms** |
+| Normal run B | 55.6 / 68.4 ms | **50.1 / 66.9 ms** |
+
+A separate instrumented replay measured **13.35 → 8.10 ms** median repulsion
+and roughly **30 ms** for drawing on both paths. The instrumented p95 moved
+from 67 to 70.3 ms. Much of the slow candidate tick was outside the recorded
+stages.
+
+An expanded profile timed the three GPU index passes separately. On the
+Four corners path, their combined median was **0.88 ms** overall and **1.05 ms**
+in the slowest ten ticks. Drawing rose from **28.36 to 37.79 ms**. A fresh
+unprofiled comparison measured **53.6 → 48.3 ms** median and **70.7 → 58.2 ms**
+p95. The earlier 30.8 ms unexplained tail did not recur. In this replay,
+drawing was the largest measured cost. Presented frames, picking,
+high-degree hubs and peak memory still need a complete viewer workload.
+
+### Production blockers
+
+- **Pilot responsiveness.** The historical 100.4 ms running pick and
+  68.2 ms pick still exceed the 50 ms target. The wider DPR 1 and standalone
+  DPR 2 controls passed all 320 picks. Of 2,400 frame intervals,
+  2,398 met the 33 ms target. The original stalls remain unexplained. The 8,192-point star
+  still fails its timing checks. [Pilot findings](#/pilot-viewer?section=doc-findings) ·
+  [Acceptance rules](#/validation-workflow?section=first-migration-rules)
+- **Force composition.** Isolated mouse repulsion, clusters and per-point
+  attraction pass through 8,192 points on M3. Combined same-input stage checks
+  pass, and both composed fixtures pass a local one-pixel screen over 40 ticks.
+  Independent trajectories still miss strict tolerances. The larger hash
+  collision path needs direct WebGL comparison and in-tick cost.
+  [Combined forces](#/combined-layout?section=doc-force-composition) ·
+  [Hashed collision](#/collision?section=doc-hashed-findings)
+- **Rendering and interaction.** The integrated viewer retains 557
+  interior color failures across two styles. All are in the link layer.
+  The antialiasing candidate improves edges. Isolated point transitions
+  match 12 fixed checkpoints. Interior colors, remaining styles and full
+  transition and pointer integration are still open.
+  [Feature inventory](#/feature-inventory) · [Link edge smoothing](#/viewer-comparison?section=doc-findings-straight-link-edge-smoothing)
+- **Integrated scale.** Measure presented frames, picking, update latency
+  and peak memory with the supported force set and renderer on moving
+  million-point graphs. High-degree hubs and the slowest ticks need
+  evidence. [Persistent dense communities](#/million-graph?section=doc-dense-communities)
+- **Graph and host contracts.** Borrowed device cleanup and explicit checkpoint
+  restart pass. Rectangle and polygon IDs and tracked positions match bounded
+  fixtures. Full setters, synchronous read APIs, automatic recovery and deck
+  integration still need a production design. Choose a shared luma family and verify the
+  supported native GPU and browser matrix. [Host study](#/integrated-webgpu?section=doc-host-ownership) ·
+  [Selection study](#/integrated-webgpu?section=doc-selection) ·
+  [Tracking study](#/integrated-webgpu?section=doc-tracked-points) ·
+  [Production checklist](#/roadmap?section=milestone-production)
+
 ```example
 migrationStatus
 ```
 
-**These envelopes differ.** The 8,192-point composed-force results do not include the complete newer collision-enabled workload. Larger reductions or spatial indices do not establish larger complete graph layouts. Some isolated force checks reach 16,384 points; the 32,768 scaling-harness option has not established acceptance.
-
-The [feature inventory](#/feature-inventory) is the detailed force/rendering checklist. Status means demonstrated scope, rather than a percentage of the migration completed.
+The [feature inventory](#/feature-inventory) is the detailed force and rendering checklist. Each status names the demonstrated scope.
 
 ### First integrated migration: bounded pilot evaluated
 
@@ -45,8 +123,8 @@ Current evidence from the native M3 inline browser, with unchanged gates:
 | Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
 | Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
 | Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3; layouts look similar after Fit | Same-geometry interior color checks fail; first-slice usability is not strict production compatibility |
-| Representative pilot viewer | Explicit 34-member scope; native exploration works. A new normal/traced/traced/normal sequence passes all 160 picks, 1,200 intervals and sampled CPU checks | New narrower control did not reproduce or explain the historical **100.4-ms running pick**; 50-ms responsiveness remains unresolved |
-| Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction demonstrated in the lab runtime | Full setters, repeated production workflows, host ownership/deck and recovery still need acceptance |
+| Representative pilot viewer | 34 members. The wider DPR 1 control peaks at 32.3 ms. The wider DPR 2 standalone Chrome control peaks at 20.0 ms while running | The historical **100.4 ms running pick** in the inline browser remains unexplained |
+| Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction in the lab runtime. Separate selection and host checks pass | Full setters, asynchronous readback contracts, deck integration and automatic recovery still need acceptance |
 
 Detailed evidence stays with the experiment:
 [earlier adverse runs](#/integrated-webgpu?section=doc-findings-final-run-and-repeatability-limit),
@@ -62,50 +140,12 @@ first-slice usability has **bounded local evidence**, with rejected workloads an
 unresolved stalls; full migration is **not ready**. Faint nonzero opacity below 0.02,
 advanced styles and automatic framing remain explicitly unsupported.
 
-**Next, in order:**
-
-1. Preserve the [cluster-attraction baseline](#/cluster-attraction). The declared
-   M3 run passes all 90 backend/CPU checkpoint/update rows through 8,192 points,
-   all 18 shared-input backend comparisons and all 18 post-timing sum checks.
-   Group sums, forces, integrated positions, independent trajectories and
-   membership updates retain the existing gates. At 8,192 points, WebGPU has
-   about 4.3–4.4× lower force-only medians for large/uneven groups; WebGL has lower
-   medians for balanced groups and supplied targets. This is one short session,
-   not a complete-frame result. The finding workflow retains the plan and source.
-2. Preserve the [per-point attractor baseline](#/point-attractors): all 144
-   backend/CPU rows, 18 direct pairs and 18 post-timing checks pass on M3 through
-   8,192 points, including live target changes and disabling/re-enabling. The
-   corrected candidate has higher force-only cost: roughly 0.32–0.49 ms versus
-   0.03–0.04 ms WebGL at 8,192 points. Full-frame cost remains unchecked.
-3. **Next: mouse repulsion** as a separate force, including pointer coordinates,
-   the minimum-distance clamp and running/paused behavior.
-4. Compose accepted candidates, including clusters and per-point attractors, with the resident core in production order;
-   check independently evolving layouts and added complete-frame GPU cost.
-
-The unresolved picking issue does **not** block independent force research. It
-still blocks a clean responsiveness verdict for the affected pilot: keep the
-50-ms target and the recorded failures. A single declared wider-window
-normal/traced/traced/normal control remains a separate follow-up near the
-historical 961 × 541 logical size. The narrower study did not reproduce the
-stall or establish its cause; width is not an established explanation.
-Do not repeat until passing or optimize the runtime without supporting evidence.
-
-The existing pilot remains the baseline; new forces are not supported there
-until composition is validated. Keep deep raster work, further arithmetic tuning
-and larger graphs parked unless the pilot needs them. Retained color failures
-still prevent a production-color compatibility claim.
-
-The bounded paused replay and first four-block attribution study are complete;
-the cause is still unresolved. The 100.4-ms event included 92.8 ms after highlight
-completion, which locates the wait without explaining it. Retain that event and
-the original 68.2-ms failure; do not repeat until a pass is selected.
-The 50-ms picking target, 95%-within-33-ms frame target and rendering rules stay unchanged.
-
-The pilot now publishes new investigations through the finding workflow. Its live
-graph remains prominent; results and expanded instructions remain readable without
-a working GPU. This first new investigation is inconclusive, and its reproduction
-procedure has not yet been independently rerun by another agent. Older experiments
-should be converted only when a new investigation gives a reason to revisit them.
+The 100.4 ms event included 92.8 ms after highlight completion. Both wider
+controls used the historical 961 × 541 logical dimensions. The standalone
+Chrome replay also matched the 1,922 × 1,082 attachment at DPR 2. Neither
+control reproduced the historical stall.
+[DPR 1 replay](#/pilot-viewer?section=study-finding-pilot-wider-control) ·
+[DPR 2 replay](#/pilot-viewer?section=study-finding-pilot-wider-dpr2)
 
 ## 2. Current numerical and layout boundary
 
@@ -113,9 +153,9 @@ Keep three contracts distinct, with the **existing tolerances unchanged**:
 
 | Contract | What it answers | Current boundary |
 | --- | --- | --- |
-| Stage and whole-tick correctness | Does the implementation agree with the reference from the same starting input? | Strong bounded evidence, including a corrected collision matrix; original failing controls stay visible |
-| Independent layout behavior | Do evolving layouts retain matching coordinates and useful geometry? | Core matched and corrected collision runs have bounded agreement; broader data and quality targets remain open |
-| GPU cost and memory | Can accepted behavior fit the intended engine workload? | Useful controlled measurements; complete-engine budgets and production precision policy remain open |
+| Stage and whole-tick correctness | Does the implementation agree with the reference from the same starting input? | Same-input stages pass on both new composed fixtures. The hashed collision candidate matches its CPU model |
+| Independent layout behavior | Do evolving layouts retain matching coordinates and useful geometry? | The composed and Four corners layouts pass local pixel screens. The composed strict coordinate failures remain |
+| GPU cost and memory | Can accepted behavior fit the intended engine workload? | Bounded frozen cost and synchronized million-point ticks are measured. Complete-engine budgets and peak memory remain open |
 
 ### Core composed simulation
 
@@ -125,6 +165,16 @@ The [matched layout study](#/matched-layout/docs/findings) independently evolves
 
 The earlier [center-enabled long runs](#/matched-layout/docs/center) use the original float32 reduction tree. Their drift and timings remain historical baseline evidence; the later high/low correction does not retroactively change those measurements.
 
+The [additional-force study](#/combined-layout?section=doc-force-composition)
+composes [mouse repulsion](#/mouse-repulsion), [clusters](#/cluster-attraction)
+and [per-point attractors](#/point-attractors) in production order. Paused
+mouse behavior, masks and pins pass. The first failing ticks pass every
+same-input stage replay. Independent positions pass 16/16 at 256 points and
+1/8 at 8,192 points. Both graphs pass the separate 40-tick visual screen,
+with maximum projected position and motion differences under 0.015 px. The
+added forces raise median GPU time from 7.83 to 8.33 ms at 8,192 points,
+with basic drawing and frozen inputs.
+
 ### Center and collision
 
 The [center correction](#/collision/docs/findings) retains a high/low position sum through every reduction level, then supplies the existing float32 aggregate. It fixes the observed dense center sensitivity without a CPU intermediate or tolerance change. Double-single precision has a bounded numerical contract; this is not a universal exact-sum guarantee.
@@ -133,13 +183,34 @@ The [original native-arithmetic study](#/collision/docs/trajectories) remains a 
 
 The original cooled-star counterexample is tick 5: two whole-tick coordinates fail after the first native collision difference. The [targeted collision correction](#/collision/docs/precision) combines refined squares/roots/divisions with separately rounded per-neighbor contributions. It passes the reconstructed input and all **1,700 tick and trajectory gates** in the repeated independent matrix, with zero measured pointwise drift from CPU. The force law, CPU reference and numerical tolerances remain unchanged.
 
-The correction adds roughly **0.84–0.89 ms** to initial dense-star GPU frames and **0.48–0.63 ms** on cooled geometry at 512 points/four passes. Both controls, all 512 timing captures and queries pass. This is bounded M3 evidence with minimal drawing. The collision demo defaults to the checked candidate; native/strict controls remain available. Production precision policy and larger collision workloads are still open.
+The correction adds roughly **0.84–0.89 ms** to initial dense-star GPU frames and **0.48–0.63 ms** on cooled geometry at 512 points/four passes. Both controls, all 512 timing captures and queries pass. This is bounded M3 evidence with minimal drawing. The collision demo defaults to the checked candidate.
+
+Above the 4,096-point cutoff, the [hash and slot pilot](#/collision?section=doc-hashed-findings)
+matches all 18,874,368 selected and empty slot entries from its production-semantics
+CPU model across nine passes at 4,097 and 8,192 points. It covers a dense bucket
+with overflow, a hash tie, pins and missing points. Direct comparison with
+the production GLSL slot path, timing and integration are still open.
 
 Agree layout-quality targets for overlap, stress, motion, stability and representative data. Those targets supplement the numerical checks. They do not relabel a failed coordinate comparison as passing. Cooled stillness alone does not establish force balance or an overlap-free layout.
 
 ## 3. The ordered research plan
 
 This is the current task order. A closed investigation can retain failing cases; it does not close the associated feature or milestone. Detailed methods, alternatives and counterexamples live on their experiment pages.
+
+### Recommended next work
+
+1. **Bring the composed forces into a representative interactive M3 workload.**
+   Extend the passed one-pixel screen to deeper zoom and more graph shapes.
+   Retain the strict failures and use same-input replay to diagnose any
+   visible layout change.
+2. **Measure a million-point interactive frame.** Use persistent communities
+   and a high-degree workload. Measure presented frames, pick/update latency
+   and peak memory. Check drawing cost first and keep recording time outside
+   the measured GPU stages.
+3. **Resolve the viewer API and color gaps.** Profile link paint at the
+   remaining interior witnesses. Decide how production serves readback to
+   selection and tracking callers. Run the host integration against a single
+   luma family before approving a production switch.
 
 ```example
 journeyPlan
@@ -227,8 +298,8 @@ Review this register before claiming full readiness; some items will need deeper
 investigation. Reopen earlier whenever an integrated workload exposes a practical
 problem. Passing the first slice must not silently close these items.
 
-Picking latency is **no longer parked**: the representative viewer reproduced a
-100.4-ms request with phase evidence. It is the next bounded investigation above.
+Picking latency remains a production blocker. The pilot records the
+100.4 ms request with phases and the follow-up controls.
 
 | Investigation | Why stop now / retained result | Reopen condition before full readiness |
 |---|---|---|
@@ -239,13 +310,12 @@ Picking latency is **no longer parked**: the representative viewer reproduced a
 | [Exact faint-alpha / stored-alpha picking](#/point-styling) | Prototype closes selected visibility cases, but dense per-source passes remain costly; historical source-byte failures retained | Pilot picking is incorrect/slow, or images/translucent dense overlap enter scope; practical visibility is never waived |
 | [Ribbon compute generation](#/ribbon-generation) | Stopped without adoption; cost and color problems retained; keep the vertex path | Integrated profiling identifies curve generation as a meaningful bottleneck |
 | [v10 WebGL 100k star context loss](#/weighted-links/docs/context-loss) | Parked native baseline failure; cannot support timing comparisons | Such a baseline is needed for the declared workload or similar instability appears in the supported path |
-| [Further arithmetic optimization and larger collision](#/collision/docs/precision) | Reuse the tested corrected solver; the 512-point collision envelope does not establish 8,192-point collision | Composed profiling misses targets, collision enters the pilot, or full supported force/count coverage is being approved |
+| [Larger collision integration](#/collision?section=doc-hashed-findings) | The isolated hash and slot route passes the CPU model through 8,192 points. WebGL GPU parity and timing are still open | Compare the original slot shader, integrate the candidate and measure collision cost on dense inputs |
 
-Not-yet-implemented features (arrows, advanced states/transitions, remaining forces,
-host integration) are **deferred scope**, not completed investigations. Revisit
-all retained failures and deferred features during the full-readiness audit:
-resolve them, validate an alternative, or explicitly document an approved behavior
-change. A narrowed feature set cannot be described as complete Cosmos parity.
+Arrows, advanced states, full transition scheduling and production host integration
+remain open. Use the feature inventory to track isolated evidence and the
+production gap per feature. Review retained failures and validate any alternative
+or agreed behavior change before approving full migration. [Feature inventory](#/feature-inventory)
 
 ## 4. luma decisions still open
 
@@ -254,12 +324,19 @@ All experiment GPU operations use public luma APIs. The lab enforces this bounda
 | Decision | Evidence still needed |
 | --- | --- |
 | Production version and package family | A compatible pinned set running the representative engine and supported host integrations |
-| Buffer/view and ownership model | Shared compute/render/picking state, capacity changes, borrowed resources and cleanup |
+| Buffer/view and ownership model | Complete Graph setters, picking, capacity changes and automatic recovery. The bounded host test verifies borrowing and cleanup |
 | Direct encoding or reusable command plans | Matched setup/encoding/GPU cost and lifecycle; `GPUCommandGraph` remains optional |
 | Supplied primitives or custom kernels | Actual exports in the chosen version, Cosmos semantics/precision, capacity and cost |
 | Production arithmetic policy | Accepted force composition and layout behavior at an affordable cost across supported devices |
 
-The lab's alpha pin is an experimental choice, not the production dependency decision. Documentation for another luma release does not establish the pinned package's behavior. Supplied layouts cannot be substituted without checking weighted springs and Cosmos's long-range force model.
+The Lab's 10.0.0-alpha.15 pin supports the tested compute and host paths.
+The installed production Graph and deck layer need luma 9.3. A deck.gl v10
+trial on one shared luma version is the next dependency check. The upstream
+deck guide lists v10 as the release targeting the luma v10 transition.
+[Host findings](#/integrated-webgpu?section=doc-host-ownership) · [deck.gl release guide](https://deck.gl/next/docs/whats-new)
+
+Compare any supplied layout with Cosmos's weighted springs and long-range
+force model before choosing it for production.
 
 ## 5. Evidence to retain and its limits
 
@@ -269,7 +346,10 @@ The lab's alpha pin is an experimental choice, not the production dependency dec
 | [Global repulsion](#/many-body), [hierarchical repulsion](#/many-body-grid), [repulsion trajectories](#/repulsion-trajectories) | Exact/approximate force semantics, precision controls and drift | Same-input agreement does not guarantee independent coordinate agreement |
 | [Weighted links](#/weighted-links), [combined layouts](#/combined-layout) | Ordered topology, force composition, cooling and precision reference paths | Selected settings/counts; historical failing controls remain documented |
 | [Resident layout](#/resident-layout/docs/dataflow) | Bounds, simulation and minimal drawing without ordinary position readback | Validation checkpoints synchronize; the renderer and force set are incomplete |
-| [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse) | Same-device prefix transfers, updates and cleanup | Retention/trim, host ownership and total driver memory remain open |
+| [Million-point Four corners](#/million-graph?section=doc-dense-communities) | GPU hierarchy, native repulsion and basic drawing on three million-point workloads on M3 | Slowest ticks, high-degree workloads and interactive viewer acceptance remain open |
+| [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse), [host ownership](#/integrated-webgpu?section=doc-host-ownership) | Same-device prefix transfers and updates, borrowed device cleanup and explicit restart | Retention/trim, full Graph ownership and recovery, and total driver memory remain open |
+| [Selection](#/integrated-webgpu?section=doc-selection), [tracked points](#/integrated-webgpu?section=doc-tracked-points) | Exact bounded IDs and position snapshots from asynchronous readback | Public synchronous APIs, latency at scale, pointer and label scheduling |
+| [Point transitions](#/point-styling?section=doc-transition-findings) | Exact same-count position, fill, size and exit comparisons | Count changes, link transitions and full rendering and scheduling |
 | [Controlled profiling](#/gpu-stage-profile), [hub springs](#/hub-springs), [grid aggregation](#/cell-aggregation) | Balanced timing and bounded M3 optimizations | Opt-in candidates and device-specific results do not establish a universal gain |
 | [Matched layouts](#/matched-layout/docs/findings), [collision trajectories](#/collision/docs/trajectories) | Independent CPU/GPU behavior and separate geometry observations | Force combinations, arithmetic variants, counts and schedules must stay explicit |
 | [Point styling and picking](#/point-styling) | Bounded styling/image/ring studies and a stored-alpha visibility candidate on M3/SwiftShader | Historical polygon gates, actual pointer scheduling, practical picking cost and broader devices remain open |

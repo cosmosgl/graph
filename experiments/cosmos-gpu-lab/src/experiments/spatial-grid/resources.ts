@@ -10,6 +10,8 @@ import writeSentinelShader from './shaders/write-sentinel.wgsl?raw'
 
 const WORKGROUP_SIZE = 256
 export type GridTimestamps = Pick<ComputePassProps, 'timestampQuerySet' | 'beginTimestampIndex' | 'endTimestampIndex'>
+export const GRID_BUILD_STAGES = ['grid clear', 'grid count and scan', 'grid scatter'] as const
+export type GridPassTimestamps = (stage: typeof GRID_BUILD_STAGES[number]) => GridTimestamps
 export type GridBenchmark = { iterations: number; submitMilliseconds: number; totalMilliseconds: number; averageMilliseconds: number }
 export type GridReadback = { counts: Uint32Array; offsets: Uint32Array; pointIndices: Uint32Array }
 export type SpatialGridBackend = {
@@ -22,7 +24,7 @@ export type SpatialGridBackend = {
   readonly scanHierarchy: number[];
   readonly positionBytes: number;
   readonly gridBytes: number;
-  encodeBuild(encoder: CommandEncoder, positionIndex?: number, timestamps?: GridTimestamps): void;
+  encodeBuild(encoder: CommandEncoder, positionIndex?: number, timestamps?: GridTimestamps, passTimestamps?: GridPassTimestamps): void;
   build(): Promise<number>;
   benchmark(iterations: number): Promise<GridBenchmark>;
   readback(): Promise<GridReadback>;
@@ -137,16 +139,17 @@ export function createSpatialGridResources (device: Device, positionBuffers: Buf
   const cellOffsets = levels[0].offsets
   let destroyed = false
   const check = (): void => { if (destroyed || device.isLost) throw new Error('Spatial grid device unavailable') }
-  const encodeBuild = (encoder: CommandEncoder, positionIndex = 0, timestamps?: GridTimestamps): void => {
+  const encodeBuild = (encoder: CommandEncoder, positionIndex = 0, timestamps?: GridTimestamps, passTimestamps?: GridPassTimestamps): void => {
     check(); const positions = positionBuffers[positionIndex]
     if (!positions) throw new Error('Unknown grid position buffer')
     // luma alpha has no encoder.clearBuffer; a small GPU clear keeps batched builds resident.
-    // As in the original harness, clearing is outside the measured count/scan/scatter interval.
-    const clearPass = encoder.beginComputePass()
+    // Legacy interval timestamps bracket count through scatter and exclude clearing.
+    // Diagnostic pairs time each existing compute pass without changing the build schedule.
+    const clearPass = encoder.beginComputePass(passTimestamps?.('grid clear'))
     clear.dispatch(clearPass, { x: Math.ceil(cellCount / WORKGROUP_SIZE), bindings: { counts: cellCounts } }); clearPass.end()
-    const prepare = encoder.beginComputePass(timestamps?.beginTimestampIndex === undefined
+    const prepare = encoder.beginComputePass(passTimestamps?.('grid count and scan') ?? (timestamps?.beginTimestampIndex === undefined
       ? {}
-      : { timestampQuerySet: timestamps.timestampQuerySet, beginTimestampIndex: timestamps.beginTimestampIndex })
+      : { timestampQuerySet: timestamps.timestampQuerySet, beginTimestampIndex: timestamps.beginTimestampIndex }))
     if (pointWorkgroups) count.dispatch(prepare, { x: pointWorkgroups, bindings: { positions, cellCounts, parameters } })
     for (const level of levels) scan.dispatch(prepare, { x: level.blockCount, bindings: level.bindings })
     for (let i = levels.length - 2; i >= 0; i--) {
@@ -157,9 +160,9 @@ export function createSpatialGridResources (device: Device, positionBuffers: Buf
     }
     sentinel.dispatch(prepare, { x: 1, bindings: { offsets: cellOffsets, parameters } }); prepare.end()
     encoder.copyBufferToBuffer({ sourceBuffer: cellOffsets, destinationBuffer: cursors, size: cellBytes })
-    const scatterPass = encoder.beginComputePass(timestamps?.endTimestampIndex === undefined
+    const scatterPass = encoder.beginComputePass(passTimestamps?.('grid scatter') ?? (timestamps?.endTimestampIndex === undefined
       ? {}
-      : { timestampQuerySet: timestamps.timestampQuerySet, endTimestampIndex: timestamps.endTimestampIndex })
+      : { timestampQuerySet: timestamps.timestampQuerySet, endTimestampIndex: timestamps.endTimestampIndex }))
     if (pointWorkgroups) scatter.dispatch(scatterPass, { x: pointWorkgroups, bindings: { positions, cursors, pointIndices, parameters } })
     scatterPass.end()
   }
