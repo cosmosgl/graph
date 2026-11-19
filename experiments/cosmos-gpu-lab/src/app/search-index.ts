@@ -1,12 +1,10 @@
 import MarkdownIt from 'markdown-it'
-import type { ExperimentCase, ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
-import { caseEvidenceLinks } from '../runtime/experiment'
-import { validationContracts } from '../runtime/validation'
+import type { ExperimentDefinition } from '../runtime/experiment'
 import { coverage } from './coverage'
 import { readEvidenceSource } from './evidence-source'
 import { experiments } from './registry'
-import { research, researchMethodPages } from './research'
-import { articleSectionId, caseEvidenceHref, caseHref, experimentHref } from './router'
+import { caseEvidencePages, findingSection, liveCaseSection, startingCase } from './experiment-route'
+import { experimentHref, experimentSectionHref } from './router'
 import { headingSlug } from './sections'
 import { vocabularyTerms } from './vocabulary'
 import { readinessFor } from './readiness'
@@ -99,9 +97,7 @@ export function indexMarkdown (source: string, options: DocumentOptions): Search
     let href = options.baseHref
     if (heading && heading.level >= 2) {
       if (options.mode === 'article' && options.experimentId && options.pageId) {
-        href = options.caseId
-          ? caseEvidenceHref(options.experimentId, options.caseId, options.pageId, heading.articleSlug)
-          : experimentHref(options.experimentId, options.pageId, heading.articleSlug)
+        href = experimentHref(options.experimentId, options.pageId, heading.articleSlug)
       } else if (options.mode === 'document') {
         lastDocumentSlug = heading.documentSlug ?? lastDocumentSlug
         if (lastDocumentSlug) href = `${options.baseHref}?section=${encodeURIComponent(lastDocumentSlug)}`
@@ -156,108 +152,53 @@ function publicText (values: Array<string | undefined>): string {
 }
 
 function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
-  const record = research[experiment.id]
-  if (experiment.cases) {
-    return experiment.cases.flatMap(item => {
-      const base = caseHref(experiment.id, item.id)
-      const assessment = readinessFor(experiment.id, item)
-      const entries = [entry({
+  const first = startingCase(experiment)
+  const entries = experiment.cases!.flatMap(item => {
+    const assessment = readinessFor(experiment.id, item)
+    const results: SearchEntry[] = []
+    if (item === first || item.kind !== 'recorded') {
+      results.push(entry({
         key: `${experiment.id}/${item.id}`,
-        title: item.title,
-        kind: 'Experiment',
-        context: experiment.title,
-        href: base,
+        title: item === first ? experiment.title : item.title,
+        kind: item === first ? 'Experiment' : 'Live case',
+        context: item === first ? '' : experiment.title,
+        href: experimentSectionHref(experiment.id, item === first ? null : liveCaseSection(item)),
         experimentId: experiment.id,
         caseId: item.id,
         readiness: assessment,
-        text: publicText([item.question, item.description, item.tryIt, item.reference, item.acceptance,
-          assessment.badge, assessment.finding, assessment.area, assessment.status,
-          ...assessment.evidence.map(result => result.text), assessment.next]),
-      })]
-      if (item.recorded) {
-        entries.push(entry({
-          key: `${experiment.id}/${item.id}/finding`,
-          title: item.title,
-          kind: 'Recorded finding',
-          context: experiment.title,
-          href: `${base}&section=recorded-findings`,
-          experimentId: experiment.id,
-          caseId: item.id,
-          text: publicText([item.recorded.conclusion, item.recorded.scope, item.recorded.limits, item.recorded.date, item.recorded.environment]),
-        }))
-      }
-      for (const observation of experiment.singlePage?.observations ?? []) {
-        entries.push(entry({
-          key: `${experiment.id}/${item.id}/${observation.id}`,
-          title: observation.title,
-          kind: 'Recorded evidence',
-          context: item.title,
-          href: caseHref(experiment.id, item.id, observation.id),
-          experimentId: experiment.id,
-          caseId: item.id,
-          text: publicText([observation.evidence, observation.limits, observation.date]),
-        }))
-      }
-      return entries
-    })
-  }
-  const base = experimentHref(experiment.id)
-  const entries = [entry({
-    key: experiment.id,
-    title: experiment.title,
-    kind: 'Experiment',
-    context: '',
-    href: base,
-    experimentId: experiment.id,
-    text: publicText([record.question, experiment.summary, record.comparison]),
-  }), entry({
-    key: `${experiment.id}/finding`,
-    title: experiment.title,
-    kind: 'Recorded finding',
-    context: '',
-    href: `${base}?section=${experiment.study?.visualFirst ? 'study-overview' : 'recorded-findings'}`,
-    experimentId: experiment.id,
-    text: publicText([experiment.study?.record.conclusion ?? record.conclusion, record.scope]),
-  })]
-  const contract = validationContracts[experiment.id]
-  entries.push(entry({
-    key: `${experiment.id}/comparison`,
-    title: experiment.title,
-    kind: 'Comparison',
-    context: '',
-    href: `${base}?section=${articleSectionId('validation-contract')}`,
-    experimentId: experiment.id,
-    text: publicText([contract.question, contract.reference, contract.acceptance, contract.coverage, contract.limits]),
-  }))
-  if (experiment.study?.visualFirst) {
-    for (const finding of experiment.study.agentFindings?.records ?? []) {
-      entries.push(entry({
-        key: `${experiment.id}/finding/${finding.id}`,
-        title: finding.question,
-        kind: 'Recorded finding',
-        context: experiment.title,
-        href: `${base}?section=study-finding-${encodeURIComponent(finding.id)}`,
-        experimentId: experiment.id,
-        text: publicText([finding.result, finding.limits, finding.recordedAt]),
+        text: publicText([item.title, item.question, item.description, item.tryIt, item.reference, item.acceptance,
+          assessment.badge, assessment.finding, ...assessment.evidence.map(result => result.text), assessment.next]),
       }))
     }
-  }
-  return entries
-}
-
-function publicPages (experiment: ExperimentDefinition): Array<{ page: ExperimentPage; item?: ExperimentCase }> {
-  if (experiment.singlePage) return []
-  if (experiment.cases) {
-    return experiment.cases.flatMap(item => caseEvidenceLinks(item).flatMap(link => {
-      const page = experiment.pages.find(candidate => candidate.id === link.page)
-      return page && !isInstructionText(`${page.id} ${page.title}`) ? [{ page, item }] : []
+    if (item.recorded) {
+      const finding = item.recorded
+      results.push(entry({
+        key: `${experiment.id}/${item.id}/finding`,
+        title: item.title,
+        kind: 'Recorded finding',
+        context: experiment.title,
+        href: experimentSectionHref(experiment.id, experiment.singlePage ? 'recorded-findings' : findingSection(item)),
+        experimentId: experiment.id,
+        caseId: item.id,
+        text: publicText([finding.conclusion, finding.scope, finding.limits, finding.date,
+          finding.environment, ...assessment.evidence.map(result => result.text)]),
+      }))
+    }
+    return results
+  })
+  for (const observation of experiment.singlePage?.observations ?? []) {
+    entries.push(entry({
+      key: `${experiment.id}/${observation.id}`,
+      title: observation.title,
+      kind: 'Recorded evidence',
+      context: experiment.title,
+      href: experimentSectionHref(experiment.id, observation.id),
+      experimentId: experiment.id,
+      caseId: first.id,
+      text: publicText([observation.evidence, observation.limits, observation.date]),
     }))
   }
-  const record = research[experiment.id]
-  const ids = new Set([...researchMethodPages(record), ...(record.evidence ? [record.evidence] : []),
-    ...record.investigations.map(item => item.page)])
-  return experiment.pages.filter(page => ids.has(page.id) && !isInstructionText(`${page.id} ${page.title}`) && page.id !== 'validation-contract')
-    .map(page => ({ page }))
+  return entries
 }
 
 function featureRows (source: string): SearchEntry[] {
@@ -361,17 +302,16 @@ export async function buildSearchIndex (): Promise<SearchIndex> {
     return indexed
   })
   for (const experiment of experiments) {
-    for (const { page, item } of publicPages(experiment)) {
+    for (const page of caseEvidencePages(experiment)) {
       if (page.kind !== 'markdown') continue
       jobs.push((async (): Promise<SearchEntry[]> => indexMarkdown(await page.load(), {
-        key: `${experiment.id}/${item?.id ?? 'document'}/${page.id}`,
+        key: `${experiment.id}/document/${page.id}`,
         title: page.title,
         kind: 'Evidence',
-        context: item?.title ?? experiment.title,
-        baseHref: item ? caseEvidenceHref(experiment.id, item.id, page.id) : experimentHref(experiment.id, page.id),
+        context: experiment.title,
+        baseHref: experimentHref(experiment.id, page.id),
         mode: 'article',
         experimentId: experiment.id,
-        caseId: item?.id,
         pageId: page.id,
       }))())
     }
@@ -408,7 +348,7 @@ export function searchIndex (index: SearchIndex, query: string): SearchResult[] 
     const context = normalize(candidate.context); const text = normalize(candidate.text)
     const haystack = `${title} ${heading} ${context} ${text}`
     if (!words.every(word => containsWord(haystack, word))) continue
-    let score = candidate.kind === 'Experiment' ? 3 : candidate.kind === 'Recorded finding' ? 2 : 0
+    let score = candidate.kind === 'Experiment' || candidate.kind === 'Live case' ? 3 : candidate.kind === 'Recorded finding' ? 2 : 0
     if (title === normalized) score += 60
     else if (title.includes(normalized)) score += 30
     if (heading.includes(normalized)) score += 18

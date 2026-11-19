@@ -58,7 +58,6 @@ export const centerMassPage: SinglePageCase = {
       limits: 'The paired GPU timings varied from −0.201 to +0.105 ms on one device, leaving the speed difference inconclusive.',
     },
   ],
-  related: ['cluster-attraction', 'point-attractors'],
   legacyCases: {
     'center-measurements': 'run-diagnostics',
     'center-force-scale': 'center-trajectories',

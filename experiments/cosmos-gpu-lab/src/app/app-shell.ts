@@ -1,7 +1,4 @@
-import type {
-  ExperimentDefinition,
-} from '../runtime/experiment'
-import { caseEvidenceLinks } from '../runtime/experiment'
+import type { ExperimentCase, ExperimentDefinition } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
@@ -9,22 +6,25 @@ import { createRetainedRun } from '../runtime/retained-run'
 import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import {
-  architectureHref, articleSectionId, caseHref, conceptHref, experimentHref, readRoute, vocabularyHref, currentSection,
+  architectureHref, conceptHref, experimentHref, experimentSectionHref, readRoute, vocabularyHref, currentSection,
 } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { research } from './research'
 import { renderJourney, renderJourneyFlow } from './journey'
 import { renderCoverageSummary, markCoverageRows } from './coverage'
 import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
-import { resolveExperimentSection } from './article-sections'
-import { disposeExperimentNotes, mountExperimentNotes, renderExperimentContents } from './experiment-page'
-import { renderStudyOverview } from './study-overview'
-import { checkAgentFindingLinks, renderAgentFindings } from './agent-findings'
-import { renderCaseEvidence, renderCaseFrame } from './case-page'
+import { renderCaseFrame } from './case-page'
+import { experimentDestination, liveCaseSection, startingCase } from './experiment-route'
+import type { ExperimentDestination } from './experiment-route'
 import { mountGlobalSearch } from './global-search'
 import { readinessFor } from './readiness'
 import { readinessBadge } from './readiness/presentation'
+
+type MountedCasePage = {
+  id: string;
+  release: () => void;
+  visit: (destination: ExperimentDestination) => Promise<void>;
+}
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -51,35 +51,21 @@ function renderHome (host: HTMLElement): void {
     heading.append(title, description)
     const grid = document.createElement('ul'); grid.className = 'experiment-grid'
     for (const experiment of group.experiments) {
-      if (!experiment.cases) {
-        const card = document.createElement('li'); card.className = 'experiment-item'
-        const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
-        link.dataset.experimentId = experiment.id
-        const title = document.createElement('h4'); title.textContent = experiment.title
-        const question = document.createElement('p'); question.textContent = research[experiment.id].question
-        link.append(title, question)
-        if (research[experiment.id].investigations.some(item => item.page === research[experiment.id].evidence && item.state === 'Parked')) {
-          const note = document.createElement('span'); note.className = 'catalog-meta'; note.textContent = 'Recorded study'; link.append(note)
-        }
-        card.append(link); grid.append(card)
-        continue
+      const item = startingCase(experiment)
+      const assessment = readinessFor(experiment.id, item)
+      const card = document.createElement('li'); card.className = 'experiment-item'
+      const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
+      link.dataset.experimentId = experiment.id
+      const heading = document.createElement('div'); heading.className = 'experiment-card-heading'
+      const title = document.createElement('h4'); title.textContent = experiment.title
+      heading.append(title, readinessBadge(assessment.badge, assessment.tone))
+      const finding = document.createElement('p'); finding.className = 'experiment-card-finding'
+      if (item.kind === 'recorded') {
+        const note = document.createElement('span'); note.className = 'catalog-recorded'; note.textContent = 'Recorded study · '
+        finding.append(note)
       }
-      for (const item of experiment.cases) {
-        const assessment = readinessFor(experiment.id, item)
-        const card = document.createElement('li'); card.className = 'experiment-item'
-        const link = document.createElement('a'); link.className = 'experiment-card'; link.href = caseHref(experiment.id, item.id)
-        link.dataset.experimentId = experiment.id; link.dataset.caseId = item.id
-        const heading = document.createElement('div'); heading.className = 'experiment-card-heading'
-        const title = document.createElement('h4'); title.textContent = item.title
-        heading.append(title, readinessBadge(assessment.badge, assessment.tone))
-        const finding = document.createElement('p'); finding.className = 'experiment-card-finding'
-        if (item.kind === 'recorded') {
-          const note = document.createElement('span'); note.className = 'catalog-recorded'; note.textContent = 'Recorded study · '
-          finding.append(note)
-        }
-        finding.append(document.createTextNode(assessment.finding)); link.append(heading, finding)
-        card.append(link); grid.append(card)
-      }
+      finding.append(document.createTextNode(assessment.finding)); link.append(heading, finding)
+      card.append(link); grid.append(card)
     }
     section.append(heading, grid); catalog.append(section)
   }
@@ -171,32 +157,6 @@ function renderReductionFrame (host: HTMLElement): HTMLElement {
   return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
-function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinition): void {
-  const record = research[experiment.id]
-  host.innerHTML = `<div class="experiment-document">
-    <header class="experiment-header unified-header"><h1>${experiment.title}</h1>
-      <p>${record.question}</p>
-      ${experiment.study ? '' : `<p class="research-conclusion">${record.conclusion}</p>`}</header>
-    <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
-  if (experiment.study?.visualFirst) {
-    const summary = document.createElement('p'); summary.className = 'study-key-result'
-    const label = document.createElement('strong'); label.textContent = 'Recorded result: '
-    const link = document.createElement('a'); link.href = `${experimentHref(experiment.id)}?section=study-overview`
-    link.textContent = 'See details'
-    summary.append(label, document.createTextNode(`${experiment.study.record.conclusion} `), link)
-    requiredElement(host, '.experiment-header').append(summary)
-  }
-  if (experiment.study && !experiment.study.visualFirst) {
-    const header = requiredElement(host, '.experiment-header')
-    const findings = renderAgentFindings(experiment); if (findings) header.append(findings)
-    header.append(renderStudyOverview(experiment))
-  }
-}
-
-function wantsLiveStudy (view: 'run' | 'evidence' | undefined, section: string | null): boolean {
-  return (view === 'run' && !section) || ['run-run', 'run-configuration', 'run-results', 'run-diagnostics'].includes(section ?? '')
-}
-
 function renderMissing (host: HTMLElement, id: string): void {
   host.innerHTML = `
     <section class="empty-state">
@@ -262,45 +222,97 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   const measureHeader = (): void => { root.style.setProperty('--lab-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`) }
   const headerSize = new ResizeObserver(measureHeader); headerSize.observe(header); measureHeader()
   const workspace = requiredElement<HTMLElement>(root, '.workspace')
-  let run = createRetainedRun(disposeExperimentNotes)
-  let parkedSearchRun: { owner: ReturnType<typeof createRetainedRun>; id: string; caseId?: string } | undefined
+  let run = createRetainedRun()
+  let parkedSearchRun: { owner: ReturnType<typeof createRetainedRun>; id: string } | undefined
   const disposeSearch = mountGlobalSearch(header, target => {
     workspace.focus({ preventScroll: true })
-    if (!run.id || !target.experimentId || (run.id === target.experimentId && run.caseId === target.caseId)) return
-    if (parkedSearchRun?.id === target.experimentId && parkedSearchRun.caseId === target.caseId) return
+    if (!run.id || !target.experimentId || run.id === target.experimentId || parkedSearchRun?.id === target.experimentId) return
     parkedSearchRun?.owner.destroy()
-    const id = run.id; const caseId = run.caseId
+    mountedPage?.release()
+    const id = run.id
     run.hide()
-    parkedSearchRun = { owner: run, id, caseId }
-    run = createRetainedRun(disposeExperimentNotes)
+    parkedSearchRun = { owner: run, id }
+    run = createRetainedRun()
   })
   const destroyRuns = (): void => { run.destroy(); parkedSearchRun?.owner.destroy(); parkedSearchRun = undefined }
-  let disposeContents = (): void => {}
-  let mountedExperiment: string | undefined
-  let mountedCase: string | undefined
-  let mountedEvidence: string | undefined
-  let failedRun: HTMLElement | undefined
-  let studyNotes: HTMLElement | undefined
-  let startStudyLive: (() => Promise<void>) | undefined
+  let mountedPage: MountedCasePage | undefined
   let renderVersion = 0
   const scrollPositions = new Map<string, number>()
   let previousPath: string | undefined
 
-  const focusCaseSection = (section: string | null): boolean => {
-    if (section === 'run-diagnostics') {
-      const tools = workspace.querySelector<HTMLDetailsElement>('.case-single-page #run-diagnostics > details')
-      if (tools) tools.open = true
-    }
-    return scrollToSection(workspace, section)
-  }
+  function mountCasePage (experiment: ExperimentDefinition, owner: ReturnType<typeof createRetainedRun>): MountedCasePage {
+    const frame = renderCaseFrame(workspace, experiment)
+    let active = experiment.cases!.find(item => owner.id === experiment.id && item.id === owner.caseId) ?? startingCase(experiment)
+    frame.setLiveCase(active)
+    let focusRequest = 0
+    let launch = 0
+    let opening: { id: string; ready: Promise<void> } | undefined
+    const moveFindingsAfterRun = (): void => { frame.slot.after(frame.recorded, frame.comparison) }
 
-  const focusExperimentSection = (id: string): void => {
-    const original = currentSection()
-    const loading = workspace.querySelector('.unified-experiment[aria-busy="true"]')
-    const section = loading ? original : resolveExperimentSection(workspace, research[id], original)
-    if (section !== original) window.history.replaceState(null, '', `${experimentHref(id)}?section=${encodeURIComponent(section!)}`)
-    if (section) scrollToSection(workspace, section)
-    else window.scrollTo(0, 0)
+    const openCase = (item: ExperimentCase, deferComparison = false): Promise<void> => {
+      if (opening?.id === item.id) return opening.ready
+      if (owner.id === experiment.id && owner.caseId === item.id && frame.slot.firstElementChild) return Promise.resolve()
+      const request = ++launch
+      active = item; frame.setLiveCase(item); moveFindingsAfterRun()
+      frame.stage.setAttribute('aria-busy', 'true')
+      frame.start.hidden = frame.retry.hidden = true
+      frame.status.textContent = 'Creating the live experiment…'
+      const isCurrent = (): boolean => request === launch && frame.stage.isConnected
+      const ready = (async (): Promise<void> => {
+        try {
+          await owner.show(experiment, frame.slot, item.id, deferComparison ? { deferComparison } : undefined)
+          if (!isCurrent()) return
+          const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
+          if (layout) {
+            const supplementary = layout.querySelector('#run-explanation, #run-live-explanation, #run-diagnostics')
+            if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, frame.comparison)
+            else layout.append(frame.recorded, frame.comparison)
+          }
+          frame.status.textContent = ''
+        } catch (error) {
+          if (!isCurrent()) return
+          frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
+          frame.retry.hidden = false
+        } finally {
+          if (isCurrent()) { opening = undefined; frame.stage.setAttribute('aria-busy', 'false') }
+        }
+      })()
+      opening = { id: item.id, ready }
+      return ready
+    }
+    const launchActive = (): void => { focusRequest++; openCase(active).catch(() => {}) }
+    frame.retry.addEventListener('click', launchActive)
+    frame.start.addEventListener('click', launchActive)
+    frame.chooser.addEventListener('change', () => {
+      const item = experiment.cases!.find(candidate => candidate.id === frame.chooser.value)!
+      const section = item === startingCase(experiment) ? null : liveCaseSection(item)
+      window.history.replaceState(null, '', experimentSectionHref(experiment.id, section))
+      const keepFocus = document.activeElement === frame.chooser
+      focusRequest++
+      openCase(item).then(() => { if (keepFocus && document.activeElement === document.body) frame.chooser.focus({ preventScroll: true }) }).catch(() => {})
+    })
+    return {
+      id: experiment.id,
+      release (): void { moveFindingsAfterRun(); focusRequest++; launch++ },
+      async visit (destination: ExperimentDestination): Promise<void> {
+        const request = ++focusRequest
+        const { section } = destination
+        if (active.kind !== 'recorded') {
+          if (destination.startLive || (owner.id === experiment.id && !frame.slot.firstElementChild)) {
+            await openCase(destination.liveCase ?? active, !!experiment.singlePage && section === 'run-diagnostics')
+          } else if (owner.id !== experiment.id && frame.retry.hidden) frame.start.hidden = false
+        }
+        if (request !== focusRequest || !frame.stage.isConnected) return
+        if (!section) { window.scrollTo(0, 0); return }
+        if (section === 'run-diagnostics') {
+          const tools = frame.slot.querySelector<HTMLDetailsElement>('#run-diagnostics > details')
+          if (tools) tools.open = true
+        }
+        const fallback = await frame.openEvidence(section)
+        if (request !== focusRequest || !frame.stage.isConnected) return
+        if (!scrollToSection(workspace, section) && fallback) scrollToSection(workspace, fallback)
+      },
+    }
   }
 
   const render = async (): Promise<void> => {
@@ -314,80 +326,19 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       else link.removeAttribute('aria-current')
     }
     const definition = route.kind === 'experiment' ? findExperiment(route.experimentId) : undefined
-    const validPage = definition && (route.kind !== 'experiment' || !route.pageId || definition.pages.some(page => page.id === route.pageId))
-    let selectedCase = route.kind === 'experiment' && definition?.cases
-      ? definition.cases.find(item => item.id === (route.caseId ?? definition.cases![0].id))
-      : undefined
-    let caseSection = currentSection()
-    let evidencePage = route.kind === 'experiment' ? route.evidencePage ?? route.pageId : undefined
-    if (route.kind === 'experiment' && definition?.singlePage && validPage) {
-      const { legacyCases, pageSections } = definition.singlePage
-      const legacySection = route.caseId && Object.hasOwn(legacyCases, route.caseId) ? legacyCases[route.caseId] : undefined
-      if (selectedCase || legacySection) {
-        const slug = caseSection ?? ''
-        const page = evidencePage ?? Object.keys(pageSections).sort((a, b) => b.length - a.length).find(id =>
-          slug === articleSectionId(id) || slug.startsWith(`${articleSectionId(id)}-`))
-        const inlineSection = page && Object.hasOwn(pageSections, page) ? pageSections[page] : legacySection
-        if (inlineSection) {
-          selectedCase = definition.cases![0]; caseSection = inlineSection; evidencePage = undefined
-          window.history.replaceState(null, '', caseHref(definition.id, selectedCase.id, inlineSection))
-        }
-      }
+    const destination = definition && route.kind === 'experiment' ? experimentDestination(definition, route, currentSection()) : undefined
+    if (destination && destination.href !== window.location.hash) window.history.replaceState(null, '', destination.href)
+    if (destination && mountedPage?.id === definition?.id) {
+      await mountedPage!.visit(destination)
+      return
     }
-    if (route.kind === 'experiment' && selectedCase && definition) {
-      if (route.pageId && evidencePage) {
-        caseSection = caseSection?.startsWith(`${articleSectionId(route.pageId)}-`)
-          ? caseSection
-          : articleSectionId(route.pageId, caseSection ?? undefined)
-      }
-      if (!evidencePage && caseSection?.startsWith('doc-')) {
-        evidencePage = [...definition.pages].sort((a, b) => b.id.length - a.id.length).find(page =>
-          caseSection === articleSectionId(page.id) || caseSection!.startsWith(`${articleSectionId(page.id)}-`))?.id
-      }
-      if (!route.caseId && evidencePage && evidencePage !== 'agent-recipe') {
-        const candidates = definition.cases!.filter(item => caseEvidenceLinks(item).some(link => link.page === evidencePage))
-        const exact = candidates.find(item => caseEvidenceLinks(item).some(link => link.page === evidencePage && link.section &&
-          caseSection === articleSectionId(link.page, link.section)))
-        selectedCase = exact ?? candidates.find(item => item.kind === 'recorded') ?? candidates[0] ?? selectedCase
-      }
-      if (!route.caseId && caseSection === 'run-diagnostics' && definition.id === 'point-styling') {
-        selectedCase = definition.cases!.find(item => item.id === 'picking')!
-      }
-      if (caseSection === 'run-run') caseSection = 'case-live'
-      if (caseSection === 'study-overview' || caseSection === 'study-investigations') caseSection = 'recorded-findings'
-      if (evidencePage === 'agent-recipe') {
-        evidencePage = undefined; caseSection = 'recorded-findings'
-        window.history.replaceState(null, '', `${caseHref(definition.id, selectedCase.id)}&section=recorded-findings`)
-      } else if (route.view === 'evidence' && !evidencePage && !caseSection) caseSection = 'recorded-findings'
-      const needsMeasurements = definition.singlePage && caseSection === 'run-diagnostics' && run.id !== definition.id
-      if (!needsMeasurements && mountedExperiment === definition.id && mountedCase === selectedCase.id && mountedEvidence === evidencePage) {
-        if (caseSection) {
-          if (!focusCaseSection(caseSection) && evidencePage) scrollToSection(workspace, articleSectionId(evidencePage))
-        } else window.scrollTo(0, 0)
-        return
-      }
-    } else if (route.kind === 'experiment' && validPage && !definition?.cases) {
-      const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
-      if (route.pageId === 'agent-recipe' || params.get('section')?.startsWith('doc-agent-recipe')) {
-        params.set('section', 'recorded-findings')
-      } else if (route.pageId) params.set('section', articleSectionId(route.pageId, currentSection() ?? undefined))
-      else if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
-      window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
-      if (mountedExperiment === route.experimentId) {
-        if (startStudyLive && wantsLiveStudy(route.view, currentSection())) await startStudyLive()
-        focusExperimentSection(route.experimentId); return
-      }
-    }
-    if (route.kind === 'experiment' && definition && parkedSearchRun?.id === definition.id &&
-      parkedSearchRun.caseId === selectedCase?.id) {
+    mountedPage?.release(); mountedPage = undefined
+    if (definition && destination && parkedSearchRun?.id === definition.id &&
+      (!destination.liveCase || parkedSearchRun.owner.caseId === destination.liveCase.id)) {
       run.destroy(); run = parkedSearchRun.owner; parkedSearchRun = undefined
     }
     renderVersion += 1
     const version = renderVersion
-    disposeContents(); mountedExperiment = undefined; mountedCase = undefined; mountedEvidence = undefined
-    if (failedRun) { disposeExperimentNotes(failedRun); failedRun = undefined }
-    if (studyNotes) { disposeExperimentNotes(studyNotes); studyNotes = undefined }
-    startStudyLive = undefined
     disposeDocumentTables(workspace)
     if (previousPath) scrollPositions.set(previousPath, window.scrollY)
     const path = window.location.hash.split('?')[0] || '#/'
@@ -398,8 +349,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       window.scrollTo(0, route.kind === 'home' ? 0 : scrollPositions.get(path) ?? 0)
     }
     run.hide()
-    if (route.kind === 'home' || (route.kind === 'experiment' &&
-      (run.id !== route.experimentId || (definition?.cases && run.caseId !== selectedCase?.id)))) {
+    if (route.kind === 'home' || (route.kind === 'experiment' && (!destination || run.id !== route.experimentId))) {
       if (run.id) scrollPositions.delete(experimentHref(run.id))
       run.destroy()
     }
@@ -528,181 +478,16 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       finish(); return
     }
 
-    const experiment = findExperiment(route.experimentId)
-    if (!experiment) {
-      renderMissing(workspace, route.experimentId)
+    if (!definition || !destination) {
+      renderMissing(workspace, definition && (route.evidencePage || route.pageId)
+        ? `${definition.id}/docs/${route.evidencePage ?? route.pageId}`
+        : route.caseId ? `${route.experimentId}?case=${route.caseId}` : route.experimentId)
       finish()
       return
     }
-
-    if (route.pageId && !experiment.pages.some(page => page.id === route.pageId)) {
-      renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return
-    }
-    if (experiment.cases) {
-      selectedCase = selectedCase ?? (route.caseId ? undefined : experiment.cases[0])
-      if (!selectedCase) { renderMissing(workspace, `${experiment.id}?case=${route.caseId}`); return }
-      if (evidencePage) {
-        const page = experiment.pages.find(entry => entry.id === evidencePage)
-        if (!page) { renderMissing(workspace, `${experiment.id}/docs/${evidencePage}`); return }
-        try {
-          await renderCaseEvidence(workspace, experiment, selectedCase, page)
-          if (version !== renderVersion) return
-          mountedExperiment = experiment.id; mountedCase = selectedCase.id; mountedEvidence = evidencePage
-          if (caseSection && !scrollToSection(workspace, caseSection)) scrollToSection(workspace, articleSectionId(page.id))
-        } catch (error) { if (version === renderVersion) renderFailure(workspace, error) }
-        return
-      }
-      const frame = renderCaseFrame(workspace, experiment, selectedCase)
-      mountedExperiment = experiment.id; mountedCase = selectedCase.id; mountedEvidence = undefined
-      if (selectedCase.kind === 'recorded') {
-        frame.stage.setAttribute('aria-busy', 'false')
-        if (caseSection) scrollToSection(workspace, caseSection)
-        return
-      }
-      let opening: Promise<void> | undefined
-      const openCase = (): Promise<void> => {
-        if (opening) return opening
-        frame.stage.setAttribute('aria-busy', 'true')
-        frame.retry.hidden = true; frame.retry.disabled = true; frame.status.textContent = 'Creating the live experiment…'
-        opening = (async (): Promise<void> => {
-          try {
-            const deferComparison = !!experiment.singlePage && caseSection === 'run-diagnostics'
-            await run.show(experiment, frame.slot, selectedCase!.id, deferComparison ? { deferComparison } : undefined)
-            if (version !== renderVersion || !frame.slot.isConnected) return
-            const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
-            if (layout) {
-              layout.querySelector('.case-recorded')?.remove()
-              layout.querySelector('.case-comparison')?.remove()
-              const supplementary = layout.querySelector('#run-explanation, #run-live-explanation, #run-diagnostics')
-              if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, frame.comparison)
-              else layout.append(frame.recorded, frame.comparison)
-            }
-            frame.status.textContent = ''
-          } catch (error) {
-            if (version !== renderVersion || !frame.slot.isConnected) return
-            frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
-            frame.retry.hidden = false; frame.retry.disabled = false
-          } finally {
-            if (version === renderVersion) {
-              frame.stage.setAttribute('aria-busy', 'false')
-              if (caseSection) focusCaseSection(caseSection)
-            }
-          }
-        })().finally(() => { opening = undefined })
-        return opening
-      }
-      frame.retry.addEventListener('click', () => { openCase().catch(error => { frame.status.textContent = String(error) }) })
-      const readingEvidence = experiment.singlePage && (caseSection === 'recorded-findings' || caseSection === 'case-comparison' ||
-        experiment.singlePage.observations.some(item => item.id === caseSection))
-      if (readingEvidence && (run.id !== experiment.id || run.caseId !== selectedCase.id)) {
-        const start = document.createElement('button'); start.type = 'button'; start.textContent = 'Start the live comparison'
-        start.className = 'button-primary'; frame.slot.append(start)
-        start.addEventListener('click', () => {
-          start.remove(); caseSection = null
-          openCase().catch(error => { frame.status.textContent = String(error) })
-        })
-        frame.stage.setAttribute('aria-busy', 'false'); scrollToSection(workspace, caseSection)
-        return
-      }
-      await openCase()
-      return
-    }
-    const record = research[experiment.id]
-    renderExperimentFrame(workspace, experiment)
-    const documentFrame = requiredElement<HTMLElement>(workspace, '.experiment-document')
-    const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
-    disposeContents = renderExperimentContents(documentFrame, experiment)
-    if (experiment.study) {
-      const liveSection = document.createElement('section'); liveSection.id = 'run-run'; liveSection.className = 'study-live'
-      const intro = document.createElement('div'); intro.className = 'study-live-intro'
-      intro.innerHTML = '<h2>Live experiment</h2><p></p>'
-      requiredElement(intro, 'p').textContent = experiment.study.liveDescription ??
-        'This is a new local session, separate from the recorded findings.'
-      const launch = document.createElement('div'); launch.className = 'study-launch'
-      launch.innerHTML = '<p role="status" data-study-status></p><button type="button" data-start-study hidden>Retry live experiment</button>'
-      const slot = document.createElement('div'); slot.className = 'study-live-slot'
-      liveSection.append(intro, launch, slot)
-      const overview = experiment.study.visualFirst ? renderStudyOverview(experiment) : undefined
-      const findings = experiment.study.visualFirst ? renderAgentFindings(experiment) : undefined
-      const notesHost = document.createElement('div'); notesHost.className = 'study-notes-host'
-      notesHost.innerHTML = '<div class="run-layout"></div>'
-      stage.append(liveSection); if (overview) stage.append(overview)
-      if (findings) stage.append(findings)
-      stage.append(notesHost); studyNotes = notesHost
-      const button = requiredElement<HTMLButtonElement>(launch, '[data-start-study]')
-      const status = requiredElement<HTMLElement>(launch, '[data-study-status]')
-      let opening: Promise<void> | undefined; let opened = false
-      const refreshContents = (): void => { disposeContents(); disposeContents = renderExperimentContents(documentFrame, experiment) }
-      startStudyLive = (): Promise<void> => {
-        if (opened) return Promise.resolve()
-        if (opening) return opening
-        button.disabled = true; button.hidden = true; status.textContent = 'Creating the live experiment…'
-        opening = (async (): Promise<void> => {
-          try {
-            await run.show(experiment, slot)
-            if (version !== renderVersion || !slot.isConnected) return
-            // The complete document is already mounted independently of GPU setup.
-            if (overview) {
-              const live = requiredElement<HTMLElement>(slot, '#run-live-viewer')
-              live.querySelector('#study-overview')?.remove()
-              live.append(overview); live.setAttribute('aria-label', 'Live comparison and recorded result')
-            }
-            launch.remove(); opened = true; refreshContents()
-          } catch (error) {
-            if (version !== renderVersion || !slot.isConnected) return
-            status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
-            button.hidden = false; button.disabled = false
-            refreshContents()
-          }
-        })().finally(() => { opening = undefined })
-        return opening
-      }
-      button.addEventListener('click', () => { startStudyLive?.().catch(error => { status.textContent = String(error) }) })
-      const liveReady = startStudyLive()
-      try {
-        await mountExperimentNotes(notesHost, experiment, record)
-        if (version !== renderVersion) return
-        checkAgentFindingLinks(documentFrame)
-        mountedExperiment = experiment.id; stage.setAttribute('aria-busy', 'false'); refreshContents()
-        if (wantsLiveStudy(route.view, currentSection())) await liveReady
-        if (version !== renderVersion) return
-        if (currentSection()) focusExperimentSection(experiment.id)
-      } catch (error) {
-        if (version !== renderVersion) return
-        run.destroy(); startStudyLive = undefined; disposeContents(); disposeContents = (): void => {}
-        disposeExperimentNotes(notesHost); studyNotes = undefined
-        stage.setAttribute('aria-busy', 'false'); renderFailure(stage, error)
-        if (findings) stage.append(findings)
-        checkAgentFindingLinks(documentFrame)
-      }
-      finish(); return
-    }
-    try {
-      let live: HTMLElement
-      try {
-        await run.show(experiment, stage)
-        if (version !== renderVersion) return
-        live = requiredElement(stage, '.experiment-run')
-      } catch (error) {
-        if (version !== renderVersion) return
-        live = document.createElement('div'); live.className = 'experiment-run'
-        live.innerHTML = `<div class="run-layout"><section id="run-run"><h2>Live experiment unavailable</h2>
-          <p>The explanations and recorded findings remain available below.</p><pre></pre></section>
-          <section id="run-results"><h2>Live results</h2><p>Unavailable: the experiment could not initialize.</p></section></div>`
-        live.querySelector('pre')!.textContent = error instanceof Error ? error.message : String(error)
-        stage.append(live); failedRun = live
-      }
-      mountedExperiment = experiment.id
-      await mountExperimentNotes(live, experiment, record)
-      if (version !== renderVersion) return
-      disposeContents(); disposeContents = renderExperimentContents(documentFrame, experiment)
-      stage.setAttribute('aria-busy', 'false'); mountedExperiment = experiment.id
-      if (currentSection()) focusExperimentSection(experiment.id)
-    } catch (error) {
-      if (version !== renderVersion) return
-      stage.setAttribute('aria-busy', 'false'); renderFailure(stage, error)
-    }
-    finish()
+    const page = mountCasePage(definition, run)
+    mountedPage = page
+    await page.visit(destination)
   }
 
   const handleRoute = (): void => {
@@ -710,10 +495,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   }
 
   const handleSameSection = (event: MouseEvent): void => {
-    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !mountedExperiment) return
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !mountedPage) return
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
     if (link && link.hash === window.location.hash && link.origin === window.location.origin && link.pathname === window.location.pathname) {
-      event.preventDefault(); focusExperimentSection(mountedExperiment)
+      event.preventDefault(); handleRoute()
     }
   }
   root.addEventListener('click', handleSameSection)
@@ -723,9 +508,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   return {
     destroy (): void {
       headerSize.disconnect(); disposeDocumentTables(workspace); disposeSearch()
-      renderVersion++; disposeContents(); destroyRuns()
-      if (failedRun) disposeExperimentNotes(failedRun)
-      if (studyNotes) disposeExperimentNotes(studyNotes)
+      renderVersion++; mountedPage?.release(); destroyRuns()
       root.removeEventListener('click', handleSameSection)
       window.removeEventListener('hashchange', handleRoute)
       window.removeEventListener('beforeunload', destroyRuns)
