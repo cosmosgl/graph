@@ -113,28 +113,35 @@ it('uses the slot tier above the exact limit and exposes the declared duplicate 
   expect(setup.forces[5362 * 4]).toBeCloseTo(2.875, 5)
 })
 
-it('reuses each point cell without changing slots or correction bytes', async () => {
-  const { points, sizes, settings, frames } = fixture(8192)
-  const scope = resourceScope()
-  try {
-    const device = scope.own(await createDevice('webgpu'))
-    const positions = scope.own(upload(device, points))
-    const directForces = scope.own(upload(device, new Float32Array(points.length)))
-    const cachedForces = scope.own(upload(device, new Float32Array(points.length)))
-    const direct = scope.own(await createCollisionSlotsWebGPU(device, sizes, directForces, settings, ORIGIN))
-    const cached = scope.own(await createCollisionSlotsWebGPU(device, sizes, cachedForces, settings, ORIGIN, undefined, true))
-    for (const frame of frames) {
-      direct.prepare(frame); cached.prepare(frame)
-      const pass = device.beginComputePass()
-      try { direct.encode(pass, positions); cached.encode(pass, positions) } finally { pass.end() }
-      await waitForGpu(device)
-      expect(compareSlots(await cached.readSlots(), await direct.readSlots())).toMatchObject({ failures: 0 })
-      const directBytes = await directForces.readAsync()
-      const cachedBytes = await cachedForces.readAsync()
-      expect(cachedBytes.every((value, offset) => value === directBytes[offset])).toBe(true)
-    }
-  } finally { scope.destroy() }
-})
+for (const count of COUNTS) {
+  it(`preserves slots and correction bytes with alternate collision cell lookups at ${count} points`, async () => {
+    const { points, sizes, settings, frames } = fixture(count)
+    const scope = resourceScope()
+    try {
+      const device = scope.own(await createDevice('webgpu'))
+      const positions = scope.own(upload(device, points))
+      const variants = []
+      for (const lookup of ['direct', 'cached', 'power-of-two'] as const) {
+        const forces = scope.own(upload(device, new Float32Array(points.length)))
+        variants.push({ lookup, forces, solver: scope.own(await createCollisionSlotsWebGPU(device, sizes, forces, settings, ORIGIN, undefined, lookup)) })
+      }
+      const [direct, ...alternates] = variants
+      for (const frame of frames) {
+        variants.forEach(({ solver }) => { solver.prepare(frame) })
+        const pass = device.beginComputePass()
+        try { variants.forEach(({ solver }) => { solver.encode(pass, positions) }) } finally { pass.end() }
+        await waitForGpu(device)
+        const directSlots = await direct.solver.readSlots()
+        const directBytes = await direct.forces.readAsync()
+        for (const { lookup, forces, solver } of alternates) {
+          expect(compareSlots(await solver.readSlots(), directSlots), lookup).toMatchObject({ failures: 0 })
+          const bytes = await forces.readAsync()
+          expect(bytes.every((value, offset) => value === directBytes[offset]), lookup).toBe(true)
+        }
+      }
+    } finally { scope.destroy() }
+  })
+}
 
 for (const count of COUNTS) {
   it(`matches independent slot order, correction and moving positions for ${count} points`, async () => {

@@ -8,7 +8,22 @@ import buildSource from './hashed-build.wgsl?raw'
 const grid = replaceOnce(gridSource, '// @collision-rotations', COLLISION_ROTATIONS.map(([a, b], axis) =>
   `const rotation${axis === 0 ? 'X' : 'Y'} = vec2u(${a}u, ${b}u);`).join('\n'))
 
+export type CollisionCellLookup = 'direct' | 'cached' | 'power-of-two'
+
+const powerOfTwoGrid = replaceOnce(grid,
+  'let cell = floor(vec2f(roundedProduct(relative.x, grid.cellsPerUnit), roundedProduct(relative.y, grid.cellsPerUnit)));', `
+  let bits = bitcast<u32>(grid.cellsPerUnit);
+  var scaled: vec2f;
+  if (bits > 0u && bits < 0x7f800000u && (bits & 0x007fffffu) == 0u) {
+    // Scaling by a normal power of two does not round a normal significand.
+    scaled = relative * grid.cellsPerUnit;
+  } else {
+    scaled = vec2f(roundedProduct(relative.x, grid.cellsPerUnit), roundedProduct(relative.y, grid.cellsPerUnit));
+  }
+  let cell = floor(scaled);`)
+
 export const collisionSlotBuildSource = product + grid + buildSource
+export const scaledCollisionSlotBuildSource = product + powerOfTwoGrid + buildSource
 export const cachedCollisionSlotBuildSource = `${replaceOnce(collisionSlotBuildSource,
   'let bucket = collisionSlotBucket(collisionWorldCell(point.xy));', `
   let cell = collisionWorldCell(point.xy);
@@ -16,7 +31,8 @@ export const cachedCollisionSlotBuildSource = `${replaceOnce(collisionSlotBuildS
   let bucket = collisionSlotBucket(cell);`)}
 @group(0) @binding(5) var<storage, read_write> pointCells: array<vec2i>;`
 
-export function collisionSlotForceSource (cacheCells = false): string {
+export function collisionSlotForceSource (lookup: CollisionCellLookup = 'direct'): string {
+  const cacheCells = lookup === 'cached'
   // Retain the small-graph candidate's correction math. Only change how
   // neighbors are found, in the production 3×3 cell and peeled-hash order.
   let force = collisionForceSource('targeted')
@@ -42,7 +58,7 @@ export function collisionSlotForceSource (cacheCells = false): string {
 ${correction}
       }
     }${force.slice(end)}
-${grid}
+${lookup === 'power-of-two' ? powerOfTwoGrid : grid}
 @group(0) @binding(4) var<uniform> grid: CollisionGrid;
 @group(0) @binding(5) var<storage, read> slots: array<u32>;
 ${cacheCells ? '@group(0) @binding(6) var<storage, read> pointCells: array<vec2i>;' : ''}

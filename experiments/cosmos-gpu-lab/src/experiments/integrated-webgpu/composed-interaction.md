@@ -273,6 +273,13 @@ million-point graph shapes at matched settings and record the added
 eight-byte cell entry per point. Enable the paired cache comparison with
 `VITE_LAB_RESIDENT_COLLISION_CACHE=1`.
 
+For a second comparison, use native multiplication only when the cell
+scale is a normal power of two. Preserve the rounded multiplication at
+other scales. Keep the lookup and force buffers unchanged. Compare
+collision slot and force bytes with both the 8-unit and the 12.5-unit
+fixtures before timing the paired million-point modes. Select these
+pairs with `VITE_LAB_RESIDENT_COLLISION_SCALED=1`.
+
 ```sh
 LAB_NATIVE_VISIBLE=1 LAB_DEFAULT_GPU_FLAGS=1 VITE_LAB_RESIDENT_FULL_FORCES=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-forces.test.ts
@@ -322,6 +329,28 @@ SHA-256 `31ff4781c54e0f8b8bae357e63899148d2fb5c543ef8b2dc3e84f02f008de4d6`.
 Independent whole-layout checks at one million, adaptive repulsion there,
 production styling, trusted full-force interactions and a larger sample
 of hub topologies remain open.
+
+### Power-of-two collision scaling
+
+The two alternative lookups preserved exact collision slot IDs and force
+bytes over nine seeded frames at 4,097 and 8,192 points. The 8-unit cell exercises
+native scaling. The 12.5-unit cell exercises the rounded fallback.
+
+| Workload | Collision median GPU time, direct → power of two | Frame p95, direct → power of two |
+| --- | ---: | ---: |
+| Dense | 171.57 → 172.69 ms | 267.4 → 267.4 ms |
+| Hub | 167.90 → 167.05 ms | 267.0 → 268.1 ms |
+
+All four million-point lanes preserved the link indices, pins and absence.
+The measured GPU allocation stayed at 233.2 MiB and every lane missed
+33 ms on all 48 intervals. The exact scale shortcut produced no useful
+improvement in the complete frame. Keep the original lookup. Profile the
+hash build, slot selection and per-point correction separately before
+changing the algorithm.
+
+The visible Chrome 157 M3 run used native Metal 3 and luma 10.0.0-alpha.15.
+See `captures/resident-collision-power-of-two-m3-20261120-054335/` with source
+archive SHA-256 `34d727db24f58151066845c09d87999b3b02873bee015eef638d3d6c02767b28`.
 
 ## Reproduce
 

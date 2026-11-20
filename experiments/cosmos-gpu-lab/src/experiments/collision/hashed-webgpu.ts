@@ -4,11 +4,12 @@ import { bindingLayout, upload } from '../../gpu/luma'
 import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import type { CollisionParameters } from './data'
 import { collisionSlotGrid, collisionSlotUniforms, type CollisionOrigin, type CollisionSlotFrame } from './hashed-grid'
-import { cachedCollisionSlotBuildSource, collisionSlotBuildSource, collisionSlotForceSource } from './hashed-source'
+import { cachedCollisionSlotBuildSource, collisionSlotBuildSource, collisionSlotForceSource, scaledCollisionSlotBuildSource } from './hashed-source'
+import type { CollisionCellLookup } from './hashed-source'
 
 export async function createCollisionSlotsWebGPU (
   device: Device, sizes: Float32Array, forces: Buffer, settings: CollisionParameters, origin: CollisionOrigin, ledger?: BufferLedger,
-  cacheCells = false
+  lookup: CollisionCellLookup = 'direct'
 ): Promise<{
     bytes: number;
     prepareResize(sizes: Float32Array): () => void;
@@ -18,6 +19,7 @@ export async function createCollisionSlotsWebGPU (
     destroy(): void;
   }> {
   let grid = collisionSlotGrid(sizes, settings, origin)
+  const cacheCells = lookup === 'cached'
   // Allocate for the initial tier. A shrink can use a smaller active grid.
   const buckets = grid.edge ** 2
   const capacity = sizes.length
@@ -47,8 +49,10 @@ export async function createCollisionSlotsWebGPU (
     const clear = own(await Kernel.createAsync(device, {
       source: collisionSlotBuildSource, entryPoint: 'clearHeads', shaderLayout: { bindings: buildBindings.slice(2, 3) },
     }))
+    let linkSource = cacheCells ? cachedCollisionSlotBuildSource : collisionSlotBuildSource
+    if (lookup === 'power-of-two') linkSource = scaledCollisionSlotBuildSource
     const link = own(await Kernel.createAsync(device, {
-      source: cacheCells ? cachedCollisionSlotBuildSource : collisionSlotBuildSource,
+      source: linkSource,
       entryPoint: 'linkPoints',
       shaderLayout: { bindings: linkBindings },
     }))
@@ -60,7 +64,7 @@ export async function createCollisionSlotsWebGPU (
       ['grid', 'uniform'], ['slots', 'read-only-storage'],
     ])
     if (cacheCells) forceBindings.push({ name: 'pointCells', location: 6, group: 0, type: 'read-only-storage' })
-    const force = own(await Kernel.createAsync(device, { source: collisionSlotForceSource(cacheCells), shaderLayout: { bindings: forceBindings } }))
+    const force = own(await Kernel.createAsync(device, { source: collisionSlotForceSource(lookup), shaderLayout: { bindings: forceBindings } }))
     return {
       bytes: [heads, next, slots, sizeBuffer, ...(pointCells ? [pointCells] : []), ...uniforms.flatMap(({ grid, params }) => [grid, params])]
         .reduce((total, buffer) => total + buffer.byteLength, 0),
