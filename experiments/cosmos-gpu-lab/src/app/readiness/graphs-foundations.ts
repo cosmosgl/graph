@@ -272,6 +272,15 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     evidence: [{ tone: 'pass', text: 'Both backends preserved pinned and absent points' }],
     next: 'Compare the linked views at Fit and while zoomed in',
   },
+  'hub-communities/moving-hub': {
+    badge: 'Live demo',
+    tone: 'neutral',
+    finding: 'Both backends kept the moving hub and its community visible.',
+    area: 'Integration',
+    status: 'Steady motion confirmed',
+    evidence: [{ tone: 'pass', text: 'Matched steady motion confirmed on the million-point hub graph' }],
+    next: 'Watch the hub move in both views',
+  },
   'repulsion-trajectories/trajectory-drift': {
     badge: 'Paths diverged',
     tone: 'review',

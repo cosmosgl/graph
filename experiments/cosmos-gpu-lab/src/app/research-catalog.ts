@@ -300,6 +300,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       reproduce: 'Press Run to start both viewers. Drag or scroll either graph to move both cameras.',
       investigations: [],
     }),
+    'hub-communities': entry('hub-communities', {
+      conclusion: 'Both viewers kept the hub visible, and WebGPU had a shorter frame interval in the steady-motion confirmation.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same starting layout, hub links, styles and linked cameras',
+      method: 'layout',
+      next: 'Check the motion of the hub and its neighbors in both viewers.',
+      reproduce: 'Press Run to start both viewers. Press Fit to see all eight communities.',
+      investigations: [],
+    }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',

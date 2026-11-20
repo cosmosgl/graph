@@ -5,33 +5,49 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { ALPHA_MIN, cool } from '../combined-layout/data'
 import { denseFixtureParameters } from '../million-graph/dense-communities'
 import { createResidentFrameLoop } from '../million-graph/frame-loop'
-import { createInteractiveFixture } from '../million-graph/interactive-fixtures'
+import { createInteractiveFixture, type InteractiveFixtureKind } from '../million-graph/interactive-fixtures'
 import { observeCanvasNavigation, panCamera, zoomCamera, type ResidentCamera, type ResidentViewport } from '../million-graph/resident-navigation'
-import { createComparisonCandidate, type ComparisonCandidate } from '../viewer-comparison/comparison-candidate'
-import { prepareComparisonInput } from '../viewer-comparison/comparison-input'
-import type { CreateDenseWebGL } from '../viewer-comparison/production-frame'
+import { createComparisonCandidate, type ComparisonCandidate } from './comparison-candidate'
+import { prepareComparisonInput } from './comparison-input'
+import type { CreateCommunityWebGL } from './production-frame'
 
-export function createDenseView (host: HTMLElement): ExperimentInstance {
+type CommunityDemo = {
+  kind: InteractiveFixtureKind;
+  title: string;
+  benchmarkSection: string;
+  webglMs: number;
+  webgpuMs: number;
+}
+
+export function createCommunityView (
+  host: HTMLElement, { kind, title, benchmarkSection, webglMs, webgpuMs }: CommunityDemo
+): ExperimentInstance {
   host.innerHTML = `<div class="controls">
-    <button type="button" class="button-primary" data-dense-run disabled>Run</button>
-    <button type="button" data-dense-fit disabled>Fit</button></div>
-    <p role="status" data-dense-status>Loading the graphs…</p>
-    <div class="viewer-comparison-panels dense-comparison-panels">
-      <section><h2>Production WebGL</h2><div class="dense-comparison-surface" data-dense-webgl></div></section>
-      <section><h2>Candidate WebGPU</h2><div class="dense-comparison-surface" data-dense-webgpu>
-        <canvas aria-label="Dense communities in WebGPU"></canvas></div></section>
+    <button type="button" class="button-primary" data-community-run disabled>Run</button>
+    <button type="button" data-community-fit disabled>Fit</button></div>
+    <p role="status" data-community-status>Loading the graphs…</p>
+    <div class="viewer-comparison-panels community-comparison-panels">
+      <section><h2>Production WebGL</h2><div class="community-comparison-surface" data-community-webgl></div>
+        <p class="community-step-rate" data-webgl-rate>— steps/s</p></section>
+      <section><h2>Candidate WebGPU</h2><div class="community-comparison-surface" data-community-webgpu>
+        <canvas aria-label="${title} in WebGPU"></canvas></div>
+        <p class="community-step-rate" data-webgpu-rate>— steps/s</p></section>
     </div>
-    <p class="demo-note">Drag or scroll either graph to pan or zoom both.
-      <a href="#/viewer-comparison?section=doc-migration-results-dense-communities-1-000-000-points-999-990-edges">Benchmark results</a>
+    <p class="demo-note">Drag or scroll either graph to pan or zoom both. Live rates count submitted simulation steps while both graphs share the GPU.</p>
+    <p class="demo-note community-benchmark">Separate M3 runs · 95th-percentile frame interval during steady motion ·
+      WebGL <strong>${webglMs.toFixed(1)} ms</strong> · WebGPU <strong>${webgpuMs.toFixed(1)} ms</strong>.
+      <a href="#/viewer-comparison?section=doc-migration-results-${benchmarkSection}">Benchmark results</a>
     </p>`
-  const run = host.querySelector<HTMLButtonElement>('[data-dense-run]')!
-  const fit = host.querySelector<HTMLButtonElement>('[data-dense-fit]')!
-  const status = host.querySelector<HTMLElement>('[data-dense-status]')!
-  const glSurface = host.querySelector<HTMLElement>('[data-dense-webgl]')!
-  const gpuSurface = host.querySelector<HTMLElement>('[data-dense-webgpu]')!
+  const run = host.querySelector<HTMLButtonElement>('[data-community-run]')!
+  const fit = host.querySelector<HTMLButtonElement>('[data-community-fit]')!
+  const status = host.querySelector<HTMLElement>('[data-community-status]')!
+  const glSurface = host.querySelector<HTMLElement>('[data-community-webgl]')!
+  const gpuSurface = host.querySelector<HTMLElement>('[data-community-webgpu]')!
+  const glRate = host.querySelector<HTMLElement>('[data-webgl-rate]')!
+  const gpuRate = host.querySelector<HTMLElement>('[data-webgpu-rate]')!
   const canvas = gpuSurface.querySelector('canvas')!
   const frame = document.createElement('iframe')
-  frame.title = 'Dense communities in production WebGL'
+  frame.title = `${title} in production WebGL`
   frame.tabIndex = -1
   const events = new AbortController()
   const { signal } = events
@@ -54,9 +70,17 @@ export function createDenseView (host: HTMLElement): ExperimentInstance {
   let dirty = true
   let glCooled = false
   let tick = 0
+  let glTick = 0
   let alpha = 1
+  let rateTimer: number | undefined
 
-  const pause = (): void => { playing = false; gl?.pause(); run.textContent = 'Run' }
+  const pause = (): void => {
+    playing = false
+    gl?.pause()
+    window.clearInterval(rateTimer)
+    glRate.textContent = gpuRate.textContent = '— steps/s'
+    run.textContent = 'Run'
+  }
   const checkCooled = (): void => { if (glCooled && alpha < ALPHA_MIN) pause() }
   const fail = (label: string, error: unknown): void => {
     if (signal.aborted) return
@@ -144,6 +168,18 @@ export function createDenseView (host: HTMLElement): ExperimentInstance {
     if (playing) { pause(); return }
     playing = true
     run.textContent = 'Pause'
+    let previousTime = performance.now()
+    let previousGlTick = glTick
+    let previousGpuTick = tick
+    rateTimer = window.setInterval(() => {
+      const now = performance.now()
+      const seconds = (now - previousTime) / 1000
+      glRate.textContent = `${((glTick - previousGlTick) / seconds).toFixed(1)} steps/s`
+      gpuRate.textContent = `${((tick - previousGpuTick) / seconds).toFixed(1)} steps/s`
+      previousTime = now
+      previousGlTick = glTick
+      previousGpuTick = tick
+    }, 1000)
     if (alpha < ALPHA_MIN) alpha = 1
     if (glCooled) { glCooled = false; gl.start() } else gl.unpause()
     loop.request()
@@ -151,19 +187,23 @@ export function createDenseView (host: HTMLElement): ExperimentInstance {
   fit.addEventListener('click', () => { fitted = true; camera = fitCamera(); applyCamera() }, { signal })
 
   const initialize = async (): Promise<void> => {
-    const control = await new Promise<CreateDenseWebGL>((resolve, reject) => {
+    const control = await new Promise<CreateCommunityWebGL>((resolve, reject) => {
       frame.addEventListener('load', () => {
-        const create = (frame.contentWindow as Window & { createDenseWebGL?: CreateDenseWebGL }).createDenseWebGL
+        const create = (frame.contentWindow as Window & { createCommunityWebGL?: CreateCommunityWebGL }).createCommunityWebGL
         if (create) resolve(create)
         else reject(new Error('The production viewer could not load.'))
       }, { once: true, signal })
       signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-      frame.src = new URL('production-viewer.html?view=dense-communities', document.baseURI).href
+      frame.src = new URL('production-viewer.html?view=communities', document.baseURI).href
       glSurface.append(frame)
     })
     if (signal.aborted) return
-    const input = prepareComparisonInput(createInteractiveFixture(1000000, 'dense'), 4)
-    gl = scope.own(await control(input, pixelRatio, () => { glCooled = true; checkCooled() }, () => fail('WebGL', 'The context was lost.')))
+    const input = prepareComparisonInput(createInteractiveFixture(1000000, kind), 4)
+    gl = scope.own(await control(input, pixelRatio, {
+      tick (): void { glTick++ },
+      ended (): void { glCooled = true; checkCooled() },
+      lost: () => fail('WebGL', 'The context was lost.'),
+    }))
     applyCamera()
     canvas.width = Math.max(1, Math.floor(viewport.width * pixelRatio))
     canvas.height = Math.max(1, Math.floor(viewport.height * pixelRatio))
