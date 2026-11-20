@@ -192,11 +192,13 @@ scroll container, with all rows visible. These rules apply to the whole lab, inc
 
 ### Live experiment frame
 
-Every live experiment uses `src/runtime/run-layout.ts`, including the standalone link diagnostic.
-At 1,200px and wider, Configuration sits beside Run and its visualization/results. Smaller screens
-stack the same content. The run summary names the run state, checks, failures/unavailable backends
-and unchecked scope when applicable. For a measurement without a pass budget, `showChecks: false`
-avoids inventing a verdict. The summary describes this browser session, not migration approval.
+For new and redesigned pages, follow the [experiment page design guide](AGENTS.md#experiment-page-design).
+Existing demos that use `src/runtime/run-layout.ts` can display Configuration beside Run at widths
+of 1,200px and above. Smaller screens stack those sections.
+
+The run summary names the run state, checks, failures/unavailable backends and unchecked scope for
+the current browser session. For a measurement without a pass budget, `showChecks: false` avoids
+inventing a verdict.
 Rendering-only demos and benchmarks do not acquire a numerical pass merely by completing.
 
 Author regions with `data-run-part="configuration|visualization|metrics|status|results|explanation|diagnostics"`

@@ -114,7 +114,6 @@ rasterizer did not generate.
 
 ## Try it
 
-Select **Run comparison**, then inspect the four enlarged images and the two
-tables. The first table reports scores from fixed input; the second reports the
-actual line's pixel and the number of changed colors and IDs. **Export JSON**
-saves the inputs, browser, device, scores and comparison counts locally.
+Choose a position, edge style, or formula to run the comparison. The enlarged
+images show the marked pixel. **Run data** lists the scores, color changes, and
+picking IDs. **Export JSON** saves the inputs and results locally.

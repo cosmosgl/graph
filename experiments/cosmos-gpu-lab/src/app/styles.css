@@ -275,6 +275,95 @@ input:disabled {
   opacity: 0.42;
 }
 
+/* Compact, labeled choices. Each experiment supplies the actions and sets aria-pressed. */
+.choice-controls {
+  display: grid;
+  gap: 4px;
+}
+
+.choice-control {
+  display: grid;
+  grid-template-columns: var(--choice-label-width, 5rem) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.choice-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.choice-label small {
+  display: block;
+  font-size: var(--type-meta);
+}
+
+.choice-options {
+  --choice-highlight-height: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.choice-control .choice-options > button[aria-pressed] {
+  position: relative;
+  isolation: isolate;
+  min-width: 26px;
+  min-height: var(--choice-highlight-height);
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 13px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Keep the highlight compact when the button has a larger touch target. */
+.choice-options > button[aria-pressed]::before {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto;
+  z-index: -1;
+  height: var(--choice-highlight-height);
+  max-height: 100%;
+  transform: translateY(-50%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.choice-control .choice-options > button[aria-pressed="false"]:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.choice-options > button[aria-pressed="false"]:hover:not(:disabled)::before {
+  background: var(--control-bg);
+}
+
+.choice-control .choice-options > button[aria-pressed="true"] {
+  color: var(--accent-hover);
+}
+
+.choice-options > button[aria-pressed="true"]::before {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+@media (pointer: coarse) {
+  .choice-control .choice-options > button[aria-pressed] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (forced-colors: active) {
+  .choice-options > button[aria-pressed="true"] {
+    text-decoration: underline;
+  }
+}
+
 .summary {
   flex-wrap: wrap;
   gap: 12px 24px;
@@ -2030,11 +2119,6 @@ button[data-action="play"][aria-pressed="true"] {
   max-width: var(--reading-width);
   margin-bottom: 24px;
   color: var(--text-secondary);
-}
-
-.run-layout .run-visualization .smoothstep-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 540px) {
-  .run-layout .run-visualization .smoothstep-panels { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* A recorded result can be read without starting a GPU session. */

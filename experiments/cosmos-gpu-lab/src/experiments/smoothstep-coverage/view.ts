@@ -1,13 +1,16 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { disposeRunLayout, mountRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
+import { createResultTables } from '../../runtime/result-tables'
 import type { Snapshot } from '../straight-links/backend'
 import { FIXED_INPUTS, fixedInputProbe, type FixedRow } from './fixed-input'
-import { compareLine, type Lane, type LineRun } from './line-study'
+import { compareLine, type LineRun } from './line-study'
 import { tracePosition, type PositionTrace } from './position-trace'
 import { roundingExample } from './rounding-example'
 
 const format = (value: number): string => Number.isFinite(value) ? String(value) : 'unavailable'
+const lanes = ['webgl', 'webgpu'] as const
+const names = { webgl: 'WebGL', webgpu: 'WebGPU' }
+const crop = { x: 76, y: 93, width: 48, height: 6 }
+
 function drawCrop (canvas: HTMLCanvasElement, snapshot: Snapshot): void {
   const source = document.createElement('canvas'); source.width = snapshot.width; source.height = snapshot.height
   const context = source.getContext('2d'); const output = canvas.getContext('2d')
@@ -20,9 +23,10 @@ function drawCrop (canvas: HTMLCanvasElement, snapshot: Snapshot): void {
   }
   context.putImageData(new ImageData(data, snapshot.width, snapshot.height), 0, 0)
   output.clearRect(0, 0, canvas.width, canvas.height); output.imageSmoothingEnabled = false
-  output.drawImage(source, 88, 90, 24, 12, 0, 0, canvas.width, canvas.height)
+  output.drawImage(source, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height)
+  const cell = canvas.width / crop.width
   output.strokeStyle = '#f4d889'; output.lineWidth = 2
-  output.strokeRect(12 * canvas.width / 24 + 1, 6 * canvas.height / 12 + 1, canvas.width / 24 - 2, canvas.height / 12 - 2)
+  output.strokeRect((100 - crop.x) * cell + 1, (96 - crop.y) * cell + 1, cell - 2, cell - 2)
 }
 
 function fixedTable (rows: FixedRow[]): string {
@@ -31,8 +35,8 @@ function fixedTable (rows: FixedRow[]): string {
     if (!row) throw new Error('A fixed-input result is missing')
     return row
   }
-  return `<h3>1. Give both renderers the same numbers</h3>
-    <p>These scores come directly from small GPU programs. “Draw” means the score is at least 0.5; no line was drawn in this step.</p>
+  return `<h3>Fixed-input scores</h3>
+    <p>Each shader received the same three positions in a separate test.</p>
     <table><thead><tr><th>Position</th><th>Backend</th><th>Current score · hard decision</th><th>Revised score · hard decision</th></tr></thead><tbody>
     ${FIXED_INPUTS.flatMap(input => (['WebGL', 'WebGPU'] as const).map(backend => {
     const original = result(backend, input, 'descending'); const revised = result(backend, input, 'ascending')
@@ -49,10 +53,8 @@ function lineTable (run: LineRun): string {
       <td>${row.cpuColors.webgl.budgetFailures} / ${row.cpuColors.webgpu.budgetFailures}</td>
       <td>${row.invisible.webgl} / ${row.invisible.webgpu}</td></tr>`
   }
-  return `<h3>2. Draw the actual line</h3><p>This run: shift ${format(run.shift)} device pixel; ${run.settings.blend ? 'blended' : 'hard'} edge.</p>
-    <p>The outlined square is pixel (100, 96). The position's sign indicates which side of the line it is on.
-    Its position and score come from a separate float probe;
-    the color and ID come from the ordinary draws. “No fragment” means the pixel never reached the shader.</p>
+  return `<h3>Sampled pixel</h3><p>Shift ${format(run.shift)} device pixels · ${run.settings.blend ? 'Blended' : 'Hard'} edge.</p>
+    <p>The probe reads the position and score at pixel (100, 96). The regular draws supply the color and picking ID.</p>
     <table><thead><tr><th>Backend / formula</th><th>Position</th><th>Score</th><th>Painted alpha</th><th>Picked ID</th></tr></thead><tbody>
     ${(['webgl', 'webgpu'] as const).flatMap(lane => (['descending', 'ascending'] as const).map(formula => {
     const value = run.samples[lane][formula]
@@ -67,8 +69,7 @@ function lineTable (run: LineRun): string {
     and a picked pixel cannot be invisible. CPU counts compare each backend with the independent line model.</p>
     <table><thead><tr><th>Formula</th><th>Strict result</th><th>Different IDs</th><th>CPU ID failures · GL / GPU</th>
     <th>Color failures · GL vs GPU</th><th>CPU color failures · GL / GPU</th><th>Invisible picks · GL / GPU</th></tr></thead>
-    <tbody>${comparison('descending')}${comparison('ascending')}</tbody></table>
-    <p>These checks cover this line only. They do not approve a production change.</p>`
+    <tbody>${comparison('descending')}${comparison('ascending')}</tbody></table>`
 }
 
 function traceTable (trace: PositionTrace): string {
@@ -111,62 +112,112 @@ function traceTable (trace: PositionTrace): string {
 }
 
 export async function createSmoothstepView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
-      <label>Move the line <select data-shift><option value="0">Original position</option><option value="-0.0009765625">Up 1/1024 pixel</option>
-        <option value="0.0009765625">Down 1/1024 pixel</option></select>
-        <span class="control-guidance">A small move tests the two sides of the edge.</span></label>
-      <label>Edge <select data-blend><option value="hard">Hard · a pixel is drawn or empty</option>
-        <option value="blend">Blended · the edge fades</option></select></label>
-      <div class="controls"><button data-run data-run-action="primary">Run comparison</button>
-        <button data-export data-run-action="export" disabled>Export JSON</button></div></div>
-    <p data-run-part="status" role="status">Ready. The comparison runs only when you select the button.</p>
-    <div data-run-part="visualization"><p>A hard edge draws a pixel when its score is at least 0.5.
-      The same part of one line appears four times below; the yellow outline marks one pixel.</p>
-      <div class="backend-panels styling-panels smoothstep-panels">${(['webgl', 'webgpu'] as const).flatMap(lane =>
-    (['descending', 'ascending'] as const).map(formula => `<article class="backend-panel"><h3>${lane === 'webgl' ? 'WebGL' : 'WebGPU'} ·
-          ${formula === 'descending' ? 'current' : 'revised'}</h3><div class="styling-viewport">
-          <canvas data-canvas="${lane}-${formula}" width="240" height="120"
-            aria-label="${lane} ${formula} line pixels"></canvas></div></article>`)).join('')}</div></div>
-    <section data-run-part="results" data-output class="readiness-table"><p>No comparison has run yet.</p></section>
-    <div data-run-part="explanation"><p>A hard edge draws a pixel when its coverage score is at least 0.5.
-      The current formula uses descending limits; the revised formula uses ascending limits and reverses the result.</p>
-      <p>WebGL does not guarantee the descending expression. A difference between the two expressions is useful evidence,
-      but matching values on this device do not make the original expression portable.</p></div>
-    <section data-run-part="diagnostics"><h3>Trace one pixel's position</h3>
-      <p>Give both renderers the same saved line corners, then follow the pixel from the screen into the line.
-      This trace always uses the original hard-edge line, regardless of the settings above.</p>
-      <button data-trace data-run-action="diagnostic">Trace the pixel</button>
-      <div data-trace-output class="readiness-table"><p>No position trace has run yet.</p></div></section>`
+  host.innerHTML = `<div class="line-edge-run">
+    <span class="visually-hidden" data-progress-status role="status"></span>
+    <section id="run-run" aria-label="WebGL and WebGPU comparison">
+      <div id="run-configuration" class="choice-controls">
+        <div class="choice-control" role="group" aria-labelledby="line-edge-position" aria-describedby="line-edge-position-step">
+          <div class="choice-label">
+            <span id="line-edge-position">Position</span>
+            <small id="line-edge-position-step">1/1024 px</small>
+          </div>
+          <div class="choice-options">
+            <button type="button" data-shift="0" aria-pressed="true">Original</button>
+            <button type="button" data-shift="-0.0009765625" aria-pressed="false">Up</button>
+            <button type="button" data-shift="0.0009765625" aria-pressed="false">Down</button>
+          </div>
+        </div>
+        <div class="choice-control" role="group" aria-labelledby="line-edge-mode">
+          <span id="line-edge-mode" class="choice-label">Edge</span>
+          <div class="choice-options">
+            <button type="button" data-blend="hard" aria-pressed="true">Hard</button>
+            <button type="button" data-blend="blend" aria-pressed="false">Blended</button>
+          </div>
+        </div>
+        <div class="choice-control" role="group" aria-labelledby="line-edge-formula">
+          <span id="line-edge-formula" class="choice-label">Formula</span>
+          <div class="choice-options">
+            <button type="button" data-formula="descending" aria-pressed="true">Current</button>
+            <button type="button" data-formula="ascending" aria-pressed="false">Revised</button>
+          </div>
+        </div>
+      </div>
+      <p class="line-edge-error" data-run-status role="alert"></p>
+      <button type="button" class="button-primary" data-retry-run hidden>Retry comparison</button>
+      <span class="line-edge-progress" aria-hidden="true">Comparing…</span>
+      <div class="line-edge-samples" data-samples hidden>
+        ${lanes.map(lane => `<figure class="line-edge-sample">
+          <figcaption><span>${names[lane]}</span><span data-score="${lane}"></span></figcaption>
+          <canvas data-canvas="${lane}" width="${crop.width * 10}" height="${crop.height * 10}" aria-label="${names[lane]} line pixels"></canvas>
+        </figure>`).join('')}
+        <p>The outline marks pixel (100, 96). A hard edge draws it at a score of 0.5 or higher.</p>
+      </div>
+    </section>
+    <section id="run-diagnostics" aria-labelledby="line-edge-trace-title">
+      <div class="line-edge-heading">
+        <h2 id="line-edge-trace-title">Trace the pixel</h2>
+        <span class="line-edge-progress" aria-hidden="true">Tracing…</span>
+      </div>
+      <p>Both renderers start from the same line corners. The trace shows where each places the pixel inside the line.</p>
+      <button type="button" data-trace>Run pixel trace</button>
+      <p class="line-edge-error" data-trace-status role="alert"></p>
+      <div data-trace-output class="readiness-table"></div>
+    </section>
+    <section id="run-results" aria-labelledby="line-edge-data-title">
+      <h2 id="line-edge-data-title">Run data</h2>
+      <p class="case-meta" data-run-device hidden></p>
+      <div data-output class="readiness-table"><p>Scores, colors, and picking IDs appear after a comparison.</p></div>
+      <button data-export type="button" disabled>Export JSON</button>
+    </section>
+  </div>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
-  let busy = false; let destroyed = false; let error: string | undefined; let report: Record<string, unknown> | undefined
+  const pressed = (selector: string): HTMLButtonElement => el(`${selector}[aria-pressed="true"]`)
+  const comparison = el('#run-run'); const diagnostics = el('#run-diagnostics')
+  const progress = el('[data-progress-status]')
+  const runError = el('[data-run-status]'); const traceError = el('[data-trace-status]')
+  const samples = el('[data-samples]')
+  const retry = el<HTMLButtonElement>('[data-retry-run]')
+  const exportButton = el<HTMLButtonElement>('[data-export]')
+  const choices = host.querySelectorAll<HTMLButtonElement>('.choice-options button')
+  const inputs = [...choices, el<HTMLButtonElement>('[data-trace]'), retry]
+  const tables = createResultTables(host)
+  let busy = false; let destroyed = false; let report: Record<string, unknown> | undefined
   let traced: PositionTrace | undefined; let traceRecordedAt: string | undefined
-  let state = 'Ready'; let devices: string[] = []
   const setBusy = (value: boolean): void => {
-    el<HTMLButtonElement>('[data-run]').disabled = value; el<HTMLButtonElement>('[data-trace]').disabled = value
-    el<HTMLButtonElement>('[data-export]').disabled = value || (!report && !traced)
-    host.querySelectorAll<HTMLSelectElement>('select').forEach(select => { select.disabled = value })
+    exportButton.disabled = value || (!report && !traced)
+    inputs.forEach(control => { control.disabled = value })
+  }
+  const renderSamples = (line: LineRun): void => {
+    const activeFormula = pressed('[data-formula]').dataset.formula === 'ascending' ? 'ascending' : 'descending'
+    for (const lane of lanes) {
+      drawCrop(el<HTMLCanvasElement>(`[data-canvas="${lane}"]`), line.snapshots[lane][activeFormula])
+      const pixel = line.samples[lane][activeFormula]
+      const rounded = Number(pixel.coverage.toPrecision(7))
+      const score = rounded === pixel.coverage ? format(rounded) : `≈${format(rounded)}`
+      const painted = pixel.color[3] === 0 ? 'Empty' : 'Drawn'
+      el(`[data-score="${lane}"]`).textContent = pixel.carrier ? `${score} · ${painted}` : 'No fragment'
+    }
+    samples.hidden = false
   }
   const run = async (): Promise<void> => {
     if (busy || destroyed) return
-    busy = true; error = undefined; report = undefined; state = 'Running'
-    setBusy(true)
-    const status = el('[role="status"]'); status.textContent = 'Testing the same numbers in both renderers…'
-    const shift = Number(el<HTMLSelectElement>('[data-shift]').value); const blend = el<HTMLSelectElement>('[data-blend]').value === 'blend'
+    busy = true; report = undefined; setBusy(true)
+    comparison.setAttribute('aria-busy', 'true')
+    progress.textContent = 'Comparing WebGL and WebGPU…'
+    const shift = Number(pressed('[data-shift]').dataset.shift); const blend = pressed('[data-blend]').dataset.blend === 'blend'
     try {
       const gl = await fixedInputProbe('webgl')
       if (destroyed) return
       const gpu = await fixedInputProbe('webgpu')
       if (destroyed) return
-      devices = [gl.info, gpu.info]; status.textContent = 'Drawing the same line four ways…'
       const line = await compareLine(shift, blend)
       if (destroyed) return
       const rows = [...gl.rows, ...gpu.rows]
-      for (const lane of ['webgl', 'webgpu'] as Lane[]) {
-        for (const formula of ['descending', 'ascending'] as const) {
-          drawCrop(el<HTMLCanvasElement>(`[data-canvas="${lane}-${formula}"]`), line.snapshots[lane][formula])
-        }
-      }
+      const devices = [gl.info, gpu.info]
+      renderSamples(line)
       el('[data-output]').innerHTML = fixedTable(rows) + lineTable(line)
+      const device = el('[data-run-device]'); device.textContent = devices.join(' · '); device.hidden = false
+      tables.refresh()
       report = {
         experiment: 'smoothstep-coverage',
         recordedAt: new Date().toISOString(),
@@ -176,38 +227,61 @@ export async function createSmoothstepView (host: HTMLElement): Promise<Experime
         fixedInputs: rows,
         line: { scene: line.scene, settings: line.settings, samples: line.samples, pair: line.pair, changes: line.changes },
       }
-      state = 'Measured'; status.textContent = 'Comparison complete. Inspect the scores and line pixels below.'
+      runError.textContent = ''
+      retry.hidden = true
+      progress.textContent = 'Comparison complete.'
     } catch (cause) {
-      error = String(cause); state = 'Failed'
-      if (!destroyed) status.textContent = `Comparison unavailable: ${error}`
+      if (!destroyed) {
+        const previous = samples.hidden ? '' : ' The previews show the previous run.'
+        progress.textContent = ''
+        runError.textContent = `Comparison unavailable.${previous} ${String(cause)}`
+        retry.hidden = false
+      }
     } finally {
       busy = false
-      if (!destroyed) setBusy(false)
+      if (!destroyed) {
+        comparison.setAttribute('aria-busy', 'false')
+        setBusy(false)
+      }
     }
   }
   const trace = async (): Promise<void> => {
     if (busy || destroyed) return
-    busy = true; error = undefined; traced = undefined; traceRecordedAt = undefined; state = 'Tracing'; setBusy(true)
-    const status = el('[role="status"]'); status.textContent = 'Following the same pixel through both renderers…'
+    busy = true; traced = undefined; traceRecordedAt = undefined; setBusy(true)
+    diagnostics.setAttribute('aria-busy', 'true')
+    progress.textContent = 'Tracing the pixel…'
     try {
       const result = await tracePosition()
       if (destroyed) return
-      traced = result; traceRecordedAt = new Date().toISOString(); devices = [result.info.webgl, result.info.webgpu]
+      traced = result; traceRecordedAt = new Date().toISOString()
       el('[data-trace-output]').innerHTML = traceTable(result)
-      state = 'Measured'; status.textContent = 'Pixel trace complete. See the results under Diagnostics.'
+      tables.refresh()
+      traceError.textContent = ''
+      progress.textContent = 'Pixel trace complete.'
     } catch (cause) {
-      error = String(cause); state = 'Failed'
-      if (!destroyed) status.textContent = `Pixel trace unavailable: ${error}`
-    } finally { busy = false; if (!destroyed) setBusy(false) }
+      if (!destroyed) {
+        progress.textContent = ''
+        traceError.textContent = `Pixel trace unavailable. ${String(cause)}`
+      }
+    } finally {
+      busy = false
+      if (!destroyed) {
+        diagnostics.setAttribute('aria-busy', 'false')
+        setBusy(false)
+      }
+    }
   }
-  el('[data-run]').addEventListener('click', () => { run().catch(cause => { error = String(cause) }) })
-  el('[data-trace]').addEventListener('click', () => { trace().catch(cause => { error = String(cause) }) })
-  host.querySelectorAll<HTMLSelectElement>('select').forEach(select => select.addEventListener('change', () => {
-    if (!report || busy || destroyed) return
-    report = undefined; state = 'Ready'; el<HTMLButtonElement>('[data-export]').disabled = !traced
-    el('[role="status"]').textContent = 'Settings changed. The results shown are from the previous run; run again to update them.'
+  const startComparison = (): void => { run().catch(() => {}) }
+  choices.forEach(button => button.addEventListener('click', () => {
+    if (busy || destroyed) return
+    for (const option of button.parentElement!.querySelectorAll('button')) {
+      option.setAttribute('aria-pressed', String(option === button))
+    }
+    startComparison()
   }))
-  el('[data-export]').addEventListener('click', () => {
+  retry.addEventListener('click', startComparison)
+  el('[data-trace]').addEventListener('click', () => { trace().catch(() => {}) })
+  exportButton.addEventListener('click', () => {
     if (!report && !traced) return
     const data = {
       experiment: 'smoothstep-coverage',
@@ -223,8 +297,6 @@ export async function createSmoothstepView (host: HTMLElement): Promise<Experime
     const link = document.createElement('a'); link.href = url; link.download = 'line-edge-comparison.json'; link.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
-  mountRunLayout(host, () => summarizeRun(state, [], 'Other lines, caps, devices and production changes', [], error),
-    { experiment: 'smoothstep-coverage', devices: () => devices })
-  compactRunControls(host, { diagnostics: true })
-  return { destroy: (): void => { destroyed = true; disposeRunLayout(host) } }
+  startComparison()
+  return { destroy: (): void => { destroyed = true; tables.destroy() } }
 }

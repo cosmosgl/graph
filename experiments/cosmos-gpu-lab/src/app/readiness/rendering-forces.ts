@@ -106,7 +106,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'smoothstep-coverage/line-edge': {
     badge: 'Study closed',
     tone: 'neutral',
-    finding: 'A formula change left 180 differing pixel IDs on one GPU.',
+    finding: 'On one hard-edged line, WebGL drew the highlighted pixel and WebGPU left it empty.',
     area: 'Research',
     status: 'Closed',
     evidence: [

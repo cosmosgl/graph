@@ -72,8 +72,19 @@ it('opens every experiment with its starting case and all its evidence and limit
         await vi.waitFor(() => expect(host.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
         expect(host.querySelectorAll('main h1'), label).toHaveLength(1)
         expect(host.querySelector('h1')?.textContent, label).toBe(experiment.title)
-        expect(host.querySelector('.case-question')?.textContent, label).toBe(first.question)
         const summary = host.querySelector('.case-header .case-recorded-summary')
+        if (experiment.presentation === 'finding-first') {
+          const assessment = readinessFor(label, first)
+          expect(summary?.querySelector('.readiness-badge')?.textContent, label).toContain(assessment.badge)
+          expect(summary?.querySelector('p')?.textContent, label).toBe(assessment.finding)
+          expect(host.querySelector('#case-live canvas'), label).not.toBeNull()
+          expect(host.querySelectorAll('main details'), label).toHaveLength(0)
+          const evidenceId = articleSectionId(first.recorded!.evidence[0].page)
+          await vi.waitFor(() => expect(host.querySelector(`#${evidenceId} .prose`), label).not.toBeNull())
+          expect(create, label).toHaveBeenCalledOnce()
+          continue
+        }
+        expect(host.querySelector('.case-question')?.textContent, label).toBe(first.question)
         const demo = experiment.presentation === 'demo'
         if (demo) expect(summary, label).toBeNull()
         else {
@@ -143,7 +154,7 @@ it('opens every published evidence document inside its experiment without exposi
         const content = frame.recorded.querySelector(`#${id}`)
         if (!content?.querySelector('.prose, .report')) issues.push(`${label}: missing evidence body`)
         const disclosure = content?.closest('details')
-        if (experiment.presentation === 'demo' ? disclosure : !disclosure?.open) issues.push(`${label}: evidence is hidden`)
+        if (experiment.presentation ? disclosure : !disclosure?.open) issues.push(`${label}: evidence is hidden`)
         if (content?.querySelector('a[href*="agent-recipe"]')) issues.push(`${label}: agent recipe link`)
         const instruction = content?.textContent?.match(/\b(?:LAB_[A-Z0-9_]+|pnpm|npx|captures\/)/i)
         if (instruction) issues.push(`${label}: ${instruction[0]}`)

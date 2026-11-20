@@ -5,8 +5,7 @@ export const cases: ExperimentCase[] = [{
   title: 'Why a line edge changes',
   kind: 'compare',
   question: 'Does changing the edge formula make WebGL and WebGPU draw the same line?',
-  description: 'Compare the original and reordered edge formulas on the same frozen line.',
-  tryIt: 'Select Run comparison with the original position and hard edge. Compare the rendered pixels and IDs.',
+  description: 'Compare both formulas on the same line in WebGL and WebGPU.',
   reference: 'Both renderers receive the same line and evaluate both edge formulas; a fixed-input check isolates the formula.',
   acceptance: 'The result reports changed colors and IDs; it does not relax the existing pixel checks.',
   recorded: {
@@ -15,6 +14,10 @@ export const cases: ExperimentCase[] = [{
     environment: 'Apple M3, Chromium 157, luma.gl 10.0.0-alpha.15.',
     scope: 'One frozen line, the original hard edge and a small shifted blended control.',
     limits: 'This does not establish behavior for every line, device or compiler.',
-    evidence: [{ label: 'Line-edge evidence', page: 'case-evidence' }],
+    evidence: [
+      { label: 'Full evidence', page: 'findings' },
+      { label: 'Comparison method', page: 'method' },
+      { label: 'Line-edge summary', page: 'case-evidence' },
+    ],
   },
 }]

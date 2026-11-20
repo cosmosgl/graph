@@ -1,5 +1,6 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { cases } from './cases'
+import './styles.css'
 
 export const experiment = defineExperiment({
   id: 'smoothstep-coverage',
@@ -7,6 +8,7 @@ export const experiment = defineExperiment({
   summary: 'Compare two ways of calculating the same line edge in WebGL and WebGPU.',
   tags: ['rendering', 'links', 'precision', 'WebGL', 'WebGPU'],
   cases,
+  presentation: 'finding-first',
   create: async host => (await import('./view')).createSmoothstepView(host),
   pages: [
     {

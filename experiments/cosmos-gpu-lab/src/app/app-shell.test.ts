@@ -410,6 +410,32 @@ it('opens older point styling bookmarks at the matching demo or archived evidenc
   })
 })
 
+it('shows the line-edge trace, run data and evidence alongside the comparison', async () => {
+  const create = vi.spyOn(findExperiment('smoothstep-coverage')!, 'create').mockImplementation(async stage => {
+    stage.innerHTML = '<section id="run-run"><canvas></canvas></section>' +
+      '<section id="run-diagnostics"><button>Run pixel trace</button></section>' +
+      '<section id="run-results"><p>Comparison scores</p></section>'
+    return { destroy (): void {} }
+  })
+  window.history.replaceState(null, '', '#/smoothstep-coverage')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => {
+    expect(host!.querySelector('#run-run canvas')).not.toBeNull()
+    expect(host!.querySelector('#doc-findings .prose')).not.toBeNull()
+  })
+  const canvas = host.querySelector('#run-run canvas')
+  await route('#/smoothstep-coverage?section=run-diagnostics', () => expect(document.activeElement?.id).toBe('run-diagnostics'))
+  await route('#/smoothstep-coverage?section=doc-findings', () => expect(document.activeElement?.id).toBe('doc-findings'))
+  await route('#/smoothstep-coverage?section=case-comparison', () => expect(document.activeElement?.id).toBe('doc-method'))
+  expect(window.location.hash).toBe('#/smoothstep-coverage?section=doc-method')
+  for (const id of ['run-run', 'run-diagnostics', 'run-results', 'doc-findings', 'doc-method']) {
+    expect(host.querySelector(`#${id}`)?.getClientRects().length, id).toBeGreaterThan(0)
+  }
+  expect(host.querySelector('#run-run canvas')).toBe(canvas)
+  expect(host.querySelector('main details')).toBeNull()
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
 for (const [id, caseId] of [
   ['precision-diagnostics', 'gravity-accuracy'],
   ['performance-lab', 'center-reduction'],

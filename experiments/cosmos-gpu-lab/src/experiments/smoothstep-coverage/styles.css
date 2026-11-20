@@ -1,0 +1,77 @@
+.case-document.case-finding-first {
+  max-width: 560px;
+  min-width: 0;
+}
+
+.case-finding-first .case-header > h1 {
+  font-size: clamp(25px, 4vw, 36px);
+  font-weight: 500;
+  letter-spacing: -.025em;
+}
+
+.case-finding-first .case-recorded-summary {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+}
+
+.case-finding-first .case-recorded-summary p { margin-bottom: 0; }
+.case-finding-first .case-stage { margin-top: 26px; }
+.case-finding-first .case-evidence { margin-top: 0; }
+.case-finding-first :is(#recorded-findings, #finding-line-edge, #run-run, #run-configuration, #run-results, #run-diagnostics, [id^="doc-"]) {
+  scroll-margin-top: calc(var(--lab-header-height, 88px) + 16px);
+}
+
+.line-edge-run > section + section,
+.case-finding-first .case-inline-evidence,
+.case-finding-first .case-evidence > h2:not(:first-child) {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--control-border);
+}
+
+.line-edge-run h2, .case-finding-first .case-evidence > h2 {
+  margin: 0 0 10px;
+  font-size: var(--type-subsection);
+  font-weight: 500;
+}
+
+.line-edge-run h3 { font-size: var(--type-subsection); font-weight: 500; }
+.line-edge-run p { margin: 0 0 10px; }
+.line-edge-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.line-edge-heading h2 { margin: 0; }
+.line-edge-progress { color: var(--text-secondary); visibility: hidden; }
+.line-edge-run [aria-busy="true"] .line-edge-progress { visibility: visible; }
+.line-edge-run > section > .line-edge-progress {
+  display: block;
+  font-size: var(--type-meta);
+  line-height: 16px;
+  text-align: end;
+}
+.line-edge-run .line-edge-error { margin-top: 8px; }
+.line-edge-error:empty { display: none; }
+.line-edge-sample { margin: 0 0 12px; }
+.line-edge-sample figcaption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 4px;
+}
+.line-edge-sample figcaption span:last-child { font-variant-numeric: tabular-nums; }
+.line-edge-sample canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  background: #19202a;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+}

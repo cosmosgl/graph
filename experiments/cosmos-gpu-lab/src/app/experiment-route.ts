@@ -48,6 +48,9 @@ export function experimentDestination (
 
   let section = requested
   const explicitPage = route.evidencePage ?? route.pageId
+  if (!explicitPage && experiment.presentation === 'finding-first' && (section === 'case-comparison' || section === 'run-explanation')) {
+    section = articleSectionId('method')
+  }
   const page = explicitPage ? experiment.pages.find(item => item.id === explicitPage) : evidencePageAt(experiment, section ?? '')
   if (explicitPage && !page && explicitPage !== 'agent-recipe') return undefined
   if (explicitPage === 'agent-recipe' || section?.startsWith('doc-agent-recipe') || (page && !isReaderPage(experiment, page))) {
@@ -68,7 +71,7 @@ export function experimentDestination (
   let liveCase = selectorCase
   if ((!section || runAnchor) && namedCase?.kind !== 'recorded' && namedCase) liveCase = namedCase
   if (!section && experiment.presentation === 'demo' && first.kind !== 'recorded') liveCase ??= first
-  const startLive = first.kind !== 'recorded' && (!section || !!runAnchor || !!selectorCase)
+  const startLive = first.kind !== 'recorded' && (!section || !!runAnchor || !!selectorCase || experiment.presentation === 'finding-first')
   const href = runAnchor && liveCase && liveCase !== first
     ? caseHref(experiment.id, liveCase.id, section ?? undefined)
     : experimentSectionHref(experiment.id, section)
