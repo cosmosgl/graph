@@ -2149,14 +2149,16 @@ button[data-action="play"][aria-pressed="true"] {
 @media (max-width: 600px) {
   .viewer-comparison-panels { grid-template-columns: minmax(0, 1fr); }
 }
-.viewer-comparison-panels.dense-comparison-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
-.dense-comparison-panels h2 { margin: 0 0 8px; font-size: var(--type-subsection); }
-.dense-comparison-surface { aspect-ratio: 4 / 3; max-height: 420px; overflow: hidden; border-radius: 6px;
+.viewer-comparison-panels.community-comparison-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 12px; }
+.community-comparison-panels h2 { margin: 0 0 8px; font-size: var(--type-subsection); }
+.community-comparison-surface { aspect-ratio: 4 / 3; max-height: 420px; overflow: hidden; border-radius: 6px;
   background: #222; cursor: grab; touch-action: none; }
-.dense-comparison-surface > :is(iframe, canvas) { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
-.dense-comparison-surface:active { cursor: grabbing; }
+.community-comparison-surface > :is(iframe, canvas) { display: block; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.community-comparison-surface:active { cursor: grabbing; }
+.community-step-rate { margin: 6px 0 0; color: var(--text-secondary); font-size: var(--type-meta); font-variant-numeric: tabular-nums; }
+.demo-note.community-benchmark { margin-top: 6px; }
 @media (max-width: 420px) {
-  .viewer-comparison-panels.dense-comparison-panels { grid-template-columns: minmax(0, 1fr); }
+  .viewer-comparison-panels.community-comparison-panels { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* One card per experiment, grouped by topic. */

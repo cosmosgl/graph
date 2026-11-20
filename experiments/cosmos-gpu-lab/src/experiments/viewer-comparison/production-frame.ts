@@ -3,10 +3,12 @@ import { applyComparisonInput, seed, type ComparisonInput } from './comparison-i
 import { createProduction } from './production'
 import { loadProductionBundle } from './production-bundle'
 
-export type CreateDenseWebGL = (input: ComparisonInput, pixelRatio: number, ended: () => void, lost: () => void) => Promise<Graph>
+export type CreateCommunityWebGL = (
+  input: ComparisonInput, pixelRatio: number, callbacks: { tick(): void; ended(): void; lost(): void }
+) => Promise<Graph>
 
 const host = document.querySelector<HTMLDivElement>('#graph')!
-const createDenseWebGL: CreateDenseWebGL = async (input, pixelRatio, ended, lost) => {
+const createCommunityWebGL: CreateCommunityWebGL = async (input, pixelRatio, { tick, ended, lost }) => {
   const GRAPH = await loadProductionBundle()
   const graph = new GRAPH(host, {
     fitViewOnInit: false,
@@ -14,6 +16,7 @@ const createDenseWebGL: CreateDenseWebGL = async (input, pixelRatio, ended, lost
     pixelRatio,
     randomSeed: seed,
     pointDefaultSize: input.size,
+    onSimulationTick: tick,
     onSimulationEnd: ended,
   })
   try {
@@ -25,8 +28,8 @@ const createDenseWebGL: CreateDenseWebGL = async (input, pixelRatio, ended, lost
   } catch (error) { graph.destroy(); throw error }
 }
 
-if (new URLSearchParams(window.location.search).get('view') === 'dense-communities') {
-  Object.assign(window, { createDenseWebGL })
+if (new URLSearchParams(window.location.search).get('view') === 'communities') {
+  Object.assign(window, { createCommunityWebGL })
 } else {
   Object.assign(window, { cosmosProduction: loadProductionBundle().then(() => createProduction(host)) })
 }

@@ -79,6 +79,8 @@ other workflow controls were too variable for a verdict.
 
 ## Hub communities · 1,000,000 points, 999,990 edges
 
+[Open the live Hub Communities demo](#/hub-communities).
+
 The hub with 8,192 source-grouped links stayed visible on both renderers,
 alongside the eight communities. All paired picks matched their expected
 point or background. Both backends produced 1,000 moving label positions per

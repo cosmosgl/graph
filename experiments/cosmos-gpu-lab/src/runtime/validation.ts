@@ -81,6 +81,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'One million points and 999,990 short local links across eight communities.',
     limits: 'Both live viewers share one GPU. The recorded benchmark ran the viewers separately.',
   },
+  'hub-communities': {
+    question: 'How does a highly connected hub move in the two viewers?',
+    reference: 'Production WebGL with the same starting positions, links, styles and camera.',
+    acceptance: 'Compare the motion of the hub and its neighbors under the same camera.',
+    coverage: 'One million points and 999,990 links, with 8,192 links using one free point as their source.',
+    limits: 'Both live viewers share one GPU. The recorded benchmark ran the viewers separately.',
+  },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',
