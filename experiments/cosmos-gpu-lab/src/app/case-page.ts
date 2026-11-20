@@ -13,13 +13,13 @@ type CaseFrame = {
   stage: HTMLElement;
   slot: HTMLElement;
   recorded: HTMLElement;
-  comparison: HTMLElement;
+  comparison?: HTMLElement;
   status: HTMLElement;
   retry: HTMLButtonElement;
   start: HTMLButtonElement;
   openEvidence: (section: string) => Promise<string | undefined>;
-  setLiveCase: (active: ExperimentCase) => void;
-  onChooseCase: (choose: (item: ExperimentCase, control: HTMLElement) => void) => void;
+  setLiveCase?: (active: ExperimentCase) => void;
+  onChooseCase?: (choose: (item: ExperimentCase, control: HTMLElement) => void) => void;
 }
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
@@ -31,6 +31,13 @@ function paragraph (text: string, className?: string): HTMLParagraphElement {
 
 function topicFor (experiment: ExperimentDefinition): (typeof experimentGroups)[number] | undefined {
   return experimentGroups.find(group => group.experiments.some(candidate => candidate.id === experiment.id))
+}
+
+function addTopicLink (header: HTMLElement, topic: ReturnType<typeof topicFor>): void {
+  if (!topic) return
+  const link = document.createElement('a'); link.className = 'case-topic-link'; link.href = `#/?section=catalog-${topic.id}`
+  const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
+  link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
 }
 
 function groupNavigation (experiment: ExperimentDefinition, topic: ReturnType<typeof topicFor>): HTMLElement | undefined {
@@ -179,7 +186,8 @@ export async function renderEvidenceContent (
 }
 
 function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinition): (section: string) => Promise<string | undefined> {
-  const inline = experiment.presentation === 'demo'
+  const findingFirst = experiment.presentation === 'finding-first'
+  const inline = findingFirst || experiment.presentation === 'demo'
   const area = document.createElement('section'); area.className = 'case-evidence'
   if (!inline) {
     const heading = document.createElement('h3'); heading.textContent = 'Detailed evidence'; area.append(heading)
@@ -191,7 +199,7 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
     if (existing) return existing
     if (!area.parentElement) recorded.append(area)
     const disclosure = inline ? undefined : document.createElement('details')
-    const title = document.createElement(inline ? 'h3' : 'summary'); title.textContent = page.title
+    const title = document.createElement(findingFirst ? 'h2' : inline ? 'h3' : 'summary'); title.textContent = page.title
     const content = document.createElement('div'); content.id = articleSectionId(page.id); content.dataset.evidenceContent = ''
     let ready: Promise<void> | undefined
     const load = (): Promise<void> => {
@@ -214,7 +222,9 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
     const block = { disclosure, load }; documents.set(page.id, block)
     return block
   }
+  const primaryEvidence = findingFirst ? startingCase(experiment).recorded?.evidence[0]?.page : undefined
   for (const page of caseEvidencePages(experiment)) {
+    if (primaryEvidence && page.id !== primaryEvidence) continue
     const block = add(page)
     if (inline) block.load().catch(() => {})
   }
@@ -228,23 +238,54 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
   }
 }
 
+function renderFindingFirstFrame (host: HTMLElement, experiment: ExperimentDefinition): CaseFrame {
+  const item = startingCase(experiment)
+  host.innerHTML = `<div class="case-document case-finding-first">
+    <header class="case-header"><h1></h1><div class="case-recorded-summary" id="recorded-findings"></div></header>
+    <div class="case-stage" aria-busy="false">
+      <div id="case-live">
+        <p class="case-load-status" role="status"></p>
+        <button class="button-primary" type="button" data-start-comparison hidden>Start the live comparison</button>
+        <button type="button" data-retry-comparison hidden>Retry live experiment</button>
+        <div class="case-live-slot"></div>
+      </div>
+      <div class="case-inline-evidence"></div>
+    </div>
+  </div>`
+  const documentView = host.querySelector<HTMLElement>('.case-finding-first')!
+  const header = documentView.querySelector<HTMLElement>('.case-header')!
+  header.querySelector('h1')!.textContent = experiment.title
+  addTopicLink(header, topicFor(experiment))
+  const assessment = readinessFor(experiment.id, item)
+  const finding = paragraph(assessment.finding); finding.id = findingSection(item)
+  header.querySelector('.case-recorded-summary')!.append(readinessBadge(assessment.badge, assessment.tone), finding)
+
+  const recorded = documentView.querySelector<HTMLElement>('.case-inline-evidence')!
+  return {
+    stage: documentView.querySelector<HTMLElement>('.case-stage')!,
+    slot: documentView.querySelector<HTMLElement>('.case-live-slot')!,
+    recorded,
+    status: documentView.querySelector<HTMLElement>('.case-load-status')!,
+    start: documentView.querySelector<HTMLButtonElement>('[data-start-comparison]')!,
+    retry: documentView.querySelector<HTMLButtonElement>('[data-retry-comparison]')!,
+    openEvidence: mountCaseEvidence(recorded, experiment),
+  }
+}
+
 export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefinition): CaseFrame {
+  if (experiment.presentation === 'finding-first') return renderFindingFirstFrame(host, experiment)
   const item = startingCase(experiment)
   const demo = experiment.presentation === 'demo'
   host.innerHTML = `<div class="case-document case-single-page"><header class="case-header"><p class="case-kind"></p><h1></h1>
     <p class="case-question"></p><p class="case-description"></p></header><section class="case-stage" aria-busy="false"></section></div>`
-  const header = host.querySelector('.case-header')!
+  const header = host.querySelector<HTMLElement>('.case-header')!
   const question = header.querySelector<HTMLElement>('.case-question')!
   question.hidden = demo
   const description = header.querySelector<HTMLElement>('.case-description')!
   header.querySelector('h1')!.textContent = experiment.title
   header.querySelector<HTMLElement>('.case-kind')!.textContent = item.kind === 'recorded' ? 'Recorded study' : ''
   const topic = topicFor(experiment)
-  if (topic) {
-    const link = document.createElement('a'); link.className = 'case-topic-link'; link.href = `#/?section=catalog-${topic.id}`
-    const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
-    link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
-  }
+  addTopicLink(header, topic)
   const summary = document.createElement('div'); summary.className = 'case-recorded-summary'
   if (!demo) header.append(summary)
 

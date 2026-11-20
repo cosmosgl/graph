@@ -109,8 +109,8 @@ LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/s
 
 Open the printed test session in the native browser. The test writes
 `smoothstep-fixed-input.json` and `smoothstep-line.json` to the ignored local
-captures directory. To repeat the shifted blended case, select **Down 1/1024
-pixel** and **Blended** in the experiment, then run the comparison.
+captures directory. To repeat the shifted blended case, choose **Down** under
+Position and **Blended** under Edge. Each choice starts a comparison.
 
 For the position trace and its length controls, run:
 

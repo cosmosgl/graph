@@ -216,18 +216,21 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   function mountCasePage (experiment: ExperimentDefinition, owner: ReturnType<typeof createRetainedRun>): MountedCasePage {
     const frame = renderCaseFrame(workspace, experiment)
+    const { comparison } = frame
     let active = experiment.cases!.find(item => owner.id === experiment.id && item.id === owner.caseId) ?? startingCase(experiment)
-    frame.setLiveCase(active)
+    frame.setLiveCase?.(active)
     let focusRequest = 0
     let launch = 0
     let opening: { id: string; ready: Promise<void> } | undefined
-    const moveFindingsAfterRun = (): void => { frame.slot.after(frame.recorded, frame.comparison) }
+    const moveFindingsAfterRun = (): void => {
+      if (comparison) frame.slot.after(frame.recorded, comparison)
+    }
 
     const openCase = (item: ExperimentCase, deferComparison = false): Promise<void> => {
       if (opening?.id === item.id) return opening.ready
       if (owner.id === experiment.id && owner.caseId === item.id && frame.slot.firstElementChild) return Promise.resolve()
       const request = ++launch
-      active = item; frame.setLiveCase(item); moveFindingsAfterRun()
+      active = item; frame.setLiveCase?.(item); moveFindingsAfterRun()
       frame.stage.setAttribute('aria-busy', 'true')
       frame.start.hidden = frame.retry.hidden = true
       frame.status.textContent = 'Creating the live experiment…'
@@ -237,10 +240,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           await owner.show(experiment, frame.slot, item.id, deferComparison ? { deferComparison } : undefined)
           if (!isCurrent()) return
           const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
-          if (layout) {
+          if (layout && comparison) {
             const supplementary = layout.querySelector('#run-explanation, #run-live-explanation, #run-diagnostics')
-            if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, frame.comparison)
-            else layout.append(frame.recorded, frame.comparison)
+            if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, comparison)
+            else layout.append(frame.recorded, comparison)
           }
           frame.status.textContent = ''
         } catch (error) {
@@ -257,7 +260,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const launchActive = (): void => { focusRequest++; openCase(active).catch(() => {}) }
     frame.retry.addEventListener('click', launchActive)
     frame.start.addEventListener('click', launchActive)
-    frame.onChooseCase((item, control) => {
+    frame.onChooseCase?.((item, control) => {
       const section = item === startingCase(experiment) ? null : liveCaseSection(item)
       window.history.replaceState(null, '', experimentSectionHref(experiment.id, section))
       const keepFocus = document.activeElement === control

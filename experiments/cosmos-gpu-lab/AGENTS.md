@@ -4,8 +4,29 @@ The Lab records bounded research for people to understand and for agents to
 reproduce. Follow the repository's root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
-Keep demo explanations, findings and limits visible as regular page sections.
-Place supporting material below the live example.
+## Experiment page design
+
+- **Use one reading column at every width.** On new and redesigned pages, lead
+  with the title, the same badge as the catalogue card, and one short finding
+  when available. Put the controls and live renders next. Keep diagnostics,
+  run data, limits, and evidence visible in the same column below the demo.
+- **Keep headings and copy concise.** Let the badge stand on its own. Describe
+  what the check found in plain words. Add a heading when it helps readers find
+  a distinct section, and use section links to jump to visible content.
+- **Give each independent question its own experiment.** Use cases for
+  variations on the same question. Make each experiment easy to find in the
+  catalogue.
+- **Show the real starting layout.** Draw it with the engine the demo uses. For
+  a moving graph with a Run button, show the layout paused. Fit the camera once
+  on Run or Fit, then keep it still as the points move.
+- **Use compact choice buttons.** The shared `choice-controls` style sizes
+  buttons around their labels and leaves room to tap. Label each group,
+  highlight the selected option, and rerun quick comparisons on click.
+- **Keep reruns steady.** Give temporary progress messages a fixed place so
+  the controls and renders stay in position. Check the live page at narrow and
+  wide widths.
+
+## Running studies
 
 For an existing study, read its `agent-recipe.md` when one is present. Check the
 declared workload, reference, acceptance rules, environment and output location
