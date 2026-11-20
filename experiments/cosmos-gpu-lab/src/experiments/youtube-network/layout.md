@@ -8,3 +8,6 @@ run, repulsion spreads the points and the friendship links pull connected
 points together. Run widens the initial overview once to make room for the
 expanding graph. Both viewers then keep the same camera as their layouts
 advance independently. Fit returns to the overview.
+
+To compare speed from the seeded layout, use Run WebGL and Run WebGPU in
+turn after loading the page. Click the active button to pause.

@@ -257,13 +257,14 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const launchActive = (): void => { focusRequest++; openCase(active).catch(() => {}) }
     frame.retry.addEventListener('click', launchActive)
     frame.start.addEventListener('click', launchActive)
-    frame.chooser.addEventListener('change', () => {
-      const item = experiment.cases!.find(candidate => candidate.id === frame.chooser.value)!
+    frame.onChooseCase((item, control) => {
       const section = item === startingCase(experiment) ? null : liveCaseSection(item)
       window.history.replaceState(null, '', experimentSectionHref(experiment.id, section))
-      const keepFocus = document.activeElement === frame.chooser
-      focusRequest++
-      openCase(item).then(() => { if (keepFocus && document.activeElement === document.body) frame.chooser.focus({ preventScroll: true }) }).catch(() => {})
+      const keepFocus = document.activeElement === control
+      const request = ++focusRequest
+      openCase(item).then(() => {
+        if (request === focusRequest && keepFocus && document.activeElement === document.body) control.focus({ preventScroll: true })
+      }).catch(() => {})
     })
     return {
       id: experiment.id,

@@ -20,29 +20,42 @@ type ComparisonDemo = {
   frameIntervals?: { webglMs: number; webgpuMs: number };
 }
 
+type Playback = 'both' | 'webgl' | 'webgpu'
+
 export function createLargeComparisonView (
   host: HTMLElement, { kind, title, pointCount = 1000000, benchmarkSection, frameIntervals }: ComparisonDemo
 ): ExperimentInstance {
+  const youtube = kind === 'youtube'
+  const rateUnit = youtube ? 'frames/s' : 'steps/s'
   const benchmarkSummary = frameIntervals
     ? `Separate M3 runs · 95th-percentile frame interval during steady motion ·
       WebGL <strong>${frameIntervals.webglMs.toFixed(1)} ms</strong> · WebGPU <strong>${frameIntervals.webgpuMs.toFixed(1)} ms</strong>.`
     : ''
+  const modes: Playback[] = youtube ? ['webgl', 'webgpu', 'both'] : ['both']
+  const labels = { webgl: ' WebGL', webgpu: ' WebGPU', both: youtube ? ' both' : '' }
+  const playbackMarkup = modes.map(mode =>
+    `<button type="button" data-comparison-run="${mode}" disabled>Run${labels[mode]}</button>`).join('')
+  const playbackNote = youtube
+    ? 'Each pane keeps its last rate of GPU-completed simulation frames.'
+    : 'Live rates count submitted simulation steps while both graphs share the GPU.'
   host.innerHTML = `<div class="controls">
-    <button type="button" class="button-primary" data-comparison-run disabled>Run</button>
+    ${playbackMarkup}
     <button type="button" data-comparison-fit disabled>Fit</button></div>
     <p role="status" data-comparison-status>${kind === 'youtube' ? 'Loading the YouTube dataset…' : 'Loading the graphs…'}</p>
     <div class="viewer-comparison-panels large-comparison-panels">
       <section><h2>Production WebGL</h2><div class="large-comparison-surface" data-comparison-webgl></div>
-        <p class="comparison-step-rate" data-webgl-rate>— steps/s</p></section>
+        <p class="comparison-step-rate" data-webgl-rate>— ${rateUnit}</p></section>
       <section><h2>Candidate WebGPU</h2><div class="large-comparison-surface" data-comparison-webgpu>
         <canvas aria-label="${title} in WebGPU"></canvas></div>
-        <p class="comparison-step-rate" data-webgpu-rate>— steps/s</p></section>
+        <p class="comparison-step-rate" data-webgpu-rate>— ${rateUnit}</p></section>
     </div>
-    <p class="demo-note">Drag or scroll either graph to pan or zoom both. Live rates count submitted simulation steps while both graphs share the GPU.</p>
+    <p class="demo-note">Drag or scroll either graph to pan or zoom both. ${playbackNote}</p>
     <p class="demo-note comparison-benchmark">${benchmarkSummary}
       <a href="#/viewer-comparison?section=doc-migration-results-${benchmarkSection}">Benchmark results</a>
     </p>`
-  const run = host.querySelector<HTMLButtonElement>('[data-comparison-run]')!
+  const playButtons = modes.map(mode => ({
+    mode, button: host.querySelector<HTMLButtonElement>(`[data-comparison-run="${mode}"]`)!,
+  }))
   const fit = host.querySelector<HTMLButtonElement>('[data-comparison-fit]')!
   const status = host.querySelector<HTMLElement>('[data-comparison-status]')!
   const glSurface = host.querySelector<HTMLElement>('[data-comparison-webgl]')!
@@ -72,27 +85,46 @@ export function createLargeComparisonView (
   let gpu: ComparisonCandidate | undefined
   let ready = false
   let failed = false
-  let playing = false
+  let playing: Playback | undefined
+  let startRequest = 0
   let dirty = true
   let glCooled = false
   let tick = 0
   let glTick = 0
+  let glCompleted = 0
+  let gpuCompleted = 0
+  let glPending: Promise<void> | undefined
+  let gpuPending: Promise<void> | undefined
   let alpha = 1
   let rateTimer: number | undefined
 
+  const updatePlayButtons = (starting?: Playback): void => {
+    for (const { mode, button } of playButtons) {
+      const action = mode === starting ? 'Starting' : mode === playing ? 'Pause' : 'Run'
+      button.textContent = action + labels[mode]
+      button.disabled = !ready || failed || signal.aborted || starting !== undefined
+      button.classList.toggle('button-primary', mode === (starting ?? playing ?? 'both'))
+    }
+  }
   const pause = (): void => {
-    playing = false
+    startRequest++
+    playing = undefined
     gl?.pause()
     window.clearInterval(rateTimer)
-    glRate.textContent = gpuRate.textContent = '— steps/s'
-    run.textContent = 'Run'
+    if (!youtube) glRate.textContent = gpuRate.textContent = '— steps/s'
+    updatePlayButtons()
   }
-  const checkCooled = (): void => { if (glCooled && alpha < ALPHA_MIN) pause() }
+  const runsWebGpu = (): boolean => playing !== undefined && playing !== 'webgl' && alpha >= ALPHA_MIN
+  const checkCooled = (): void => {
+    const glFinished = playing === 'webgpu' || glCooled
+    const gpuFinished = playing === 'webgl' || alpha < ALPHA_MIN
+    if (playing && glFinished && gpuFinished) pause()
+  }
   const fail = (message: string, error: unknown): void => {
     if (signal.aborted) return
     failed = true
     pause()
-    run.disabled = fit.disabled = true
+    fit.disabled = true
     status.hidden = false
     status.textContent = `${message} ${error instanceof Error ? error.message : String(error)}`
   }
@@ -109,18 +141,21 @@ export function createLargeComparisonView (
     }
     drawing.camera = camera
     dirty = false
-    if (playing && alpha >= ALPHA_MIN) {
+    const advances = runsWebGpu()
+    if (advances) {
       graph.frame(tick++, alpha, false)
       alpha = cool(alpha, 5000)
       checkCooled()
     }
     drawing.draw()
     await waitForGpu(graph.device, 20000)
+    if (advances) gpuCompleted = tick
   }
   const loop = createResidentFrameLoop({
-    wantsFrame: () => ready && !signal.aborted && !failed && (dirty || (playing && alpha >= ALPHA_MIN)),
-    async frame (): Promise<void> {
-      try { await drawGpu() } catch (error) { fail('WebGPU stopped.', error) }
+    wantsFrame: () => ready && !signal.aborted && !failed && (dirty || runsWebGpu()),
+    frame (): Promise<void> {
+      gpuPending = drawGpu().catch(error => fail('WebGPU stopped.', error))
+      return gpuPending
     },
   })
 
@@ -169,11 +204,21 @@ export function createLargeComparisonView (
   resize.observe(glSurface); resize.observe(gpuSurface)
   resizeViews()
 
-  run.addEventListener('click', () => {
+  const startPlayback = async (mode: Playback): Promise<void> => {
     if (!gl || !ready || failed) return
-    if (playing) { pause(); return }
-    playing = true
-    run.textContent = 'Pause'
+    const pauseOnly = playing === mode
+    if (playing) pause()
+    if (pauseOnly) return
+    if (youtube) {
+      const request = ++startRequest
+      updatePlayButtons(mode)
+      await Promise.all([glPending, gpuPending])
+      if (signal.aborted || failed || request !== startRequest) return
+    }
+    playing = mode
+    updatePlayButtons()
+    const showGl = mode !== 'webgpu'
+    const showGpu = mode !== 'webgl'
     // Start on the seeded layout at rest and leave room for its expansion
     // when it first moves. Keep any camera the user positioned themselves.
     if (kind === 'youtube' && fitRadius !== youtubeMotionRadius) {
@@ -181,21 +226,31 @@ export function createLargeComparisonView (
       if (fitted) { camera = fitCamera(); applyCamera() }
     }
     let previousTime = performance.now()
-    let previousGlTick = glTick
-    let previousGpuTick = tick
+    let previousGlCount = youtube ? glCompleted : glTick
+    let previousGpuCount = youtube ? gpuCompleted : tick
+    const scopeLabel = youtube ? (mode === 'both' ? ' · both' : ' · solo') : ''
+    if (showGl) glRate.textContent = `— ${rateUnit}${scopeLabel}`
+    if (showGpu) gpuRate.textContent = `— ${rateUnit}${scopeLabel}`
     rateTimer = window.setInterval(() => {
       const now = performance.now()
       const seconds = (now - previousTime) / 1000
-      glRate.textContent = `${((glTick - previousGlTick) / seconds).toFixed(1)} steps/s`
-      gpuRate.textContent = `${((tick - previousGpuTick) / seconds).toFixed(1)} steps/s`
+      const glCount = youtube ? glCompleted : glTick
+      const gpuCount = youtube ? gpuCompleted : tick
+      if (showGl) glRate.textContent = `${((glCount - previousGlCount) / seconds).toFixed(1)} ${rateUnit}${scopeLabel}`
+      if (showGpu) gpuRate.textContent = `${((gpuCount - previousGpuCount) / seconds).toFixed(1)} ${rateUnit}${scopeLabel}`
       previousTime = now
-      previousGlTick = glTick
-      previousGpuTick = tick
-    }, 1000)
-    if (alpha < ALPHA_MIN) alpha = 1
-    if (glCooled) { glCooled = false; gl.start() } else gl.unpause()
+      previousGlCount = glCount
+      previousGpuCount = gpuCount
+    }, youtube ? 2000 : 1000)
+    if (showGpu && alpha < ALPHA_MIN) alpha = 1
+    if (showGl) {
+      if (glCooled) { glCooled = false; gl.start() } else gl.unpause()
+    }
     loop.request()
-  }, { signal })
+  }
+  for (const { mode, button } of playButtons) {
+    button.addEventListener('click', () => { startPlayback(mode).catch(error => fail('Playback stopped.', error)) }, { signal })
+  }
   fit.addEventListener('click', () => { fitted = true; camera = fitCamera(); applyCamera() }, { signal })
 
   const initialize = async (): Promise<void> => {
@@ -219,6 +274,13 @@ export function createLargeComparisonView (
     const input = prepareComparisonInput(scene, kind === 'youtube' ? 2 : 4)
     gl = scope.own(await control(input, pixelRatio, {
       tick (): void { glTick++ },
+      frameSubmitted: youtube
+        ? (completion): void => {
+          const submitted = glTick
+          glPending = completion.then(() => { glCompleted = Math.max(glCompleted, submitted) })
+            .catch(error => fail('WebGL stopped.', error))
+        }
+        : undefined,
       ended (): void { glCooled = true; checkCooled() },
       lost: () => fail('WebGL stopped.', 'The context was lost.'),
     }))
@@ -229,7 +291,8 @@ export function createLargeComparisonView (
     await drawGpu()
     if (signal.aborted || failed) return
     ready = true
-    run.disabled = fit.disabled = false
+    updatePlayButtons()
+    fit.disabled = false
     status.hidden = true
     loop.request()
   }

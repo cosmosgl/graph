@@ -4,11 +4,24 @@ import { createProduction } from './production'
 import { loadProductionBundle } from './production-bundle'
 
 export type CreateComparisonWebGL = (
-  input: ComparisonInput, pixelRatio: number, callbacks: { tick(): void; ended(): void; lost(): void }
+  input: ComparisonInput, pixelRatio: number, callbacks: {
+    tick(): void;
+    frameSubmitted?(completion: Promise<void>): void;
+    ended(): void;
+    lost(): void;
+  }
 ) => Promise<Graph>
 
+async function completedFrame (graph: Graph): Promise<void> {
+  // The simulation callback runs before Graph draws. Place the fence after
+  // the rest of that frame has submitted on the same device.
+  await Promise.resolve()
+  const fence = graph.simulation.device!.createFence()
+  try { await fence.signaled } finally { fence.destroy() }
+}
+
 const host = document.querySelector<HTMLDivElement>('#graph')!
-const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, { tick, ended, lost }) => {
+const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, { tick, frameSubmitted, ended, lost }) => {
   const GRAPH = await loadProductionBundle()
   const graph = new GRAPH(host, {
     fitViewOnInit: false,
@@ -16,7 +29,10 @@ const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, {
     pixelRatio,
     randomSeed: seed,
     pointDefaultSize: input.size,
-    onSimulationTick: tick,
+    onSimulationTick (): void {
+      tick()
+      frameSubmitted?.(completedFrame(graph))
+    },
     onSimulationEnd: ended,
   })
   try {
