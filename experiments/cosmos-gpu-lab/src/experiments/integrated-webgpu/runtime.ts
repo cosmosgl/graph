@@ -7,13 +7,15 @@ import { cool } from '../combined-layout/data'
 import { forceSettings } from '../combined-layout/production-settings'
 import { DEFAULT_STRENGTH } from '../mouse-repulsion/data'
 import type { MouseArithmetic } from '../mouse-repulsion/webgpu'
-import { createRenderer } from './renderer'
+import { createRenderer, type ViewerPaint } from './renderer'
 import { composeWorkload, workload, type IntegratedForceMode, type Workload } from './data'
 import type { createIntegratedReadback, ViewerReadback } from './readback'
 export type IntegratedSpring = 'hoist' | 'prefetch'
 export type FrameTimestamps = { query: QuerySet; offset: number } | { scope: ComputeScope; draw: RenderPassProps }
 export type FrameTrace = { encodeSimulationMs: number; encodeDrawMs: number; completionWaitMs: number }
-export type Feedback = { kind: string; ms: number; id: number | null; readMs: number; highlightMs: number; opportunityMs: number }
+export type Feedback = {
+  kind: string; ms: number; id: number | null; object?: 'point' | 'link'; readMs: number; highlightMs: number; opportunityMs: number;
+}
 type ClusterChannels = NonNullable<AdditionalForces['cluster']>
 type AttractorChannels = NonNullable<AdditionalForces['attractor']>
 export type IntegratedForceStep = {
@@ -23,6 +25,8 @@ export type IntegratedForceStep = {
 type IntegratedOptions = {
   forces?: IntegratedForceMode; decay?: number; mouseArithmetic?: MouseArithmetic;
   readback?: boolean;
+  paint?: ViewerPaint;
+  linkPicking?: boolean;
   onDeviceError?(error: Error): unknown;
   onForceStep?(step: IntegratedForceStep): void | Promise<void>;
 }
@@ -83,7 +87,7 @@ export async function createIntegrated (
   let readback: Awaited<ReturnType<typeof createIntegratedReadback>> | undefined
   try {
     backend = await makeBackend(data, composition)
-    renderer = createRenderer(() => backend.positionSource!(), data.graph, canvas)
+    renderer = createRenderer(() => backend.positionSource!(), data.graph, canvas, options.paint)
     const drawing = renderer
     if (options.readback) {
       const { createIntegratedReadback } = await import('./readback')
@@ -220,16 +224,26 @@ export async function createIntegrated (
       },
       async pick (x: number, y: number, start = performance.now()): Promise<number | null> {
         healthy(); const token = ++generation
-        const id = await drawing.pick(x, y)
+        const object = options.linkPicking ? await drawing.pickObject(x, y) : undefined
+        const id = options.linkPicking ? object?.id ?? null : await drawing.pick(x, y)
         if (destroyed || token !== generation) return null
-        const read = performance.now(); drawing.selected = id ?? -1
+        const point = object?.kind === 'link' ? null : id
+        const read = performance.now()
+        drawing.selected = point ?? -1
+        drawing.selectedLink = object?.kind === 'link' ? object.id : -1
         await api.frame(false); const highlighted = performance.now(); await nextFrame(); const end = performance.now()
         if (!destroyed && token === generation) {
           feedback.push({
-            kind: 'pick', ms: end - start, id, readMs: read - start, highlightMs: highlighted - read, opportunityMs: end - highlighted,
+            kind: 'pick',
+            ms: end - start,
+            id,
+            ...(object ? { object: object.kind } : {}),
+            readMs: read - start,
+            highlightMs: highlighted - read,
+            opportunityMs: end - highlighted,
           })
         }
-        return id
+        return point
       },
       drag (id: number, x: number, y: number, release = false): void {
         healthy(); const [wx, wy] = api.world(x, y)

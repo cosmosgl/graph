@@ -157,3 +157,28 @@ VITE_LAB_PRODUCTION_SHA256=$(shasum -a 256 dist/index.min.js | cut -d' ' -f1)
 export LAB_NATIVE_VISIBLE=1 VITE_LAB_PAINT_LINK_OPACITY=1 VITE_LAB_PRODUCTION_SHA256
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/paint-link-opacity.test.ts
 ```
+
+## Fractional styles on moving geometry
+
+Use ticks 1, 4, 8 and 12 of the GPU Karate Club layout. Replay each geometry
+and camera through the production Graph's public setters. Display the two
+480 × 320 CSS canvases in visible Chrome. Use DPR 1 and 2, 1.23× zoom, small
+fractional pans and fractional point sizes. Switch from the first circle and
+solid-link palette to the second at tick 8. The candidate uses smoothed
+solid links and distance opacity during the moving draw. Require exact
+interior point IDs, zero invisible candidate point picks and interior color
+error within 2/255. Keep the one-backing-pixel boundary counts separate.
+
+For object picking, start with a four-point chain whose two links cross.
+Use native pointer clicks at the crossing and check the visible link highlight.
+Check the later link ID, then move a faint point across the crossing using
+the live position update. A transparent point should expose the link below
+it. Links with effective source alpha below half an RGBA8 byte should expose
+the background. Check the exact object kind and ID at both pixel ratios.
+
+Use the same source archive, production build checksum and capture variables.
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_MOTION_STYLES=1 \
+  pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/motion-styles.test.ts
+```

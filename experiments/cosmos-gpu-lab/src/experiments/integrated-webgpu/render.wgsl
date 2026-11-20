@@ -25,9 +25,12 @@ fn clip(p: vec2f) -> vec4f { return vec4f((p - params.region.xy) / params.region
 }
 fn coverage(v: Vertex) -> f32 { return 1.0 - smoothstep(v.radius - 0.5,v.radius + 0.5,length(v.position.xy + params.region.xy - v.center)); }
 @fragment fn pointColor(v: Vertex) -> @location(0) vec4f { return vec4f(v.color.rgb,v.color.a * coverage(v)); }
+fn encodedId(id: u32, kind: f32) -> vec4f {
+  return vec4f(vec3f(f32(id & 255u), f32((id >> 8u) & 255u), f32((id >> 16u) & 255u)) / 255.0, kind);
+}
 @fragment fn pointId(v: Vertex) -> @location(0) vec4f {
   if (coverage(v) < 0.5 || v.color.a <= 0.0) { discard; }
-  return vec4f(vec3f(f32(v.id & 255u),f32((v.id >> 8u) & 255u),f32((v.id >> 16u) & 255u)) / 255.0,1);
+  return encodedId(v.id, 1.0);
 }
 fn linkOpacity(worldDelta: vec2f) -> f32 {
   if (params.linkVisibility.w == 0.0) { return params.linkColor.a; }
@@ -36,6 +39,9 @@ fn linkOpacity(worldDelta: vec2f) -> f32 {
   let far = params.linkVisibility.y;
   return params.linkColor.a * max(params.linkVisibility.z, (distance - far) / (near - far));
 }
+fn linkRgb(index: u32) -> vec3f {
+  return select(params.linkColor.rgb, vec3f(0.957, 0.847, 0.537), f32(index) == params.state.z);
+}
 @vertex fn linkVertex(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
   let edge = links[i]; let a = positions[edge.x]; let b = positions[edge.y];
   let sa = screen(a.xy); let sb = screen(b.xy); let d = sb - sa; let len = length(d);
@@ -43,8 +49,13 @@ fn linkOpacity(worldDelta: vec2f) -> f32 {
   let corners = array<vec2f,4>(vec2f(0,-1),vec2f(0,1),vec2f(1,-1),vec2f(1,1));
   let c = corners[v]; var out: Vertex;
   out.position = clip(mix(sa,sb,c.x) + n * c.y * params.state.y * 0.5 * params.viewport.z);
-  out.color = vec4f(params.linkColor.rgb, linkOpacity(b.xy - a.xy));
+  out.color = vec4f(linkRgb(i), linkOpacity(b.xy - a.xy));
+  out.id = i + 1u;
   if (a.w > 0.5 || b.w > 0.5 || len <= 0.00001 || params.state.y <= 0.0 || params.linkColor.a <= 0.0) { out.position = vec4f(2,2,2,1); }
   return out;
 }
 @fragment fn linkColor(v: Vertex) -> @location(0) vec4f { return v.color; }
+@fragment fn linkId(v: Vertex) -> @location(0) vec4f {
+  if (v.color.a < 0.5 / 255.0) { discard; }
+  return encodedId(v.id, 0.5);
+}

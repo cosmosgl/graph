@@ -279,3 +279,26 @@ copy of the source archive at base `5a211b93`. The archive SHA-256 is
 The production UMD SHA-256 is
 `1e5d4c779f33c2a510a0d3c9ee43dbf7f0d0cb6e99a728d1ca0bee98130cd4dc`.
 [Replay method](#/viewer-comparison?section=doc-agent-recipe-check-the-short-link-opacity-rule)
+
+## Circles, solid links and clicks during motion
+
+Eight matched Karate Club frames passed at ticks 1, 4, 8 and 12 at DPR 1
+and 2. Each frame used the moving WebGPU viewer with smoothed solid links
+and distance opacity. The production Graph drew the same geometry and
+camera. Across 3,072,000 pixels the interior channels and point IDs matched
+exactly. The predefined boundary bands contained 993 pixels with color
+difference over 2/255. No invisible point picks were found in the samples.
+
+Eight native clicks on a separate four-point crossing fixture returned
+the expected link, faint foreground point, revealed link and background.
+The selected link visibly changed color in the candidate. Feedback took
+8.3–22.6 ms on the isolated fixture. This covers solid link crossings and
+point precedence on the tested renderer. The production click policies,
+curves, point images and other styles still need live comparisons.
+
+The M3 run used visible Chrome 157, luma 9.3.6 for the WebGL Graph and
+luma 10.0.0-alpha.15 for the native WebGPU viewer. See
+`captures/viewer-motion-input-m3-20261120-042356/` with source archive SHA-256
+`fbc39a3d403206a83d17ee7d08f47a626951972f147cd2fb90f82936ce839b99` and
+the production UMD checksum above.
+[Replay method](#/viewer-comparison?section=doc-agent-recipe-fractional-styles-on-moving-geometry)
