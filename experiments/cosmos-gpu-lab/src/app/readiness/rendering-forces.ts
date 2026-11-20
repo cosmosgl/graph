@@ -41,10 +41,10 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     ],
     next: 'Investigate the mask and color-boundary differences.',
   },
-  'point-styling/shapes': {
+  'point-shapes/shapes': {
     badge: 'Edge checks fail',
     tone: 'fail',
-    finding: 'Selected shape checks pass; fractional edge cases still fail.',
+    finding: 'WebGL and WebGPU returned different picking IDs at two edge pixels when testing fractional sizes and positions at 1× pixel ratio.',
     area: 'Integration',
     status: 'Checks failed',
     evidence: [
@@ -53,7 +53,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     ],
     next: 'Check fractional sizes and positions on more devices.',
   },
-  'point-styling/picking': {
+  'point-picking/picking': {
     badge: 'High pick cost',
     tone: 'review',
     finding: 'The prototype avoids invisible picks; dense requests remain expensive.',
@@ -66,7 +66,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     ],
     next: 'Reduce dense picking cost and measure pointer latency.',
   },
-  'point-styling/images': {
+  'point-images/images': {
     badge: 'Compatibility failed',
     tone: 'fail',
     finding: 'The candidate passed 40 atlas cases; production compatibility failed.',
@@ -78,7 +78,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     ],
     next: 'Investigate production image and picking parity.',
   },
-  'point-styling/effects': {
+  'point-rings-greyout/effects': {
     badge: 'Polygon checks fail',
     tone: 'fail',
     finding: 'Selected color checks pass; polygon boundary failures remain.',

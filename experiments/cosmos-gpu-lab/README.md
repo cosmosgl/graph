@@ -136,8 +136,8 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 
 - `precision-diagnostics`: production GLSL/native WGSL gravity versus analytic and compatibility
   references, plus controlled serial/blocked/tree sums on exact bounded-integer fixtures.
-- `point-styling`: production point shaders versus WebGPU shapes, strokes and host picking,
-  with exhaustive pixel checks and explicit fractional-size/zero-opacity failing controls.
+- `point-shapes`, `point-picking`, `point-images` and `point-rings-greyout`: separate WebGL and WebGPU
+  comparisons with pixel-level evidence, including the fractional-size and zero-opacity failure cases.
 - `center-mass`: tick-by-tick WebGL/WebGPU correctness comparison.
 - `scalable-reduction`: GPU-resident hierarchical reduction at larger point counts.
 - `point-rendering`: WebGL point sprites and WebGPU instanced circle quads.

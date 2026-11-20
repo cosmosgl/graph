@@ -1,3 +1,4 @@
+import { pointStylingExperimentIds } from '../experiments/point-styling/cases'
 import type { ExperimentDefinition, ExperimentModule } from '../runtime/experiment'
 import { caseEvidenceLinks } from '../runtime/experiment'
 import { research, researchMethodPages } from './research'
@@ -47,7 +48,7 @@ const modules = import.meta.glob<ExperimentModule>('../experiments/*/experiment.
   eager: true,
 })
 
-const definitions = Object.values(modules).map(module => module.experiment)
+const definitions = Object.values(modules).flatMap(module => 'experiments' in module ? module.experiments : [module.experiment])
 validateExperiments(definitions)
 
 export const experiments = definitions.sort((a, b) => a.title.localeCompare(b.title))
@@ -61,7 +62,13 @@ const catalogTopics = [
     id: 'rendering',
     title: 'Rendering and interaction',
     description: 'How points and links are drawn and selected.',
-    ids: ['point-rendering', 'point-styling', 'straight-links', 'smoothstep-coverage', 'curved-links', 'ribbon-generation'],
+    ids: ['point-rendering', 'straight-links', 'smoothstep-coverage', 'curved-links', 'ribbon-generation'],
+  },
+  {
+    id: 'point-styling',
+    title: 'Point styling and picking',
+    description: 'WebGL and WebGPU comparisons for points.',
+    ids: Object.values(pointStylingExperimentIds),
   },
   {
     id: 'forces-motion',

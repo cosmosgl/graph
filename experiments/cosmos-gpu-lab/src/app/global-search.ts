@@ -11,7 +11,7 @@ type QuickJumpResult = Pick<SearchResult, 'title' | 'kind' | 'href' | 'experimen
   & Partial<Pick<SearchResult, 'heading' | 'context' | 'snippet'>>
 const previewLimit = 4
 const suggestedExperiments = [
-  ['point-styling', 'picking'],
+  ['point-picking', 'picking'],
   ['precision-diagnostics', 'gravity-accuracy'],
   ['viewer-comparison', 'compare-viewers'],
 ].flatMap(([experimentId, caseId]) => {

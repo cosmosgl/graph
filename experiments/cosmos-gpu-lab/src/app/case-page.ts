@@ -6,7 +6,7 @@ import { caseEvidencePages, evidencePageAt, findingSection, isReaderPage, starti
 import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
 import { readinessFor } from './readiness'
-import { recordedObservations } from './readiness/presentation'
+import { readinessBadge, recordedObservations } from './readiness/presentation'
 import { articleSectionId, experimentHref } from './router'
 
 type CaseFrame = {
@@ -232,6 +232,16 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     const link = document.createElement('a'); link.className = 'case-topic-link'; link.href = `#/?section=catalog-${topic.id}`
     const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
     link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
+  }
+  const evidence = item.recorded?.evidence[0]
+  if (experiment.showRecordedSummary && evidence) {
+    const assessment = readinessFor(experiment.id, item)
+    const summary = document.createElement('div'); summary.className = 'case-recorded-summary'
+    const details = document.createElement('a')
+    details.href = experimentHref(experiment.id, evidence.page, evidence.section)
+    details.textContent = 'View test details'
+    summary.append(readinessBadge(assessment.badge, assessment.tone), paragraph(assessment.finding), details)
+    header.append(summary)
   }
 
   const stage = host.querySelector<HTMLElement>('.case-stage')!

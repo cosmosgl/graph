@@ -1,3 +1,5 @@
+import { cases as pointStylingCases, pointStylingExperimentIds } from '../experiments/point-styling/cases'
+
 export type ValidationContract = {
   question: string;
   reference: string;
@@ -9,6 +11,13 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  ...Object.fromEntries(pointStylingCases.map(item => [pointStylingExperimentIds[item.id], {
+    question: item.question,
+    reference: item.reference,
+    acceptance: item.acceptance,
+    coverage: item.recorded.scope,
+    limits: item.recorded.limits,
+  } satisfies ValidationContract])),
   'million-graph': {
     question: 'How does shared repulsion change the layout, and how responsive is the moving graph through a million points?',
     reference: 'Matched per-point force runs, frozen paint layers, and expected IDs and camera behavior during native input.',
@@ -80,27 +89,6 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'Solid rational curves; fixed tessellation, rebuilt and static caches; color-only or color plus IDs; duplicate baseline and balanced timing.',
     limits: 'No independent CPU geometry gate or WebGL equivalence claim. Frozen endpoints model rebuilding cost, not an evolving simulation. ' +
       'Existing curved-link raster failures remain open. Full styles, invalidation integration, culling, adaptive tessellation and cross-device costs are unchecked.',
-  },
-  'point-styling': {
-    question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
-    reference: 'Unmodified production GLSL with the legacy CPU rule; independent candidate CPU geometry with positive global opacity ' +
-      '(visible rule), plus quantized and pick-only candidates with the declared source-alpha rule; offscreen RGBA8 color/ID readback.',
-    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
-    coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
-      'raw/decoded atlas images, NPOT/non-square layouts, PNG color/alpha normalization and nearest/linear CPU colors; ' +
-      'outline/hover/focus rings, greyout layers/opacity, bounded OKLab shades and exact polygon boundary diagnostics; ' +
-      'production, explicit-coordinate and isolated-source verdicts stay separate.',
-    limits: 'Host picking only. Pointer tolerance, wider codec/color support, broader automatic shades, ' +
-      'transitions, occlusion and latency remain separate. ' +
-      'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
-      'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
-      'Original raster/picking and pre-blend-quantization failures stay visible. Clamping passes the bounded 64 × 64 atlas, ' +
-      'while its three NPOT/non-square nearest-boundary failures remain as controls. Integer nearest texels with clamped linear ' +
-      'sampling pass all 48 static packing cases and 72 sequential raw-image update cases on M3. ' +
-      'Premultiplied-bitmap to sRGB ImageData normalization passes 8/8 PNG settings; direct bitmap paths remain rejected. ' +
-      'Normalized rings/greyout pass 88/96 M3 rows. The opt-in pixel-space diagnostic passes 86/96; ' +
-      'CPU diamond ties and exact color-preservation rejections stay open without a reference/tolerance change. ' +
-      'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
   },
   'curved-links': {
     question: 'Do production curved solid ribbons and luma WebGPU match the rendered and pickable footprint?',
@@ -274,6 +262,29 @@ export const validationContracts: Record<string, ValidationContract> = {
 }
 
 /* eslint-enable @typescript-eslint/naming-convention */
+
+// Frozen shared contract used in the existing point-styling JSON export format.
+export const pointStylingExportContract: ValidationContract = {
+  question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
+  reference: 'Unmodified production GLSL with the legacy CPU rule; independent candidate CPU geometry with positive global opacity ' +
+    '(visible rule), plus quantized and pick-only candidates with the declared source-alpha rule; offscreen RGBA8 color/ID readback.',
+  acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
+  coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
+    'raw/decoded atlas images, NPOT/non-square layouts, PNG color/alpha normalization and nearest/linear CPU colors; ' +
+    'outline/hover/focus rings, greyout layers/opacity, bounded OKLab shades and exact polygon boundary diagnostics; ' +
+    'production, explicit-coordinate and isolated-source verdicts stay separate.',
+  limits: 'Host picking only. Pointer tolerance, wider codec/color support, broader automatic shades, ' +
+    'transitions, occlusion and latency remain separate. ' +
+    'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
+    'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
+    'Original raster/picking and pre-blend-quantization failures stay visible. Clamping passes the bounded 64 × 64 atlas, ' +
+    'while its three NPOT/non-square nearest-boundary failures remain as controls. Integer nearest texels with clamped linear ' +
+    'sampling pass all 48 static packing cases and 72 sequential raw-image update cases on M3. ' +
+    'Premultiplied-bitmap to sRGB ImageData normalization passes 8/8 PNG settings; direct bitmap paths remain rejected. ' +
+    'Normalized rings/greyout pass 88/96 M3 rows. The opt-in pixel-space diagnostic passes 86/96; ' +
+    'CPU diamond ties and exact color-preservation rejections stay open without a reference/tolerance change. ' +
+    'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
+}
 
 export function validationContractMarkdown (id: string, includeQuestion = true): string {
   const contract = validationContracts[id]

@@ -1,3 +1,14 @@
+import { cases as pointStylingCases, pointStylingExperimentIds } from '../experiments/point-styling/cases'
+
+type ExperimentRoute = {
+  kind: 'experiment';
+  experimentId: string;
+  pageId?: string;
+  caseId?: string;
+  evidencePage?: string;
+  view?: 'run' | 'evidence';
+}
+
 export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
@@ -7,10 +18,14 @@ export type AppRoute =
   | { kind: 'numerical-research' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
-  | { kind: 'experiment'; experimentId: string; pageId?: string; caseId?: string; evidencePage?: string; view?: 'run' | 'evidence' }
+  | ExperimentRoute
 
 export function currentSection (): string | null {
   return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
+}
+
+export function articleSectionId (pageId: string, section?: string): string {
+  return `doc-${pageId}${section ? `-${section}` : ''}`
 }
 
 // Keep bookmarks and search results from both former documents useful.
@@ -57,6 +72,29 @@ const migrationSectionAliases = new Map([
   ['7-future-directions', 'future-directions'],
 ])
 
+// Preserve bookmarks from the former page, including the original shared evidence.
+export function resolveExperimentAliases (route: ExperimentRoute, section: string | null): ExperimentRoute {
+  if (route.experimentId !== 'point-styling') return route
+  const namedCase = pointStylingCases.find(item => item.id === route.caseId)
+  if (route.caseId && !namedCase) return route
+
+  const explicitPage = route.evidencePage ?? route.pageId
+  const docSection = section?.startsWith('doc-') ? section : ''
+  const evidenceCase = pointStylingCases.find(item => {
+    const page = item.recorded.evidence[0].page
+    const prefix = articleSectionId(page)
+    return explicitPage ? explicitPage === page : docSection === prefix || docSection.startsWith(`${prefix}-`)
+  })
+  const selectedCase = pointStylingCases.find(item => section === `try-${item.id}` || section === `finding-${item.id}`)
+  const contractSection = articleSectionId('validation-contract')
+  const sharedDocument = explicitPage
+    ? explicitPage !== 'validation-contract'
+    : docSection !== '' && docSection !== contractSection && !docSection.startsWith(`${contractSection}-`)
+  const defaultCase = section === 'run-diagnostics' ? 'picking' : 'shapes'
+  const liveCase = sharedDocument ? 'shapes' : selectedCase?.id ?? namedCase?.id ?? defaultCase
+  return { ...route, experimentId: pointStylingExperimentIds[evidenceCase?.id ?? liveCase], caseId: undefined }
+}
+
 export function readRoute (): AppRoute {
   const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const segments = window.location.hash
@@ -86,7 +124,7 @@ export function readRoute (): AppRoute {
 
   const legacyRun = currentSection()?.startsWith('run-') || (segments[0] === 'weighted-links' &&
     ['WebGL', 'WebGPU'].includes(new URLSearchParams(window.location.search).get('linkDiagnostic') ?? ''))
-  return {
+  return resolveExperimentAliases({
     kind: 'experiment',
     experimentId: decodeURIComponent(segments[0]),
     caseId: params.get('case') ?? undefined,
@@ -98,7 +136,7 @@ export function readRoute (): AppRoute {
     pageId: segments[1] === 'docs' && segments[2]
       ? decodeURIComponent(segments[2])
       : undefined,
-  }
+  }, currentSection())
 }
 
 export function vocabularyHref (): string {
@@ -111,10 +149,6 @@ export function architectureHref (): string {
 
 export function conceptHref (conceptId: string): string {
   return `#/concepts/${encodeURIComponent(conceptId)}`
-}
-
-export function articleSectionId (pageId: string, section?: string): string {
-  return `doc-${pageId}${section ? `-${section}` : ''}`
 }
 
 export function experimentHref (experimentId: string, pageId?: string, section?: string): string {

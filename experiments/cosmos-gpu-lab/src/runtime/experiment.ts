@@ -90,6 +90,7 @@ export type ExperimentDefinition = {
   summary: string;
   tags: string[];
   cases?: ExperimentCase[];
+  showRecordedSummary?: boolean;
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
@@ -97,9 +98,7 @@ export type ExperimentDefinition = {
   pages: ExperimentPage[];
 }
 
-export type ExperimentModule = {
-  experiment: ExperimentDefinition;
-}
+export type ExperimentModule = { experiment: ExperimentDefinition } | { experiments: ExperimentDefinition[] }
 
 export function defineExperiment (definition: ExperimentDefinition): ExperimentDefinition {
   if (definition.pages.some(page => page.id === 'validation-contract')) throw new Error('Reserved validation-contract page id')

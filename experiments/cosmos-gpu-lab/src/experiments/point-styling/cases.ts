@@ -1,8 +1,15 @@
 import type { ExperimentCase } from '../../runtime/experiment'
+import type { StylingCaseId } from './case-view'
 
-// Each case uses the same renderers, but asks a different question. The
-// recorded findings describe their original inputs, not this browser's run.
-export const cases: ExperimentCase[] = [
+export const pointStylingExperimentIds: Record<StylingCaseId, string> = {
+  shapes: 'point-shapes',
+  picking: 'point-picking',
+  images: 'point-images',
+  effects: 'point-rings-greyout',
+}
+
+// The experiments share renderers. Each records its own inputs and findings.
+export const cases = [
   {
     id: 'shapes',
     title: 'Point shapes',
@@ -18,7 +25,7 @@ export const cases: ExperimentCase[] = [
       environment: 'Apple M3 · Chrome 157 · luma 10.0.0-alpha.4',
       scope: '12 frozen configurations, including shapes, strokes, overlap, zoom and pixel ratio.',
       limits: 'Fractional size and position cases retain failed parity checks. This is not full Graph or cross-device acceptance.',
-      evidence: [{ label: 'Point-shape evidence', page: 'shapes-evidence' }],
+      evidence: [{ label: 'Point-shape evidence', page: 'shapes-evidence', section: 'fractional-positions-and-sizes' }],
     },
   },
   {
@@ -76,4 +83,4 @@ export const cases: ExperimentCase[] = [
       evidence: [{ label: 'Ring and greyout evidence', page: 'effects-evidence' }],
     },
   },
-]
+] satisfies Array<ExperimentCase & { id: StylingCaseId }>

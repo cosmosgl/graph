@@ -46,9 +46,9 @@ it('keeps Quick jump editable on a phone and shows experiment mini cards among t
     expect(window.location.hash).toBe('#/')
     const [experiment, finding] = options()
     expect(experiment.querySelector('.case-nav-title')?.textContent).toBe('Point picking')
-    expect(experiment.hash).toBe('#/point-styling?section=try-picking')
-    const picking = findExperiment('point-styling')!.cases!.find(item => item.id === 'picking')!
-    expect(experiment.querySelector('.readiness-badge')?.textContent).toContain(readinessFor('point-styling', picking).badge)
+    expect(experiment.hash).toBe('#/point-picking')
+    const picking = findExperiment('point-picking')!.cases![0]
+    expect(experiment.querySelector('.readiness-badge')?.textContent).toContain(readinessFor('point-picking', picking).badge)
     expect(finding.querySelector('.global-search-kind')?.textContent).toBe('Recorded finding')
     expect(finding.querySelector('.readiness-badge')).toBeNull()
     expect(panel.getBoundingClientRect().left).toBeGreaterThanOrEqual(0)
