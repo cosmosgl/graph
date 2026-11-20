@@ -8,6 +8,7 @@ import { median, type TimestampWrites } from '../many-body/timing'
 import { createDenseCommunities, communityDensity, denseFixtureParameters, type DenseCommunities } from '../million-graph/dense-communities'
 import { checkpoints, layoutDifference, layoutSample, motionChecks, percentile, type LayoutSample } from '../million-graph/field-metrics'
 import { trackMotion, type MotionResult } from '../million-graph/field-motion'
+import { createInteractiveFixture } from '../million-graph/interactive-fixtures'
 import { GRID_BUILD_STAGES } from '../spatial-grid/resources'
 import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 import type { DistantForce } from './resident-cell-field'
@@ -35,7 +36,8 @@ type Lane = {
   hierarchyBytes: number; linkBytes: number; profile?: Profile;
 }
 type LaneOptions = {
-  profile?: 'stages' | 'expanded'; controlBox?: Float32Array; submitMs?: number[]; observe?: (graph: Graph, tick: number) => Promise<void>;
+  profile?: 'stages' | 'expanded'; controlBox?: Float32Array; submitMs?: number[]; coarseLevels?: number;
+  observe?: (graph: Graph, tick: number) => Promise<void>;
 }
 
 function assertVisible (): void {
@@ -90,12 +92,12 @@ function profileTail (stages: readonly string[], rows: number[][], elapsed: numb
 }
 
 async function runLane (
-  fixture: DenseCommunities, mode: DistantForce, elapsed: number[], { profile, controlBox, submitMs, observe }: LaneOptions = {}
+  fixture: DenseCommunities, mode: DistantForce, elapsed: number[], { profile, controlBox, submitMs, coarseLevels, observe }: LaneOptions = {}
 ): Promise<Lane> {
   const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 340; document.body.append(canvas)
   let backend: Graph | undefined
   try {
-    backend = await createResidentGraph(canvas, fixture.input, fixture.graph, mode)
+    backend = await createResidentGraph(canvas, fixture.input, fixture.graph, mode, { coarseLevels })
     if (backend.device.info.fallback !== false) throw new Error('Expected native WebGPU')
     const stages: readonly ProfileStage[] = profile === 'expanded' ? expandedStages : RESIDENT_STAGES
     const stageCount = stages.length
@@ -189,6 +191,41 @@ nativeStudy('times and profiles both resident solvers on persistent million-poin
     } catch (error) { await writeArtifact(name, { ...base, status: 'failed', elapsed, error: String(error) }); throw error }
   }
 }, 1200000)
+
+it.skipIf(import.meta.env.VITE_LAB_RESIDENT_DEEP_FIELD !== '1')('compares four and six shared levels in moving million-point layouts', async () => {
+  for (const kind of ['dense', 'hubs'] as const) {
+    const { input, graph, metadata } = createInteractiveFixture(count, kind)
+    const anchorCount = metadata.pinnedCount - 1
+    const fixture = { input, graph, anchorCount, firstAnchor: count - anchorCount }
+    const environmentInfo = await environment(fixture)
+    const first: LayoutSample[] = []
+    const observe = async (candidate: Graph, tick: number): Promise<void> => {
+      if (tick === 1) first.push(layoutSample(await candidate.readPositions(), tick, first[0]?.box, fixture.firstAnchor))
+    }
+    const artifact = `resident-deep-field-quality-${kind}`
+    const record: Record<string, unknown> = { ...environmentInfo, metadata, status: 'started' }
+    try {
+      const reference = await runLane(fixture, 'four-corners', [], { coarseLevels: 4, observe })
+      const candidate = await runLane(fixture, 'four-corners', [], { coarseLevels: 6, observe, controlBox: reference.snapshot.box })
+      const oneTick = layoutDifference(first[1], first[0])
+      const settled = layoutDifference(candidate.snapshot, reference.snapshot)
+      record.adapter = candidate.adapter
+      record.oneTick = oneTick
+      record.settled = settled
+      record.backingPixels = {
+        oneTickP95: oneTick.p95Px * 1082 / 340,
+        oneTickMax: oneTick.maxPx * 1082 / 340,
+        settledP95: settled.p95Px * 1082 / 340,
+      }
+      record.checks = { reference: reference.checks, candidate: candidate.checks }
+      record.status = 'complete'
+    } catch (error) {
+      record.status = 'failed'
+      record.error = String(error)
+      throw error
+    } finally { await writeArtifact(artifact, record) }
+  }
+}, 180000)
 
 function gridTail (elapsed: number[], submitMs: number[], profile?: Profile): {
   ticks: number[]; submitMedianMs: number; tailSubmitMedianMs: number; postSubmitMedianMs: number; tailPostSubmitMedianMs: number;

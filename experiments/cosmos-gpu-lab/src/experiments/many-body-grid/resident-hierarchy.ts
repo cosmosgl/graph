@@ -18,7 +18,7 @@ import normalizeSource from './resident-normalize.wgsl?raw'
 // every tick; its point IDs are also the execution order for repulsion.
 export async function createResidentHierarchy (
   device: Device, positions: Buffer[], samples: Buffer, forces: Buffer, count: number, p: Parameters, slotCount = 8,
-  distantForce: DistantForce = 'per-point'
+  distantForce: DistantForce = 'per-point', coarseLevels?: number
 ): Promise<{
   readonly bytes: number;
   prepare(tick: number, alpha: number): void;
@@ -41,7 +41,7 @@ export async function createResidentHierarchy (
       return own(device.createBuffer({ byteLength: Math.max(size, 16), usage: Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST }))
     }
     const box = storage(16); const normalized = storage(count * 8)
-    const field = fieldLayout(l, distantForce)
+    const field = fieldLayout(l, distantForce, coarseLevels)
     const aggregates = storage(l.cells * 16); const centroids = storage((l.cells + field.cells * field.rows) * 16)
     const slots = storage(l.finest ** 2 * slotCount * 8)
     const levels = own(upload(device, new Uint32Array(l.sizes.flatMap((n, i) => [n, l.offsets[i], 0, 0]))))

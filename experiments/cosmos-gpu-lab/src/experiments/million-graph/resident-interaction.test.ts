@@ -16,7 +16,7 @@ import { createMillionGraphView, type MovingFrame, type PickFeedback } from './v
 
 type ScreenPoint = [number, number]
 type WindowInfo = { bounds: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number } }
-type Variant = 'baseline' | 'combined' | 'fenced' | 'ahead' | 'depth'
+type Variant = 'baseline' | 'combined' | 'fenced' | 'ahead' | 'depth' | 'deep-field'
 declare module 'vitest/browser' {
   interface BrowserCommands {
     residentInput(action: 'layout'): Promise<WindowInfo>;
@@ -34,7 +34,8 @@ const expectedPoint = [0, 0, 1, 0]
 const renderCandidates = import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
 const framePacing = import.meta.env.VITE_LAB_RESIDENT_FRAME_PACING === '1'
 const depthCandidates = import.meta.env.VITE_LAB_RESIDENT_DEPTH_LINKS === '1'
-const frameStudy = framePacing || depthCandidates
+const deepField = import.meta.env.VITE_LAB_RESIDENT_DEEP_FIELD === '1'
+const frameStudy = framePacing || depthCandidates || deepField
 const profile = frameStudy && import.meta.env.VITE_LAB_RESIDENT_FRAME_PROFILE === '1'
 const querySamples = (intervals + 1) * RESIDENT_STAGES.length
 const cases: Array<[number, InteractiveFixtureKind]> = [
@@ -49,7 +50,8 @@ const cases: Array<[number, InteractiveFixtureKind]> = [
 ]
 const renderCases: Array<[number, InteractiveFixtureKind, Variant]> = cases.map(([count, kind]) => [count, kind, 'baseline'])
 if (frameStudy) {
-  const variant = depthCandidates ? 'depth' : 'ahead'
+  const pacingVariant = depthCandidates ? 'depth' : 'ahead'
+  const variant = deepField ? 'deep-field' : pacingVariant
   renderCases.splice(0, renderCases.length,
     [1000000, 'dense', 'fenced'], [1000000, 'dense', variant],
     [1000000, 'hubs', variant], [1000000, 'hubs', 'fenced'])
@@ -154,6 +156,7 @@ for (const [count, kind, variant] of renderCases) {
       pointCulling: candidate,
       cachedHighlight: candidate,
       depthLinks: variant === 'depth',
+      coarseLevels: variant === 'deep-field' ? 6 : undefined,
       scheduleAhead: variant === 'ahead',
       callback: frameStudy ? (animationTime, busy): void => { callbacks.push({ animationTime, started: performance.now(), busy }) } : undefined,
       timestamps: profile
