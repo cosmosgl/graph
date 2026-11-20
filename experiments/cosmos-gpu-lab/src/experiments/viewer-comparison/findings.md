@@ -302,3 +302,45 @@ luma 10.0.0-alpha.15 for the native WebGPU viewer. See
 `fbc39a3d403206a83d17ee7d08f47a626951972f147cd2fb90f82936ce839b99` and
 the production UMD checksum above.
 [Replay method](#/viewer-comparison?section=doc-agent-recipe-fractional-styles-on-moving-geometry)
+
+## Advanced styles on changing geometry
+
+The paired style renderers replayed three positions, zooms and drawing
+states at DPR 1 and 2. The point fixtures include eight shapes, strokes,
+images, rings and foreground/greyout ordering. The link fixtures include
+fractional widths, caps, endpoint gradients, dash/dot patterns and a faint
+overlapping link. The visible WebGL and WebGPU backends each drew the same
+changing inputs. The run checked 9,830,400 pixels per renderer pair.
+
+| Study | Frames meeting every strict check | Largest ID disagreement in a frame |
+| --- | ---: | ---: |
+| Points | 23/24 | 8 pixels |
+| Straight links | 14/24 | 343 pixels |
+| Curved links | 4/24 | 1 pixel |
+
+The point paint matched within 2/255 in every frame, including both
+overlap and atlas cases. At DPR 1 the first shape frame had eight
+different WebGL/WebGPU IDs and 16 WebGPU mask disagreements with the
+independent reference. At (222, 85) the candidate missed a diamond that
+the reference and WebGL both picked. The dashed straight crossing had
+343 differing IDs at DPR 1 and 226 at DPR 2 in the first frame even
+though paint stayed within budget. A witness at (80, 149) lies within
+half a pixel of the horizontal link cap and side, where WebGPU and the
+CPU reference picked link 0.
+At DPR 2 the candidate also missed link 1 at a witness on the vertical
+ribbon edge. The curved replays usually agreed on picked IDs across
+backends. Their strict failures include CPU mask or color differences in
+the segmented and patterned fixtures.
+
+No result picked a pixel whose final attachment alpha was zero.
+The failed masks still require attribution before applying the practical
+one-pixel edge allowance. These isolated style draws use supplied
+positions. Combined drawing and visible interaction with arrows, link
+hover and focus, and the production depth path remain open.
+
+All three replays completed on M3 with native Apple Metal 3 WebGPU and
+ANGLE Metal WebGL 2 in visible Chrome 157, using luma 10.0.0-alpha.15 on
+both sides. The source and pixel witnesses are in
+`captures/advanced-motion-m3-20261120-051419/`, source archive SHA-256
+`43251162c884d42168439cc3ee24a08bcaaf66097656a180b970f45adf9f3edd`.
+[Replay method](#/viewer-comparison?section=doc-agent-recipe-advanced-styles-on-changing-geometry)

@@ -1,4 +1,4 @@
-import { Buffer, type TextureFormatColor } from '@luma.gl/core'
+import { Buffer, type Device, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { patternProbeGPU } from '../straight-links/pattern-probe'
 import { patternCode, hasPatterns, patternShader } from '../straight-links/patterns'
@@ -31,7 +31,9 @@ const varyingSource = `${source}
   let coverage = smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y));
   return vec4f(input.coord.y,input.smoothing,coverage,f32(input.id + 1u));
 }`
-export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
+export async function createCurvesWebGPU (
+  canvas: HTMLCanvasElement
+): Promise<Backend & { adapter: Device['info'] }> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true }); const scope = resourceScope()
   try {
@@ -75,6 +77,7 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
     }
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      adapter: device.info,
       async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {

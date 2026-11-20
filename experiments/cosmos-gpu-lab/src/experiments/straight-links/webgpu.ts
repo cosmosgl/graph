@@ -1,4 +1,4 @@
-import { Buffer, type TextureFormatColor } from '@luma.gl/core'
+import { Buffer, type Device, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -39,7 +39,9 @@ struct CaptureVertex { @builtin(position) position: vec4f, @location(0) @interpo
 }
 @fragment fn captureFragment(input: CaptureVertex) -> @location(0) vec4f { return input.clip; }`
 }
-export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
+export async function createLinksWebGPU (
+  canvas: HTMLCanvasElement
+): Promise<Backend & { adapter: Device['info'] }> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true }); const scope = resourceScope()
   try {
@@ -88,6 +90,7 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
     let carrierKernel: RenderKernel | undefined
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      adapter: device.info,
       async rasterize (clip, width, height): Promise<Uint8Array> {
         const frame = resourceScope()
         try {

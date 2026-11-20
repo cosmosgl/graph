@@ -1,4 +1,4 @@
-import { Buffer, type TextureFormatColor } from '@luma.gl/core'
+import { Buffer, type Device, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -15,7 +15,9 @@ import { SOURCE_ALPHA_WGSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 import { createDynamicAtlas } from './dynamic-atlas'
 
-export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE, timestamps = false): Promise<Backend> {
+export async function createStylingWebGPU (
+  canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE, timestamps = false
+): Promise<Backend & { adapter: Device['info'] }> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, timestamps, error => { failure ??= error.message; return true })
   const scope = resourceScope()
@@ -69,6 +71,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
     return {
       atlas: dynamic,
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      adapter: device.info,
       async render (points, settings, diagnose = false, variant = 'production', display = true, storedAlpha): Promise<Snapshot> {
         if (storedAlpha) validateStoredAlpha(points, settings, variant, storedAlpha)
         const frame = resourceScope()
