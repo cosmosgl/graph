@@ -22,7 +22,7 @@ export function stagesFor (center = 0, collision?: CollisionParameters): readonl
   if (collision?.strength) for (let i = 0; i < collision.iterations; i++) stages.push('collision')
   return stages
 }
-export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
+export type Fixture = 'chain' | 'star' | 'communities' | 'pinned' | 'hubs'
 export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision; center?: number }
 export const ALPHA_MIN = 0.001
 export const GRAVITY = 0.25
@@ -56,6 +56,9 @@ export function createGraph (settings: Settings): { graph: GraphInput; input: In
     if (settings.fixture === 'star') add(0, i)
     else if (settings.fixture === 'communities') {
       if (i % 16) { add(i - 1, i); if (i % 16 > 1) add(Math.floor(i / 16) * 16, i) } else add(i - 1, i) // Bridges make the community fixture connected.
+    } else if (settings.fixture === 'hubs' && i > 5) {
+      // Keep the chain and add three distinct high-degree source groups.
+      add(i - 1, i); add(2 + i % 3, i)
     } else add(i - 1, i)
   }
   if (settings.fixture === 'pinned') {
