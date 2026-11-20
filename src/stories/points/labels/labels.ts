@@ -1,5 +1,10 @@
 import { LabelRenderer, LabelOptions } from '@interacta/css-labels'
-import { Graph } from '@cosmos.gl/graph'
+
+type LabelView = {
+  spaceToScreenPosition(position: [number, number]): [number, number];
+  spaceToScreenRadius(radius: number): number;
+  getPointRadiusByIndex(index: number): number | undefined;
+}
 
 export class CosmosLabels {
   private labelRenderer: LabelRenderer
@@ -11,7 +16,7 @@ export class CosmosLabels {
     this.pointIndexToLabel = pointIndexToLabel
   }
 
-  public update (graph: Graph, pointPositions: ReadonlyMap<number, [number, number]>): void {
+  public update (graph: LabelView, pointPositions: ReadonlyMap<number, [number, number]>): void {
     let index = 0
     pointPositions.forEach((positions, pointIndex) => {
       // Convert coordinates to the screen space
@@ -22,7 +27,7 @@ export class CosmosLabels {
 
       // Get the node radius and convert it to the screen space value in pixels
       const radius = graph.spaceToScreenRadius(
-        graph.getPointRadiusByIndex(pointIndex) as number
+        graph.getPointRadiusByIndex(pointIndex) ?? 0
       )
 
       // Set label properties

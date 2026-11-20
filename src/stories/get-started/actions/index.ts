@@ -21,6 +21,7 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
 
   const defaultLinkColor = '#5F74C2'
   const highlightLinkColor = '#7080D0'
+  let selectionRequest = 0
 
   const config = {
     spaceSize: 4096,
@@ -42,6 +43,7 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
     simulationGravity: 0.1,
     simulationDecay: 100000,
     onPointClick: (index: number): void => {
+      selectionRequest++
       graph.setConfigPartial({
         highlightedPointIndices: [index],
         outlinedPointIndices: [index],
@@ -52,6 +54,7 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
       console.log('Clicked point index: ', index)
     },
     onBackgroundClick: (): void => {
+      selectionRequest++
       graph.setConfigPartial({
         highlightedPointIndices: undefined,
         outlinedPointIndices: undefined,
@@ -120,10 +123,12 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   }
 
   function fitView (): void {
+    selectionRequest++
     graph.fitView()
   }
 
   function zoomIn (): void {
+    selectionRequest++
     const pointIndex = getRandomPointIndex()
     graph.zoomToPointByIndex(pointIndex)
     graph.setConfigPartial({
@@ -135,6 +140,7 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   }
 
   function highlightPoint (): void {
+    selectionRequest++
     const pointIndex = getRandomPointIndex()
     graph.setConfigPartial({
       highlightedPointIndices: [pointIndex],
@@ -153,16 +159,18 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
     const top = getRandomInRange([h / 4, h / 2])
     const bottom = getRandomInRange([top, (h * 3) / 4])
     pause()
-    const indices = graph.findPointsInRect([
+    const request = ++selectionRequest
+    graph.findPointsInRectAsync([
       [left, top],
       [right, bottom],
-    ])
-    const highlightedLinkIndices = graph.getConnectedLinkIndices(indices)
-    graph.setConfigPartial({
-      highlightedPointIndices: indices,
-      highlightedLinkIndices,
-      linkDefaultColor: highlightLinkColor,
-    })
+    ]).then(indices => {
+      if (!indices || request !== selectionRequest) return
+      graph.setConfigPartial({
+        highlightedPointIndices: indices,
+        highlightedLinkIndices: graph.getConnectedLinkIndices(indices),
+        linkDefaultColor: highlightLinkColor,
+      })
+    }).catch((error: unknown) => { console.error('Rectangle selection failed', error) })
   }
 
   const fitViewButton = document.createElement('div')

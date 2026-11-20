@@ -40,6 +40,32 @@ const tick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve,
 const MAX_POLLS = 1000
 
 describe('tracked point positions through Graph', () => {
+  it('returns the positions captured before a step and discards replaced tracking requests', async () => {
+    const graph = await createHeadlessGraph()
+    try {
+      graph.trackPointPositionsByIndices([0, 2])
+      graph.step()
+      const snapshot = graph.getPointPositionsArray()
+      const pending = graph.getTrackedPointPositionsMapAsync()
+      graph.step()
+      const first = await pending
+      expect(first?.get(0)).toEqual([snapshot[0], snapshot[1]])
+      expect(first?.get(2)).toEqual([snapshot[4], snapshot[5]])
+      expect(await graph.getTrackedPointPositionsMapAsync()).toEqual(graph.getTrackedPointPositionsMap())
+
+      const oldSet = graph.getTrackedPointPositionsMapAsync()
+      graph.trackPointPositionsByIndices([3])
+      await expect(oldSet).resolves.toBeNull()
+      expect([...(await graph.getTrackedPointPositionsMapAsync())!.keys()]).toEqual([3])
+
+      const oldPoints = graph.getTrackedPointPositionsMapAsync()
+      graph.setPointPositions(POSITIONS.slice())
+      await expect(oldPoints).resolves.toBeNull()
+      graph.render(undefined, 0)
+      expect(await graph.getTrackedPointPositionsMapAsync()).toEqual(graph.getTrackedPointPositionsMap())
+    } finally { graph.destroy() }
+  })
+
   it('reports the tracked points at their current positions', async () => {
     const graph = await createHeadlessGraph()
     try {

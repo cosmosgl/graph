@@ -55,9 +55,22 @@ export const pointLabels = (
   div.appendChild(graphDiv)
 
   const cosmosLabels = new CosmosLabels(labelsDiv, pointIndexToLabel)
+  let readPending = false
+  let readRequested = false
+  let disposed = false
+  let labelRevision = 0
 
   const drawTrackedLabels = (): void => {
-    if (labelMode === 'tracked') cosmosLabels.update(graph, graph.getTrackedPointPositionsMap())
+    if (disposed || labelMode !== 'tracked') return
+    if (readPending) { readRequested = true; return }
+    readPending = true
+    const revision = labelRevision
+    graph.getTrackedPointPositionsMapAsync().then(positions => {
+      if (positions && !disposed && revision === labelRevision) cosmosLabels.update(graph, positions)
+    }).catch((error: unknown) => { console.error('Tracked positions could not be read', error) }).finally(() => {
+      readPending = false
+      if (readRequested) { readRequested = false; drawTrackedLabels() }
+    })
   }
 
   const graph = new Graph(graphDiv, {
@@ -87,7 +100,7 @@ export const pointLabels = (
 
   // _Track the points_ for which you wish to display labels.
   // Their coordinates in the simulation space will be accessible
-  // via the `getTrackedPointPositionsMap` method. You can then convert
+  // via the `getTrackedPointPositionsMapAsync` method. You can then convert
   // them to the screen space with the `spaceToScreenPosition`
   // method.
   graph.trackPointPositionsByIndices(
@@ -103,11 +116,12 @@ export const pointLabels = (
     frame = requestAnimationFrame(drawSampledLabels)
   }
   const updateLabelMode = (): void => {
+    labelRevision++
     cancelAnimationFrame(frame)
     if (labelMode === 'tracked') drawTrackedLabels()
     else frame = requestAnimationFrame(drawSampledLabels)
   }
   frame = requestAnimationFrame(drawSampledLabels)
 
-  return { div, graph, destroy: () => cancelAnimationFrame(frame) }
+  return { div, graph, destroy: (): void => { disposed = true; cancelAnimationFrame(frame) } }
 }
