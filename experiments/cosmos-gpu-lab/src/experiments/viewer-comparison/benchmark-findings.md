@@ -49,6 +49,8 @@ WebGL startup varied beyond the declared limit.
 
 ## Dense communities · 1,000,000 points, 999,990 edges
 
+[Open the live Dense Communities demo](#/dense-communities).
+
 Both backends kept the eight communities visible, moved all 984,613 free
 points and preserved pinned and absent state. Each paired WebGL window missed
 367–368 estimated animation opportunities against 100–102 for WebGPU.

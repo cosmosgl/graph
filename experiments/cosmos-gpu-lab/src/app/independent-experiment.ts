@@ -1,10 +1,10 @@
 import type { ExperimentCase, ExperimentDefinition } from '../runtime/experiment'
 import { caseEvidenceLinks } from '../runtime/experiment'
 import { findExperiment } from './registry'
-import { articleSectionId, resolveExperimentAliases } from './router'
+import { articleSectionId, experimentHref, resolveExperimentAliases } from './router'
 
-// Retain the words and citations in the research record, but do not turn them
-// into navigation to a different experiment or case from this experiment.
+// Keep research evidence scoped to its case. A report can link to a standalone
+// demonstration so readers can see the workload it describes.
 export function unlinkOtherExperiments (
   host: HTMLElement, current: ExperimentDefinition, item?: ExperimentCase, currentPage?: string
 ): void {
@@ -23,6 +23,7 @@ export function unlinkOtherExperiments (
     }, section)
     const target = findExperiment(destination.experimentId)
     if (!target) continue
+    if (target.presentation === 'demo' && hash === experimentHref(target.id)) continue
     let unrelated = target.id !== current.id
     if (!unrelated && item) {
       const targetCase = destination.caseId

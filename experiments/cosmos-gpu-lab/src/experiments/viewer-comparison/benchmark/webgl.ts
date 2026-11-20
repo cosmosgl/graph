@@ -1,4 +1,5 @@
 import { loadProductionBundle } from '../production-bundle'
+import { applyComparisonInput } from '../comparison-input'
 import type { Pair } from '../../selection/reference'
 import type { CreateAdapter, Tracked } from './adapter'
 import { origin, seed, viewport } from './fixture'
@@ -49,11 +50,7 @@ export const createAdapter: CreateAdapter = async (host, fixture, observer, pick
       graph.setZoomTransformByPointPositions(new Float32Array([origin, origin]), 0, fixture.zoom, 0)
     }
     const { positions, pinned } = fixture
-    graph.pause()
-    graph.setPointPositions(positions, true)
-    graph.setPinnedPoints(pinned)
-    graph.setLinks(fixture.scene.graph.links)
-    graph.setLinkStrength(fixture.scene.graph.weights)
+    applyComparisonInput(graph, fixture)
     setCamera()
     graph.render(1, 0)
     sampleMemory()

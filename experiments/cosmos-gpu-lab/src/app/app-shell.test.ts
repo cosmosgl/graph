@@ -574,6 +574,23 @@ it('opens a recorded viewer bookmark on the same page and preserves a running co
   expect(destroy).not.toHaveBeenCalled()
 })
 
+it('opens the standalone demo from the previous Dense Communities bookmark', async () => {
+  const { create } = mockRun('dense-communities')
+  window.history.replaceState(null, '', '#/viewer-comparison?section=try-dense-communities')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  expect(window.location.hash).toBe('#/dense-communities?section=try-dense-communities')
+  expect(host.querySelector('h1')?.textContent).toBe('Dense Communities')
+  expect(host.querySelector('.case-chooser')).toBeNull()
+  expect(create).toHaveBeenCalledTimes(1)
+
+  await vi.waitFor(() => expect(host!.querySelector('#doc-layout .prose')?.textContent).toContain('pinned anchors'))
+  expect(host.querySelector('#doc-layout')?.closest('details')).toBeNull()
+  expect(host.querySelector('#case-comparison')?.closest('details')).toBeNull()
+  await route('#/dense-communities?section=doc-layout', () => expect(document.activeElement?.id).toBe('doc-layout'))
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
 it('keeps the Forces and motion peers discoverable from the center case', async () => {
   const { create } = mockRun('center-mass')
   window.history.replaceState(null, '', '#/center-mass')

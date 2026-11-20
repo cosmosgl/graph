@@ -90,6 +90,7 @@ export type ExperimentDefinition = {
   summary: string;
   tags: string[];
   cases?: ExperimentCase[];
+  presentation?: 'demo';
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };

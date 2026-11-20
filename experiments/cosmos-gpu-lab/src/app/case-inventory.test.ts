@@ -73,13 +73,17 @@ it('opens every experiment with its starting case and all its evidence and limit
         expect(host.querySelectorAll('main h1'), label).toHaveLength(1)
         expect(host.querySelector('h1')?.textContent, label).toBe(experiment.title)
         expect(host.querySelector('.case-question')?.textContent, label).toBe(first.question)
-        const summary = host.querySelector('.case-header .case-recorded-summary')!
-        const assessment = readinessFor(label, first)
-        const badge = summary.querySelector<HTMLElement>('.readiness-badge')
-        expect(badge?.textContent, label).toContain(assessment.badge)
-        expect(badge?.dataset.tone, label).toBe(assessment.tone)
-        expect(summary.querySelector('p')?.textContent, label).toBe(assessment.finding)
-        expect(summary.querySelector('a'), label).not.toBeNull()
+        const summary = host.querySelector('.case-header .case-recorded-summary')
+        const demo = experiment.presentation === 'demo'
+        if (demo) expect(summary, label).toBeNull()
+        else {
+          const assessment = readinessFor(label, first)
+          const badge = summary?.querySelector<HTMLElement>('.readiness-badge')
+          expect(badge?.textContent, label).toContain(assessment.badge)
+          expect(badge?.dataset.tone, label).toBe(assessment.tone)
+          expect(summary?.querySelector('p')?.textContent, label).toBe(assessment.finding)
+          expect(summary?.querySelector('a'), label).toBeTruthy()
+        }
         if (first.kind === 'recorded') {
           expect(create, label).not.toHaveBeenCalled()
           expect(host.querySelector('#case-live'), label).toBeNull()
@@ -96,10 +100,12 @@ it('opens every experiment with its starting case and all its evidence and limit
         const topic = experimentGroups.find(group => group.experiments.includes(experiment))!
         expect(host.querySelector('.case-topic-link')?.getAttribute('href'), label).toBe(`#/?section=catalog-${topic.id}`)
         const peers = Array.from(host.querySelectorAll('.case-group-navigation a'), link => link.getAttribute('href'))
-        expect(peers, label).toEqual(topic.experiments.filter(peer => peer !== experiment).map(peer => `#/${peer.id}`))
+        expect(peers, label).toEqual(demo ? [] : topic.experiments.filter(peer => peer !== experiment).map(peer => `#/${peer.id}`))
         const findings = host.querySelector('.case-recorded')!
         expect(findings.closest('details'), label).toBeNull()
-        expect(host.querySelectorAll('.case-evidence-detail summary'), label).toHaveLength(caseEvidencePages(experiment).length)
+        const pages = caseEvidencePages(experiment)
+        expect(host.querySelectorAll('[data-evidence-content]'), label).toHaveLength(pages.length)
+        expect(host.querySelectorAll('.case-evidence-detail summary'), label).toHaveLength(demo ? 0 : pages.length)
         if (experiment.singlePage) {
           for (const observation of experiment.singlePage.observations) {
             const row = findings.querySelector(`#${observation.id}`)!
@@ -136,7 +142,8 @@ it('opens every published evidence document inside its experiment without exposi
         await frame.openEvidence(id)
         const content = frame.recorded.querySelector(`#${id}`)
         if (!content?.querySelector('.prose, .report')) issues.push(`${label}: missing evidence body`)
-        if (!content?.closest('details')?.open) issues.push(`${label}: evidence did not open`)
+        const disclosure = content?.closest('details')
+        if (experiment.presentation === 'demo' ? disclosure : !disclosure?.open) issues.push(`${label}: evidence is hidden`)
         if (content?.querySelector('a[href*="agent-recipe"]')) issues.push(`${label}: agent recipe link`)
         const instruction = content?.textContent?.match(/\b(?:LAB_[A-Z0-9_]+|pnpm|npx|captures\/)/i)
         if (instruction) issues.push(`${label}: ${instruction[0]}`)

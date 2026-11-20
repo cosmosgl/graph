@@ -72,8 +72,14 @@ const migrationSectionAliases = new Map([
   ['7-future-directions', 'future-directions'],
 ])
 
-// Preserve bookmarks from the former page, including the original shared evidence.
+// Preserve bookmarks to cases moved to their own pages and keep existing evidence links.
 export function resolveExperimentAliases (route: ExperimentRoute, section: string | null): ExperimentRoute {
+  if (route.experimentId === 'viewer-comparison' &&
+    (route.caseId === 'dense-communities' || section === 'try-dense-communities' || section === 'finding-dense-communities')) {
+    if (route.pageId || route.evidencePage || section?.startsWith('doc-')) return { ...route, caseId: undefined }
+    return { ...route, experimentId: 'dense-communities' }
+  }
+
   if (route.experimentId !== 'point-styling') return route
   const namedCase = pointStylingCases.find(item => item.id === route.caseId)
   if (route.caseId && !namedCase) return route

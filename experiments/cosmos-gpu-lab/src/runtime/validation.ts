@@ -74,6 +74,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'Public host-driven production scheduler, not its default autonomous loop. Independent trajectories are quality observations. ' +
       'Strict compatibility and full migration remain unapproved.',
   },
+  'dense-communities': {
+    question: 'How do the same eight communities look as they move?',
+    reference: 'Production WebGL with the same starting positions, links, styles and camera.',
+    acceptance: 'Compare the initial layout, motion and the view while panning, zooming and fitting both graphs.',
+    coverage: 'One million points and 999,990 short local links across eight communities.',
+    limits: 'Both live viewers share one GPU. The recorded benchmark ran the viewers separately.',
+  },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',

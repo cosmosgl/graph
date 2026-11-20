@@ -2,20 +2,17 @@ import { workload } from '../../integrated-webgpu/data'
 import { createInteractiveFixture } from '../../million-graph/interactive-fixtures'
 import { loadYoutubeFixture } from '../../million-graph/youtube-fixture'
 import type { Pair } from '../../selection/reference'
+import { origin, prepareComparisonInput, type ComparisonInput } from '../comparison-input'
+
+export { origin, seed } from '../comparison-input'
 
 export const viewport = { width: 961, height: 541, pixelRatio: 2 }
 const workloads = ['karate', 'dense', 'hubs', 'youtube'] as const
 export type Workload = typeof workloads[number]
-export const origin = 2048
-export const seed = 29471
 
-export async function prepareFixture (workloadName: Workload, points: number): Promise<{
-  scene: Awaited<ReturnType<typeof loadYoutubeFixture>>;
+export async function prepareFixture (workloadName: Workload, points: number): Promise<ComparisonInput & {
   replacement: Awaited<ReturnType<typeof loadYoutubeFixture>>;
-  positions: Float32Array;
   replacementPositions: Float32Array;
-  pinned: number[];
-  size: number;
   zoom: number;
   digest: string;
   pickIndices: number[];
@@ -26,20 +23,14 @@ export async function prepareFixture (workloadName: Workload, points: number): P
   const { input, graph } = scene
   const count = input.points.length / 4
   const size = workloadName === 'youtube' ? 2 : 4
-  graph.sizes.fill(size)
-  const positions = new Float32Array(count * 2)
+  const comparison = prepareComparisonInput(scene, size)
+  const { positions } = comparison
   const replacementPositions = new Float32Array(count * 2)
   const shifted = input.points.slice()
-  const pinned: number[] = []
   for (let i = 0; i < count; i++) {
     const offset = i * 4
-    if (input.points[offset + 2]) pinned.push(i)
+    const present = !input.points[offset + 3]
     for (let axis = 0; axis < 2; axis++) {
-      const present = !input.points[offset + 3]
-      positions[i * 2 + axis] = present ? input.points[offset + axis] + origin : NaN
-      // Use the actual Float32 layout ingested by WebGL, translated back to
-      // the candidate's zero-centered space. Avoid an origin-rounding mismatch.
-      if (present) input.points[offset + axis] = positions[i * 2 + axis] - origin
       const delta = axis === 0 ? 1 : -1
       replacementPositions[i * 2 + axis] = positions[i * 2 + axis] + delta
       if (present) shifted[offset + axis] = replacementPositions[i * 2 + axis] - origin
@@ -60,7 +51,7 @@ export async function prepareFixture (workloadName: Workload, points: number): P
   const digest = Array.from(new Uint8Array(hash), value => value.toString(16).padStart(2, '0')).join('')
   const zoom = workloadName === 'dense' || workloadName === 'hubs' ? 0.07 : workloadName === 'youtube' ? 0.25 : 3
   const pickIndices = workloadName === 'dense' || workloadName === 'hubs' ? [0] : workloadName === 'youtube' ? [count - 12, count - 7, count - 2] : [0, 3, 8]
-  return { scene, replacement, positions, replacementPositions, pinned, size, zoom, digest, pickIndices }
+  return { ...comparison, replacement, replacementPositions, zoom, digest, pickIndices }
 }
 
 export type BenchmarkFixture = Awaited<ReturnType<typeof prepareFixture>>

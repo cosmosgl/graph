@@ -20,25 +20,25 @@ export function zoomCamera (
   return { x: camera.x + (x - viewport.width / 2) * shift, y: camera.y - (y - viewport.height / 2) * shift, zoom }
 }
 
-export function observeCanvasNavigation (canvas: HTMLCanvasElement, viewport: ResidentViewport, actions: {
+export function observeCanvasNavigation (surface: HTMLElement, viewport: ResidentViewport, actions: {
   pan(dx: number, dy: number): void;
   zoom(factor: number, x: number, y: number): boolean;
-  pick(click: ResidentClick): void;
+  pick?(click: ResidentClick): void;
 }): () => void {
   const events = new AbortController()
   const { signal } = events
   let gesture: { id: number; x: number; y: number; dragging: boolean } | undefined
   const local = (event: MouseEvent): [number, number] => {
-    const box = canvas.getBoundingClientRect()
+    const box = surface.getBoundingClientRect()
     return [(event.clientX - box.left) * viewport.width / box.width, (event.clientY - box.top) * viewport.height / box.height]
   }
-  canvas.addEventListener('pointerdown', event => {
+  surface.addEventListener('pointerdown', event => {
     if (event.button !== 0 || gesture) return
     const [x, y] = local(event)
     gesture = { id: event.pointerId, x, y, dragging: false }
-    if (event.isTrusted) canvas.setPointerCapture(event.pointerId)
+    if (event.isTrusted) surface.setPointerCapture(event.pointerId)
   }, { signal })
-  canvas.addEventListener('pointermove', event => {
+  surface.addEventListener('pointermove', event => {
     if (!gesture || event.pointerId !== gesture.id) return
     const [x, y] = local(event)
     const dx = x - gesture.x; const dy = y - gesture.y
@@ -46,18 +46,18 @@ export function observeCanvasNavigation (canvas: HTMLCanvasElement, viewport: Re
     actions.pan(dx, dy)
     gesture = { id: event.pointerId, x, y, dragging: true }
   }, { signal })
-  canvas.addEventListener('pointerup', event => {
+  surface.addEventListener('pointerup', event => {
     if (!gesture || event.pointerId !== gesture.id) return
-    if (!gesture.dragging) {
+    if (!gesture.dragging && actions.pick) {
       const [x, y] = local(event)
       actions.pick({ x, y, started: performance.now(), trusted: event.isTrusted })
     }
     gesture = undefined
   }, { signal })
   const clearGesture = (event: PointerEvent): void => { if (gesture?.id === event.pointerId) gesture = undefined }
-  canvas.addEventListener('pointercancel', clearGesture, { signal })
-  canvas.addEventListener('lostpointercapture', clearGesture, { signal })
-  canvas.addEventListener('wheel', event => {
+  surface.addEventListener('pointercancel', clearGesture, { signal })
+  surface.addEventListener('lostpointercapture', clearGesture, { signal })
+  surface.addEventListener('wheel', event => {
     const [x, y] = local(event)
     const factor = Math.exp(-Math.max(-100, Math.min(100, event.deltaY)) * 0.0025)
     if (actions.zoom(factor, x, y)) event.preventDefault()

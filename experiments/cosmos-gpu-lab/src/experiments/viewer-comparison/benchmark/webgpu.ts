@@ -5,10 +5,9 @@ import { waitForGpu } from '../../../gpu/luma'
 import { resourceScope } from '../../../gpu/resource-scope'
 import { ALPHA_MIN, cool } from '../../combined-layout/data'
 import { createIntegratedReadback } from '../../integrated-webgpu/readback'
-import { createRenderer } from '../../integrated-webgpu/renderer'
-import { createResidentGraph } from '../../many-body-grid/resident-graph'
 import { createResidentFrameLoop } from '../../million-graph/frame-loop'
 import type { Pair } from '../../selection/reference'
+import { createComparisonCandidate } from '../comparison-candidate'
 import type { CreateAdapter, Tracked } from './adapter'
 import { viewport } from './fixture'
 
@@ -24,17 +23,7 @@ export const createAdapter: CreateAdapter = async (host, fixture, observer, pick
   const sampleMemory = (): void => { peakBytes = Math.max(peakBytes, memory.count) }
   try {
     const { scene, replacement } = fixture
-    const graph = scope.own(await createResidentGraph(canvas, scene.input, scene.graph, 'four-corners', {
-      pixelRatio: ratio, externalDraw: true, productionForceDefaults: true,
-    }))
-    const drawing = scope.own(createRenderer(() => graph.positionSource(), scene.graph, canvas, {
-      smoothLinks: true,
-      linkDistanceOpacity: { range: [50, 150], minimum: 0.25 },
-      background: [34 / 255, 34 / 255, 34 / 255, 1],
-      defaultPoint: { color: [179 / 255, 179 / 255, 179 / 255, 1], size: fixture.size },
-    }))
-    drawing.ratio = ratio
-    drawing.setLinkStyle([0.4, 0.4, 0.4, 1], 1)
+    const { graph, drawing } = scope.own(await createComparisonCandidate(canvas, fixture, ratio))
     let tick = 0
     let alpha = 1
     let running = false
