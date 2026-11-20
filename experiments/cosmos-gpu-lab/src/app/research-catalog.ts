@@ -310,6 +310,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       reproduce: 'Press Run to start both viewers. Press Fit to see all eight communities.',
       investigations: [],
     }),
+    'youtube-network': entry('youtube-network', {
+      conclusion: 'Both viewers completed the 262,144-point workflow. At one million points, both WebGL controls stopped at moving rectangle selection.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same YouTube friendship links, seeded positions, styles and linked cameras',
+      method: 'layout',
+      next: 'Compare the moving layout, and use the recorded benchmark for what each backend completed.',
+      reproduce: 'Choose the point count, then press Run. Drag or scroll either graph to move both cameras.',
+      investigations: [],
+    }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',

@@ -11,6 +11,7 @@ it('keeps same-case evidence and demo links while removing links to unrelated re
     <a id="other-evidence" href="#/precision-diagnostics?section=doc-gravity-evidence">Gravity evidence</a>
     <a id="own-evidence" href="#/precision-diagnostics?case=addition-order&section=doc-addition-evidence">Own evidence</a>
     <a id="demo" href="#/dense-communities">Live demonstration</a>
+    <a id="demo-case" href="#/youtube-network?section=try-friendships-262k">Live demonstration at a specific size</a>
     <a id="demo-evidence" href="#/dense-communities?section=doc-layout">Demo evidence</a>
     <a id="reference" href="#/vocabulary">Vocabulary</a>
     <a id="external" href="https://example.com/">External source</a></p>`
@@ -21,6 +22,7 @@ it('keeps same-case evidence and demo links while removing links to unrelated re
   expect(host.querySelector('#other, #sibling, #other-evidence, #demo-evidence')).toBeNull()
   expect(host.querySelector('#own-evidence')).not.toBeNull()
   expect(host.querySelector('#demo')).not.toBeNull()
+  expect(host.querySelector('#demo-case')).not.toBeNull()
   expect(host.querySelector('#reference')).not.toBeNull()
   expect(host.querySelector('#external')).not.toBeNull()
 })

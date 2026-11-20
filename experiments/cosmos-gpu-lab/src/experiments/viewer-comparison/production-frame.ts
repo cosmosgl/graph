@@ -3,12 +3,12 @@ import { applyComparisonInput, seed, type ComparisonInput } from './comparison-i
 import { createProduction } from './production'
 import { loadProductionBundle } from './production-bundle'
 
-export type CreateCommunityWebGL = (
+export type CreateComparisonWebGL = (
   input: ComparisonInput, pixelRatio: number, callbacks: { tick(): void; ended(): void; lost(): void }
 ) => Promise<Graph>
 
 const host = document.querySelector<HTMLDivElement>('#graph')!
-const createCommunityWebGL: CreateCommunityWebGL = async (input, pixelRatio, { tick, ended, lost }) => {
+const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, { tick, ended, lost }) => {
   const GRAPH = await loadProductionBundle()
   const graph = new GRAPH(host, {
     fitViewOnInit: false,
@@ -28,8 +28,8 @@ const createCommunityWebGL: CreateCommunityWebGL = async (input, pixelRatio, { t
   } catch (error) { graph.destroy(); throw error }
 }
 
-if (new URLSearchParams(window.location.search).get('view') === 'communities') {
-  Object.assign(window, { createCommunityWebGL })
+if (new URLSearchParams(window.location.search).get('view') === 'large-comparison') {
+  Object.assign(window, { createComparisonWebGL })
 } else {
   Object.assign(window, { cosmosProduction: loadProductionBundle().then(() => createProduction(host)) })
 }

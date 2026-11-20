@@ -69,6 +69,10 @@ The lab build includes that bundle as an asset.
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.
 
+The **YouTube Network** demo uses the benchmark's prepared
+[SNAP fixture](src/experiments/million-graph/production-envelope.md#workloads).
+The Lab serves the prepared dataset in development and includes it in the build when present.
+
 ## Interface palette
 
 Keep charcoal surfaces and neutral reading text. Shared tokens in `src/app/styles.css` use pale
