@@ -5,14 +5,17 @@ import { waitForGpu } from '../../gpu/luma'
 import { writeArtifact } from '../../testing/artifacts'
 import { changedMembership } from '../cluster-attraction/study'
 import { createCompositionOracle } from '../combined-layout/force-composition'
+import { createSamplingPolicy } from '../combined-layout/production-settings'
 import { ALL_PAIRS_MAX_POINTS } from '../combined-layout/repulsion-policy'
 import { stageDurations } from '../combined-layout/stage-timing'
 import { buildReference, cellOf, frameFor, layout } from '../many-body-grid/data'
 import { compareArray, type Snapshot } from '../many-body/reference'
 import { motionChecks, percentile } from '../million-graph/field-metrics'
 import { changedTargets } from '../point-attractors/data'
+import { displacement } from '../repulsion-trajectories/metrics'
 import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 import { createIntegrated, nextFrame, type Integrated, type IntegratedForceStep } from './runtime'
+import { measureQuality } from './quality'
 import { fit } from './validation'
 
 type ScreenPoint = [number, number]
@@ -34,13 +37,15 @@ const screenLimit = 1
 const frameTarget = 33
 const pickTarget = 50
 const nativeStudy = import.meta.env.VITE_LAB_COMPOSED_INTERACTION === '1'
-const scaleStudy = import.meta.env.VITE_LAB_COMPOSED_SCALE === '1'
+const requestedScale = import.meta.env.VITE_LAB_COMPOSED_SCALE
+const scaleStudy = requestedScale === '1' || requestedScale === '32768'
+const scaleCount = requestedScale === '32768' ? 32768 : 16384
 const mouseArithmetic = import.meta.env.VITE_LAB_MOUSE_ARITHMETIC === 'native' ? 'native' : 'expanded'
 const layouts = scaleStudy
   ? [
     { kind: 'communities', count: 8192, forces: 'composed-collision' },
-    { kind: 'communities', count: 16384, forces: 'composed-collision' },
-    { kind: 'hubs', count: 16384, forces: 'composed-collision' },
+    { kind: 'communities', count: scaleCount, forces: 'composed-collision' },
+    { kind: 'hubs', count: scaleCount, forces: 'composed-collision' },
   ] as const
   : [
     { kind: 'karate', count: 34, forces: 'composed-collision' },
@@ -492,4 +497,80 @@ for (const { kind, count, forces } of layouts.filter(layout => scaleStudy || (la
       await writeArtifact(`composed-interaction-${kind}-${count}`, record)
     }
   }, 120000)
+}
+
+const longStudy = import.meta.env.VITE_LAB_COMPOSED_LONG === '1'
+for (const adaptive of [false, true]) {
+  it.skipIf(!nativeStudy || !longStudy)(`cools all eight forces for 5,000 ticks with ${adaptive ? 'adaptive' : 'fixed'} samples`, async () => {
+    const count = 8192
+    const decay = 5000
+    const { host, canvas } = createCanvas()
+    const checkpoints: unknown[] = []
+    const record: Record<string, unknown> = { ...sourceInfo(), count, decay, adaptive, checkpoints, status: 'started' }
+    let runtime: Integrated | undefined
+    try {
+      visible()
+      const viewer = await createIntegrated(canvas, 'communities', count, { forces: 'composed-collision', decay, adaptiveSampling: adaptive })
+      runtime = viewer
+      record.bounds = await openViewport(viewer)
+      record.environment = describeEnvironment(viewer.backend.positionSource!().device, canvas)
+      expect(viewer.backend.positionSource!().device.info.fallback).toBe(false)
+      const initial = viewer.data.input.points.slice()
+      // A tight group exercises the occupancy policy before the points spread.
+      const dense = new Float32Array(512 * 4)
+      for (let i = 0; i < 512; i++) dense.set([4 + (i % 32) * 0.002, 4 + Math.floor(i / 32) * 0.002, 0, 0], i * 4)
+      viewer.patchPositions(2, dense)
+      initial.set(dense, 8)
+      const policy = createSamplingPolicy(count)
+      const checksAt = new Set([1, 60, 200, 1000, 2500, decay])
+      let previous: Float32Array = initial
+      let samples = 8
+      const started = performance.now()
+      for (let tick = 1; tick <= decay; tick++) {
+        if (tick % 25 === 0) visible()
+        const probe = checksAt.has(tick)
+        if (adaptive && probe) viewer.backend.requestOccupancy!()
+        await viewer.frame(true)
+        if (!probe) continue
+        const positions = (await viewer.backend.read()).positions
+        const motion = motionChecks(initial, positions)
+        expect([motion.nonfinite, motion.flagErrors, motion.fixedMoved]).toEqual([0, 0, 0])
+        const grid = await viewer.backend.readBounds!()
+        const { finest } = layout(count)
+        let changedCells = 0
+        for (let id = 2; id < count; id++) {
+          if (cellOf(previous[id * 4], previous[id * 4 + 1], finest, grid) !== cellOf(positions[id * 4], positions[id * 4 + 1], finest, grid)) changedCells++
+        }
+        const occupancy = adaptive ? await viewer.backend.readOccupancy!() : null
+        const choice = occupancy ? policy.collect(occupancy) : null
+        checkpoints.push({ tick, alpha: viewer.alpha, samples, choice, occupancy, changedCells, motion, quality: measureQuality(viewer, positions, previous) })
+        if (choice && choice.applied !== samples) {
+          samples = choice.applied
+          viewer.backend.setSampling!(samples)
+        }
+        previous = positions
+      }
+      record.coolingMs = performance.now() - started
+      expect(viewer.tick).toBe(decay)
+      expect(viewer.alpha).toBeCloseTo(0.001, 6)
+      await viewer.frame(true)
+      const cooled = (await viewer.backend.read()).positions
+      record.residual = displacement(cooled, previous)
+      const beforeHeat = viewer.alpha
+      viewer.resume()
+      await commands.composedInput('right-down', [width / 2, height / 2])
+      try { await vi.waitFor(() => expect(viewer.alpha).toBeGreaterThanOrEqual(0.1), { timeout: 15000 }) } finally { await commands.composedInput('right-up') }
+      viewer.pause(true)
+      await viewer.settle()
+      const reheated = (await viewer.backend.read()).positions
+      const motion = motionChecks(initial, reheated)
+      expect([motion.nonfinite, motion.flagErrors, motion.fixedMoved]).toEqual([0, 0, 0])
+      record.reheat = { before: beforeHeat, after: viewer.alpha, tick: viewer.tick, motion: displacement(reheated, cooled) }
+      record.status = 'complete'
+    } catch (error) {
+      record.status = 'failed'
+      record.error = String(error)
+      throw error
+    } finally { runtime?.destroy(); host.remove(); await writeArtifact(`composed-cooling-${adaptive ? 'adaptive' : 'fixed'}`, record) }
+  }, 300000)
 }

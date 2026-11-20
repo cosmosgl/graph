@@ -10,7 +10,7 @@ migrationFocus
 ## What remains
 
 - **Performance** Bring 95% of steady frames within 33 ms on dense, hub and real graphs. [Earlier callbacks and depth-tested links](#/million-graph?section=doc-interactive-study) still miss the target.
-- **Simulation and rendering** [All eight forces](#/integrated-webgpu?section=doc-composed-interaction-native-m3-scaling-results) match the CPU at 16,384 points. Large hubs still miss timing. Validate longer layouts, larger graphs and the remaining [rendering features](#feature-coverage).
+- **Simulation and rendering** [All eight forces](#/integrated-webgpu?section=doc-composed-interaction) match recorded CPU checkpoints through 32,768 points. Larger full-force graphs miss timing. Validate the resident force composition and remaining [rendering features](#feature-coverage).
 - **Graph and host integration** [Async selection and labels](#/integrated-webgpu?section=doc-readback) run through the production Graph on WebGL. Million-point WebGPU labels miss their latency target. Connect production Graph and [Deck hosting](#/integrated-webgpu?section=doc-host-ownership) to a supported WebGPU backend.
 - **Production acceptance** Apply the [M3 scope and working budgets](#/million-graph?section=doc-production-envelope) to the dense, hub and YouTube workloads. Verify the target GPUs and browsers.
 
@@ -24,14 +24,14 @@ featureCoverage
 
 Revisit these studies when the pilot exposes the issue or the feature enters scope. Review the retained failures before approving full migration.
 
-- [Large hubs in the 8,192-point star](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate). Timing still fails with ordered prefetch. Resume when the supported workload includes large hubs.
+- [Ordered prefetch for hubs](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate). The 8,192-point star misses timing. The newer three-hub runs quantify the spring cost at 16,384 and 32,768 points.
 - [Straight-link caps and edges](#/straight-links?section=doc-method). Boundary failures remain in the frozen checks. Resume if thin links disappear, picking disagrees with visibility or the pilot exceeds the edge tolerance.
 - [Curved links and dash/dot boundaries](#/curved-links?section=doc-method). Pattern mask failures remain. Resume when curves or patterns enter scope and check motion, color and source visibility.
 - [Fractional and polygon point edges](#/point-styling?section=doc-method). Some masks and color-preserving alternatives fail. Resume if the circle pilot shows a defect or more shapes enter scope.
 - [Faint-alpha picking](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026). The candidate fixes selected visibility cases at a cost under dense overlap. Resume if picking is wrong or slow, or images or translucent overlap enter scope.
 - [Compute-generated ribbons](#/ribbon-generation?section=doc-findings). Keep the vertex path after the cost and color checks. Revisit if profiling shows curve generation is a substantial bottleneck.
 - [Direct WebGL reset at 100,000 points](#/weighted-links?section=doc-context-loss). Bounded ordered passes now complete on M3. Revisit if the direct baseline is needed or the bounded path resets.
-- [Collision at larger scale](#/collision?section=doc-hashed-findings). Bounded WebGL comparison and 8,192-point timing are recorded on M3. Revisit for larger dense graphs with the production seed stream.
+- [Collision at larger scale](#/collision?section=doc-hashed-findings). The isolated WebGL comparison and composed 32,768-point checks are recorded on M3. Verify the resident million-point path and the production seed stream.
 
 ## Future directions
 

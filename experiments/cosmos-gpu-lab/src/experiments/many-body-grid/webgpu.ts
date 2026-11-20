@@ -321,7 +321,7 @@ export async function createGridWebGPU (
         destroy: scope.destroy,
       }
     } catch (error) { scope.destroy(); throw error }
-  }), options)
+  }), { ...options, maximumPoints: streamed && options.gpuBounds ? 32768 : options.maximumPoints })
   return {
     ...base,
     name: `WebGPU grid (${centroidMode} centroids)`,

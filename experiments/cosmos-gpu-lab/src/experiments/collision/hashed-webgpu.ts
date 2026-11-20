@@ -17,11 +17,10 @@ export async function createCollisionSlotsWebGPU (
     destroy(): void;
   }> {
   let grid = collisionSlotGrid(sizes, settings, origin)
-  // Every supported count uses a 256×256 grid with 32 slots per bucket.
+  // Allocate for the initial tier. A shrink can use a smaller active grid.
   const buckets = grid.edge ** 2
   const capacity = sizes.length
   let count = capacity
-  const bucketGroups = Math.ceil(buckets / 64)
   const scope = resourceScope(ledger)
   const own = scope.own
   try {
@@ -77,15 +76,16 @@ export async function createCollisionSlotsWebGPU (
         params.write(new Float32Array([count, settings.strength, settings.radius, settings.padding, 0, frame.alpha, settings.cooling, 0]))
       },
       encode (pass, positions, iteration = 0): void {
-        const { grid, params } = uniforms[iteration]
+        const { grid: gridParams, params } = uniforms[iteration]
         const workgroups = Math.ceil(count / 64)
+        const bucketGroups = Math.ceil(grid.edge ** 2 / 64)
         clear.dispatch(pass, { x: bucketGroups, bindings: { heads } })
-        link.dispatch(pass, { x: workgroups, bindings: { positions, grid, heads, next } })
-        select.dispatch(pass, { x: bucketGroups, bindings: { grid, heads, next, slots } })
-        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params, forces, grid, slots } })
+        link.dispatch(pass, { x: workgroups, bindings: { positions, grid: gridParams, heads, next } })
+        select.dispatch(pass, { x: bucketGroups, bindings: { grid: gridParams, heads, next, slots } })
+        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params, forces, grid: gridParams, slots } })
       },
       async readSlots (): Promise<Uint32Array> {
-        const bytes = await slots.readAsync(0, slots.byteLength)
+        const bytes = await slots.readAsync(0, grid.edge ** 2 * grid.capacity * 4)
         return new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
       },
       destroy: scope.destroy,
