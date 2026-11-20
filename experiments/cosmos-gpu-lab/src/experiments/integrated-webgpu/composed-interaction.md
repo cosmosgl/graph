@@ -240,6 +240,89 @@ full-force sizes need their own checks. The results are in
 `captures/composed-long-m3-20261120-045955/`, using the 32,768-point replay's
 source archive above.
 
+## All eight forces with the resident hierarchy
+
+Run the full force set on the GPU-resident dense and hub fixtures at 65,536,
+262,144 and 1,000,000 points. Compare with the three-force resident viewer
+at one million. Use the same fixed Fit camera, basic opaque points and
+links, four shared distant-field levels and eight nearby repulsion samples.
+Use the once-computed center, local cluster means with explicit targets
+for some clusters, optional signed point targets, a held pointer near one
+community and two hashed collision passes. Use the production collision
+slot tiers, with the Lab's retained deterministic seed stream. Use the
+ordinary springs with rest lengths that respect collision radii. This
+resident path uses approximate repulsion and native integration.
+
+Measure consecutive synchronized moving callbacks with eight warmup
+ticks and 48 steady intervals at 961 × 541 CSS pixels and DPR 2. Keep the
+33 ms frame rule. Afterward profile each stage with GPU timestamps through
+a separate short run. Compare the visible link index buffer with the input,
+check finite movement and exact fixed and absent positions after cooling,
+and probe the isolated pinned point and background. Record residual motion,
+community retention and sampled GPU bytes. Time and result failures stay
+separate. The existing 8,192–32,768 comparison supplies the independent
+force checkpoints. This replay tests composition and scaling with the
+resident approximation and the declared fixtures.
+
+The first profiling run pointed to collision as the largest cost. Compare
+recomputing each candidate's world cell in the collision force with caching
+that exact cell while building the hashed lists. First require identical
+slot IDs and correction bytes on the frozen dense fixture with five seeds,
+including wrapped cells, overlaps and absent points. Then measure both
+million-point graph shapes at matched settings and record the added
+eight-byte cell entry per point. Enable the paired cache comparison with
+`VITE_LAB_RESIDENT_COLLISION_CACHE=1`.
+
+```sh
+LAB_NATIVE_VISIBLE=1 LAB_DEFAULT_GPU_FLAGS=1 VITE_LAB_RESIDENT_FULL_FORCES=1 \
+  pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-forces.test.ts
+```
+
+### Native resident results
+
+The first full run exposed a cluster reduction limit. A single group with
+131,328 present members contributed only 65,536. The final reduction
+previously read only one partial per workgroup lane. Each lane now sums
+its remaining partials before the group reduces. The targeted test reads
+all 131,328 and matches both CPU coordinate sums exactly. Retain the
+first run as provisional for million-point full-force timing and layout.
+
+| Points | Forces | Dense p95 and intervals ≤33 ms | Hub p95 and intervals ≤33 ms |
+| ---: | --- | ---: | ---: |
+| 65,536 | Eight | 18.1 ms · 48/48 | 32.5 ms · 46/48 |
+| 262,144 | Eight | 51.8 ms · 5/48 | 68.2 ms · 5/48 |
+| 1,000,000 | Three | 51.4 ms · 24/48 | 50.8 ms · 20/48 |
+| 1,000,000 | Eight | 267.3 ms · 0/48 | 267.5 ms · 0/48 |
+| 1,000,000 | Eight with cached collision cells | 368.0 ms · 0/48 | 367.8 ms · 0/48 |
+
+All ten lanes ran to 200 ticks and preserved the exact link index buffer,
+pins and absent state. The pin and background probes returned the expected
+IDs. Every free point moved and all positions stayed finite. The full
+million-point lanes retained 100% of the dense community members and
+99.17% on the hub fixture under the declared neighborhood radius. They
+still had about 0.22 world units RMS of motion at tick 200. Collision remained
+active through cooling. The 65,536-point result meets the sampled frame
+target on both shapes. It uses basic styles and the resident approximation.
+
+Without the cache, the full million-point runs first drew in 295–311 ms
+from prepared data and used up to 233.2 MiB of sampled GPU allocations.
+Median GPU collision for two passes was 172.8 ms dense and 167.7 ms hub.
+Cluster attraction cost about 28 ms, and the mouse and point attractor
+stages each took about 14–15 ms. Drawing took about 13 ms. Collision
+caching kept exact frozen slot and force bytes over five seeds but raised
+the two-pass cost to 272.5 and 271.2 ms, and memory to 240.9 MiB.
+Keep recomputing cells in the current candidate.
+
+All lanes used visible Chrome 157, native M3 Metal 3 and luma
+10.0.0-alpha.15. The repaired runs are in
+`captures/resident-full-forces-m3-20261120-053445/`, source archive SHA-256
+`00c5bf86e09251f04d113602857e6482a5354f87ff5d60c2f47c56fec1461714`.
+The first run is in `captures/resident-full-forces-m3-20261120-052854/`,
+SHA-256 `31ff4781c54e0f8b8bae357e63899148d2fb5c543ef8b2dc3e84f02f008de4d6`.
+Independent whole-layout checks at one million, adaptive repulsion there,
+production styling, trusted full-force interactions and a larger sample
+of hub topologies remain open.
+
 ## Reproduce
 
 Set a unique `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and

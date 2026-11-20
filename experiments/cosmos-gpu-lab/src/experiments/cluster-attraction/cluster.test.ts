@@ -1,9 +1,12 @@
 import { expect, it } from 'vitest'
+import { createDevice, upload, waitForGpu } from '../../gpu/luma'
+import { resourceScope } from '../../gpu/resource-scope'
 import { writeArtifact } from '../../testing/artifacts'
 import { fixture, grouping, SETTINGS } from './data'
 import { reference, compare } from './reference'
 import { createBackend, replaceCanvas } from './backend'
 import { changedMembership } from './study'
+import { createClusterWebGPU } from './webgpu'
 it('separates membership, centroid mass, pinned/absent masks and point strength', () => {
   const input = fixture('semantics'); const result = reference(input)
   expect(Array.from(result.aggregates)).toEqual([0, 0, 2, 0, 12, 4, 1, 0, -16, -16, 2, 0, 0, 0, 0, 0])
@@ -23,6 +26,26 @@ it('groups stable original IDs, chunks a large group, and retains empty groups',
   const large = grouping(fixture('uneven', 8192))
   expect(large.ranges[1]).toBe(32); expect(large.members.length).toBe(8192)
   expect(new Set(large.members).size).toBe(8192)
+})
+
+it('includes every partial in a large unbalanced cluster centroid', async () => {
+  const count = 131329
+  const input = fixture('single-group', count)
+  for (let id = 0; id < count; id++) input.points.set([id < 65536 ? 0 : 256, id % 4 - 2, 0, 0], id * 4)
+  input.points[input.points.length - 1] = 1
+  const expected = reference(input).aggregates
+  const scope = resourceScope()
+  try {
+    const device = scope.own(await createDevice('webgpu'))
+    const positions = scope.own(upload(device, input.points))
+    const forces = scope.own(upload(device, new Float32Array(input.points.length)))
+    const cluster = scope.own(await createClusterWebGPU(device, input, forces))
+    cluster.prepare(1, SETTINGS.strength)
+    const pass = device.beginComputePass()
+    try { cluster.encode(pass, positions) } finally { pass.end() }
+    await waitForGpu(device)
+    expect(await cluster.readAggregates()).toEqual(expected)
+  } finally { scope.destroy() }
 })
 for (const api of ['webgl', 'webgpu'] as const) {
   for (const mode of ['semantics', 'all-unassigned', 'all-absent'] as const) {

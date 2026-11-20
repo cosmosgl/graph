@@ -5,10 +5,12 @@ export const FIXTURES = ['semantics', 'balanced', 'uneven', 'single-group', 'tar
 export type Fixture = typeof FIXTURES[number]
 export function validate (input: ClusterInput): void {
   const n = input.points.length / 4; const groups = input.targets.length / 4
-  if (!Number.isInteger(n) || n < 1 || n > 32768 || !Number.isInteger(groups) || groups < 1 || groups > 64 ||
+  if (!Number.isInteger(n) || n < 1 || n > 1000000 || !Number.isInteger(groups) || groups < 1 || groups > 64 ||
     input.membership.length !== n || input.strengths.length !== n) throw new Error('Invalid cluster input dimensions')
   for (let i = 0; i < n; i++) {
-    if (input.membership[i] < -1 || input.membership[i] >= groups || !Number.isFinite(input.strengths[i])) throw new Error('Invalid cluster assignment or strength')
+    if (input.membership[i] < -1 || input.membership[i] >= groups || !Number.isFinite(input.strengths[i])) {
+      throw new Error('Invalid cluster assignment or strength')
+    }
   }
   if (!input.targets.every(Number.isFinite)) throw new Error('Cluster targets must be finite; use the presence flag for missing targets')
 }

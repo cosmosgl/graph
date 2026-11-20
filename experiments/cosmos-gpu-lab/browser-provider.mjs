@@ -5,10 +5,10 @@ export function labBrowser (gpu) {
   const residentStudy = process.env.VITE_LAB_RESIDENT_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_DRAW_COST === '1' ||
     process.env.VITE_LAB_COMPOSED_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_REAL_GRAPH === '1' ||
     process.env.VITE_LAB_MOTION_STYLES === '1' || process.env.VITE_LAB_MOTION_FEATURES === '1' || process.env.VITE_LAB_GRAPH_READBACK === '1' ||
-    process.env.VITE_LAB_RESIDENT_READBACK === '1'
+    process.env.VITE_LAB_RESIDENT_READBACK === '1' || process.env.VITE_LAB_RESIDENT_FULL_FORCES === '1'
   const provider = playwright({ launchOptions: {
     channel: 'chrome',
-    args: gpu ? ['--enable-unsafe-webgpu'] : [],
+    args: gpu && process.env.LAB_DEFAULT_GPU_FLAGS !== '1' ? ['--enable-unsafe-webgpu'] : [],
   }, ...(residentStudy ? { contextOptions: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 } } : {}) })
   const inline = process.env.LAB_INLINE_BROWSER === '1'
   if (inline) {

@@ -12,7 +12,7 @@ import { createInteractiveFixture } from '../million-graph/interactive-fixtures'
 import { GRID_BUILD_STAGES } from '../spatial-grid/resources'
 import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 import type { DistantForce } from './resident-cell-field'
-import { createResidentGraph, RESIDENT_STAGES } from './resident-graph'
+import { createResidentGraph, RESIDENT_STAGES, type ResidentStage } from './resident-graph'
 
 const nativeStudy = it.skipIf(!import.meta.env.LAB_DENSE_COMMUNITIES)
 const nativeGridProfile = it.skipIf(!import.meta.env.LAB_DENSE_GRID_PROFILE)
@@ -22,7 +22,7 @@ const warmups = 3
 const motionIds = 1026
 const localScreenPx = 1
 const lateCheckpoints = [50, 100, 200]
-type ProfileStage = typeof RESIDENT_STAGES[number] | typeof GRID_BUILD_STAGES[number]
+type ProfileStage = ResidentStage | typeof GRID_BUILD_STAGES[number]
 const expandedStages = [...RESIDENT_STAGES.slice(0, 2), ...GRID_BUILD_STAGES, ...RESIDENT_STAGES.slice(2)]
 type Graph = Awaited<ReturnType<typeof createResidentGraph>>
 type Environment = {
