@@ -7,7 +7,7 @@ import { upload, waitForGpu } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { writeArtifact } from '../../testing/artifacts'
 import { cool } from '../combined-layout/data'
-import { createIntegratedReadback } from '../integrated-webgpu/readback'
+import { createIntegratedReadback, type TrackedSnapshot } from '../integrated-webgpu/readback'
 import { nextFrame } from '../integrated-webgpu/runtime'
 import { createResidentGraph } from '../many-body-grid/resident-graph'
 import { selectedByReference, type Camera, type Pair, type Query } from '../selection/reference'
@@ -17,9 +17,16 @@ import { cameraFromView } from './resident-navigation'
 const count = 1000000
 const viewport = { width: 961, height: 541, pixelRatio: 2 }
 const size = 5
+const compareSchedules = import.meta.env.VITE_LAB_RESIDENT_LABEL_SCHEDULING === '1'
+const schedules = ['cache-poll', 'after-draw', 'before-draw'] as const
+const kinds = ['dense', 'hubs'] as const
 
-for (const kind of ['dense', 'hubs'] as const) {
-  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_READBACK !== '1')(`measures selection and labels on the moving million-point ${kind} graph`, async () => {
+const cases = kinds.flatMap(kind => {
+  const order = kind === 'dense' ? schedules : [...schedules].reverse()
+  return (compareSchedules ? order : [schedules[0]]).map(schedule => ({ kind, schedule }))
+})
+for (const { kind, schedule } of cases) {
+  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_READBACK !== '1')(`measures moving million-point ${kind} readback with ${schedule}`, async () => {
     const scope = resourceScope()
     const host = document.createElement('div')
     host.dataset.residentStudy = 'true'
@@ -34,10 +41,11 @@ for (const kind of ['dense', 'hubs'] as const) {
     host.append(canvas, overlay, selectionOutput)
     canvas.dataset.canvas = 'true'
     document.body.append(host)
-    const rows: Array<{ tick: number; shape: string; selected: number; areaMs: number; labelMs: number }> = []
+    const rows: unknown[] = []
     const record: Record<string, unknown> = {
       rows,
       kind,
+      schedule,
       count,
       source: import.meta.env.LAB_SOURCE_REVISION,
       snapshot: import.meta.env.LAB_SOURCE_SNAPSHOT,
@@ -74,7 +82,11 @@ for (const kind of ['dense', 'hubs'] as const) {
       const tracked = Array.from({ length: 1000 }, (_, i) => i === 1 ? 1 : i * 1000)
       const labels = new CosmosLabels(overlay, new Map(tracked.map(id => [id, `Point ${id}`])))
       const screen = ([x, y]: Pair): Pair => [viewport.width / 2 + (x - camera.x) * camera.zoom, viewport.height / 2 - (y - camera.y) * camera.zoom]
-      const labelView = { spaceToScreenPosition: screen, spaceToScreenRadius: (radius: number): number => radius, getPointRadiusByIndex: (): number => size / 2 }
+      const labelView = {
+        spaceToScreenPosition: screen,
+        spaceToScreenRadius: (radius: number): number => radius,
+        getPointRadiusByIndex: (): number => size / 2,
+      }
       const [x, y] = screen([3200, 0])
       const queries: [Query, Query] = [
         { rect: [[x - 24.5, y - 24.5], [x + 24.5, y + 24.5]] },
@@ -86,40 +98,64 @@ for (const kind of ['dense', 'hubs'] as const) {
         alpha = cool(alpha, 200)
         await waitForGpu(graph.device)
       }
+      let lastLabel: TrackedSnapshot | null = null
       for (let i = 0; i < 8; i++) {
         await nextFrame()
         expect(document.visibilityState).toBe('visible')
-        graph.frame(tick++, alpha)
+        const tickStarted = performance.now()
+        graph.frame(tick++, alpha, schedule !== 'before-draw')
         alpha = cool(alpha, 200)
         const started = performance.now()
+        let notification: Promise<{ snapshot: TrackedSnapshot | null; coordinatesMs: number }> | undefined
+        const requestLabels = (): NonNullable<typeof notification> => readback.api.readTrackedPositions().then(snapshot => ({
+          snapshot, coordinatesMs: performance.now() - started,
+        }))
+        if (schedule === 'before-draw') {
+          notification = requestLabels()
+          graph.redraw()
+        }
+        const drawComplete = compareSchedules ? waitForGpu(graph.device).then(() => performance.now() - started) : Promise.resolve(null)
         const query = queries[i % queries.length]
         const areaRequest = readback.api.selectArea(query)
-        readback.moved()
+        if (schedule === 'after-draw') notification = requestLabels()
+        if (schedule === 'cache-poll') readback.moved()
         memory()
-        const drawLabels = async (): Promise<number> => {
+        const pollLabels = async (): Promise<{ snapshot: TrackedSnapshot | null; coordinatesMs: number }> => {
           const deadline = started + 2000
           let snapshot = readback.api.latestTrackedPositions()
           while (snapshot?.tick !== tick && performance.now() < deadline) {
             await nextFrame()
             snapshot = readback.api.latestTrackedPositions()
           }
+          return { snapshot, coordinatesMs: performance.now() - started }
+        }
+        const drawLabels = async (): Promise<{
+          coordinatesMs: number; drawMs: number | null; labelCpuMs: number; labelMs: number; labelFromTickMs: number;
+        }> => {
+          const [{ snapshot, coordinatesMs }, drawMs] = await Promise.all([notification ?? pollLabels(), drawComplete])
           expect(snapshot?.tick).toBe(tick)
           expect(snapshot?.map.size).toBe(tracked.length - 1)
+          lastLabel = snapshot
+          const labelStarted = performance.now()
           labels.update(labelView, snapshot!.map)
+          const labelCpuMs = performance.now() - labelStarted
           await nextFrame()
-          return performance.now() - started
+          const presented = performance.now()
+          return { coordinatesMs, drawMs, labelCpuMs, labelMs: presented - started, labelFromTickMs: presented - tickStarted }
         }
-        const [result, labelMs] = await Promise.all([areaRequest.then(area => {
+        const [result, label] = await Promise.all([areaRequest.then(area => {
           expect(area?.tick).toBe(tick)
           expect(area!.ids.length).toBeGreaterThan(0)
           selectionOutput.textContent = `${area!.ids.length.toLocaleString()} selected`
           return { selected: area!.ids.length, areaMs: performance.now() - started }
         }), drawLabels()])
-        rows.push({ tick, shape: 'rect' in query ? 'rectangle' : 'polygon', ...result, labelMs })
+        rows.push({ tick, shape: 'rect' in query ? 'rectangle' : 'polygon', ...result, ...label })
       }
 
       const positions = await graph.readPositions()
-      const points = Array.from({ length: count }, (_, id) => ({ world: [positions[id * 4], positions[id * 4 + 1]] as Pair, size, absent: positions[id * 4 + 3] }))
+      const points = Array.from({ length: count }, (_, id) => ({
+        world: [positions[id * 4], positions[id * 4 + 1]] as Pair, size, absent: positions[id * 4 + 3],
+      }))
       const view: Camera = {
         viewport: [viewport.width, viewport.height],
         origin: [camera.x, camera.y],
@@ -130,15 +166,32 @@ for (const kind of ['dense', 'hubs'] as const) {
         maxSize: 64,
         scaleOnZoom: false,
       }
+      const areaChecks = []
       for (const query of queries) {
         const result = await readback.api.selectArea(query)
         const expected = selectedByReference(points, view, query)
-        expect(result?.ids.length).toBe(expected.length)
-        expect(result!.ids.every((id, i) => id === expected[i])).toBe(true)
+        const actual = result?.ids ?? []
+        const exact = actual.length === expected.length && actual.every((id, i) => id === expected[i])
+        const referenceIds = new Set(expected); const actualIds = new Set(actual)
+        const absent = expected.filter(id => !actualIds.has(id))
+        const added = actual.filter(id => !referenceIds.has(id))
+        const witnesses = (ids: number[]): unknown[] => ids.slice(0, 8).map(id => ({ id, ...points[id], screen: screen(points[id].world) }))
+        areaChecks.push({
+          query,
+          exact,
+          expected: expected.length,
+          actual: actual.length,
+          missed: absent.length,
+          added: added.length,
+          missedWitnesses: witnesses(absent),
+          addedWitnesses: witnesses(added),
+        })
       }
+      record.areaChecks = areaChecks
       const coordinates = (await readback.api.readTrackedPositions())!.map
       expect([...coordinates].every(([id, pair]) => pair[0] === positions[id * 4] && pair[1] === positions[id * 4 + 1])).toBe(true)
       expect(coordinates.has(1)).toBe(false)
+      expect(lastLabel).toMatchObject({ tick, map: coordinates })
 
       const pendingArea = readback.api.selectArea(queries[0])
       const pendingLabels = readback.api.readTrackedPositions()
@@ -154,12 +207,19 @@ for (const kind of ['dense', 'hubs'] as const) {
       expect(await pendingTopology).toBeNull()
       expect(graph.linkCount).toBe(count - 11)
       expect(readback.api.error).toBe('')
+      record.labelCoordinatesExact = true
+      record.replacementInvalidation = true
       record.peakBytes = peakBytes
+      expect(areaChecks.every(check => check.exact), 'Expected the independent area selection IDs in order').toBe(true)
       record.status = 'complete'
     } catch (error) {
       record.status = 'failed'
       record.error = String(error)
       throw error
-    } finally { scope.destroy(); host.remove(); await writeArtifact(`resident-readback-${kind}`, record) }
+    } finally {
+      scope.destroy(); host.remove()
+      const lane = compareSchedules ? `-${schedule}` : ''
+      await writeArtifact(`resident-readback-${kind}${lane}`, record)
+    }
   }, 120000)
 }
