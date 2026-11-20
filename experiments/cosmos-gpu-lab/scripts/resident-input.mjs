@@ -8,16 +8,6 @@ export async function composedInput ({ page, iframe }, action, from) {
   return await graphInput(page, iframe.locator('[data-composed-study] canvas'), action, from)
 }
 
-export async function crashIsolatedGpu ({ page }) {
-  if (process.env.VITE_LAB_GPU_PROCESS_LOSS !== '1' || process.env.LAB_INLINE_BROWSER === '1' || process.env.LAB_NATIVE_VISIBLE !== '1') {
-    throw new Error('GPU process loss requires the explicitly enabled, isolated visible Chrome runner')
-  }
-  const browser = page.context().browser()
-  if (!browser) throw new Error('Expected the runner-owned Chrome browser')
-  const session = await browser.newBrowserCDPSession()
-  try { await session.send('Browser.crashGpuProcess') } finally { await session.detach() }
-}
-
 async function graphInput (page, canvas, action, from, to) {
   if (action === 'layout') await canvas.scrollIntoViewIfNeeded()
   const bounds = await canvas.boundingBox()

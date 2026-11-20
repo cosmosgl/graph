@@ -1,17 +1,18 @@
 import { defineConfig } from 'vitest/config'
 import { labBrowser } from './browser-provider.mjs'
 import { writeLabArtifact } from './scripts/artifacts.mjs'
-import { composedInput, crashIsolatedGpu, residentInput } from './scripts/resident-input.mjs'
+import { composedInput, residentInput } from './scripts/resident-input.mjs'
+import { crashIsolatedGpu } from './src/testing/gpu-process-loss'
 
 // Local research checks use the current machine's native browser/GPU.
 // Keep the legacy flag for existing native-only tests and historical reproduction commands.
 // Expensive sweeps still require their own explicit flags.
 const deckHost = process.env.LAB_DECK_HOST === '1'
-const graphReadback = process.env.VITE_LAB_GRAPH_READBACK === '1'
+const labelReadback = process.env.VITE_LAB_GRAPH_READBACK === '1' || process.env.VITE_LAB_RESIDENT_READBACK === '1'
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   optimizeDeps: {
-    include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array', ...(graphReadback ? ['@interacta/css-labels'] : []), ...(deckHost
+    include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array', ...(labelReadback ? ['@interacta/css-labels'] : []), ...(deckHost
       ? ['@deck.gl/core', '@luma.gl/core', '@luma.gl/core/webgl', '@luma.gl/core/webgpu', '@luma.gl/engine', '@luma.gl/graph']
       : [])],
   },

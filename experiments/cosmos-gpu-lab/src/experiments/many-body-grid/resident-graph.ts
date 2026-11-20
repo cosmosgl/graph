@@ -5,6 +5,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { graphRgb, graphRgba } from '../../runtime/palette'
 import { createLinkResources, type LinkInput } from '../combined-layout/topology'
 import { GRAVITY, REPULSION, SPRINGS } from '../combined-layout/data'
+import type { PositionSource } from '../many-body/backend'
 import { createFixture, nearLimit, type Input } from '../many-body/data'
 import type { Snapshot } from '../many-body/reference'
 import type { TimestampWrites } from '../many-body/timing'
@@ -99,6 +100,8 @@ export async function createResidentGraph (
   readonly topologyMs: number;
   readonly linkCount: number;
   updateLinks(input: LinkInput): void;
+  positionSource(): PositionSource;
+  patchPositions(first: number, values: Float32Array): void;
   frame(tick: number, alpha: number, draw?: boolean, timestamps?: ResidentStageTimestamps, gridTimestamps?: GridPassTimestamps): void;
   redraw(layers?: ResidentLayers, timestamps?: TimestampWrites): void;
   redrawHighlight(timestamps?: TimestampWrites): boolean;
@@ -264,6 +267,21 @@ export async function createResidentGraph (
       updateLinks (links): void {
         healthy()
         topology.update(input.points, links)
+        highlightValid = false
+      },
+      positionSource (): PositionSource { healthy(); return { device, buffer: positions[current], count } },
+      patchPositions (first, values): void {
+        healthy()
+        if (!Number.isInteger(first) || first < 0 || values.length % 4 || first + values.length / 4 > count) {
+          throw new Error('Invalid resident position patch range')
+        }
+        for (let i = 0; i < values.length; i += 4) {
+          if (!Number.isFinite(values[i + 2]) || !Number.isFinite(values[i + 3]) ||
+            (values[i + 3] <= 0.5 && (!Number.isFinite(values[i]) || !Number.isFinite(values[i + 1])))) {
+            throw new Error('Invalid resident position patch values')
+          }
+        }
+        if (values.byteLength) positions.forEach(buffer => buffer.write(values, first * 16))
         highlightValid = false
       },
       frame (tick, alpha, draw = true, timestamps, gridTimestamps): void {
