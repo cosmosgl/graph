@@ -152,6 +152,12 @@ pass, and require exact agreement with the ordinary combined pass for the
 frozen tick. Those timestamps diagnose incremental costs. They do not
 determine the end-to-end frame verdict.
 
+The next tier repeats the comparison at 32,768 points beside the same
+8,192-point control. The streamed repulsion keeps the temporary storage
+bounded, and collision uses the production 512 × 512 grid and 16-slot tier.
+Measure the same eight forces and exercise the same point, mask and pin
+checks before comparing timings.
+
 ### Native M3 scaling results
 
 The 8,192-point control and both 16,384-point graphs matched all 203
@@ -185,8 +191,54 @@ This visible Chrome 157 run used native Apple Metal 3 WebGPU and luma
 10.0.0-alpha.15. The six lanes are in `captures/composed-scale-m3-20261120-040635/`
 with source archive SHA-256
 `e1af2861563fb4d7d165bf469bcd215813757a3200427c5ed2652946bff19098`.
-Long cooling, adaptive slot changes and larger full-force graphs still need
-checks. The hub spring and collision costs are the focus for larger graphs.
+### 32,768-point tier on M3
+
+The full-force communities and three-hub graphs matched all 134 recorded
+CPU checkpoints. Projected position and motion differences were zero.
+The 8,192-point control also matched. The larger graphs completed with the
+same masks, pins, live channel changes and exact point pick checks.
+
+| Graph | Frame p95 | Steady ≤33 ms | Picks ≤50 ms | Worst pick |
+| --- | ---: | ---: | ---: | ---: |
+| Communities, 8,192 | 18.7 ms | 48/48 | 8/8 | 30.5 ms |
+| Communities, 32,768 | 50.5 ms | 20/48 | 7/8 | 73.2 ms |
+| Three hubs, 32,768 | 51.9 ms | 0/48 | 6/8 | 83.5 ms |
+
+Repulsion took 16.7–17.1 ms in the split GPU profiles at 32,768. Weighted
+springs took 0.31 ms for communities and 12.0 ms for three hubs. Both collision
+passes together took 1.98 and 2.88 ms. Repulsion and high-degree springs
+remain the largest targets in the composed layout.
+
+Visible Chrome 157 reported native Apple Metal 3 WebGPU with luma
+10.0.0-alpha.15. All six lanes are in `captures/composed-scale32768-m3-20261120-045806/`
+with source archive SHA-256
+`a38020636eb5e0c9a8f27ba1f237a1bf29270a5f1c6398aadd9256952107d9e3`.
+
+## Long cooling and adaptive repulsion
+
+Use two copies of the 8,192-point full-force community graph, with two hashed
+collision passes and 512 free points starting in a tight group. The control
+keeps eight repulsion slots. The candidate starts at eight and applies the
+production occupancy policy at the recorded checkpoints. Run 5,000 cooling
+ticks and a residual tick. Check exact pinned and missing state, finite
+coordinates, stress, overlaps and cell changes. Reheat each graph with native
+held mouse repulsion and verify that movement resumes. Keep quality and
+timing separate from the native moving-frame acceptance window.
+
+Both 5,000-tick runs finished with finite positions and exact pin and absence
+checks. The adaptive run increased the slot count from 8 to 64 after its first
+tick and returned to 8 at tick 200 after two low-occupancy samples. Both settled
+to zero circle overlaps at the fixed test view. Final stress was 0.8699 for
+fixed sampling and 0.8706 for adaptive. One-tick residual RMS was
+0.000078 and 0.000081 world units. Native mouse input reheated both from
+about 0.001 to 0.1 and resumed measurable motion.
+
+Recorded intervals include thousands of changes in the finest cell assignment
+from one checkpoint to the next. This long run supports stability on the
+8,192-point fixture. Cell-edge displacement and long runs at the larger
+full-force sizes need their own checks. The results are in
+`captures/composed-long-m3-20261120-045955/`, using the 32,768-point replay's
+source archive above.
 
 ## Reproduce
 
@@ -199,6 +251,8 @@ LAB_NATIVE_VISIBLE=1 VITE_LAB_COMPOSED_INTERACTION=1 \
 ```
 
 Set `VITE_LAB_COMPOSED_SCALE=1` to select the full-force capacity comparison.
+Set it to `32768` for the third tier. Set `VITE_LAB_COMPOSED_LONG=1` and use
+`-t 'cools all eight forces'` to run the long cooling comparison.
 
 Set `VITE_LAB_MOUSE_ARITHMETIC=native` to replay the baseline with the
 original pointer calculation and retain the failed screen checks.

@@ -6,7 +6,7 @@ export type AttractorInput = Input & { targets?: Float32Array; strengths?: Float
 export const FIXTURES = ['semantics', 'shared-target', 'individual-targets', 'mixed', 'translated'] as const
 export type Fixture = typeof FIXTURES[number]
 export function validate (input: AttractorInput, settings = SETTINGS): void {
-  validateInput(input, settings, 16384)
+  validateInput(input, settings, 32768)
   if (input.points.length < 4 || !Number.isFinite(settings.strength)) throw new Error('Expected points and a finite attractor coefficient')
 }
 export function packAttractors (input: AttractorInput): { values: Float32Array; active: boolean } {

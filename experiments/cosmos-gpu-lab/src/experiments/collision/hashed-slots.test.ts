@@ -88,8 +88,8 @@ function movementChecks (
 }
 
 it('uses the slot tier above the exact limit and exposes the declared duplicate and overflow controls', () => {
-  expect(() => collisionSlotGrid(new Float32Array(4096), COLLISION, ORIGIN)).toThrow('4,097–16,384')
-  expect(() => collisionSlotGrid(new Float32Array(16385), COLLISION, ORIGIN)).toThrow('4,097–16,384')
+  expect(() => collisionSlotGrid(new Float32Array(4096), COLLISION, ORIGIN)).toThrow('4,097–32,768')
+  expect(() => collisionSlotGrid(new Float32Array(32769), COLLISION, ORIGIN)).toThrow('4,097–32,768')
   const small = fixture(4097)
   const project = collisionSlotsReference(small.points, small.sizes, small.settings, ORIGIN, small.frames[0])
   const seamSlots = [project.slots.indexOf(7), project.slots.indexOf(8)]

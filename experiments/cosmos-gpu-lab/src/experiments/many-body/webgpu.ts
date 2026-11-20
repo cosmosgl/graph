@@ -36,7 +36,7 @@ export type WebGPUForceFactory = (resources: {
   integrate?(source: number, timing: TimestampWrites, pass?: ComputePass): boolean; destroy(): void;
 }>
 export type BackendContext = { device: Device; ledger?: BufferLedger; check?(): void }
-export type WebGPUOptions = { context?: BackendContext; preserve?: PositionSource }
+export type WebGPUOptions = { context?: BackendContext; preserve?: PositionSource; maximumPoints?: number }
 const deviceLosses = new WeakMap<Device, { message?: string }>()
 const absentSource = `
 @group(0) @binding(0) var<storage, read_write> source: array<vec4f>;
@@ -50,7 +50,7 @@ export async function createWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory,
   options: WebGPUOptions = {}
 ): Promise<Backend> {
-  validateInput(input, p, customForce ? 16384 : 4096)
+  validateInput(input, p, options.maximumPoints ?? (customForce ? 16384 : 4096))
   let failure: string | undefined; let destroyed = false
   const device = options.context?.device ?? await createDevice('webgpu', canvas, true, error => { failure = error.message })
   let loss = deviceLosses.get(device)

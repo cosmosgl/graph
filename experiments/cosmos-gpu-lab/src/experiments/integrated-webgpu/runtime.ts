@@ -25,6 +25,7 @@ export type IntegratedForceStep = {
 type IntegratedOptions = {
   forces?: IntegratedForceMode; decay?: number; mouseArithmetic?: MouseArithmetic;
   readback?: boolean;
+  adaptiveSampling?: boolean;
   paint?: ViewerPaint;
   linkPicking?: boolean;
   onDeviceError?(error: Error): unknown;
@@ -78,6 +79,7 @@ export async function createIntegrated (
       nearArithmetic: 'refined',
       springOptimization: optimization,
       hubThreshold: 1024,
+      adaptiveSampling: options.adaptiveSampling,
       forceSettings: nextComposition?.settings ?? { ...forceSettings('reference', next.input.points.length / 4), center: 0.1 },
       additionalForces,
     })
