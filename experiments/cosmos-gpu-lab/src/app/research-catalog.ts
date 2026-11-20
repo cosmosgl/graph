@@ -282,7 +282,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'migration-benchmark',
       evidence: 'migration-results',
       methodPages: ['performance-audit', 'method', 'agent-recipe'],
-      next: 'Resolve the full YouTube selection failure and extend the comparison to more production styles and workflows.',
+      next: 'Test box selection through the production WebGPU Graph API on the moving million-point YouTube graph. ' +
+        'Check that it selects the right points and shows the result promptly.',
       reproduce: 'Run the migration benchmark for the chosen fixture. Use Compare corrected link paint for the frozen color check.',
       investigations: [
         { page: 'migration-results', state: 'Current evidence', description: 'Matched motion, click feedback, updates, selection, labels and memory on M3.' },
