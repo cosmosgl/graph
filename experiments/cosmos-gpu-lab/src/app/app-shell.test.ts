@@ -492,7 +492,7 @@ it('opens a recorded viewer bookmark on the same page and preserves a running co
   const canvas = host.querySelector('canvas')!
   await route('#/viewer-comparison?case=link-color-evidence', () =>
     expect(document.activeElement?.id).toBe('finding-link-color-evidence'))
-  expect(host.querySelector('h1')?.textContent).toBe('Production and WebGPU viewers')
+  expect(host.querySelector('h1')?.textContent).toBe('Graph interaction in WebGL and WebGPU')
   expect(host.querySelector('canvas')).toBe(canvas)
   expect(create).toHaveBeenCalledTimes(1)
   expect(pause).not.toHaveBeenCalled()

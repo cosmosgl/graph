@@ -4,8 +4,8 @@ import recordedSummary from './recorded-summary.json'
 import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'viewer-comparison',
-  title: 'Production and WebGPU viewers',
-  summary: 'Compare the small production Graph viewer with the integrated candidate: appearance, updates and running interaction.',
+  title: 'Graph interaction in WebGL and WebGPU',
+  summary: 'Compare how the same small graph looks and responds in production WebGL and experimental WebGPU.',
   tags: ['integration', 'rendering', 'interaction'],
   cases,
   study: {
@@ -22,8 +22,8 @@ export const experiment = defineExperiment({
       title: 'Link-color evidence',
       load: async (): Promise<string> => (await import('./link-color-evidence.md?raw')).default,
     },
-    { kind: 'markdown', id: 'method', title: 'Viewer comparison protocol', load: async (): Promise<string> => (await import('./method.md?raw')).default },
-    { kind: 'markdown', id: 'findings', title: 'Viewer comparison findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
+    { kind: 'markdown', id: 'method', title: 'Comparison method', load: async (): Promise<string> => (await import('./method.md?raw')).default },
+    { kind: 'markdown', id: 'findings', title: 'Graph comparison findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
     {
       kind: 'markdown',
       id: 'agent-recipe',

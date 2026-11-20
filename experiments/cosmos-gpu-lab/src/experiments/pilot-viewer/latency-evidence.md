@@ -15,7 +15,7 @@ establish why the delay occurred. An earlier separate 68.2 ms failure also remai
 unexplained.
 
 The original measured source was not independently snapshotted. The selected
-graph, frame windows and sampled pixel checks are described in the original viewer
+graph, frame windows and sampled pixel checks are described in the original pilot
 findings.
 
 ## Narrow-window control

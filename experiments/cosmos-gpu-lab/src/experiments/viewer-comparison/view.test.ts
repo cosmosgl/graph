@@ -18,7 +18,7 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(host.querySelector('[data-study-status]')).toBeNull()
     }, { timeout: 30000 })
     if (!canPark) expect(host.querySelector('[data-restart-note]')?.textContent).toContain('opening a reference restarts the graphs')
-    const frame = host.querySelector<HTMLIFrameElement>('iframe[title="Unchanged production Cosmos WebGL viewer"]')!
+    const frame = host.querySelector<HTMLIFrameElement>('iframe[title="Production Cosmos WebGL graph"]')!
     const candidate = host.querySelector<HTMLCanvasElement>('canvas[data-webgpu]')!
     await vi.waitFor(() => {
       expect((frame.contentWindow as Window & { cosmosProduction?: Promise<Production> }).cosmosProduction).toBeDefined()
@@ -144,10 +144,10 @@ it('shows real graphs on load and keeps the viewer working after reference navig
     await vi.waitFor(() => expect(host.querySelector('h1')?.textContent).toBe('Numerical research'))
     window.location.hash = '#/viewer-comparison'
     await vi.waitFor(() => {
-      expect(host.querySelector('iframe[title="Unchanged production Cosmos WebGL viewer"]')).not.toBeNull()
+      expect(host.querySelector('iframe[title="Production Cosmos WebGL graph"]')).not.toBeNull()
       expect(host.querySelector('[data-study-status]')).toBeNull()
     })
-    const returned = host.querySelector<HTMLIFrameElement>('iframe[title="Unchanged production Cosmos WebGL viewer"]')!
+    const returned = host.querySelector<HTMLIFrameElement>('iframe[title="Production Cosmos WebGL graph"]')!
     await vi.waitFor(() => {
       expect((returned.contentWindow as Window & { cosmosProduction?: Promise<Production> }).cosmosProduction).toBeDefined()
     }, { timeout: 15000 })

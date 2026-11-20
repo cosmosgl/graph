@@ -14,7 +14,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="pause" data-run-action="primary">Pause</button>
     <button data-action="fit" data-run-action="primary">Fit graph</button>
     <button data-action="reset" data-run-action="primary">Reset Karate Club</button></div>
-    <p data-run-part="status" role="status">Creating the native WebGPU viewer…</p>
+    <p data-run-part="status" role="status">Loading the Karate Club graph…</p>
     <section data-run-part="visualization"><canvas aria-label="Karate Club WebGPU graph" width="960" height="540"
       style="width:100%;aspect-ratio:16/9;display:block;touch-action:none"></canvas>
       <p data-selection>Choose a circle or locate a member.</p>

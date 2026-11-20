@@ -35,7 +35,7 @@ it('gives every experiment a practical case and accessible human-facing evidence
       for (const field of [item.title, item.question, item.description, item.reference, item.acceptance]) {
         expect(field.trim().length, label).toBeGreaterThan(0)
       }
-      if (item.kind !== 'recorded') expect(item.tryIt?.trim().length, label).toBeGreaterThan(0)
+      if (item.tryIt !== undefined) expect(item.tryIt.trim().length, label).toBeGreaterThan(0)
       const evidence = caseEvidenceLinks(item)
       expect(evidence.length, label).toBeGreaterThan(0)
       for (const link of evidence) {
@@ -79,7 +79,10 @@ it('opens every experiment with its starting case and all its evidence and limit
         } else {
           expect(create, label).toHaveBeenCalledOnce()
           expect(create.mock.calls[0][1], label).toBe(first.id)
-          expect(host.querySelector('#case-live')!.textContent, label).toContain(first.tryIt)
+          const live = host.querySelector('#case-live')
+          expect(live, label).not.toBeNull()
+          if (first.tryIt) expect(live?.textContent, label).toContain(first.tryIt)
+          else expect(host.querySelector('.case-intro h2:not([hidden]), .case-intro p:not([hidden])'), label).toBeNull()
           expect(host.querySelector('#run-results')!.compareDocumentPosition(host.querySelector('#recorded-findings')!) &
             Node.DOCUMENT_POSITION_FOLLOWING, label).toBeTruthy()
         }

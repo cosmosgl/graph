@@ -237,7 +237,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const stage = host.querySelector<HTMLElement>('.case-stage')!
   const navigation = groupNavigation(experiment, topic)
   if (navigation) stage.after(navigation)
-  const intro = document.createElement('section'); intro.className = 'case-intro'; intro.id = 'case-live'
+  const intro = document.createElement('section'); intro.className = 'case-intro'
   const title = document.createElement('h2'); title.textContent = 'Try it'
   const instruction = paragraph('')
   intro.append(title, instruction)
@@ -255,7 +255,12 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry live experiment'; retry.hidden = true
   const start = document.createElement('button'); start.type = 'button'; start.textContent = 'Start the live comparison'
   start.className = 'button-primary'; start.hidden = true
-  if (item.kind !== 'recorded') stage.append(intro, status, start, retry, slot)
+  if (item.kind !== 'recorded') {
+    const liveEntry = liveCases.length > 1 || item.tryIt?.trim() ? intro : stage
+    liveEntry.id = 'case-live'
+    if (liveEntry === intro) stage.append(intro)
+    stage.append(status, start, retry, slot)
+  }
   const recorded = recordedFindings(experiment)
   const openEvidence = evidenceDisclosures(recorded, experiment)
   const comparison = document.createElement('section'); comparison.className = 'case-comparison'; comparison.id = 'case-comparison'
@@ -263,7 +268,10 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const [reference, acceptance] = comparison.querySelectorAll('dd')
   const setLiveCase = (active: ExperimentCase): void => {
     question.textContent = active.question; description.textContent = active.description
-    instruction.textContent = active.tryIt ?? ''; chooser.value = active.id
+    const guidance = active.tryIt?.trim() ?? ''
+    instruction.textContent = guidance
+    title.hidden = instruction.hidden = !guidance
+    chooser.value = active.id
     reference.textContent = active.reference; acceptance.textContent = active.acceptance
   }
   setLiveCase(item)

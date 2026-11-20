@@ -54,7 +54,7 @@ pnpm run build
 pnpm --filter @cosmos.gl/gpu-lab dev
 ```
 
-The **Production and WebGPU viewers** comparison loads the unchanged standalone production
+The **Graph interaction in WebGL and WebGPU** experiment loads the unchanged standalone production
 bundle from `dist/index.min.js`; rebuild it after changing the production checkout.
 The lab build includes that bundle as an asset.
 

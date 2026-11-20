@@ -247,7 +247,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     evidence: [
       { tone: 'fail', text: '557 original interior pixels failed' },
       { tone: 'pass', text: 'Corrected opacity matched both styles' },
-      { tone: 'warn', text: 'Earlier selection delay unexplained' },
+      { tone: 'warn', text: 'Earlier click delay remains unexplained' },
     ],
     next: 'Test more cameras, styles and devices',
   },

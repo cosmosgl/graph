@@ -1,6 +1,6 @@
-# Small viewer comparison on M3
+# Small-graph comparison on M3
 
-**Both small viewers worked in the 18 November workflow. That run failed its
+**Both backends supported small-graph exploration on 18 November. That run failed its
 color gate. A later native replay matched both frozen styles with the short-link
 opacity rule.** The workflow evaluation used the native inline browser.
 
@@ -12,15 +12,15 @@ WebGL 2 through ANGLE Metal **Apple M3**. The candidate used luma
 Browser user agent reported Chromium 157. Both visible panels measured
 **472 × 320 CSS pixels, DPR 2** (944 × 640 attachments).
 
-The predeclared Karate Club graph has 34 points and 78 weighted links. Each viewer
+The predeclared Karate Club graph has 34 points and 78 weighted links. Each backend
 ran independently: 60 warmup ticks, Fit, 300 evolving intervals; continue to tick
 5,000, Fit, then 300 **paused redraw** intervals. Actual counters matched ticks
 360 and 5,000. GPU completion is included; readbacks, layout scores and pixel checks
-are outside the windows. The other viewer was paused. No build or tests ran during
-the timed windows. These are public host-driven viewers, not production's default
-independent scheduler, and the cooled result does not measure another simulation tick.
+are outside the windows. The other graph was paused. No build or tests ran during
+the timed windows. The comparison used public host-driven frames. The cooled window
+measured paused redraws.
 
-| Viewer | Window | p95 complete interval | Within 33 ms | Gate |
+| Backend | Window | p95 complete interval | Within 33 ms | Gate |
 |---|---|---:|---:|---|
 | Production WebGL | Evolving, ticks 61–360 | 16.8 ms | 300/300 | Pass |
 | luma WebGPU | Evolving, ticks 61–360 | 17.4 ms | 300/300 | Pass |
@@ -42,7 +42,7 @@ The candidate's sampled CPU audit at tick 5,000 checked 2,150 pixels: zero inter
 ID/color errors and zero invisible picks. A separate full-attachment comparison put
 the **same candidate positions and camera** into the unchanged production renderer:
 
-| Frozen geometry / style | Pixels checked | Interior ID errors | Interior color errors | Invisible picks, either viewer |
+| Frozen geometry / style | Pixels checked | Interior ID errors | Interior color errors | Invisible picks across both panels |
 |---|---:|---:|---:|---:|
 | Cooled tick 5,000, A | 604,160 | 0 | 78 | 0 |
 | Evolving tick 459, B | 604,160 | 0 | 707 | 0 |
@@ -66,13 +66,13 @@ boundary rule and exact interior IDs. Full mask agreement is not claimed at edge
 
 ## Updates and actual running interaction
 
-With both viewers running, A → B → A point color/size and link color/width changes
+With both graphs running, A → B → A point color/size and link color/width changes
 applied successfully. Public production point getters matched supplied values;
 candidate GPU pixel audits had zero sampled interior ID/color errors or invisible
 picks. The paired paint failures above remain separate failures of compatibility.
 
-Native pointer input selected the same peripheral node **16** and hubs **33** and
-**0** in both viewers. Dragging hub 0 visibly moved the point and its incident links
+Clicks registered the same IDs in both panels for peripheral point **16** and
+hubs **33** and **0**. Dragging hub 0 visibly moved the point and its incident links
 while simulation continued (around ticks 4,300). Several earlier clicks landed on
 background after the small moving point left the screenshot location; those null
 results remain in the capture, not counted as exact-node successes.
@@ -105,9 +105,8 @@ visibly moved and zoomed both cameras; equal wheel gain was not asserted.
 
 ## Decision and reproduction
 
-- **Strict compatibility: rejected in this comparison.** Interior colors differ.
-  The exact successful point selections and full-attachment interior ID agreement
-  do not override those failures.
+- **Strict compatibility: rejected in this comparison.** Interior color differences
+  exceeded the limit. Clicked point IDs and interior pixel IDs matched.
 - **First-slice usability: supported for this bounded small workflow.** This can
   inform an opt-in pilot decision, provided its known color differences and unsupported
   features are explicit. It does not turn the complete acceptance matrix green.
@@ -117,8 +116,8 @@ visibly moved and zoomed both cameras; equal wheel gain was not asserted.
 Use the [declared method](#/viewer-comparison?section=doc-method) and the visible
 controls. Export JSON keeps local timing samples, geometry, adapters, checks and
 input observations; captures are not committed. Reproduce fresh paint without a
-long run by recreating the viewers, comparing A, toggling to B and comparing again.
-For settled evidence, run **Assess early and cooled viewers** first. Compare paint
+long run by recreating the graphs, comparing A, toggling to B and comparing again.
+For the running and paused redraw measurements, choose **Measure frame times**. Compare paint
 intentionally replaces the production layout; reset before another independent run.
 
 Seven focused tests passed in the same inline browser: four report/gate regressions
@@ -141,7 +140,7 @@ Apple WebGPU / `metal-3`, `fallback: false`. The luma versions were 9.3.6 and
 
 Both panels measured 305 × 320 CSS pixels at DPR 2 (610 × 640 attachments). For
 each fresh fitted fixture, candidate positions and camera were copied into the
-production viewer. The original geometry-derived one-device-pixel boundary was
+production graph. The original geometry-derived one-device-pixel boundary was
 excluded; the interior color limit remained 2/255 per channel.
 
 | Fixture, style A | Points / links | Interior pixels | ID errors | Color errors | Max channel error | Strict paint |
@@ -149,14 +148,14 @@ excluded; the interior color limit remained 2/255 per channel.
 | Karate Club | 34 / 78 | 323,298 | 0 | 88 | 35/255 | Fail |
 | Chain | 32 / 31 | 358,200 | 0 | 113 | 29/255 | Fail |
 
-Both images were nonempty, with zero invisible picks in either viewer. The color
+Both images were nonempty, with zero invisible picks in either panel. The color
 gate failed on both fixtures while exact interior IDs passed. The fixtures also
 differ in positions, link density and framing, so these results do not isolate a
 cause. Style B, evolved layouts, pointer interaction, timing, other devices and
 full migration readiness were not assessed. The earlier color failures remain.
 
 To repeat this bounded comparison, build the source revision above, open
-**Production and WebGPU viewers**, recreate the viewers, compare style-A paint,
+`#/viewer-comparison`, recreate the graphs, compare style-A paint,
 replace with the 32-point chain, compare again and export JSON. Use the declared
 panel size and DPR for a direct comparison. The raw local capture is in
 `captures/chain-paint-investigation-20261118T091319Z-89050/`. Its two paint rows
@@ -167,7 +166,7 @@ Karate and chain. Future paint exports include the fixture and point/link counts
 
 A 19 November 2026 native Chrome 157 check on Apple M3 reproduced both strict
 interior color failures and isolated every failing pixel to the link draw. The
-production viewer used WebGL 2 through ANGLE Metal with luma 9.3.6. The candidate
+production graph used WebGL 2 through ANGLE Metal with luma 9.3.6. The candidate
 used Apple WebGPU (`metal-3`, `fallback: false`) with luma 10.0.0-alpha.15.
 
 The fresh 34-point, 78-link Karate Club fixture stayed at tick zero. Both panels
@@ -235,7 +234,7 @@ SHA-256 is `83aabf23fe67a88e171d39f54c37ec93be95cd5b2e964b6ce9c33457c6430787`.
 
 On the same frozen Karate Club scene, both A/B witnesses intersected link 32
 (point 3 to point 7). It projected to 19.15 CSS pixels. Production evaluates
-`max(1, (150 - length) / 100)` with this viewer's configured limits and raises
+`max(1, (150 - length) / 100)` with the production graph's configured limits and raises
 the source opacity by about 1.309×. The CPU calculation from the actual
 positions, camera and source color predicted the isolated RGBA bytes exactly.
 
@@ -263,14 +262,14 @@ The replay required exact interior IDs, zero invisible picks and a 2/255
 interior color tolerance. The production control used luma 9.3.6 on Apple M3
 ANGLE Metal WebGL 2.
 The candidate used luma 10.0.0-alpha.15 on non-fallback Apple Metal 3 WebGPU.
-Chrome `157.0.8103.79` was visible. The focused replay and viewer regressions
+Chrome `157.0.8103.79` was visible. The focused replay and graph interaction regressions
 passed 4/4 from the isolated source archive. The evaluated scope is two fresh
 styles at one camera on M3. Moving and cooled positions, corrected frame cost,
 other link styles and other adapters still need their own comparisons.
 
 **Compare corrected link paint** under **Additional checks** uses the two
 corrections in the paired snapshots and reports the result in Live results.
-The native viewer and report tests passed 5/5 with this action and the same
+The native graph comparison and report tests passed 5/5 with this action and the same
 production UMD checksum.
 
 The recorded bytes, four paint comparisons, original controls and generated UMD
