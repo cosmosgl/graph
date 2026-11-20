@@ -5,6 +5,7 @@ import { cool } from '../combined-layout/data'
 import { createResidentChain, createResidentGraph, type Distribution, type ResidentStageTimestamps } from '../many-body-grid/resident-graph'
 import type { DistantForce } from '../many-body-grid/resident-cell-field'
 import { createDenseCommunities } from './dense-communities'
+import { createResidentFrameLoop } from './frame-loop'
 import { createInteractiveFixture, type InteractiveFixture } from './interactive-fixtures'
 import {
   cameraFromView, observeCanvasNavigation, panCamera, zoomCamera, type ResidentCamera, type ResidentClick,
@@ -100,8 +101,8 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     canvas.style.height = `${viewport.height}px`
   }
   let backend: Graph | undefined
-  let running = false; let loading = false; let inFlight = false; let destroyed = false
-  let tick = 0; let alpha = 1; let generation = 0; let request = 0; let error = ''
+  let running = false; let loading = false; let destroyed = false
+  let tick = 0; let alpha = 1; let generation = 0; let error = ''
   let camera: ResidentCamera | undefined; let fitRequested = false
   let selection: number | null = null
   let pendingPick: ResidentClick | undefined
@@ -117,7 +118,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     play.textContent = error ? 'Retry' : tick >= 200 ? 'Run again' : tick > 0 ? 'Resume' : 'Run graph'
   }
   const release = (): void => {
-    generation++; running = false; cancelAnimationFrame(request); request = 0
+    generation++; running = false; loop.cancel()
     camera = undefined; cameraUpdates.length = 0; fitRequested = false; pendingPick = undefined; selection = null
     backend?.destroy(); backend = undefined; tick = 0; alpha = 1; error = ''
   }
@@ -126,24 +127,9 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     cameraUpdates.length = 0; fitRequested = false; pendingPick = undefined
     study?.failed(error)
   }
-  const schedule = (): void => {
-    if (!backend || destroyed || loading || error || request || (inFlight && !study?.scheduleAhead)) return
-    if (!running && !pendingPick && !fitRequested && !cameraUpdates.length) return
-    request = requestAnimationFrame(animationTime => {
-      request = 0
-      study?.callback?.(animationTime, inFlight)
-      // Keep one callback pending while the GPU works, without queuing a
-      // second simulation frame or taking a pick against in-flight state.
-      if (study?.scheduleAhead && running) schedule()
-      if (destroyed || loading || error || inFlight) return
-      // eslint-disable-next-line no-void
-      void step(animationTime)
-    })
-  }
   const step = async (animationTime: number): Promise<void> => {
     const active = backend; const version = generation
     if (!active || destroyed) return
-    inFlight = true
     try {
       const start = performance.now()
       if (fitRequested) { active.fit(); camera = undefined; fitRequested = false }
@@ -204,11 +190,15 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     } catch (cause) {
       if (destroyed || version !== generation) return
       failed(cause)
-    } finally {
-      inFlight = false
-      if (!destroyed) { controls(); schedule() }
-    }
+    } finally { if (!destroyed) controls() }
   }
+  const loop = createResidentFrameLoop({
+    wantsFrame: () => !!backend && !destroyed && !loading && !error && (!!running || !!pendingPick || fitRequested || cameraUpdates.length > 0),
+    frame: step,
+    opportunity: study?.callback,
+    scheduleAhead: () => running && !!study?.scheduleAhead,
+  })
+  const schedule = loop.request
   const startingStatus = 'Starting layout · tick 0 / 200.'
   const prepare = async (run: boolean): Promise<void> => {
     release()
@@ -279,7 +269,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     showStatus(`Running · tick ${tick} / 200.`); schedule()
   }
   const pause = (): void => {
-    running = false; cancelAnimationFrame(request); request = 0
+    running = false; loop.cancel()
     controls()
     if (!loading && !error && backend) showStatus(tick === 0 ? startingStatus : `Paused · tick ${tick} / 200.`)
   }

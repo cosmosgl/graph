@@ -16,14 +16,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'million-graph': entry('million-graph', {
-      conclusion: 'At one million points, the three-force WebGPU viewer reaches about 50 ms frame p95. The eight-force replay reaches about 267 ms.',
+      conclusion: 'Matched WebGPU motion was about 55% faster on both million-point community fixtures. The full YouTube control stopped at moving selection.',
       reviewed: '2026-11-20',
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
       comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       method: 'overview',
       methodPages: ['production-envelope'],
       evidence: 'interactive-study',
-      next: 'Run production WebGL on the same million-point workloads and compare frame and interaction latency.',
+      next: 'Investigate YouTube selection under load and confirm the variable click tails before production integration.',
       reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
       investigations: [
         { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
@@ -271,24 +271,24 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'scope',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Compare input-to-feedback timing with production WebGL and use the recorded timing phases to investigate recurring stalls.',
+      next: 'Use the matched Viewer Comparison benchmark and the recorded timing phases to investigate recurring stalls.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {
-      conclusion: 'Corrected short-link opacity clears all 557 interior color failures on M3. Smoothing reduces the remaining edge differences.',
-      reviewed: '2026-11-19',
-      variant: 'Unchanged production Graph / luma v9 versus integrated corrected luma v10 core',
-      comparison: 'Same topology and supplied styles → independent layouts and running interaction → bounded workflow checks',
-      method: 'method',
-      evidence: 'link-color-evidence',
-      methodPages: ['agent-recipe'],
-      next: 'Verify the corrected paint across production link styles, sizes, and transitions.',
-      reproduce: 'Run Compare corrected link paint in the live viewer. The original paint and smoothing controls preserve the starting discrepancy.',
-      investigations: [{
-        page: 'link-color-evidence',
-        state: 'Current evidence',
-        description: 'Same-geometry opacity and edge comparisons for both Karate styles.',
-      }],
+      conclusion: 'On the matched Karate graph, both backends ran at about 18 ms frame p95. WebGPU reduced steady frame p95 on the million-point communities.',
+      reviewed: '2026-11-20',
+      variant: 'Production Graph with luma v9 and the corrected resident WebGPU viewer with luma v10',
+      comparison: 'Same data, settings, camera and interactions through the autonomous loops, in separate visible Chrome sessions',
+      method: 'migration-benchmark',
+      evidence: 'migration-results',
+      methodPages: ['performance-audit', 'method', 'agent-recipe'],
+      next: 'Resolve the full YouTube selection failure and extend the comparison to more production styles and workflows.',
+      reproduce: 'Run the migration benchmark for the chosen fixture. Use Compare corrected link paint for the frozen color check.',
+      investigations: [
+        { page: 'migration-results', state: 'Current evidence', description: 'Matched motion, click feedback, updates, selection, labels and memory on M3.' },
+        { page: 'link-color-evidence', state: 'Supporting investigation', description: 'Same-geometry opacity and edge comparisons for both Karate styles.' },
+        { page: 'findings', state: 'Historical baseline', description: 'Original Karate Club timing and appearance checks.' },
+      ],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +

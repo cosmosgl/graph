@@ -35,7 +35,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     </div></section>
     <section data-run-part="results" data-report></section>
     <section data-run-part="diagnostics"><h3>Additional measurements</h3>
-    <p>Run focused pixel, interaction and timing checks with the core pilot on this device.</p>
+    <p>Replay the original core pilot's pixel, interaction and timing checks on this device.
+    <a href="#/viewer-comparison?section=doc-migration-benchmark">Compare against production WebGL</a>.</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
     <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button>

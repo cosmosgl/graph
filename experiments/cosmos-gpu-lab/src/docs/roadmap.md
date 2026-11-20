@@ -1,5 +1,5 @@
-**Migration requires comparable behavior and no meaningful slowdown against production WebGL.** The million-point WebGL baseline is pending.
-[Pilot assessment](#/pilot-viewer?section=doc-findings) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
+**Migration requires comparable behavior and no meaningful slowdown against production WebGL.** Default-force motion meets the measured slowdown margin for Karate Club and the two million-point community fixtures. The full million-point YouTube comparison remains open after the WebGL selection failures.
+[Matched results](#/viewer-comparison?section=doc-migration-results) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
 
 ## Current focus
 
@@ -9,11 +9,11 @@ migrationFocus
 
 ## What remains
 
-- **Scope** Start with native Chrome on M3 and three million-point graphs. Use the same workloads and compare startup, updates, memory and layout quality on both backends. [Acceptance scope](#/million-graph?section=doc-production-envelope)
-- **Moving performance** The million-point three-force WebGPU runs reach about 50 ms p95. YouTube with 2.85 million links reached 51.9 ms p95. Measure the equivalent production WebGL workloads and compare steady frames, interaction and updates. Keep the earlier 68.2 and 100.4 ms stalls in the pick assessment. [Timing evidence](#/million-graph?section=doc-interactive-study)
+- **Scope** The first paired run covers default forces and basic styles on native Chrome on M3. Repeat with production interaction styling and additional supported devices as integration proceeds. [Acceptance scope](#/million-graph?section=doc-production-envelope)
+- **Moving performance** At one million points, frame p95 went from 151.4 to 67.0 ms for dense communities and from 151.7 to 68.5 ms in the hub confirmation. The largest tested YouTube workflow completed by both backends was 262,144 points. Diagnose the full YouTube WebGL selection failure and the variable click tails. The earlier 68.2 and 100.4 ms pilot stalls remain part of the input evidence. [Matched results](#/viewer-comparison?section=doc-migration-results)
 - **Full simulation** All eight forces match recorded CPU checkpoints through 32,768 points. The resident approximation runs all eight through one million with exact link indices, pins and absence. Both million-point WebGPU layouts take about 267 ms p95. Compare the same force set with production WebGL. Profile collision where it causes a slowdown. Retest dense overlap, multiple hubs, adaptive sampling, cell crossings and long cooling at scale. [Full-force evidence](#/integrated-webgpu?section=doc-composed-interaction)
 - **Appearance and picking** Moving circles and solid straight links match the checked interiors. Isolated shapes, images, rings, widths, gradients and patterned link studies still show some mask and color differences. Resolve visible ownership at edges and overlaps, then check arrows, hover, focus and depth-based occlusion in the same moving renderer. [Moving styles](#/viewer-comparison?section=doc-findings) · [Feature coverage](#feature-coverage)
-- **Graph workflows** Exercise actual WebGPU setters, topology replacement, resize, transitions, callbacks, dragging and Fit. Async selection and tracked coordinates already run through the production WebGL Graph. Compare area selection and label latency on the same moving graphs, and resolve the two observed polygon edge discrepancies. [Readback evidence](#/integrated-webgpu?section=doc-readback)
+- **Graph workflows** Both backends completed moving selection, 1,000 labels, updates and resize on the community fixtures. Reproduce the YouTube WebGL area-result failure, resolve the two near-edge polygon discrepancies and verify these workflows through the full production WebGPU API. Transitions, callbacks, point dragging and Fit remain integration checks. [Readback evidence](#/integrated-webgpu?section=doc-readback) · [Matched results](#/viewer-comparison?section=doc-migration-results)
 - **Deck, recovery and release** Use one supported luma version for the production Graph and Deck WebGPU paths. Verify same-device draw, pick and teardown, then recover a full session from unexpected loss and check WebGL availability when WebGPU cannot start. The M3 controls cover current production WebGL and a Lab WebGPU restart. Extend the browser and GPU scope before public release. [Host evidence](#/integrated-webgpu?section=doc-host-ownership)
 
 ## Feature coverage

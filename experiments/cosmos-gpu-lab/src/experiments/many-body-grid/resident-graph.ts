@@ -12,6 +12,8 @@ import { createCollisionSlotsWebGPU } from '../collision/hashed-webgpu'
 import { createCenterWebGPU } from '../combined-layout/center-webgpu'
 import { createLinkResources, type LinkInput } from '../combined-layout/topology'
 import { GRAVITY, REPULSION, SPRINGS } from '../combined-layout/data'
+import { strictExactShader } from '../combined-layout/exact-shader'
+import { repulsionMethod } from '../combined-layout/repulsion-policy'
 import type { MouseForce } from '../combined-layout/webgpu'
 import type { PositionSource } from '../many-body/backend'
 import { createFixture, nearLimit, type Input } from '../many-body/data'
@@ -84,6 +86,8 @@ export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
 type ResidentOptions = {
   pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean; coarseLevels?: number;
+  externalDraw?: boolean;
+  productionForceDefaults?: boolean;
   fullForces?: {
     centerStrength: number; cluster: ClusterInput; attractor: AttractorInput; collision: CollisionParameters; collisionCells?: CollisionCellLookup;
   };
@@ -148,7 +152,23 @@ export async function createResidentGraph (
     const positions = [own(upload(device, input.points)), own(upload(device, input.points))]
     const samples = own(upload(device, input.samples))
     const forces = own(device.createBuffer({ byteLength: count * 16, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-    const hierarchy = own(await createResidentHierarchy(device, positions, samples, forces, count, REPULSION, 8, distantForce, options.coarseLevels))
+    const allPairs = options.productionForceDefaults && repulsionMethod(count, 'production') === 'exact'
+    const hierarchy = allPairs
+      ? undefined
+      : own(await createResidentHierarchy(device, positions, samples, forces, count, REPULSION, 8, distantForce, options.coarseLevels))
+    const exactParams = allPairs ? own(upload(device, new Float32Array(8), Buffer.UNIFORM)) : undefined
+    const exact = allPairs
+      ? own(await Kernel.createAsync(device, {
+        source: strictExactShader(),
+        entryPoint: 'direct',
+        shaderLayout: {
+          bindings: bindingLayout([
+            ['positions', 'read-only-storage'], ['samples', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
+          ]),
+        },
+      }))
+      : undefined
+    const springVariation = options.productionForceDefaults ? [1, 1.2] : SPRINGS.variation
     const topology = own(createLinkResources(device, input.points, graph))
     const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
     const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
@@ -172,7 +192,7 @@ export async function createResidentGraph (
     if (extra && config) extra.attractor.update(packAttractors(config.attractor).values)
     let pointer: MouseForce | undefined
     const viewBuffer = own(upload(device, new Float32Array(4)))
-    const viewBounds = own(await createGpuBounds(device, count, layout(count).finest, viewBuffer))
+    const viewBounds = options.externalDraw ? undefined : own(await createGpuBounds(device, count, layout(count).finest, viewBuffer))
     const display = own(upload(device, new Float32Array([width, height, ratio, -1]), Buffer.UNIFORM))
     const picker = options.picking ? own(await createResidentPicker(device, count)) : undefined
     const gravity = own(await Kernel.createAsync(device, {
@@ -206,13 +226,17 @@ export async function createResidentGraph (
         ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['visibleIds', 'read-only-storage'],
       ]
       : [['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform']])
-    const pointRenderer = own(createStorageRenderer(
-      device, pointsSource(!!culling, !!highlight), 'triangle-list', pointBindings,
-      depthLinks ? { depthWriteEnabled: true, depthCompare: 'always' } : {}, undefined, highlight?.framebuffer
-    ))
-    const lineRenderer = own(createStorageRenderer(device, linksSource(!!highlight, depthLinks), 'line-list', bindingLayout([
-      ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['links', 'read-only-storage'],
-    ]), depthLinks ? { depthWriteEnabled: true, depthCompare: 'less' } : {}, undefined, highlight?.framebuffer))
+    const pointRenderer = options.externalDraw
+      ? undefined
+      : own(createStorageRenderer(
+        device, pointsSource(!!culling, !!highlight), 'triangle-list', pointBindings,
+        depthLinks ? { depthWriteEnabled: true, depthCompare: 'always' } : {}, undefined, highlight?.framebuffer
+      ))
+    const lineRenderer = options.externalDraw
+      ? undefined
+      : own(createStorageRenderer(device, linksSource(!!highlight, depthLinks), 'line-list', bindingLayout([
+        ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['links', 'read-only-storage'],
+      ]), depthLinks ? { depthWriteEnabled: true, depthCompare: 'less' } : {}, undefined, highlight?.framebuffer))
     await waitForGpu(device, 30000)
     let current = 0; let destroyed = false; let autoFit = true
     let highlightValid = false; let drewPoints = false
@@ -244,6 +268,7 @@ export async function createResidentGraph (
       }
     }
     const paint = (layers: ResidentLayers, timestamps?: TimestampWrites): void => {
+      if (!pointRenderer || !lineRenderer) throw new Error('This resident graph uses an external renderer')
       const withPoints = layers === 'points' || layers === 'both'
       const filtered = withPoints && culling
       const { timestampQuerySet, beginTimestampIndex, endTimestampIndex } = timestamps ?? {}
@@ -294,7 +319,7 @@ export async function createResidentGraph (
     }
     return {
       device,
-      hierarchyBytes: hierarchy.bytes,
+      hierarchyBytes: hierarchy?.bytes ?? 0,
       linkBytes: topology.bytes,
       get topologyMs (): number { return topology.buildMs },
       get linkCount (): number { return topology.edgeCount },
@@ -332,14 +357,14 @@ export async function createResidentGraph (
         pointer = next
       },
       frame (tick, alpha, draw = true, timestamps, gridTimestamps): void {
-        healthy(); hierarchy.prepare(tick, alpha)
+        healthy(); hierarchy?.prepare(tick, alpha)
         highlightValid = false
         const updateView = draw && autoFit
-        if (updateView) viewBounds.prepare(tick)
+        if (updateView) viewBounds?.prepare(tick)
         gravityParams.write(new Float32Array([count, alpha, GRAVITY, 0]))
         const collisionSettings = extra?.collisionSettings
         springParams.write(new Float32Array([
-          SPRINGS.spring, SPRINGS.distance, 1, 1, alpha, SPRINGS.friction, SPRINGS.maxStep,
+          SPRINGS.spring, SPRINGS.distance, ...springVariation, alpha, SPRINGS.friction, SPRINGS.maxStep,
           collisionSettings?.strength ? 1 : 0, collisionSettings?.radius ?? 0, collisionSettings?.padding ?? 0, count, 0,
         ]))
         if (extra && pointer) {
@@ -353,20 +378,32 @@ export async function createResidentGraph (
         if (extra) {
           compute(pass => { extra.center.encode(pass, positions[current], alpha, extra.centerStrength); move(pass) }, timestamps?.('centroid'))
         }
-        hierarchy.encodeIndex(current, timestamps?.('bounds and normalization'), gridTimestamps)
+        hierarchy?.encodeIndex(current, timestamps?.('bounds and normalization'), gridTimestamps)
         // Measure each split pass against its own timestamp pair. The timing
         // sweep keeps the ordinary hierarchy/repulsion/springs pass intact.
-        if (timestamps) {
+        if (exact && exactParams) {
+          exactParams.write(new Float32Array([
+            count, alpha, REPULSION.repulsion, nearLimit(count, REPULSION), REPULSION.friction, REPULSION.referenceLength, 0, 0,
+          ]))
+          compute(pass => {
+            exact.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params: exactParams, forces } })
+            move(pass)
+          }, timestamps?.('repulsion'))
+          compute(pass => {
+            moveAlongLinks(pass)
+            if (updateView && !extra) viewBounds?.encode(pass, positions[current])
+          }, timestamps?.('springs and camera'))
+        } else if (hierarchy && timestamps) {
           compute(pass => hierarchy.encodeHierarchy(pass, current), timestamps('hierarchy and cell field'))
           compute(pass => { hierarchy.encodeRepulsion(pass, current); move(pass) }, timestamps('repulsion'))
           compute(pass => {
             moveAlongLinks(pass)
-            if (updateView && !extra) viewBounds.encode(pass, positions[current])
+            if (updateView && !extra) viewBounds?.encode(pass, positions[current])
           }, timestamps('springs and camera'))
-        } else {
+        } else if (hierarchy) {
           compute(pass => {
             hierarchy.encodeForce(pass, current); move(pass); moveAlongLinks(pass)
-            if (updateView && !extra) viewBounds.encode(pass, positions[current])
+            if (updateView && !extra) viewBounds?.encode(pass, positions[current])
           })
         }
         if (extra) {
@@ -381,7 +418,7 @@ export async function createResidentGraph (
               collision.encode(pass, positions[current], i)
               move(pass, collisionIntegration)
             }
-            if (updateView) viewBounds.encode(pass, positions[current])
+            if (updateView) viewBounds?.encode(pass, positions[current])
           }, timestamps?.('collision'))
         }
         if (draw) paint('both', timestamps?.('draw'))
@@ -411,6 +448,7 @@ export async function createResidentGraph (
       },
       fit (): void {
         healthy()
+        if (!viewBounds) throw new Error('Fit belongs to the external renderer')
         // Center the padding around the graph and keep this view for later ticks.
         viewBounds.prepare(0, [0.5, 0.5])
         compute(pass => viewBounds.encode(pass, positions[current]))
@@ -434,6 +472,7 @@ export async function createResidentGraph (
       readPositions (): Promise<Float32Array> { healthy(); return readFloats(positions[current]) },
       async readMotionSample (limit): Promise<ResidentMotionSample> {
         healthy()
+        if (!hierarchy) throw new Error('A grid motion sample requires hierarchical repulsion')
         if (!Number.isInteger(limit) || limit < 1 || limit > count) throw new Error('Invalid motion sample size')
         const [points, normalized, fieldBox, view] = await Promise.all([
           readFloats(positions[current], limit * 16), hierarchy.readCellCenters(limit), hierarchy.readBounds(), readFloats(viewBuffer),

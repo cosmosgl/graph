@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:ui": "vitest run --config vitest.ui.config.mjs",
     "test:gpu": "vitest run --config vitest.config.ts",
+    "benchmark:migration": "node scripts/migration-benchmark.mjs",
     "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit",
     "lint": "eslint --cache ./src --ext .ts --ignore-path ../../.gitignore"
   },

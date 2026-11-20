@@ -1,5 +1,9 @@
 # Moving graph interaction on M3
 
+These WebGPU-only experiments replay the original draw and scheduling options.
+The [matched benchmark](#/viewer-comparison?section=doc-migration-results)
+records production WebGL using identical inputs and production-style drawing.
+
 Can the GPU-resident million-point graph stay responsive while a person
 pans, zooms and picks points? Run the same Lab view with Four corners on the
 M3 at 65,536, 262,144 and 1,000,000 points. Each size has persistent dense

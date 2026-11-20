@@ -51,8 +51,9 @@ All points moved and the final positions were finite. This native Chrome 157
 run used the Apple Metal 3 adapter and luma 10.0.0-alpha.15. The results are in
 `captures/resident-youtube-m3-20261120-040053/` with source archive SHA-256
 `df386359d7dc437273aaecad184f2ecf319f824e6f1b030caaf8489bf01cb9bf`.
-This initial run covers basic styles, startup and steady motion. The
-matched production WebGL run is still pending.
+This initial run covers the simpler WebGPU draw, startup and steady motion.
+The later comparison uses production-matched styles and observes the
+moving selection failure in WebGL. [Matched results](#/viewer-comparison?section=doc-migration-results)
 
 Retain the 8,192-point full-force community as a correctness control. Scale
 gravity, global centroid, repulsion, weighted springs, cluster attraction,
@@ -72,9 +73,9 @@ faint objects and overlapping point and link picks.
 Run the same data, settings and interactions on both backends for each
 of the three graphs. Use repeated production WebGL runs to set a
 meaningful slowdown limit for each workload and metric before judging the
-candidate. The Lab's million-point results provide WebGPU timings.
-Comparative performance at that size is **Not assessed**.
-[Performance rule](#/validation-workflow?section=performance-against-production-webgl)
+candidate. The default-force community runs meet the steady-motion margin.
+The full YouTube speed verdict is **Not assessed** because both WebGL runs
+stopped at moving selection. [Results](#/viewer-comparison?section=doc-migration-results) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
 
 | Area | Measure on both backends |
 | --- | --- |
@@ -82,7 +83,7 @@ Comparative performance at that size is **Not assessed**.
 | Picking and dragging | Time from the same input event to visible feedback. Include p95 and the slowest samples, with background and overlapping objects. |
 | Startup | Time from in-memory input to the first usable frame, including upload and cold pipeline setup. Record warm startup as well. |
 | Updates | Time from the setter call to visible point or topology replacement and incremental position or style edits. |
-| CPU consumers | Rectangle and polygon selection time and presentation of 1,000 tracked labels. Check that graph or camera changes discard stale results. |
+| CPU consumers | Rectangle and polygon selection time and presentation of 1,000 tracked labels. Verify that a replacement invalidates pending results. The area request captures the camera at the time of the request. |
 | Memory | Peak app-owned GPU buffers and textures during startup, resize and replacement. Record which allocations each measurement includes. |
 
 The earlier M3 plan used 33 ms for steady frames and label updates, 50 ms for

@@ -1,6 +1,8 @@
 import { frameFor, cellOf } from '../many-body-grid/data'
 import type { Input } from '../many-body/data'
 import { createResidentChain, type Distribution } from '../many-body-grid/resident-graph'
+import { percentile } from './motion-metrics'
+export { motionChecks, percentile } from './motion-metrics'
 
 export const checkpoints = [1, 10, 50, 100, 200]
 export const bins = 96
@@ -8,24 +10,6 @@ const sampleCount = 4096
 export type LayoutSample = { box: Float32Array; side: number; density: Uint32Array; sample: Float32Array }
 type EdgeInput = { input: Input; probes: Array<{ n: number; axis: number; id: number }> }
 type EdgeResult = { n: number; pairs: number; controlJumpP95: number; extraJumpP95: number; maxExtra: number }
-
-export function percentile (values: number[], fraction: number): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.ceil(fraction * sorted.length) - 1]
-}
-
-export function motionChecks (initial: Float32Array, positions: Float32Array): {
-  nonfinite: number; flagErrors: number; fixedMoved: number; freeMoved: number;
-} {
-  let nonfinite = 0; let flagErrors = 0; let fixedMoved = 0; let freeMoved = 0
-  for (let o = 0; o < positions.length; o += 4) {
-    if (!Number.isFinite(positions[o]) || !Number.isFinite(positions[o + 1])) nonfinite++
-    if (positions[o + 2] !== initial[o + 2] || positions[o + 3] !== initial[o + 3]) flagErrors++
-    const moved = positions[o] !== initial[o] || positions[o + 1] !== initial[o + 1]
-    if (initial[o + 2] || initial[o + 3]) { if (moved) fixedMoved++ } else if (moved) freeMoved++
-  }
-  return { nonfinite, flagErrors, fixedMoved, freeMoved }
-}
 
 export function layoutSample (positions: Float32Array, tick: number, controlBox?: Float32Array, sampleEnd = positions.length / 4): LayoutSample {
   const box = controlBox ?? frameFor(positions, tick - 1).bounds

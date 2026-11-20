@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cosmos migration benchmark</title>
+  <style>
+    body { margin: 16px; font: 14px system-ui, sans-serif; background: #222; color: #eee; }
+    header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+    h1 { font-size: 18px; margin: 0; }
+    #surface { position: relative; width: 961px; height: 541px; overflow: hidden; }
+    #graph, #labels { position: absolute; inset: 0; }
+    #graph canvas { display: block; width: 100%; height: 100%; }
+    #labels, #selection, #pick-marker { pointer-events: none; }
+    #pick-marker { position: absolute; width: 10px; height: 10px; transform: translate(-50%, -50%); border: 1px solid #ffdb8c; border-radius: 50%; }
+    #selection { position: absolute; inset: 0; background: #75b0ff25; }
+  </style>
+</head>
+<body>
+  <header><h1>Cosmos migration benchmark</h1><span id="stage"></span><output id="feedback"></output></header>
+  <div id="surface"><div id="graph"></div><div id="labels"></div><div id="selection" hidden></div><div id="pick-marker" hidden></div></div>
+  <script type="module" src="/src/experiments/viewer-comparison/benchmark/page.ts"></script>
+</body>
+</html>
