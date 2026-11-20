@@ -65,10 +65,7 @@ export function experimentDestination (
 
   const selectorCase = experiment.cases!.find(item => item.kind !== 'recorded' && section === liveCaseSection(item))
   const runAnchor = section?.startsWith('run-') || section === 'case-live'
-  // Before the unified page, this bookmark used the picking case by default.
-  const legacyPicking = !namedCase && section === 'run-diagnostics' && experiment.id === 'point-styling'
   let liveCase = selectorCase
-  if (legacyPicking) liveCase = experiment.cases!.find(item => item.id === 'picking')
   if ((!section || runAnchor) && namedCase?.kind !== 'recorded' && namedCase) liveCase = namedCase
   const startLive = first.kind !== 'recorded' && (!section || !!runAnchor || !!selectorCase)
   const href = runAnchor && liveCase && liveCase !== first

@@ -2078,6 +2078,9 @@ button[data-action="play"][aria-pressed="true"] {
 .case-meta { color: var(--text-secondary); font-size: var(--type-meta); }
 .case-question { margin: 0 0 8px; font-weight: 500; }
 .case-description { color: var(--text-secondary); margin-bottom: 0; }
+.case-recorded-summary { max-width: 74ch; margin-top: 16px; padding: 10px 14px; border-left: 2px solid var(--control-border); }
+.case-recorded-summary p { margin: 0 0 6px; }
+.case-recorded-summary > .readiness-badge { margin-bottom: 6px; }
 .case-observation-checks { display: grid; gap: 2px; list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; }
 .readiness-evidence { display: flex; align-items: baseline; gap: 5px; }
 .readiness-icon { font-weight: 600; }

@@ -1,7 +1,7 @@
 import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { validationContracts } from '../../runtime/validation'
+import { pointStylingExportContract } from '../../runtime/validation'
 import { runFilteredAlphaCost, renderFilteredAlphaCost, type FilteredAlphaCostRow } from './stored-alpha-filter-study'
 import { runStoredAlphaCost, renderStoredAlphaCost, STORED_ALPHA_COST_POLICY, type StoredAlphaCostRow } from './stored-alpha-cost'
 import { storedAlphaReplay, renderStoredAlphaRows, type StoredAlphaRow } from './stored-alpha-study'
@@ -490,7 +490,7 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
           : undefined,
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
-        validationContract: validationContracts['point-styling'],
+        validationContract: pointStylingExportContract,
         fixture: name,
         renderer: variant,
         sourceAlphaPolicy: variant === 'eligibility'

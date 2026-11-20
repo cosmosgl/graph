@@ -1,3 +1,5 @@
+import { cases as pointStylingCases, pointStylingExperimentIds } from '../experiments/point-styling/cases'
+import { readinessFor } from './readiness'
 import { additionalResearch } from './research-catalog'
 
 export type EvidenceState = 'Current evidence' | 'Supporting investigation' | 'Historical baseline' | 'Superseded' | 'Parked'
@@ -14,11 +16,39 @@ const BASELINE_REVIEWED = '2026-11-12'
 export function researchMethodPages (record: ResearchSummary): string[] {
   return [...new Set([record.method, ...record.methodPages ?? [], 'validation-contract'])]
 }
+
+const pointStylingResearch = Object.fromEntries(pointStylingCases.map(item => {
+  const id = pointStylingExperimentIds[item.id]
+  const { conclusion, scope, environment, date, evidence: [primary] } = item.recorded
+  const investigations: Investigation[] = [{ page: primary.page, state: 'Current evidence', description: scope }]
+  if (item.id === 'shapes') {
+    investigations.push(
+      { page: 'method', state: 'Supporting investigation', description: 'Styling and picking matrix with retained visibility and coverage failures.' },
+      { page: 'transition-findings', state: 'Supporting investigation', description: 'Exact point position, fill, size and exit checkpoints on M3.' }
+    )
+  }
+  return [id, {
+    method: 'validation-contract',
+    methodPages: item.id === 'shapes' ? ['transition-method'] : [],
+    question: item.question,
+    conclusion,
+    scope,
+    variant: environment,
+    reviewed: date,
+    evidence: primary.page,
+    next: readinessFor(id, item).next,
+    reproduce: item.tryIt,
+    comparison: item.reference,
+    investigations,
+  } satisfies ResearchSummary]
+}))
+
 // Editorial assessments, never inferred from a test count. The migration page and
 // experiment pages read these same records; exact measurements stay linked.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
   ...additionalResearch(BASELINE_REVIEWED),
+  ...pointStylingResearch,
   'smoothstep-coverage': {
     method: 'method',
     evidence: 'findings',
@@ -233,50 +263,6 @@ export const research: Record<string, ResearchSummary> = {
       description: 'Exact-boundary research is stopped for the first slice. Solid links remain an integration input; ' +
         'practical defects reopen the investigation.',
     }],
-  },
-  'point-styling': {
-    method: 'validation-contract',
-    comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
-    question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Stored-alpha picking resolves the tested invisible-source boundary on M3 and SwiftShader without changing color bytes; ' +
-      'region filtering reduces sparse-request cost while dense overlap remains expensive.',
-    scope: 'Five original candidate/UI checks pass on both environments; software retains two old source-byte failures. ' +
-      'All 16 paired filtered/prototype cases pass exact outputs on M3 and SwiftShader. ' +
-      'Pixel-distance hover/focus overlays pass CPU colors in 96/96 cases on both; eight polygon-mask rows remain rejected. ' +
-      'The stored-alpha reference consumes measured source masks, not a portable rounding prediction.',
-    variant: 'Stored-alpha-v1 through public luma 10.0.0-alpha.15 APIs; Apple M3 and Linux x64 SwiftShader. Earlier polygon measurements retain alpha.4.',
-    reviewed: '2026-11-16',
-    evidence: 'method',
-    methodPages: ['transition-method'],
-    next: 'Integrate basic circles and point picking first. Advanced styles and exact-edge research are parked; ' +
-      'practical visibility and latency remain required.',
-    reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
-      'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
-    methods: [
-      {
-        title: 'Stored-alpha picking',
-        verdict: 'Method under test',
-        page: 'method',
-        detail: 'Per-point stored paint gates geometric IDs without changing original colors. ' +
-          'Filtered sparse requests improve; dense cost and runtime integration remain open.',
-      },
-      {
-        title: 'Styled points · normalized coverage',
-        verdict: 'Method under test',
-        page: 'method',
-        detail: 'Bounded shape/image/ring checks coexist with retained polygon and visibility counterexamples.',
-      },
-      {
-        title: 'Pixel-space polygon predicates',
-        verdict: 'Rejected under current gates',
-        page: 'method',
-        detail: 'CPU diamond ties and original-color preservation failures remain; matching GPU IDs is insufficient.',
-      },
-    ],
-    investigations: [
-      { page: 'method', state: 'Current evidence', description: 'Styling and picking matrix with retained visibility and coverage failures.' },
-      { page: 'transition-findings', state: 'Supporting investigation', description: 'Exact point position, fill, size and exit checkpoints on M3.' },
-    ],
   },
 }
 

@@ -33,7 +33,7 @@ function mockRun (id: string): { create: MockInstance<ExperimentDefinition['crea
     stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>
       <button data-run-action="primary">Step</button><section data-run-part="visualization"><canvas></canvas></section>
       <p data-run-part="results" data-test-tick>0</p><p data-run-part="explanation">Original guidance.</p>
-      ${id === 'point-styling' ? '' : '<button data-run-action="diagnostic">Trace</button>'}`
+      <button data-run-action="diagnostic">Trace</button>`
     stage.querySelector('button')!.addEventListener('click', () => { stage.querySelector('[data-test-tick]')!.textContent = String(++tick) })
     mountRunLayout(stage, () => summarizeRun('Ready', [], 'Other inputs'), { experiment: id })
     return { pause, destroy: (): void => { disposeRunLayout(stage); destroy() } }
@@ -50,6 +50,9 @@ it('shows topic cards and the global search without starting GPU work', async ()
   expect(links).toHaveLength(experiments.length)
   expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length)
   for (const group of experimentGroups) expect(host.querySelector(`#catalog-${group.id}`)?.textContent).toBe(group.title)
+  const pointLinks = host.querySelectorAll<HTMLAnchorElement>('[aria-labelledby="catalog-point-styling"] .experiment-card')
+  expect(Array.from(pointLinks, link => link.hash).sort()).toEqual(['#/point-images', '#/point-picking', '#/point-rings-greyout', '#/point-shapes'])
+  expect(links.some(link => link.hash === '#/point-styling')).toBe(false)
   for (const experiment of experiments) {
     const item = startingCase(experiment)
     const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}"]`)
@@ -358,9 +361,57 @@ it('keeps one recorded result when returning to the retained live viewer', async
   expect(create).toHaveBeenCalledTimes(1)
 })
 
+it.each([
+  ['point-shapes', 'shapes', 'Edge checks fail', 'doc-shapes-evidence-fractional-positions-and-sizes'],
+  ['point-picking', 'picking', 'High pick cost', 'doc-picking-evidence'],
+  ['point-images', 'images', 'Compatibility failed', 'doc-images-evidence'],
+  ['point-rings-greyout', 'effects', 'Polygon checks fail', 'doc-effects-evidence'],
+])('opens %s with its own demo, recorded badge and evidence', async (id, caseId, badge, section) => {
+  const { create } = mockRun(id)
+  window.history.replaceState(null, '', `#/${id}`)
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-live-slot canvas')).not.toBeNull())
+  expect(create).toHaveBeenCalledWith(expect.any(HTMLElement), caseId, undefined)
+  expect(host.querySelector('.case-chooser')).toBeNull()
+  expect(host.querySelectorAll('.case-observations > li')).toHaveLength(1)
+  expect(host.querySelector('.case-topic-link')?.textContent).toContain('Point styling and picking')
+  const summary = host.querySelector('.case-recorded-summary')!
+  expect(summary.querySelector('.readiness-badge')?.textContent).toContain(badge)
+  expect(summary.textContent).not.toContain('Recorded finding')
+  const target = summary.querySelector<HTMLAnchorElement>('a')!
+  expect(target.hash).toBe(`#/${id}?section=${section}`)
+  target.click()
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe(section))
+  expect(host.querySelector(`#${section}`)?.closest('details')?.open).toBe(true)
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
+it('opens older point styling bookmarks at the matching demo or archived evidence', async () => {
+  const picking = mockRun('point-picking')
+  const images = mockRun('point-images')
+  window.history.replaceState(null, '', '#/point-styling?section=run-diagnostics')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-diagnostics'))
+  expect(window.location.hash).toBe('#/point-picking?section=run-diagnostics')
+  expect(picking.create).toHaveBeenCalledWith(expect.any(HTMLElement), 'picking', undefined)
+
+  await route('#/point-styling?case=images', () => {
+    expect(window.location.hash).toBe('#/point-images')
+    expect(images.create).toHaveBeenCalledWith(expect.any(HTMLElement), 'images', undefined)
+  })
+  await route('#/point-styling/docs/shapes-evidence?section=fractional-positions-and-sizes', () => {
+    expect(window.location.hash).toBe('#/point-shapes?section=doc-shapes-evidence-fractional-positions-and-sizes')
+    expect(document.activeElement?.id).toBe('doc-shapes-evidence-fractional-positions-and-sizes')
+  })
+  const archived = 'doc-method-stored-alpha-picking-prototype-16-november-2026'
+  await route(`#/point-styling?section=${archived}`, () => {
+    expect(window.location.hash).toBe(`#/point-shapes?section=${archived}`)
+    expect(document.activeElement?.id).toBe(archived)
+  })
+})
+
 for (const [id, caseId] of [
   ['precision-diagnostics', 'gravity-accuracy'],
-  ['point-styling', 'picking'],
   ['performance-lab', 'center-reduction'],
 ]) {
   it(`switches the ${id} live case without replacing the experiment findings`, async () => {
