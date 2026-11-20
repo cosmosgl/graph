@@ -4,11 +4,13 @@ A Vite application for focused, documented experiments supporting the Cosmos Web
 experiment owns its demo, shaders, technical documentation, diagrams, Markdown findings and GPU-resource
 lifecycle.
 
-Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
-remaining gaps and the evidence needed for a production switch.
+The **WebGPU migration** page (`#/roadmap`) shows the current decision, next priority, and what remains before a
+production switch. Each **Feature coverage** row shows the WebGL behavior, the WebGPU evidence and the remaining
+checks. The links at the top jump to the coverage, parked investigations or future ideas. Existing
+`#/feature-inventory` links jump to the corresponding section or feature.
 
 Home groups experiment cards by topic. Each card opens the experiment and shows a recorded outcome or open question
-with a concise finding. The header links to the catalog, roadmap, feature coverage and learning guide;
+with a concise finding. The header links to the catalog, migration page and learning guide;
 other references appear above the catalog.
 Focus the search field on the right of the header to see three suggested experiments. Type to find
 experiments, recorded evidence, guides and references. Quick jump shows the top four matches.
@@ -80,8 +82,9 @@ spatial-grid encodings independent of the presentation palette.
 Create `src/experiments/<id>/experiment.ts` and export an `ExperimentDefinition`. Vite discovers experiment manifests
 through `import.meta.glob`; the demo and documentation remain lazy-loaded.
 The registry validates each manifest and adds the experiment to the catalog. Assign it to a topic in
-`src/app/registry.ts`; unassigned experiments appear under More experiments. The migration roadmap records
-research progress separately from the catalog.
+`src/app/registry.ts`; unassigned experiments appear under More experiments. Update the migration page when a
+finding changes a production decision or the next priority. The feature inventory supplies the checklist and its
+search entries.
 
 Add `ExperimentCase` entries and accept the selected case ID in `create` when cases use different live
 views. Each case defines a question, description, reference, acceptance rule and links to its own method

@@ -2,8 +2,7 @@ export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
   | { kind: 'learn'; sectionId?: string }
-  | { kind: 'roadmap' }
-  | { kind: 'feature-inventory' }
+  | { kind: 'roadmap'; section?: string }
   | { kind: 'validation-workflow' }
   | { kind: 'numerical-research' }
   | { kind: 'vocabulary'; termId?: string }
@@ -13,6 +12,50 @@ export type AppRoute =
 export function currentSection (): string | null {
   return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
 }
+
+// Keep bookmarks and search results from both former documents useful.
+const migrationSectionAliases = new Map([
+  ['1-simulation-forces', 'coverage-simulation'],
+  ['2-point-rendering', 'coverage-points'],
+  ['3-link-rendering', 'coverage-links'],
+  ['4-rendering-support-and-interaction', 'coverage-interaction'],
+  ['5-what-the-existing-experiments-actually-establish', 'feature-coverage'],
+  ['keeping-this-checklist-useful', 'how-to-read-coverage'],
+  ['1-where-we-are', 'current-focus'],
+  ['million-point-four-corners-on-m3', 'current-focus'],
+  ['persistent-dense-communities-on-m3', 'current-focus'],
+  ['drawing-and-interaction-on-the-m3', 'current-focus'],
+  ['million-point-moving-graph', 'current-focus'],
+  ['first-integrated-migration-bounded-pilot-evaluated', 'migration-status'],
+  ['production-blockers', 'what-remains'],
+  ['open-milestone-checklists', 'what-remains'],
+  ['cross-cutting-work-still-open', 'what-remains'],
+  ['gpu-execution-and-resources', 'what-remains'],
+  ['simulation', 'coverage-simulation'],
+  ['rendering-and-interaction', 'feature-coverage'],
+  ['library-and-embedding', 'feature-host-rendering-and-shared-resources'],
+  ['production-acceptance', 'what-remains'],
+  ['milestone-execution', 'what-remains'],
+  ['milestone-simulation', 'coverage-simulation'],
+  ['milestone-rendering', 'feature-coverage'],
+  ['milestone-integration', 'feature-host-rendering-and-shared-resources'],
+  ['milestone-production', 'what-remains'],
+  ['2-current-numerical-and-layout-boundary', 'coverage-simulation'],
+  ['core-composed-simulation', 'coverage-simulation'],
+  ['center-and-collision', 'feature-collision'],
+  ['3-the-ordered-research-plan', 'current-focus'],
+  ['recommended-next-work', 'current-focus'],
+  ['journey-polygon-boundaries', 'feature-other-shapes'],
+  ['journey-graph-integration', 'migration-status'],
+  ['journey-missing-forces', 'coverage-simulation'],
+  ['journey-link-rendering', 'coverage-links'],
+  ['journey-production-envelope', 'current-focus'],
+  ['retained-rendering-evidence', 'parked-investigations'],
+  ['4-luma-decisions-still-open', 'what-remains'],
+  ['5-evidence-to-retain-and-its-limits', 'feature-coverage'],
+  ['6-the-migration-journey', 'what-remains'],
+  ['7-future-directions', 'future-directions'],
+])
 
 export function readRoute (): AppRoute {
   const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
@@ -24,8 +67,10 @@ export function readRoute (): AppRoute {
 
   if (segments.length === 0) return { kind: 'home' }
   if (segments[0] === 'learn') return { kind: 'learn', sectionId: segments[1] }
-  if (segments[0] === 'roadmap') return { kind: 'roadmap' }
-  if (segments[0] === 'feature-inventory') return { kind: 'feature-inventory' }
+  if (segments[0] === 'roadmap' || segments[0] === 'feature-inventory') {
+    const section = params.get('section') || (segments[0] === 'feature-inventory' ? 'feature-coverage' : undefined)
+    return { kind: 'roadmap', section: section && (migrationSectionAliases.get(section) ?? section) }
+  }
   if (segments[0] === 'architecture') return { kind: 'architecture' }
   if (segments[0] === 'validation-workflow') return { kind: 'validation-workflow' }
   if (segments[0] === 'numerical-research') return { kind: 'numerical-research' }
@@ -97,10 +142,6 @@ export function runHref (experimentId: string): string {
   return experimentHref(experimentId)
 }
 
-export function roadmapHref (): string {
-  return '#/roadmap'
-}
-
-export function featureInventoryHref (): string {
-  return '#/feature-inventory'
+export function roadmapHref (section?: string): string {
+  return section ? `#/roadmap?section=${encodeURIComponent(section)}` : '#/roadmap'
 }

@@ -11,7 +11,7 @@ is a first migration attempt, not a complete replacement or production approval.
 **The [integrated candidate](#/integrated-webgpu) has now been assessed in bounded
 M3 workloads.** Small-graph and selected 8,192-point controls pass; large-star and
 intermittent latency failures remain recorded. This is neither blanket first-slice
-acceptance nor production approval. See the [current roadmap](#/roadmap) for the
+acceptance nor production approval. See the [migration page](#/roadmap) for the
 decision and next gate; isolated experiment passes cannot substitute for it.
 
 ### Supported first slice
@@ -103,7 +103,7 @@ its feature enters scope. Before declaring full migration readiness, review ever
 parked item: resolve it, validate a replacement, or explicitly approve a supported
 behavioral difference. If a feature is still excluded, do not claim complete
 Cosmos parity. Full readiness concerns a declared feature/device/workload envelope,
-not a promise of identical results on every GPU. The [roadmap's parked register](#/roadmap?section=parked-investigations)
+not a promise of identical results on every GPU. The [parked investigations](#/roadmap?section=parked-investigations) section
 tracks these return conditions; deeper research may be necessary **before** full
 approval, not after it.
 

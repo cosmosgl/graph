@@ -6,7 +6,6 @@ export type MethodAssessment = { title: string; verdict: 'Method under test' | '
   detail: string; page: string; section?: string; }
 export type ResearchSummary = {
   question: string; conclusion: string; scope: string; variant: string; reviewed: string;
-  milestone: 'execution' | 'simulation' | 'rendering' | 'integration' | 'production';
   evidence?: string; next: string; reproduce: string; comparison: string;
   methods?: MethodAssessment[]; method: string; methodPages?: string[]; investigations: Investigation[];
 }
@@ -15,7 +14,7 @@ const BASELINE_REVIEWED = '2026-11-12'
 export function researchMethodPages (record: ResearchSummary): string[] {
   return [...new Set([record.method, ...record.methodPages ?? [], 'validation-contract'])]
 }
-// Editorial assessments, never inferred from a test count. Home highlights and
+// Editorial assessments, never inferred from a test count. The migration page and
 // experiment pages read these same records; exact measurements stay linked.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
@@ -23,7 +22,6 @@ export const research: Record<string, ResearchSummary> = {
   'smoothstep-coverage': {
     method: 'method',
     evidence: 'findings',
-    milestone: 'rendering',
     reviewed: '2026-11-17',
     comparison: 'Same input → original and ascending-edge coverage on WebGL and WebGPU → actual line pixels and IDs',
     question: 'Can changing how we calculate a line edge make WebGL and WebGPU draw the same pixels?',
@@ -44,7 +42,6 @@ export const research: Record<string, ResearchSummary> = {
     scope: 'Same-device color/ID preservation and GPU plus completion cost on frozen curves.',
     variant: 'Vertex baseline, duplicate baseline, compute rebuild and static sample reuse; luma 10.0.0-alpha.15',
     reviewed: '2026-11-16',
-    milestone: 'rendering',
     method: 'method',
     evidence: 'findings',
     investigations: [{ page: 'findings', state: 'Parked', description: 'Investigation stopped; native measurements and the coarse-curve color failure are retained for reference.' }],
@@ -60,7 +57,6 @@ export const research: Record<string, ResearchSummary> = {
     scope: 'Nine hashed passes compare all slots, forces and positions. The in-tick replay covers the frozen and moving 8,192-point communities on M3.',
     variant: 'Targeted exact collision and a separate f32 hash/slot implementation; luma 10.0.0-alpha.15 in the large study',
     reviewed: '2026-11-19',
-    milestone: 'simulation',
     evidence: 'hashed-findings',
     method: 'method',
     methodPages: ['hashed-method'],
@@ -93,7 +89,6 @@ export const research: Record<string, ResearchSummary> = {
     scope: 'Two communities workloads at 256 and 8,192 points, same-input replays, projected motion and frozen GPU cost with basic drawing.',
     variant: 'Corrected resident core with mouse, cluster and per-point attraction stages; luma 10.0.0-alpha.15',
     reviewed: '2026-11-19',
-    milestone: 'simulation',
     evidence: 'force-composition',
     method: 'method',
     next: 'Extend the corrected force set to large representative graphs and measure full viewer cost.',
@@ -154,7 +149,6 @@ export const research: Record<string, ResearchSummary> = {
     scope: '12 selected runs; shared CPU sampling decisions. Center-on historical runs and full runtime adaptation remain separate.',
     variant: 'Strict WebGPU, center off; luma 10.0.0-alpha.4; Apple M3',
     reviewed: BASELINE_REVIEWED,
-    milestone: 'simulation',
     evidence: 'findings',
     next: 'Validate independent runtime scheduling and agree quality budgets across representative data and devices.',
     reproduce: 'Use the matched comparison method and findings for the exact center-off fixture/preset matrix.',
@@ -166,7 +160,6 @@ export const research: Record<string, ResearchSummary> = {
   'curved-links': {
     method: 'validation-contract',
     evidence: 'method',
-    milestone: 'rendering',
     reviewed: '2026-11-17',
     comparison: 'Compare production curved ribbons across WebGL and WebGPU against independent triangle-strip masks and source checks.',
     question: 'Do production solid curves render and pick consistently through public luma APIs?',
@@ -209,7 +202,6 @@ export const research: Record<string, ResearchSummary> = {
   'straight-links': {
     method: 'validation-contract',
     evidence: 'method',
-    milestone: 'rendering',
     reviewed: '2026-11-17',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
@@ -254,7 +246,6 @@ export const research: Record<string, ResearchSummary> = {
       'The stored-alpha reference consumes measured source masks, not a portable rounding prediction.',
     variant: 'Stored-alpha-v1 through public luma 10.0.0-alpha.15 APIs; Apple M3 and Linux x64 SwiftShader. Earlier polygon measurements retain alpha.4.',
     reviewed: '2026-11-16',
-    milestone: 'rendering',
     evidence: 'method',
     methodPages: ['transition-method'],
     next: 'Integrate basic circles and point picking first. Advanced styles and exact-edge research are parked; ' +
@@ -291,72 +282,7 @@ export const research: Record<string, ResearchSummary> = {
 
 /* eslint-enable @typescript-eslint/naming-convention */
 
-export const milestones = [
-  {
-    id: 'execution',
-    title: 'GPU execution and resources',
-    position: 'Resident resizing, explicit restart and a shared-device Deck prerelease tested on M3',
-    acceptance: 'Host ownership, recovery and the production dependency',
-    gates: ['Validate the production engine and deck.gl layer on a supported shared luma family.',
-      'Verify full viewer recovery after unplanned device loss, including pending reads and interactions.'],
-    evidence: [['resident-layout', 'Resident execution'], ['point-capacity', 'Point capacity'], ['integrated-webgpu', 'Host ownership']],
-  },
-  {
-    id: 'simulation',
-    title: 'Simulation',
-    position: 'Corrected interactive forces match the CPU through 8,192 points. Four corners reaches 50 ms median on million-point dense communities',
-    acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Confirm composed layout quality across longer runs and more graph shapes, retaining the native pointer failures.',
-      'Verify hashed collision above 8,192 points with the production scheduling and seed stream.',
-      'Validate the supported force set in the million-point viewer and account for slow ticks on dense graphs and large hubs.'],
-    evidence: [['mouse-repulsion', 'Mouse repulsion'], ['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'],
-      ['combined-layout', 'Combined forces'], ['integrated-webgpu', 'Interactive forces'],
-      ['collision', 'Collision'], ['matched-layout', 'Matched layouts'], ['million-graph', 'Million-point Four corners']],
-  },
-  {
-    id: 'rendering',
-    title: 'Rendering and interaction',
-    position: 'Reduced drawing preserves frozen pixels and meets the pick target in the million-point M3 replay',
-    acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Verify covered-point drawing and cached highlights with the supported production styles.',
-      'Integrate circles and solid straight links first; defer advanced styles and review parked boundary failures before full readiness.',
-      'Validate transitions, remaining styles and pointer behavior. Resolve the selection readback API before production integration.'],
-    evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
-      ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive'], ['million-graph', 'Scale interaction']],
-  },
-  {
-    id: 'integration',
-    title: 'Library and embedding',
-    position: 'Corrected interior paint, async reads and a pinned Deck host pass bounded M3 checks',
-    acceptance: 'Complete Graph and host contracts',
-    gates: ['Attribute the representative viewer’s running-pick delay, retaining the unchanged 50-ms target and recorded phases.',
-      'Verify the corrected paint and frame pacing under broader production styles and larger workloads.',
-      'Connect production setters and asynchronous readback to the full CosmosGraphLayer with a supported shared dependency.'],
-    evidence: [['pilot-viewer', 'Representative pilot'], ['viewer-comparison', 'Production comparison'], ['point-capacity', 'Resident updates']],
-  },
-  {
-    id: 'production',
-    title: 'Production acceptance',
-    position: 'Reduced drawing meets the M3 pick target. Million-point frame pacing and full styling coverage remain open',
-    acceptance: 'Agreed quality/performance budgets and native support matrix',
-    gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
-      'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
-    evidence: [['gpu-stage-profile', 'Controlled profiling'], ['performance-lab', 'Isolated benchmarks']],
-  },
-] as const
-
-export const mainOpenIssues = [
-  { text: 'Complete production force/rendering coverage and the Graph/host contracts.', href: '#/feature-inventory' },
-  {
-    text: 'Meet the frame target at scale and verify production styles and graph updates.',
-    href: '#/million-graph?section=doc-interactive-study',
-  },
-  { text: 'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.', href: '#/roadmap?section=milestone-production' },
-] as const
-
-// Current editorial priority. The gate and findings come from the same records
-// used by Roadmap and the experiment page, never from this browser's live run.
+// Editorial priority for the migration page. The linked study owns the evidence.
 export const migrationFocus = {
-  step: 5,
   experiment: 'million-graph',
 } as const

@@ -4,7 +4,7 @@ import { coverage } from './coverage'
 import { readEvidenceSource } from './evidence-source'
 import { experiments } from './registry'
 import { caseEvidencePages, findingSection, liveCaseSection, startingCase } from './experiment-route'
-import { experimentHref, experimentSectionHref } from './router'
+import { experimentHref, experimentSectionHref, roadmapHref } from './router'
 import { headingSlug } from './sections'
 import { vocabularyTerms } from './vocabulary'
 import { readinessFor } from './readiness'
@@ -201,45 +201,25 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
   return entries
 }
 
-function featureRows (source: string): SearchEntry[] {
-  const tokens = markdown.parse(source, {}); const entries: SearchEntry[] = []; let cells: string[] | undefined
-  for (const token of tokens) {
-    if (token.type === 'tr_open') cells = []
-    else if (cells && token.type === 'inline') cells.push(isInstructionText(token.content) ? '' : inlineText(token))
-    else if (token.type === 'tr_close' && cells) {
-      const feature = coverage.find(item => cells![0]?.startsWith(item.name))
-      if (feature) {
-        entries.push(entry({
-          key: `feature/${feature.id}`,
-          title: feature.name,
-          kind: 'Feature coverage',
-          context: feature.group,
-          href: `#/feature-inventory?section=${feature.id}`,
-          text: cells.join(' '),
-        }))
-      }
-      cells = undefined
-    }
-  }
-  return entries
+function featureRows (): SearchEntry[] {
+  return coverage.map(feature => entry({
+    key: `feature/${feature.id}`,
+    title: feature.name,
+    kind: 'Feature coverage',
+    context: feature.group,
+    href: roadmapHref(feature.id),
+    text: publicText([feature.searchText]),
+  }))
 }
 
 const references = [
   {
     key: 'roadmap',
-    title: 'Roadmap',
+    title: 'WebGPU migration',
     kind: 'Guide',
-    href: '#/roadmap',
+    href: roadmapHref(),
     mode: 'document' as const,
     load: async (): Promise<string> => (await import('../docs/roadmap.md?raw')).default,
-  },
-  {
-    key: 'feature-inventory',
-    title: 'Feature coverage',
-    kind: 'Reference',
-    href: '#/feature-inventory',
-    mode: 'document' as const,
-    load: async (): Promise<string> => (await import('../docs/feature-inventory.md?raw')).default,
   },
   {
     key: 'learn',
@@ -292,14 +272,12 @@ const references = [
 ]
 
 export async function buildSearchIndex (): Promise<SearchIndex> {
-  const entries = experiments.flatMap(experimentEntries)
+  const entries = [...experiments.flatMap(experimentEntries), ...featureRows()]
   const jobs: Array<Promise<SearchEntry[]>> = references.map(async reference => {
     const source = await reference.load()
-    const indexed = indexMarkdown(source, {
+    return indexMarkdown(source, {
       key: reference.key, title: reference.title, kind: reference.kind, context: '', baseHref: reference.href, mode: reference.mode,
     })
-    if (reference.key === 'feature-inventory') indexed.push(...featureRows(source))
-    return indexed
   })
   for (const experiment of experiments) {
     for (const page of caseEvidencePages(experiment)) {
