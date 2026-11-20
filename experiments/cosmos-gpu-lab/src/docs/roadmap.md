@@ -1,4 +1,4 @@
-**Prototype demonstrated on Apple M3.** Cosmos ships with WebGL while production validation continues.
+**WebGPU runs on Apple M3. Keep WebGL as the production backend.**
 [Pilot assessment](#/pilot-viewer?section=doc-findings) · [Acceptance rules](#/validation-workflow?section=first-migration-rules)
 
 ## Current focus
@@ -9,10 +9,12 @@ migrationFocus
 
 ## What remains
 
-- **Performance** Bring 95% of steady frames within 33 ms on dense, hub and real graphs. [Earlier callbacks and depth-tested links](#/million-graph?section=doc-interactive-study) still miss the target.
-- **Simulation and rendering** [All eight forces](#/integrated-webgpu?section=doc-composed-interaction) match recorded CPU checkpoints through 32,768 points. Larger full-force graphs miss timing. Validate the resident force composition and remaining [rendering features](#feature-coverage).
-- **Graph and host integration** [Async selection and labels](#/integrated-webgpu?section=doc-readback) run through the production Graph on WebGL. Million-point WebGPU labels miss their latency target. Connect production Graph and [Deck hosting](#/integrated-webgpu?section=doc-host-ownership) to a supported WebGPU backend.
-- **Production acceptance** Apply the [M3 scope and working budgets](#/million-graph?section=doc-production-envelope) to the dense, hub and YouTube workloads. Verify the target GPUs and browsers.
+- **Scope** The first decision covers native Chrome on M3 and three million-point graphs. Repeat the complete workload, with the same settings and [startup, update, memory and visual budgets](#/million-graph?section=doc-production-envelope), on the production candidate.
+- **Moving performance** The three-force viewer met both sampled targets at 196,608 points. At one million, reduced drawing kept the sampled picks within 50 ms. Steady intervals missed 33 ms. YouTube with 2.85 million links reached 51.9 ms p95. Check the complete draw, callback pacing, interaction and updates. Keep the earlier 68.2 and 100.4 ms stalls in the pick assessment. [Timing evidence](#/million-graph?section=doc-interactive-study)
+- **Full simulation** All eight forces match recorded CPU checkpoints through 32,768 points. The resident approximation runs all eight through one million with exact link indices, pins and absence. Both million-point layouts take about 267 ms p95. Profile the collision stages first, then retest dense overlap, multiple hubs, adaptive sampling, cell crossings and long cooling at scale. [Full-force evidence](#/integrated-webgpu?section=doc-composed-interaction)
+- **Appearance and picking** Moving circles and solid straight links match the checked interiors. Isolated shapes, images, rings, widths, gradients and patterned link studies still show some mask and color differences. Resolve visible ownership at edges and overlaps, then check arrows, hover, focus and depth-based occlusion in the same moving renderer. [Moving styles](#/viewer-comparison?section=doc-findings) · [Feature coverage](#feature-coverage)
+- **Graph workflows** Exercise actual WebGPU setters, topology replacement, resize, transitions, callbacks, dragging and Fit. Async selection and tracked coordinates already run through the production WebGL Graph. The resident WebGPU replay met the area latency target, with two polygon edge discrepancies in a repeat. Matching graph draws leave million-point labels around 50 ms. [Readback evidence](#/integrated-webgpu?section=doc-readback)
+- **Deck, recovery and release** Use one supported luma version for the production Graph and Deck WebGPU paths. Verify same-device draw, pick and teardown, then recover a full session from unexpected loss and check WebGL availability when WebGPU cannot start. The M3 controls cover current production WebGL and a Lab WebGPU restart. Extend the browser and GPU scope before public release. [Host evidence](#/integrated-webgpu?section=doc-host-ownership)
 
 ## Feature coverage
 
@@ -31,7 +33,7 @@ Revisit these studies when the pilot exposes the issue or the feature enters sco
 - [Faint-alpha picking](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026). The candidate fixes selected visibility cases at a cost under dense overlap. Resume if picking is wrong or slow, or images or translucent overlap enter scope.
 - [Compute-generated ribbons](#/ribbon-generation?section=doc-findings). Keep the vertex path after the cost and color checks. Revisit if profiling shows curve generation is a substantial bottleneck.
 - [Direct WebGL reset at 100,000 points](#/weighted-links?section=doc-context-loss). Bounded ordered passes now complete on M3. Revisit if the direct baseline is needed or the bounded path resets.
-- [Collision at larger scale](#/collision?section=doc-hashed-findings). The isolated WebGL comparison and composed 32,768-point checks are recorded on M3. Verify the resident million-point path and the production seed stream.
+- [Collision seed parity](#/collision?section=doc-hashed-findings). The million-point resident path uses the Lab's deterministic seed stream. Recheck slot order and long dense runs with the production stream when the backend is integrated.
 
 ## Future directions
 

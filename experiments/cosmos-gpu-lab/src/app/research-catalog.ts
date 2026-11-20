@@ -16,14 +16,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'million-graph': entry('million-graph', {
-      conclusion: 'Reduced drawing met the 50 ms pick target on both million-point M3 workloads. Their frame p95 remained near 50 ms.',
-      reviewed: '2026-11-19',
+      conclusion: 'The three-force viewer runs near 50 ms p95 at one million points. The eight-force replay takes about 267 ms with collision enabled.',
+      reviewed: '2026-11-20',
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
       comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       method: 'overview',
       methodPages: ['production-envelope'],
       evidence: 'interactive-study',
-      next: 'Improve slow frames at one million points and verify the full force and rendering workload.',
+      next: 'Measure the collision build, slot selection and correction separately before improving the full moving frame.',
       reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
       investigations: [
         { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
