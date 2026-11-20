@@ -73,6 +73,13 @@ it('opens every experiment with its starting case and all its evidence and limit
         expect(host.querySelectorAll('main h1'), label).toHaveLength(1)
         expect(host.querySelector('h1')?.textContent, label).toBe(experiment.title)
         expect(host.querySelector('.case-question')?.textContent, label).toBe(first.question)
+        const summary = host.querySelector('.case-header .case-recorded-summary')!
+        const assessment = readinessFor(label, first)
+        const badge = summary.querySelector<HTMLElement>('.readiness-badge')
+        expect(badge?.textContent, label).toContain(assessment.badge)
+        expect(badge?.dataset.tone, label).toBe(assessment.tone)
+        expect(summary.querySelector('p')?.textContent, label).toBe(assessment.finding)
+        expect(summary.querySelector('a'), label).not.toBeNull()
         if (first.kind === 'recorded') {
           expect(create, label).not.toHaveBeenCalled()
           expect(host.querySelector('#case-live'), label).toBeNull()

@@ -57,7 +57,6 @@ export const experiments = cases.map(item => defineExperiment({
   summary: item.description,
   tags: ['rendering', 'picking', 'WebGL', 'WebGPU'],
   cases: [item],
-  showRecordedSummary: true,
   create: async host => (await import('./view')).createStylingView(host, item.id),
   pages: [
     ...evidencePages.filter(page => page.id === item.recorded.evidence[0].page),
