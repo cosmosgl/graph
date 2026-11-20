@@ -5,6 +5,7 @@ import { describeEnvironment } from '../../gpu/force-preview'
 import { waitForGpu } from '../../gpu/luma'
 import { writeArtifact } from '../../testing/artifacts'
 import { COLLISION } from '../collision/data'
+import type { CollisionCellLookup } from '../collision/hashed-source'
 import { cool } from '../combined-layout/data'
 import { stageDurations } from '../combined-layout/stage-timing'
 import { nextFrame } from '../integrated-webgpu/runtime'
@@ -59,16 +60,26 @@ function distribution (values: number[]): { medianMs: number; p95Ms: number; max
 
 const study = it.skipIf(import.meta.env.VITE_LAB_RESIDENT_FULL_FORCES !== '1')
 const cacheComparison = import.meta.env.VITE_LAB_RESIDENT_COLLISION_CACHE === '1'
-const lanes: Array<{ count: number; kind: InteractiveFixtureKind; full: boolean; cache?: boolean }> =
+const scaledComparison = import.meta.env.VITE_LAB_RESIDENT_COLLISION_SCALED === '1'
+const lanes: Array<{ count: number; kind: InteractiveFixtureKind; full: boolean; cells?: CollisionCellLookup }> =
   [65536, 262144, 1000000].flatMap(count => (['dense', 'hubs'] as const).map(kind => ({ count, kind, full: true })))
 lanes.splice(4, 0, { count: 1000000, kind: 'dense', full: false })
 lanes.push({ count: 1000000, kind: 'hubs', full: false })
 if (cacheComparison) {
-  lanes.splice(6, 0, { count: 1000000, kind: 'dense', full: true, cache: true }, { count: 1000000, kind: 'hubs', full: true, cache: true })
+  lanes.splice(6, 0,
+    { count: 1000000, kind: 'dense', full: true, cells: 'cached' },
+    { count: 1000000, kind: 'hubs', full: true, cells: 'cached' })
+}
+if (scaledComparison) {
+  lanes.splice(0, lanes.length,
+    { count: 1000000, kind: 'dense', full: true },
+    { count: 1000000, kind: 'dense', full: true, cells: 'power-of-two' },
+    { count: 1000000, kind: 'hubs', full: true, cells: 'power-of-two' },
+    { count: 1000000, kind: 'hubs', full: true })
 }
 
-for (const { count, kind, full, cache } of lanes) {
-  const mode = cache ? 'cached-collision' : full ? 'eight-forces' : 'three-forces'
+for (const { count, kind, full, cells } of lanes) {
+  const mode = cells ? `${cells}-collision` : full ? 'eight-forces' : 'three-forces'
   study(`runs ${mode} for the ${count}-point resident ${kind} layout`, async () => {
     const host = document.createElement('div')
     host.dataset.residentStudy = 'true'
@@ -103,7 +114,7 @@ for (const { count, kind, full, cache } of lanes) {
       expect(devicePixelRatio).toBe(viewport.pixelRatio)
       record.windowInfo = await commands.residentInput('layout')
       const { input, graph, metadata } = createInteractiveFixture(count, kind)
-      const settings = full ? { ...fullForces(input), cacheCollisionCells: cache } : undefined
+      const settings = full ? { ...fullForces(input), collisionCells: cells } : undefined
       const started = performance.now()
       const resident = await createResidentGraph(canvas, input, graph, 'four-corners', {
         pixelRatio: viewport.pixelRatio,

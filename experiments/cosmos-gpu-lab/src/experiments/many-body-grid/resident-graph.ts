@@ -7,6 +7,7 @@ import { SETTINGS as CLUSTER, type ClusterInput } from '../cluster-attraction/da
 import { createClusterWebGPU } from '../cluster-attraction/webgpu'
 import type { CollisionParameters } from '../collision/data'
 import { collisionPassFrame } from '../collision/hashed-grid'
+import type { CollisionCellLookup } from '../collision/hashed-source'
 import { createCollisionSlotsWebGPU } from '../collision/hashed-webgpu'
 import { createCenterWebGPU } from '../combined-layout/center-webgpu'
 import { createLinkResources, type LinkInput } from '../combined-layout/topology'
@@ -83,7 +84,9 @@ export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
 type ResidentOptions = {
   pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean; coarseLevels?: number;
-  fullForces?: { centerStrength: number; cluster: ClusterInput; attractor: AttractorInput; collision: CollisionParameters; cacheCollisionCells?: boolean };
+  fullForces?: {
+    centerStrength: number; cluster: ClusterInput; attractor: AttractorInput; collision: CollisionParameters; collisionCells?: CollisionCellLookup;
+  };
 }
 export type ResidentMotionSample = { points: Float32Array; normalized: Float32Array; fieldBox: Float32Array; view: Float32Array }
 export const RESIDENT_STAGES = ['gravity', 'bounds and normalization', 'hierarchy and cell field', 'repulsion', 'springs and camera', 'draw'] as const
@@ -161,7 +164,7 @@ export async function createResidentGraph (
       cluster: own(await createClusterWebGPU(device, config.cluster, forces)),
       attractor: own(await createAttractorWebGPU(device, count, forces)),
       mouse: own(await createMouseWebGPU(device, forces, undefined, 'expanded')),
-      collision: own(await createCollisionSlotsWebGPU(device, graph.sizes, forces, config.collision, [0, 0], undefined, config.cacheCollisionCells)),
+      collision: own(await createCollisionSlotsWebGPU(device, graph.sizes, forces, config.collision, [0, 0], undefined, config.collisionCells)),
       collisionIntegration: own(upload(device, new Float32Array([count, 0, 0, 0, 1, REPULSION.referenceLength, 0, 0]), Buffer.UNIFORM)),
       collisionSettings: config.collision,
       centerStrength: config.centerStrength,
