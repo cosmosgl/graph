@@ -38,6 +38,12 @@ export const experiment = defineExperiment({
     },
     {
       kind: 'markdown',
+      id: 'production-envelope',
+      title: 'Acceptance scope on M3',
+      load: async (): Promise<string> => (await import('./production-envelope.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'results',
       title: 'Million-point findings',
       load: async (): Promise<string> => (await import('../workgroup-repulsion/moving-million.md?raw')).default,

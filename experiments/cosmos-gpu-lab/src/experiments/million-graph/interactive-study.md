@@ -18,6 +18,60 @@ to check whether the result holds in a fresh browser session.
 
 ## Native M3 findings
 
+### Requesting the next frame early
+
+Four million-point lanes completed on native Apple Metal 3 WebGPU in visible
+Chrome 157 with luma 10.0.0-alpha.15. Both paths used Reduced drawing, with one
+tick in flight. Each pick returned the expected ID and visible highlight.
+
+| Workload | Frame p95, after fence → early request | Intervals ≤33 ms | Worst pick |
+| --- | ---: | ---: | ---: |
+| Dense | 50.1 → 34.2 ms | 18/48 → 11/48 | 44.7 → 44.3 ms |
+| Hub | 50.0 → 50.0 ms | 9/48 → 10/48 | 40.3 → 39.8 ms |
+
+The early request missed the frame gate on both graphs. It skipped 48 dense
+and 51 hub callbacks during the steady samples while earlier work was still
+in flight. Interaction interval p95 was 67.3–83.4 ms across the four lanes.
+The first synchronized frame took 305–452 ms from Run, including static data
+generation. An in-capacity replacement from 999,990 to 999,989 links took
+235–255 ms to reach the next animation opportunity with the update. Peak
+sampled luma allocation was 189.5 MiB. The startup and update timings cover
+this Lab viewer and its basic styles.
+
+| Workload | Simulation GPU median, after fence → early | Drawing GPU median | GPU total median | Idle after fence, p95 |
+| --- | ---: | ---: | ---: | ---: |
+| Dense | 12.33 → 12.56 ms | 13.65 → 13.62 ms | 25.86 → 26.18 ms | 9.7 → 6.1 ms |
+| Hub | 15.55 → 15.68 ms | 13.60 → 13.43 ms | 29.13 → 29.12 ms | 17.4 → 17.0 ms |
+
+These split-pass diagnostics include the GPU stages and the complete draw.
+The hub springs took about 5.92 ms versus 2.42–2.46 ms for dense. Drawing
+was the largest single stage. The early request can reduce wake-up gaps but
+still leaves more GPU work than fits in a single refresh interval. Keep the
+existing scheduling in the demo for now.
+
+Captures are in `captures/resident-pacing-m3-20261120-035249/` and
+`captures/resident-pacing-profile-m3-20261120-035334/`. Both refer to the first
+directory's exact source archive with SHA-256
+`199432406a8c93cabcecb9861f713b52f2f905a78dcfbad59e498847b3ce5408`.
+The smaller viewer's [68.2 and 100.4 ms pick stalls](#/pilot-viewer?section=doc-findings)
+remain recorded for that workload.
+
+### Depth-tested links
+
+On the same M3, depth tested links matched every pixel in the frozen
+comparisons at DPR 1 and 2, at Fit and 3×. The moving run kept exact pick IDs
+and all 32 picks met 50 ms. Median profiled drawing went from 13.51 to 12.61 ms
+in the dense graph and from 13.45 to 12.47 ms in the hub graph. Peak sampled
+GPU allocation went from 189.5 to 191.5 MiB. In the uninstrumented run, just
+21 of 48 dense and 11 of 48 hub candidate intervals met 33 ms. Both p95s
+remained around 50 ms. The demo keeps its current draw path.
+
+The pixel checks are in `captures/resident-depth-frozen-m3-20261120-035717/`.
+The moving and profile runs are in `captures/resident-depth-moving-m3-0-20261120-035817/`
+and `captures/resident-depth-moving-m3-1-20261120-035833/`. The source archive
+in the first folder has SHA-256
+`b540b882478b4b9d8ee852e0f5d2913f23a1ae139c40bd2fd54cfdf190341ccb`.
+
 ### Reduced drawing replay
 
 The matched one-million-point replay compared Standard and Reduced drawing
@@ -144,6 +198,38 @@ lanes visible. A running fixture and exact picks establish bounded behavior.
 Production appearance, remaining forces, arbitrary pointer targets and other
 devices require separate checks.
 
+### Browser frame scheduling
+
+Compare both million-point fixtures with Four corners and Reduced drawing.
+Keep a single simulation tick in flight in both lanes. The control requests
+the next animation callback after the GPU fence. The candidate requests it
+before submitting the current tick and skips callbacks while a tick or pick
+is still in flight. Measure intervals between callbacks that submit and
+complete graph updates. Record every skipped callback, submission time,
+GPU-fence wait and time from completion to the next update callback.
+
+Use the same eight warmup ticks, 48 steady intervals and native input
+sequence. Time a same-point-count link replacement while the viewer is
+moving, from the topology call through the frame with the new links and the
+next animation opportunity. Report it separately from steady and pick timing.
+Keep both fixtures and both sequencing variants visible in the result.
+
+Repeat with split simulation passes instrumented using GPU timestamps. The
+timestamp lanes diagnose simulation and draw work, including point filtering
+and highlight composition. Use the ordinary pass layout for the frame gate.
+Read timestamps and positions after timing. Keep browser callback latency
+distinct from either sum of GPU timings or fence latency.
+
+### Opaque link overdraw
+
+Use the original fence scheduling for this comparison. Compare Reduced drawing
+with the same draw using a depth attachment. Draw opaque points in their
+original order, then draw the single-color opaque links farther away. Reject
+link fragments where a point or an identical-color link already wrote a sample.
+Check exact output pixels against the original draw before testing moving frame
+and pick times on both million-point fixtures. Measure draw GPU time and added
+allocation. This probe uses basic opaque links and preserves point occlusion.
+
 ## Replay
 
 Set a unique lowercase `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
@@ -153,3 +239,9 @@ Set a unique lowercase `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
 LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_INTERACTION=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-interaction.test.ts
 ```
+
+Set `VITE_LAB_RESIDENT_FRAME_PACING=1` to compare callback scheduling. Add
+`VITE_LAB_RESIDENT_FRAME_PROFILE=1` in a fresh capture for GPU timestamps.
+Set `VITE_LAB_RESIDENT_DEPTH_LINKS=1` instead of the pacing flag to compare
+the depth-tested draw path. The same flag selects the frozen depth comparison
+with `VITE_LAB_RESIDENT_DRAW_COST=1` in `resident-draw-cost.test.ts`.

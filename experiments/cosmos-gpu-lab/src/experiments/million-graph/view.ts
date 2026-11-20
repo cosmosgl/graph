@@ -2,7 +2,7 @@ import { describeDevice, waitForGpu } from '../../gpu/luma'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
 import { cool } from '../combined-layout/data'
-import { createResidentChain, createResidentGraph, type Distribution } from '../many-body-grid/resident-graph'
+import { createResidentChain, createResidentGraph, type Distribution, type ResidentStageTimestamps } from '../many-body-grid/resident-graph'
 import type { DistantForce } from '../many-body-grid/resident-cell-field'
 import { createDenseCommunities } from './dense-communities'
 import { createInteractiveFixture, type InteractiveFixture } from './interactive-fixtures'
@@ -12,7 +12,9 @@ import {
 } from './resident-navigation'
 
 type Graph = Awaited<ReturnType<typeof createResidentGraph>>
-export type MovingFrame = { tick: number; animationTime: number; started: number; completed: number; camera?: ResidentCamera }
+export type MovingFrame = {
+  tick: number; animationTime: number; started: number; submitted: number; completed: number; camera?: ResidentCamera;
+}
 export type PickFeedback = {
   id: number | null; tick: number; running: boolean; trusted: boolean;
   cachedHighlight?: boolean;
@@ -20,8 +22,13 @@ export type PickFeedback = {
 }
 type Study = {
   viewport: ResidentViewport;
+  fixture?: Pick<InteractiveFixture, 'input' | 'graph'>;
   pointCulling?: boolean;
   cachedHighlight?: boolean;
+  depthLinks?: boolean;
+  scheduleAhead?: boolean;
+  callback?(animationTime: number, busy: boolean): void;
+  timestamps?(tick: number): ResidentStageTimestamps | undefined;
   ready(graph: Graph, initialPositions: Float32Array, metadata?: InteractiveFixture['metadata']): void;
   submitted(): void;
   frame(frame: MovingFrame): void;
@@ -119,10 +126,15 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
     study?.failed(error)
   }
   const schedule = (): void => {
-    if (!backend || destroyed || loading || error || inFlight || request) return
+    if (!backend || destroyed || loading || error || request || (inFlight && !study?.scheduleAhead)) return
     if (!running && !pendingPick && !fitRequested && !cameraUpdates.length) return
     request = requestAnimationFrame(animationTime => {
       request = 0
+      study?.callback?.(animationTime, inFlight)
+      // Keep one callback pending while the GPU works, without queuing a
+      // second simulation frame or taking a pick against in-flight state.
+      if (study?.scheduleAhead && running) schedule()
+      if (destroyed || loading || error || inFlight) return
       // eslint-disable-next-line no-void
       void step(animationTime)
     })
@@ -173,8 +185,9 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
         return
       }
       const moving = running
-      if (moving) active.frame(tick, alpha)
+      if (moving) active.frame(tick, alpha, true, study?.timestamps?.(tick))
       else active.redraw()
+      const submitted = performance.now()
       study?.submitted()
       await waitForGpu(active.device, 30000)
       if (destroyed || version !== generation) return
@@ -186,7 +199,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
       const state = tick >= 200 ? 'Finished' : running ? 'Running' : 'Paused'
       const selected = selection === null ? '' : ` · selected point ${selection}`
       showStatus(`${state} · tick ${tick} / 200 · last synchronized tick ${(completed - start).toFixed(1)} ms${selected}.`)
-      study?.frame({ tick, animationTime, started: start, completed, camera })
+      study?.frame({ tick, animationTime, started: start, submitted, completed, camera })
     } catch (cause) {
       if (destroyed || version !== generation) return
       failed(cause)
@@ -209,12 +222,12 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
       await new Promise(resolve => requestAnimationFrame(resolve))
       if (destroyed || version !== generation) return
       const pointCount = Number(count.value)
-      const fixture = distribution.value === 'hubs'
+      const fixture = !study?.fixture && distribution.value === 'hubs'
         ? createInteractiveFixture(pointCount, 'hubs')
-        : study && distribution.value === 'persistent-communities'
+        : study && !study.fixture && distribution.value === 'persistent-communities'
           ? createInteractiveFixture(pointCount, 'dense')
           : undefined
-      const { input, graph } = fixture ?? (distribution.value === 'persistent-communities'
+      const { input, graph } = study?.fixture ?? fixture ?? (distribution.value === 'persistent-communities'
         ? createDenseCommunities(pointCount)
         : createResidentChain(pointCount, distribution.value as Distribution))
       const useCoverage = drawing.value === 'coverage'
@@ -223,6 +236,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
         picking: true,
         pointCulling: study?.pointCulling ?? useCoverage,
         cachedHighlight: study?.cachedHighlight ?? useCoverage,
+        depthLinks: study?.depthLinks,
       })
       if (destroyed || version !== generation) { next.destroy(); return }
       backend = next

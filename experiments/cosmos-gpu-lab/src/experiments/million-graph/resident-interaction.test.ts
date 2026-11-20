@@ -1,18 +1,22 @@
-import { luma } from '@luma.gl/core'
+import { luma, type QuerySet } from '@luma.gl/core'
 import { expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
 import { describeEnvironment } from '../../gpu/force-preview'
 import { waitForGpu } from '../../gpu/luma'
 import { graphRgba } from '../../runtime/palette'
 import { writeArtifact } from '../../testing/artifacts'
-import type { createResidentGraph } from '../many-body-grid/resident-graph'
+import { stageDurations } from '../combined-layout/stage-timing'
+import { RESIDENT_STAGES, type createResidentGraph, type ResidentStageTimestamps } from '../many-body-grid/resident-graph'
+import type { TimestampWrites } from '../many-body/timing'
+import { readLumaTimer } from '../weighted-links/timing'
 import { motionChecks, percentile } from './field-metrics'
-import type { InteractiveFixtureKind } from './interactive-fixtures'
+import { createInteractiveFixture, type InteractiveFixtureKind } from './interactive-fixtures'
 import { cameraFromView, type ResidentCamera } from './resident-navigation'
 import { createMillionGraphView, type MovingFrame, type PickFeedback } from './view'
 
 type ScreenPoint = [number, number]
 type WindowInfo = { bounds: { x: number; y: number; width: number; height: number }; viewport: { width: number; height: number } }
+type Variant = 'baseline' | 'combined' | 'fenced' | 'ahead' | 'depth'
 declare module 'vitest/browser' {
   interface BrowserCommands {
     residentInput(action: 'layout'): Promise<WindowInfo>;
@@ -28,6 +32,11 @@ const warmup = 8
 const intervals = 48
 const expectedPoint = [0, 0, 1, 0]
 const renderCandidates = import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
+const framePacing = import.meta.env.VITE_LAB_RESIDENT_FRAME_PACING === '1'
+const depthCandidates = import.meta.env.VITE_LAB_RESIDENT_DEPTH_LINKS === '1'
+const frameStudy = framePacing || depthCandidates
+const profile = frameStudy && import.meta.env.VITE_LAB_RESIDENT_FRAME_PROFILE === '1'
+const querySamples = (intervals + 1) * RESIDENT_STAGES.length
 const cases: Array<[number, InteractiveFixtureKind]> = [
   [65536, 'dense'], [65536, 'hubs'],
   [131072, 'hubs'], [131072, 'dense'],
@@ -38,12 +47,17 @@ const cases: Array<[number, InteractiveFixtureKind]> = [
   [786432, 'dense'], [786432, 'hubs'],
   [1000000, 'dense'], [1000000, 'hubs'],
 ]
-const renderCases: Array<[number, InteractiveFixtureKind, 'baseline' | 'combined']> = renderCandidates
-  ? [
+const renderCases: Array<[number, InteractiveFixtureKind, Variant]> = cases.map(([count, kind]) => [count, kind, 'baseline'])
+if (frameStudy) {
+  const variant = depthCandidates ? 'depth' : 'ahead'
+  renderCases.splice(0, renderCases.length,
+    [1000000, 'dense', 'fenced'], [1000000, 'dense', variant],
+    [1000000, 'hubs', variant], [1000000, 'hubs', 'fenced'])
+} else if (renderCandidates) {
+  renderCases.splice(0, renderCases.length,
     [1000000, 'dense', 'baseline'], [1000000, 'dense', 'combined'],
-    [1000000, 'hubs', 'combined'], [1000000, 'hubs', 'baseline'],
-  ]
-  : cases.map(([count, kind]) => [count, kind, 'baseline'])
+    [1000000, 'hubs', 'combined'], [1000000, 'hubs', 'baseline'])
+}
 
 function allocation (): { buffer: number; texture: number; total: number } {
   const stats = luma.stats.getStats('GPU Time and Memory')
@@ -77,11 +91,12 @@ function paintedPoint (canvas: HTMLCanvasElement, point: ScreenPoint): number[] 
 }
 
 for (const [count, kind, variant] of renderCases) {
-  const lane = renderCandidates ? `-${variant}` : ''
-  const candidate = variant === 'combined'
+  const lane = renderCandidates || frameStudy ? `-${variant}${profile ? '-profile' : ''}` : ''
+  const candidate = variant !== 'baseline'
   it.skipIf(import.meta.env.VITE_LAB_RESIDENT_INTERACTION !== '1')(`measures a moving ${count}-point ${kind}${lane} viewer`, async () => {
     const frames: MovingFrame[] = []
     const picks: PickFeedback[] = []
+    const callbacks: Array<{ animationTime: number; started: number; busy: boolean }> = []
     let hidden = document.visibilityState !== 'visible'
     const recordVisibility = (): void => { hidden ||= document.visibilityState !== 'visible' }
     document.addEventListener('visibilitychange', recordVisibility)
@@ -106,6 +121,7 @@ for (const [count, kind, variant] of renderCases) {
       warmup,
       intervals,
       variant,
+      profile,
       frameTarget,
       pickTarget,
       status: 'started',
@@ -117,6 +133,8 @@ for (const [count, kind, variant] of renderCases) {
     }
     let backend: Awaited<ReturnType<typeof createResidentGraph>> | undefined
     let initialPositions: Float32Array | undefined
+    let query: QuerySet | undefined
+    let readyAt = 0
     let fail = ''
     let notify = (): void => {}
     async function until (check: () => boolean, label: string): Promise<void> {
@@ -135,7 +153,23 @@ for (const [count, kind, variant] of renderCases) {
       viewport,
       pointCulling: candidate,
       cachedHighlight: candidate,
+      depthLinks: variant === 'depth',
+      scheduleAhead: variant === 'ahead',
+      callback: frameStudy ? (animationTime, busy): void => { callbacks.push({ animationTime, started: performance.now(), busy }) } : undefined,
+      timestamps: profile
+        ? (tick): ResidentStageTimestamps | undefined => {
+          if (!query || tick < warmup || tick > warmup + intervals) return undefined
+          return (stage): TimestampWrites => {
+            const idx = 2 * ((tick - warmup) * RESIDENT_STAGES.length + RESIDENT_STAGES.indexOf(stage))
+            return { timestampQuerySet: query, beginTimestampIndex: idx, endTimestampIndex: idx + 1 }
+          }
+        }
+        : undefined,
       ready (graph, positions, metadata): void {
+        readyAt = performance.now()
+        if (profile && graph.device.features.has('timestamp-query')) {
+          query = graph.device.createQuerySet({ type: 'timestamp', count: querySamples * 2 })
+        }
         backend = graph; initialPositions = positions; record.fixture = metadata
         sampleMemory(); notify()
       },
@@ -163,6 +197,8 @@ for (const [count, kind, variant] of renderCases) {
       expect(windowInfo.bounds.width).toBe(viewport.width)
       expect(windowInfo.bounds.height).toBe(viewport.height)
       expect([canvas.width, canvas.height]).toEqual([1922, 1082])
+      const replacement = frameStudy ? createInteractiveFixture(count, kind).graph : undefined
+      const start = performance.now()
       host.querySelector<HTMLButtonElement>('[data-play]')!.click()
       await until(() => !!backend, 'resident graph startup')
       const graph = backend!
@@ -170,9 +206,21 @@ for (const [count, kind, variant] of renderCases) {
       record.environment = describeEnvironment(graph.device, canvas)
       expect(graph.device.info.fallback).toBe(false)
       await until(() => frames.length >= warmup + intervals + 1, 'the normal timing window')
-      const normal = describeTimes(frameIntervals(frames.slice(warmup, warmup + intervals + 1)), frameTarget)
+      const steady = frames.slice(warmup, warmup + intervals + 1)
+      const normal = describeTimes(frameIntervals(steady), frameTarget)
       record.normal = normal
-      record.synchronizedTicks = describeTimes(frames.slice(warmup, warmup + intervals + 1).map(frame => frame.completed - frame.started), frameTarget)
+      record.synchronizedTicks = describeTimes(steady.map(frame => frame.completed - frame.started), frameTarget)
+      if (frameStudy) {
+        record.callbacks = callbacks
+        record.steadyWork = {
+          submit: describeTimes(steady.map(frame => frame.submitted - frame.started), frameTarget),
+          fence: describeTimes(steady.map(frame => frame.completed - frame.submitted), frameTarget),
+          betweenUpdates: describeTimes(steady.slice(1).map((frame, i) => frame.started - steady[i].completed), frameTarget),
+          busyCallbacks: callbacks.filter(({ animationTime, busy }) => busy &&
+            animationTime >= steady[0].animationTime && animationTime <= steady.at(-1)!.animationTime).length,
+        }
+        record.startup = { readyMs: readyAt - start, firstSynchronizedFrameMs: frames[0].completed - start, topologyMs: graph.topologyMs }
+      }
       const interactionStart = frames.length - 1
 
       await commands.residentInput('pan', [300, 180], [360, 205])
@@ -218,6 +266,25 @@ for (const [count, kind, variant] of renderCases) {
       if (candidate) expect(picks.every(pick => pick.cachedHighlight === true)).toBe(true)
       expect(hidden).toBe(false)
 
+      if (replacement) {
+        const links = replacement.links.subarray(0, -2)
+        const weights = replacement.weights.subarray(0, -1)
+        const updated = performance.now()
+        graph.updateLinks({ links, weights, sizes: replacement.sizes })
+        const submitted = performance.now()
+        expect(graph.linkCount).toBe(count - 11)
+        await until(() => frames.at(-1)!.started >= submitted, 'the first updated frame')
+        const rendered = frames.at(-1)!
+        await new Promise(resolve => requestAnimationFrame(resolve))
+        record.update = {
+          linkCount: graph.linkCount,
+          topologyMs: graph.topologyMs,
+          callMs: submitted - updated,
+          frameMs: rendered.completed - updated,
+          feedbackMs: performance.now() - updated,
+        }
+      }
+
       host.querySelector<HTMLButtonElement>('[data-pause]')!.click()
       await waitForGpu(graph.device, 30000)
       if (candidate) expect(graph.redrawHighlight()).toBe(true)
@@ -231,6 +298,20 @@ for (const [count, kind, variant] of renderCases) {
       expect(motion.freeMoved).toBeGreaterThan(0)
       expect(Array.from(final.subarray(0, 4))).toEqual(expectedPoint)
       record.motion = motion
+      if (profile) {
+        const measurements: { durations: number[] | null } = { durations: null }
+        const timer = query
+          ? await readLumaTimer({
+            async readTimestampDuration (): Promise<number> {
+              measurements.durations = stageDurations(await query!.readResults({ firstQuery: 0, queryCount: querySamples * 2 }), querySamples)
+              return measurements.durations?.reduce((total, duration) => total + duration, 0) ?? NaN
+            },
+          })
+          : { status: 'unavailable' }
+        const valid = timer.status === 'valid' ? measurements.durations : null
+        const rows = valid ? steady.map((_, i) => valid.slice(i * RESIDENT_STAGES.length, (i + 1) * RESIDENT_STAGES.length)) : null
+        record.gpuTiming = { status: timer.status, stages: RESIDENT_STAGES, rows }
+      }
       record.status = 'complete'
     } catch (error) {
       record.status = 'failed'
@@ -238,6 +319,7 @@ for (const [count, kind, variant] of renderCases) {
       throw error
     } finally {
       document.removeEventListener('visibilitychange', recordVisibility)
+      query?.destroy()
       view.destroy()
       host.remove()
       await writeArtifact(`resident-interaction-${count}-${kind}${lane}`, record)

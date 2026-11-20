@@ -4,7 +4,9 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { graphRgba } from '../../runtime/palette'
 import { createResidentChain, createResidentGraph } from './resident-graph'
 
-it.each([1, 2])('composites cached highlights in original draw order at DPR %s', async pixelRatio => {
+const variants = [[1, false], [2, false], [1, true], [2, true]] as const
+
+it.each(variants)('composites highlights in draw order at DPR %s (link depth %s)', async (pixelRatio, depthLinks) => {
   const scope = resourceScope()
   const { input, graph } = createResidentChain(6)
   input.points.set([
@@ -38,7 +40,7 @@ it.each([1, 2])('composites cached highlights in original draw order at DPR %s',
   }
   try {
     const expected = scope.own(await createResidentGraph(expectedCanvas, input, graph, 'per-point', { pixelRatio }))
-    const actual = scope.own(await createResidentGraph(actualCanvas, input, graph, 'per-point', { pixelRatio, cachedHighlight: true }))
+    const actual = scope.own(await createResidentGraph(actualCanvas, input, graph, 'per-point', { pixelRatio, cachedHighlight: true, depthLinks }))
     const camera = { x: 0, y: 0, zoom: 1 }
     expected.setCamera(camera); actual.setCamera(camera)
     actual.redraw()

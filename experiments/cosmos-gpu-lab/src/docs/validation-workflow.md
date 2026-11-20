@@ -68,10 +68,13 @@ quality review while strict compatibility remains failed or unassessed.
 
 ### Workload and measurement
 
-Start with chain, communities and star at about 1,000 points, then 8,192, plus
-one representative real graph selected before evaluation. Record link count,
-seed, settings, cooling schedule, viewport, pixel ratio, browser, device and luma
-version. Existing 8,192-point evidence does not include the full collision path.
+Start with chain, communities and star at about 1,000 points, then 8,192. The
+[M3 acceptance scope](#/million-graph?section=doc-production-envelope) names the
+real graph and larger workloads. Record link count, seed, settings, cooling
+schedule, viewport, pixel ratio, browser, device and luma version. The
+[8,192-point community checkpoints](#/integrated-webgpu?section=doc-composed-interaction)
+include two hashed collision passes. The live chain and star timings used
+collision off.
 
 Compare moving and settled layouts. Exercise repeated updates, dragging, resize,
 pause/resume and teardown. Measure the complete supported workload without
