@@ -15,12 +15,16 @@ type SavedSession = {
   productionErrors: string[]; candidateFeedback: unknown[];
 }
 
+function clickedPointLabel (id: number | undefined): string {
+  return id !== undefined && id >= 0 ? `Clicked point ${id}` : 'No point clicked'
+}
+
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div class="controls">
     <button class="button-primary" data-action="run" data-run-action="primary">Run both</button>
     <button data-action="pause" data-run-action="primary">Pause both</button>
     <button data-action="fit" data-run-action="primary">Fit both</button></div>
-    <p role="status" data-run-part="status">Creating production WebGL and candidate WebGPU viewers…</p>
+    <p role="status" data-run-part="status">Loading the WebGL and WebGPU graphs…</p>
     <div data-run-part="visualization" class="viewer-comparison-panels" data-panels>
       <section><h3>Production WebGL · luma v9</h3><div data-webgl style="height:320px;position:relative"></div><p data-gl-status></p></section>
       <section><h3>Candidate WebGPU · luma v10</h3><canvas data-webgpu aria-label="Candidate WebGPU graph"
@@ -36,13 +40,13 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="style">Toggle style A / B</button><button data-action="chain">Replace with 32-point chain</button>
     <button data-action="karate">Restore Karate Club</button><button data-action="resize">Toggle height 320 / 280</button>
     <button data-action="recreate">Destroy and recreate</button>
-    <button data-action="assess">Assess early and cooled viewers</button>
+    <button data-action="assess">Measure frame times</button>
     <button data-action="paint">Compare same-geometry paint</button><button data-action="paint-layers">Attribute paint differences</button>
     <button data-action="paint-link-smoothing">Test link edge smoothing</button>
     <button data-action="paint-corrected-links">Compare corrected link paint</button>
     <button data-action="check">Check current updates</button>
     <button data-action="cancel">Cancel assessment</button><button data-action="export">Export JSON</button></div>
-    <p>Paint checks use the same fixed positions in both viewers and replace the current production layout.
+    <p>Paint checks use the same fixed positions in both panels and replace the current production layout.
     The recorded evidence describes the test conditions and limits.</p></section>`
   host.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = true })
   const status = host.querySelector<HTMLElement>('[role=status]')!; const results = host.querySelector<HTMLElement>('[data-results]')!
@@ -93,7 +97,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     if (!recovered.length) return
     const heading = document.createElement('h3'); heading.textContent = 'Earlier live sessions'; target.append(heading)
     const note = document.createElement('p')
-    note.textContent = 'The viewer restarted. Completed results from earlier sessions are kept in this tab and included in Export JSON. ' +
+    note.textContent = 'The live comparison restarted. Completed results from earlier sessions are kept in this tab and included in Export JSON. ' +
       'Graph position and playback state are not restored; export the results to keep them after closing the tab.'
     target.append(note)
     for (const session of recovered) {
@@ -113,15 +117,15 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   }
   const create = async (): Promise<void> => {
     const iframe = document.createElement('iframe')
-    iframe.title = 'Unchanged production Cosmos WebGL viewer'
+    iframe.title = 'Production Cosmos WebGL graph'
     iframe.style.cssText = 'width:100%;height:100%;border:0;display:block'
     const loaded = new Promise<void>((resolve, reject) => {
-      iframe.onload = (): void => resolve(); iframe.onerror = (): void => reject(new Error('Production viewer frame failed to load'))
+      iframe.onload = (): void => resolve(); iframe.onerror = (): void => reject(new Error('Production WebGL frame failed to load'))
     })
     iframe.src = new URL('production-viewer.html', document.baseURI).href
     glHost.replaceChildren(iframe); await loaded
     gl = await (iframe.contentWindow as Window & { cosmosProduction: Promise<Production> }).cosmosProduction
-    if (!gl) throw new Error('Production frame did not expose its viewer')
+    if (!gl) throw new Error('Production frame did not expose the WebGL graph')
     watchInteraction(gl.canvas)
     try { gpu = await createIntegrated(canvas, 'karate', 34) } catch (e) { gl.destroy(); throw e }
     // Match the production canvas's integer attachment sizing at fractional DPRs.
@@ -181,13 +185,13 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       }
       if (!busy) {
         status.textContent = `${playing ? 'Running' : 'Paused'} · ${scene} · style ${alternate ? 'B' : 'A'} · ` +
-        `${width} × ${height} CSS px per viewer · DPR ${ratio}`
+        `${width} × ${height} CSS px per panel · DPR ${ratio}`
       }
       const last = gl.feedback.at(-1)
       host.querySelector<HTMLElement>('[data-gl-status]')!.textContent = `Tick ${gl.tick} · ` +
-        `${gl.graph.isSimulationRunning ? 'simulating' : 'paused / cooled'} · selected ${gl.selected ?? 'none'} · ` +
+        `${gl.graph.isSimulationRunning ? 'simulating' : 'paused / cooled'} · ${clickedPointLabel(gl.selected)} · ` +
         `last ${last?.kind ?? 'input unchecked'} ${last?.ms.toFixed(1) ?? '—'} ms${gl.errors.length ? ' · feedback error' : ''}`
-      host.querySelector<HTMLElement>('[data-gpu-status]')!.textContent = `Tick ${gpu.tick} · selected ${gpu.renderer.selected} · ` +
+      host.querySelector<HTMLElement>('[data-gpu-status]')!.textContent = `Tick ${gpu.tick} · ${clickedPointLabel(gpu.renderer.selected)} · ` +
         `last ${gpu.feedback.at(-1)?.ms.toFixed(1) ?? 'unchecked'} ms`
     }
   }
@@ -346,7 +350,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       return structuredClone(sessions)
     },
     restoreEvidence: (evidence: unknown): void => {
-      if (!Array.isArray(evidence)) throw new Error('Invalid saved viewer evidence')
+      if (!Array.isArray(evidence)) throw new Error('Invalid saved graph comparison results')
       recovered.push(...evidence as SavedSession[]); renderRecovered()
     },
     destroy: (): void => {

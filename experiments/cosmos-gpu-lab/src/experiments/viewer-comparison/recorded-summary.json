@@ -4,21 +4,21 @@
   "recordedAt": "2026-11-18",
   "sourceRevision": null,
   "environment": "Apple M3, visible Chromium 157; production WebGL with luma 9.3.6 and candidate WebGPU with luma 10.0.0-alpha.15",
-  "scope": "Karate Club: 34 points and 78 weighted links; selected timing, interaction and rendering checks with both viewers controlled by the test.",
-  "question": "Can the experimental WebGPU viewer support a small graph exploration workflow?",
-  "method": "Compare the production and WebGPU viewers on the same graph. Measure animation and interaction; separately compare their pixels with the same fixed point and link positions.",
-  "conclusion": "Both viewers ran the small graph. The original comparison found differences on short links. A follow-up matched both frozen styles after applying production’s distance-based opacity.",
+  "scope": "Timing, interaction and rendering checks on the 34-point, 78-link Karate Club graph, with both backends controlled by the test.",
+  "question": "Can experimental WebGPU support the same small-graph interactions as production WebGL?",
+  "method": "Run the same graph in production WebGL and experimental WebGPU. Measure animation and interaction, then compare pixels with fixed point and link positions.",
+  "conclusion": "Both backends ran the small graph. The original comparison found differences on short links. A follow-up matched both frozen styles after applying production’s distance-based opacity.",
   "checks": [
-    { "name": "Evolving frame intervals", "outcome": "Pass", "detail": "Both viewers met the 33 ms target in all 300 measured intervals." },
+    { "name": "Evolving frame intervals", "outcome": "Pass", "detail": "Both backends met the 33 ms target in all 300 measured intervals." },
     { "name": "Point identities at fixed positions", "outcome": "Pass", "detail": "Point identities matched away from edges; no invisible point IDs appeared in the picking image in the cooled style-A comparison." },
     { "name": "Colors · cooled geometry, style A", "outcome": "Fail", "detail": "78 interior color errors in 604,160 pixels." },
     { "name": "Colors · evolving geometry, style B", "outcome": "Fail", "detail": "707 interior color errors in 604,160 pixels, using the earlier comparator and its more conservative invisible-point boundary." },
     { "name": "Colors · fresh geometry, style A", "outcome": "Fail", "detail": "88 interior color errors in 604,160 pixels with the final comparator; maximum channel difference 35/255 against a 2/255 limit." },
     { "name": "Colors · fresh geometry, style B", "outcome": "Fail", "detail": "469 interior color errors in 604,160 pixels with the final comparator; maximum channel difference 56/255 against a 2/255 limit." },
     { "name": "Colors · distance opacity, frozen styles A and B", "outcome": "Pass", "detail": "The 19 November replay matched all interior RGBA bytes in both styles on M3, testing 1,228,800 pixels per style." },
-    { "name": "Full migration readiness", "outcome": "Not assessed", "detail": "The small viewer does not cover the complete Cosmos API, features or devices." }
+    { "name": "Full migration readiness", "outcome": "Not assessed", "detail": "The trial covers a small graph and a subset of Cosmos features on one device." }
   ],
-  "limits": "The color follow-up covers the two fresh styles at one camera on M3. The frame intervals measure display pacing. The earlier selection-latency outlier remains open.",
+  "limits": "The color follow-up covers the two fresh styles at one camera on M3. The frame intervals measure display pacing. An earlier slow response to a click remains unexplained.",
   "visual": "The live comparison above is a new local run. No image from the recorded run was retained here.",
   "sourcePage": "findings"
 }

@@ -29,7 +29,7 @@ in the excluded edge region. All 557 interior failures remained unchanged.
 
 The first failure in each style came from the link from point 3 to point 7.
 It measured 19.15 CSS pixels. Production's visibility rule uses
-`max(1, (150 - length) / 100)` in this viewer. At that length the rule boosts
+`max(1, (150 - length) / 100)` in the production graph. At that length the rule boosts
 the configured opacity by 1.309×. That multiplier predicted the exact isolated
 RGBA in the production renderer. The candidate originally used the configured
 link opacity directly.
@@ -50,5 +50,5 @@ interior IDs and invisible picks also passed. Combining distance opacity and
 the ramp left 172 and 158 over-tolerance pixels in the excluded boundary region.
 
 The result covers the frozen Karate Club styles and camera on Apple M3 native
-Chrome 157. The [viewer findings](#/viewer-comparison?section=doc-findings-short-link-opacity)
+Chrome 157. The [graph comparison findings](#/viewer-comparison?section=doc-findings-short-link-opacity)
 include the source snapshot and production control checksum.

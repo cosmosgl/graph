@@ -5,8 +5,8 @@ import { agentFindings } from './agent-findings'
 import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'pilot-viewer',
-  title: 'Karate Club pilot viewer',
-  summary: 'Try the bounded WebGPU pilot as a small graph explorer: find members, inspect neighbors and move the running graph.',
+  title: 'Karate Club on WebGPU',
+  summary: 'Find members, inspect neighbors and drag points while the 34-member graph runs on WebGPU.',
   tags: ['integration', 'interaction'],
   cases,
   study: { record: readStudyRecord(recordedSummary, 'pilot-viewer'), recipePage: 'agent-recipe', visualFirst: true, agentFindings },
@@ -22,7 +22,7 @@ export const experiment = defineExperiment({
     {
       kind: 'markdown',
       id: 'findings',
-      title: 'Representative viewer findings',
+      title: 'Karate Club pilot findings',
       load: async (): Promise<string> => (await import('./findings.md?raw')).default,
     },
     {

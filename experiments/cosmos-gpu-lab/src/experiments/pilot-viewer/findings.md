@@ -1,4 +1,4 @@
-# Representative viewer findings
+# Karate Club pilot findings
 
 **The small explorer works, but its responsiveness is not accepted.** In the wider
 window, one running pick took **100.4 ms**, exceeding the unchanged 50-ms target.
@@ -101,7 +101,7 @@ IDs directly and therefore supply no GPU picking evidence.
 | First-slice usability | Bounded exploration works, but **responsiveness fails** in the wider window |
 | Full migration readiness | **Not ready:** unsupported options, full API/host coverage, larger workloads and unresolved failures remain |
 
-Continue using the viewer as an investigation tool. Reopen the bounded latency
+Continue using the graph to investigate interaction. Reopen the bounded latency
 question before claiming this supported workflow passes; do not expand to large
 graphs or reopen unrelated raster investigations to avoid this finding.
 

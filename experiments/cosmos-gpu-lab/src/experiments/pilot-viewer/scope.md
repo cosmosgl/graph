@@ -1,6 +1,6 @@
 # First pilot: a small graph explorer
 
-**Proceed with a research-only Karate Club viewer inside the lab. Do not replace
+**Proceed with a research-only WebGPU trial on the Karate Club graph. Do not replace
 production Cosmos or claim that the first migration is accepted.** The purpose is
 to find out whether the integrated backend supports a useful exploration task:
 locate a member, inspect their connections, and move the graph while it runs.
@@ -20,7 +20,7 @@ remain with the original integrated experiment. No new fixture, force or shader 
 | Updates | Change point sizes; reset/reload the selected graph; pause/resume | This does not implement the complete Graph setters or arbitrary graph ingestion |
 | Lifecycle | Existing runtime resize/destruction; disposable lab page | No shared host device, deck integration, recovery or production ownership policy |
 | Environment | Current user's native Apple M3 in the visible inline browser | No device/browser portability claim |
-| Workload | This 34-member real graph | Earlier synthetic 1,024 and 8,192 results are context, not approval of those sizes in this viewer |
+| Workload | This 34-member real graph | Earlier synthetic 1,024 and 8,192 results provide context. This trial covers 34 members |
 
 Point and link colors remain those of the integrated runtime. Size-by-degree changes
 only drawing, not force parameters or link weights. Selection highlights the picked
@@ -31,9 +31,9 @@ CPU topology. That metadata is not a GPU simulation readback.
 
 | Issue | Current decision | Reopen when |
 |---|---|---|
-| Production interior colors differ | **Strict compatibility rejected.** Retain the [matched viewer findings](#/viewer-comparison?section=doc-findings); the two-byte gate is unchanged | Before claiming production color compatibility, or immediately if the intended exploration is visually obstructed |
+| Production interior colors differ | **Strict compatibility rejected.** Retain the [graph comparison findings](#/viewer-comparison?section=doc-findings); the two-byte gate is unchanged | Before claiming production color compatibility, or immediately if the intended exploration is visually obstructed |
 | Earlier 68.2-ms pick and intermittent stalls | Unresolved; this trial now records a 100.4-ms running pick | **Reopened:** attribute the recorded delay before accepting responsiveness; see findings |
-| 8,192-point star cost | Outside this viewer's supported trial; tuning stopped for the first attempt | A representative pilot actually requires a large hub workload |
+| 8,192-point star cost | Outside this pilot's scope; tuning stopped for the first attempt | A representative pilot actually requires a large hub workload |
 | Faint nonzero opacity, advanced raster boundaries and exact arithmetic refinements | Prior rejected cases stay rejected; deeper investigation parked | The pilot needs the option, or before full migration approval |
 | Full feature/API/host coverage | Not implemented or not accepted here | A deliberate next integration task with its own control and evidence |
 
@@ -43,7 +43,7 @@ text rendering in the GPU canvas, host-device sharing, recovery, and nonzero opa
 below 0.02. The current pilot exposes opaque points only. There is no hidden WebGL
 fallback and no production backend switch.
 
-**The decision to try the viewer is not permission to relabel a failed gate.** Strict
+**The pilot retains every acceptance gate.** Strict
 compatibility, first-slice usability and full migration readiness remain separate.
 A functional trial can continue while the documented compatibility blocker stays red.
 If a local responsiveness, identity or visibility check fails, retain that failure

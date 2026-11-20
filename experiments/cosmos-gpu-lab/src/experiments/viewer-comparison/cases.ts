@@ -2,21 +2,20 @@ import type { ExperimentCase } from '../../runtime/experiment'
 
 export const cases: ExperimentCase[] = [{
   id: 'compare-viewers',
-  title: 'Compare production and WebGPU viewers',
+  title: 'Compare clicks and drags in WebGL and WebGPU',
   kind: 'compare',
-  question: 'How do the two viewers behave on the same small graph?',
-  description: 'Explore the Karate Club graph in the production WebGL viewer and the experimental WebGPU viewer.',
-  tryIt: 'Press Run both. Select a point in each viewer and compare which points are highlighted.',
-  reference: 'The existing production viewer, using the same graph and supplied point and link styles.',
+  question: 'Does each graph highlight the point you click?',
+  description: 'Production WebGL and experimental WebGPU both start with the same 34-point Karate Club graph.',
+  reference: 'Production WebGL with the same graph data, point styles and link styles.',
   acceptance: 'The live views are for exploration. Separate recorded checks cover frame intervals, picking and fixed-position pixels.',
   recorded: {
-    conclusion: 'Both viewers supported the small exploration workflow. Applying production’s short-link opacity in the candidate ' +
+    conclusion: 'Point clicks and drags worked in both panels. Applying production’s short-link opacity in the candidate ' +
       'cleared all 557 original interior color failures across the two frozen styles.',
     date: '18–19 November 2026',
     environment: 'Apple M3; visible Chromium 157; production WebGL and experimental WebGPU.',
-    scope: '34 points and 78 links, selected interactions and two fixed-position color styles.',
-    limits: 'The color result covers one device and two fresh styles. The earlier selection-latency outlier remains unexplained.',
-    evidence: [{ label: 'Viewer comparison evidence', page: 'findings' }, { label: 'Comparison method', page: 'method' }],
+    scope: '34 points and 78 links, point interaction checks and two fixed-position color styles.',
+    limits: 'The color result covers one device and two fresh styles. An earlier slow response to a click remains unexplained.',
+    evidence: [{ label: 'Graph comparison findings', page: 'findings' }, { label: 'Comparison method', page: 'method' }],
   },
 }, {
   id: 'link-color-evidence',

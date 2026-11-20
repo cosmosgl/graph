@@ -58,7 +58,7 @@ completed steps. Use the `records` and feedback entries to identify what actuall
 ran. A fresh A/B paint replay has no frame-time or pointer-interaction assessment.
 
 For the complete historical procedure—including the cooled run, actual pointer
-interactions and timing—follow **Viewer comparison protocol**. It requires the
+interactions and timing—follow **Comparison method**. It requires the
 visible native browser, the declared panel dimensions and no competing build or
 test process during timing. Keep these focused paint checks distinct from it.
 

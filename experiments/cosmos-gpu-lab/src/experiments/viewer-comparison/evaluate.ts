@@ -7,8 +7,8 @@ import { LINK_VISIBILITY, styles } from './styles'
 import type { Production } from './production'
 export const protocol = 'Karate Club 34 points / 78 weighted links; seed 29471, default corrected candidate and matched core-force settings. ' +
   'Equal measured CSS panel widths × 320 px at actual DPR. Public host-driven frames, one GPU completion in flight. ' +
-  'Per viewer: 60 warmup ticks, Fit, 300 early intervals; cool to tick 5000, Fit, 300 paused redraw intervals. ' +
-  'Time one viewer at a time, other paused. Readbacks/quality outside timing. Then style A/B, 32-point chain replacement and Karate restoration, ' +
+  'Per backend: 60 warmup ticks, Fit, 300 early intervals; cool to tick 5000, Fit, 300 paused redraw intervals. ' +
+  'Time one backend at a time with the other paused. Readbacks/quality outside timing. Then style A/B, 32-point chain replacement and Karate restoration, ' +
   'resize, recreation; actual picking and dragging during running. Frame target ≥95% ≤33 ms; feedback ≤50 ms. ' +
   'Exact point IDs and original one-device-pixel / two-byte rendering rules remain unchanged.'
 export type FrameRow = { backend: string; window: string; intervals: number[]; p95: number; within33: number; pass: boolean }

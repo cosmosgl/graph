@@ -5,8 +5,8 @@ export const cases: ExperimentCase[] = [{
   title: 'Explore the Karate Club graph',
   kind: 'explore',
   question: 'Can you inspect and move members while the graph runs?',
-  description: 'Explore a 34-member social graph using the experimental WebGPU viewer.',
-  tryIt: 'Press Run, then select a circle to see its neighbors. Drag a member, or use Fit graph to return to the whole view.',
+  description: 'Explore a 34-member social graph running on experimental WebGPU.',
+  tryIt: 'Press Run, then click a circle to see its neighbors. Drag a member, or use Fit graph to return to the whole view.',
   reference: 'The supplied Karate Club topology and member IDs, with the existing WebGPU graph runtime.',
   acceptance: 'Selection should identify the chosen member. The recorded feedback check uses a 50 ms limit.',
   recorded: {
@@ -17,7 +17,7 @@ export const cases: ExperimentCase[] = [{
     scope: '34 members, 78 links, two initial viewport sizes and later bounded picking controls.',
     limits: 'The two earlier selection delays remain unexplained. The original measured source was not independently snapshotted; ' +
       'larger graphs were not accepted.',
-    evidence: [{ label: 'Selection feedback evidence', page: 'latency-evidence' }, { label: 'Original viewer findings', page: 'findings' }],
+    evidence: [{ label: 'Selection feedback evidence', page: 'latency-evidence' }, { label: 'Karate Club pilot findings', page: 'findings' }],
   },
 }, {
   id: 'selection-feedback',

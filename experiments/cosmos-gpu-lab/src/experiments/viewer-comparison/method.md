@@ -1,17 +1,18 @@
-# Small viewer workflow comparison
+# Graph interaction comparison method
 
-The left viewer is the unchanged workspace production `Graph`, loaded from its standalone UMD bundle with luma v9 in a same-origin iframe. luma rejects two major versions in one
-window; isolation preserves both original libraries without bypassing that guard. The right uses the lab's resident luma v10 backend and corrected
-arithmetic. Build the current control from the repository root before starting:
+The WebGL panel uses the unchanged workspace production `Graph` from its standalone UMD bundle with luma v9.
+It runs in a same-origin iframe so the two major luma versions have separate windows.
+The WebGPU panel uses the lab's resident luma v10 backend and corrected arithmetic.
+Build the current control from the repository root before starting:
 
 ```sh
 pnpm run build
 pnpm --filter @cosmos.gl/gpu-lab dev
 ```
 
-No production file, shader, dependency or acceptance gate changes. This is a public
-host-driven production viewer (`enableRenderLoop: false`, `renderOneFrame`), with
-its real pointer/hover/drag implementation. Both viewers use a completion-paced
+No production file, shader, dependency or acceptance gate changes. The production graph uses
+public host-driven frames (`enableRenderLoop: false`, `renderOneFrame`) and its original
+pointer, hover and drag implementation. Both graphs use a completion-paced
 host loop. It does not benchmark production's default autonomous scheduler.
 
 ## Declared sequence
@@ -28,7 +29,7 @@ zero. Production's seeded random stream and float32 translation differ from the
 lab's prepared samples. This is a workflow/quality comparison, not a same-input
 arithmetic regression. Existing strict numerical gates stay in their experiments.
 
-1. Independently reset each viewer. Advance 60 ticks, Fit, measure 300 evolving
+1. Independently reset each graph. Advance 60 ticks, Fit, measure 300 evolving
    complete frame intervals. Record unweighted graph-distance stress after timing.
 2. Continue to tick 5,000, Fit, record geometry/stress, then measure 300 **paused
    redraw** intervals. Low cooled motion and stress alone are not quality approval.
@@ -41,7 +42,7 @@ arithmetic regression. Existing strict numerical gates stay in their experiments
    alpha 0.35, except point 0 at alpha zero; links become coral, width 2.5, alpha 0.7.
    Preserve the supplied colors. Check CPU setter values and candidate GPU pixels.
 5. Pick a peripheral point and both hubs, and drag a point while running in each
-   viewer. Production needs its native hover result before a drag can begin.
+   panel. Production needs its native hover result before a drag can begin.
    Record actual input callbacks, IDs, visible movement and feedback timings.
 6. Replace with a 32-point chain and back; resize to height 280 and back; pause,
    resume, destroy and recreate. Preserve completed evidence in local Export JSON.

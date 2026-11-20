@@ -73,7 +73,7 @@ const catalogTopics = [
   {
     id: 'whole-graphs',
     title: 'Whole graphs and layouts',
-    description: 'Complete layouts, moving graphs and viewers.',
+    description: 'Complete layouts and interactive graphs.',
     ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
       'viewer-comparison', 'pilot-viewer', 'matched-layout'],
   },
