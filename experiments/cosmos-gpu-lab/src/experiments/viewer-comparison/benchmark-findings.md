@@ -115,6 +115,8 @@ then met the declared motion margin.
 
 ## YouTube · 1,000,000 points, 2,852,734 edges
 
+[Open the live YouTube Network demo](#/youtube-network).
+
 Both WebGL controls completed the moving window at 949.4 and 935.1 ms p95.
 Both returned no usable first moving rectangle selection, so neither full
 control reached the later queries, updates and warm-start measurements.
@@ -147,6 +149,8 @@ matched Viewer Comparison renderer. [Earlier YouTube run](#/million-graph?sectio
 | Peak tracked memory (MiB) | 994.8 | 284.9 | -709.9 | -71.4 | — | Not assessed · Missing a complete matched pair |
 
 ## YouTube capacity
+
+[Open the 262,144-point YouTube demo](#/youtube-network?section=try-friendships-262k).
 
 The largest tested YouTube workload that completed the entire workflow on
 both backends had **262,144 points and 1,369,771 edges**. That is a tested

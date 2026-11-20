@@ -281,6 +281,27 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     evidence: [{ tone: 'pass', text: 'Matched steady motion confirmed on the million-point hub graph' }],
     next: 'Watch the hub move in both views',
   },
+  'youtube-network/friendships': {
+    badge: 'Live demo',
+    tone: 'neutral',
+    finding: 'Both viewers drew and moved the million-point YouTube friendship graph.',
+    area: 'Integration',
+    status: 'Full timing comparison inconclusive',
+    evidence: [{ tone: 'fail', text: 'Both WebGL controls stopped at moving rectangle selection' }],
+    next: 'Compare the layouts as the real friendship network moves',
+  },
+  'youtube-network/friendships-262k': {
+    badge: 'Live demo',
+    tone: 'neutral',
+    finding: 'Both viewers completed the recorded workflow at 262,144 points.',
+    area: 'Integration',
+    status: 'Steady-motion timing inconclusive',
+    evidence: [
+      { tone: 'pass', text: 'Both backends completed moving selections and tracked labels' },
+      { tone: 'warn', text: 'WebGL frame intervals varied across runs' },
+    ],
+    next: 'Compare the smaller real graph as its layout moves',
+  },
   'repulsion-trajectories/trajectory-drift': {
     badge: 'Paths diverged',
     tone: 'review',

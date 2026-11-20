@@ -262,7 +262,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
       const option = document.createElement('option'); option.value = candidate.id; option.textContent = candidate.title; chooser.append(option)
     }
     const label = document.createElement('label'); label.className = 'case-chooser'
-    label.append(document.createTextNode('Case'), chooser); intro.insertBefore(label, instruction)
+    label.append(document.createTextNode(experiment.caseChooserLabel ?? 'Case'), chooser); intro.insertBefore(label, instruction)
   }
   const slot = document.createElement('div'); slot.className = 'case-live-slot'
   const status = paragraph('', 'case-load-status'); status.setAttribute('role', 'status')

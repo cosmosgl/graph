@@ -23,12 +23,11 @@ export const experiment = defineExperiment({
       evidence: [{ label: 'About the layout', page: 'layout' }],
     },
   }],
-  create: async host => (await import('../viewer-comparison/community-view')).createCommunityView(host, {
+  create: async host => (await import('../viewer-comparison/large-comparison-view')).createLargeComparisonView(host, {
     kind: 'hubs',
     title: 'Hub Communities',
     benchmarkSection: 'hub-communities-1-000-000-points-999-990-edges',
-    webglMs: 151.7,
-    webgpuMs: 68.5,
+    frameIntervals: { webglMs: 151.7, webgpuMs: 68.5 },
   }),
   pages: [{
     kind: 'markdown',

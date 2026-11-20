@@ -67,9 +67,12 @@ export function experimentDestination (
   const runAnchor = section?.startsWith('run-') || section === 'case-live'
   let liveCase = selectorCase
   if ((!section || runAnchor) && namedCase?.kind !== 'recorded' && namedCase) liveCase = namedCase
+  if (!section && experiment.presentation === 'demo' && first.kind !== 'recorded') liveCase ??= first
   const startLive = first.kind !== 'recorded' && (!section || !!runAnchor || !!selectorCase)
   const href = runAnchor && liveCase && liveCase !== first
     ? caseHref(experiment.id, liveCase.id, section ?? undefined)
     : experimentSectionHref(experiment.id, section)
-  return { href, liveCase, startLive, section: selectorCase || section === 'run-run' ? 'case-live' : section }
+  if (selectorCase) section = experiment.presentation === 'demo' ? null : 'case-live'
+  else if (section === 'run-run') section = 'case-live'
+  return { href, liveCase, startLive, section }
 }

@@ -591,6 +591,30 @@ it('opens the standalone demo from the previous Dense Communities bookmark', asy
   expect(create).toHaveBeenCalledTimes(1)
 })
 
+it('opens a bookmarked YouTube size and switches sizes on the same page', async () => {
+  const { create, destroy } = mockRun('youtube-network')
+  const subset = '#/youtube-network?section=try-friendships-262k'
+  window.history.replaceState(null, '', subset)
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const chooser = host.querySelector<HTMLSelectElement>('.case-chooser select')!
+  const findings = host.querySelector('#recorded-findings')!
+  expect(chooser.value).toBe('friendships-262k')
+  expect(create.mock.calls[0][1]).toBe('friendships-262k')
+  expect(host.querySelector('.case-description')?.textContent).toContain('262,144 points and 1,369,771 friendship links')
+  expect(findings.closest('details')).toBeNull()
+  expect(findings.querySelector('#finding-friendships-262k')).not.toBeNull()
+
+  await route('#/youtube-network', () => expect(create.mock.calls[1]?.[1]).toBe('friendships'))
+  expect(chooser.value).toBe('friendships')
+  expect(destroy).toHaveBeenCalledTimes(1)
+
+  chooser.value = 'friendships-262k'; chooser.dispatchEvent(new Event('change'))
+  await vi.waitFor(() => expect(create.mock.calls[2]?.[1]).toBe('friendships-262k'))
+  expect(window.location.hash).toBe(subset)
+  expect(host.querySelector('#recorded-findings')).toBe(findings)
+})
+
 it('keeps the Forces and motion peers discoverable from the center case', async () => {
   const { create } = mockRun('center-mass')
   window.history.replaceState(null, '', '#/center-mass')

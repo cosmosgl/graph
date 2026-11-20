@@ -3,14 +3,24 @@ import type { GraphInput } from '../weighted-links/data'
 
 export const youtubeFixtureHash = '1b4f834c6acf374905934cc4fd65ded5ef8116fd73016db5e15ee8177da0f8b5'
 
-export async function loadYoutubeFixture (count = 1000000): Promise<{
+// Include the prepared fixture when building the Lab and allow other demos to
+// build on a checkout where the dataset has yet to be prepared.
+const prepared = import.meta.glob<string>('../../../captures/fixtures/youtube-million.bin', {
+  eager: true, import: 'default', query: '?url',
+})
+const fixtureUrl = prepared['../../../captures/fixtures/youtube-million.bin'] ?? './captures/fixtures/youtube-million.bin'
+
+export async function loadYoutubeFixture (count = 1000000, signal?: AbortSignal): Promise<{
   input: ReturnType<typeof createFixture>;
   graph: GraphInput;
 }> {
-  const response = await fetch('/captures/fixtures/youtube-million.bin')
-  if (!response.ok) throw new Error('Prepare the SNAP YouTube fixture before running the replay')
+  const response = await fetch(fixtureUrl, { signal })
+  if (!response.ok || response.headers.get('content-type')?.includes('text/html')) {
+    throw new Error('Prepare the SNAP YouTube fixture using the Lab README.')
+  }
   const bytes = await response.arrayBuffer()
   const hash = await crypto.subtle.digest('SHA-256', bytes)
+  signal?.throwIfAborted()
   const checksum = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('')
   if (checksum !== youtubeFixtureHash) throw new Error('Unexpected SNAP YouTube fixture checksum')
   const data = new Uint32Array(bytes)
