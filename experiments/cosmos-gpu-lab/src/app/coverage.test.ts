@@ -1,40 +1,28 @@
 import { expect, it } from 'vitest'
 import inventory from '../docs/feature-inventory.md?raw'
-import { coverage, parseCoverage, renderCoverageIndex, renderCoverageSummary } from './coverage'
-import { experimentRole, journeySteps, renderJourney, currentStep, currentJourneyStep } from './journey'
-import { migrationFocus } from './research'
-it('indexes all inventory features without treating partial curves as unstarted or a parked sub-study as the whole experiment', () => {
+import { coverage, parseCoverage, renderCoverage } from './coverage'
+
+it('keeps all inventory features classified and rejects an unrecognized status', () => {
   expect(coverage).toHaveLength(37)
   expect(coverage.find(row => row.name === 'Curved links')?.status).toBe('Partial')
-  expect(coverage.find(row => row.name === 'Distance-based visibility')).toMatchObject({ status: 'Partial', experiments: ['viewer-comparison'] })
-  expect(coverage.find(row => row.name === 'Per-point attractors')).toMatchObject({
-    status: 'Partial',
-    experiments: ['point-attractors', 'integrated-webgpu'],
-  })
-  expect(coverage.find(row => row.name === 'Cluster attraction')).toMatchObject({
-    status: 'Partial',
-    experiments: ['cluster-attraction', 'integrated-webgpu'],
-  })
-  expect(experimentRole('weighted-links')).not.toBe('Parked')
-  expect(experimentRole(migrationFocus.experiment)).toBe('Current investigation')
-  expect(() => parseCoverage(inventory.replace('**Partial.**', '**Unclassified.**'))).toThrow('Unclassified inventory feature')
+  expect(coverage.find(row => row.name === 'Other shapes')?.status).toBe('Covered in isolation')
+  expect(coverage.find(row => row.name === 'Arrowheads')?.status).toBe('Needs validation')
+  expect(() => parseCoverage(inventory.replace('| Partial |', '| Unclassified |'))).toThrow('unclassified inventory feature')
 })
-it('derives visible counts and method links from the inventory and retains every feature', () => {
-  const host = document.createElement('div'); renderCoverageIndex(host)
-  expect(host.querySelectorAll('tbody tr')).toHaveLength(37)
-  expect(host.textContent).toContain('No validating experiment yet')
-  expect(host.querySelector('[href="#/curved-links"]')!.textContent).toContain('color-face')
-  renderCoverageSummary(host)
-  expect(host.textContent).toContain('1 covered in isolation')
-  expect(host.textContent).toContain('33 partial')
-  expect(host.textContent).toContain('3 needs validation')
-  expect(host.textContent).toContain('not a completion percentage')
-})
-it('distinguishes the ordered current investigation from still-open migration workstreams', () => {
-  const host = document.createElement('div'); renderJourney(host)
-  expect(host.querySelectorAll('tbody tr')).toHaveLength(5)
-  expect(journeySteps.filter(step => step.number === currentStep)).toHaveLength(1)
-  expect(host.querySelector('#journey-polygon-boundaries')!.textContent).toContain('Closed with retained failures')
-  expect(host.textContent).toContain('GPU execution and resources and')
-  expect(host.querySelector(`#journey-${currentJourneyStep().id} a`)!.getAttribute('href')).toBe(`#/${migrationFocus.experiment}`)
+
+it('shows each feature with its evidence and WebGL behavior in the open checklist', () => {
+  const host = document.createElement('div')
+  renderCoverage(host)
+  expect(host.querySelectorAll('.coverage-group')).toHaveLength(4)
+  expect(host.querySelectorAll('li[id^="feature-"]')).toHaveLength(37)
+  expect(host.querySelectorAll('.coverage-evidence')).toHaveLength(37)
+  expect(host.querySelectorAll('.coverage-baseline')).toHaveLength(37)
+  const summary = host.querySelector('.coverage-summary')!.textContent
+  expect(summary).toContain('1 covered in isolation')
+  expect(summary).toContain('33 partial')
+  expect(summary).toContain('3 need validation')
+  const collision = host.querySelector('#feature-collision')!
+  expect(collision.querySelector('a')?.getAttribute('href')).toBe('#/collision?section=doc-hashed-findings')
+  expect(collision.textContent).toContain('Production WebGL')
+  expect(host.querySelector('nav[aria-label="Coverage groups"] a[href="#/roadmap?section=coverage-simulation"]')?.textContent).toBe('Simulation 12')
 })

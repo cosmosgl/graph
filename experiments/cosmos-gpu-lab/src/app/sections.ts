@@ -10,7 +10,7 @@ export function scrollToSection (host: HTMLElement, section: string | null): boo
   return true
 }
 
-export function addSectionNavigation (host: HTMLElement): void {
+export function addSectionNavigation (host: HTMLElement, includeContents = true): void {
   const article = host.querySelector<HTMLElement>('.prose')
   if (!article) return
   const base = window.location.hash.split('?')[0] || '#/'
@@ -33,7 +33,7 @@ export function addSectionNavigation (host: HTMLElement): void {
     const value = link.getAttribute('href')!
     if (!value.startsWith('#/') && value.length > 1) link.href = href(decodeURIComponent(value.slice(1)))
   }
-  if (headings.length < 4) return
+  if (!includeContents || headings.length < 4) return
   const layout = document.createElement('div'); layout.className = 'document-layout'
   article.before(layout); layout.append(article)
   const contents = document.createElement('nav'); contents.className = 'document-contents'

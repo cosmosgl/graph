@@ -1,9 +1,7 @@
 import { expect, it } from 'vitest'
-import { validationContracts } from '../runtime/validation'
-import { currentJourneyStep } from './journey'
 import { experiments, findExperiment } from './registry'
-import { migrationFocus, milestones, research, researchMethodPages } from './research'
-import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
+import { research, researchMethodPages } from './research'
+import { renderInvestigationContext } from './research-ui'
 
 it('assigns every experiment and document to the shared research destinations without dropping history', () => {
   expect(Object.keys(research).sort()).toEqual(experiments.map(e => e.id).sort())
@@ -25,35 +23,6 @@ it('assigns every experiment and document to the shared research destinations wi
       if (item.replacement) expect(indexed).toContain(item.replacement)
     }
   }
-  for (const milestone of milestones) for (const [id] of milestone.evidence) expect(findExperiment(id)).toBeDefined()
-})
-
-it('derives the bounded home assessment from shared experiment records', () => {
-  const home = document.createElement('div')
-  renderMigrationOverview(home)
-  const focus = research[migrationFocus.experiment]
-  const current = findExperiment(migrationFocus.experiment)!
-  expect(home.querySelector('[data-decision="focus"]')!.textContent).toContain(focus.conclusion)
-  expect(home.querySelector(`[href="#/${current.id}"]`)!.textContent).toBe(current.title)
-  expect(home.querySelector('[data-decision="next"]')!.textContent).toContain(focus.next)
-  expect(home.querySelector('[data-decision="next"]')!.textContent).not.toContain(validationContracts[current.id].acceptance)
-  expect(home.querySelector('.research-meta')!.textContent).toContain(new Intl.DateTimeFormat('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-  }).format(new Date(focus.reviewed)))
-  expect(home.querySelector(`[href="#/roadmap?section=journey-${currentJourneyStep().id}"]`)).not.toBeNull()
-  expect(home.querySelector('details')).toBeNull()
-})
-
-it('keeps the complete milestone table, gates and deep links visible on Roadmap', () => {
-  const host = document.createElement('div')
-  renderMigrationOverview(host, true)
-  expect(host.querySelectorAll('.readiness-table tbody tr')).toHaveLength(milestones.length)
-  for (const milestone of milestones) {
-    const section = host.querySelector(`#milestone-${milestone.id}`)!
-    expect(section).not.toBeNull()
-    for (const gate of milestone.gates) expect(section.textContent).toContain(gate)
-  }
-  expect(host.querySelector('details,[hidden]')).toBeNull()
 })
 
 it('preserves earlier findings, their warnings and links to corrected work', () => {

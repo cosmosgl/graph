@@ -6,12 +6,9 @@ import { createRetainedRun } from '../runtime/retained-run'
 import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import {
-  architectureHref, conceptHref, experimentHref, experimentSectionHref, readRoute, vocabularyHref, currentSection,
+  architectureHref, conceptHref, experimentHref, experimentSectionHref, readRoute, roadmapHref, vocabularyHref, currentSection,
 } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { renderJourney, renderJourneyFlow } from './journey'
-import { renderCoverageSummary, markCoverageRows } from './coverage'
-import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
 import { renderCaseFrame } from './case-page'
 import { experimentDestination, liveCaseSection, startingCase } from './experiment-route'
@@ -90,20 +87,14 @@ function renderVocabularyFrame (host: HTMLElement): HTMLElement {
   return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
-function renderRoadmapFrame (host: HTMLElement): HTMLElement {
+function renderMigrationFrame (host: HTMLElement): HTMLElement {
   host.innerHTML = `
-    <header class="experiment-header reference-header">
-      <div>
-        <p class="eyebrow">Migration journey · Cosmos readiness</p>
-        <h1>Cosmos → WebGPU</h1>
-        <p>How realistic is the migration, how ready is Cosmos, and what evidence do we still need?</p>
-      </div>
-    </header>
-    <section class="experiment-stage reference-stage">
-      <div class="loading">Loading migration roadmap…</div>
-    </section>
+    <div class="migration-document">
+      <header><h1 id="migration-status">Cosmos → WebGPU</h1></header>
+      <section class="migration-page"><div class="loading">Loading migration…</div></section>
+    </div>
   `
-  return requiredElement<HTMLElement>(host, '.reference-stage')
+  return requiredElement<HTMLElement>(host, '.migration-page')
 }
 
 function renderArchitectureFrame (host: HTMLElement): HTMLElement {
@@ -117,22 +108,6 @@ function renderArchitectureFrame (host: HTMLElement): HTMLElement {
     </header>
     <section class="experiment-stage reference-stage">
       <div class="loading">Loading architecture guide…</div>
-    </section>
-  `
-  return requiredElement<HTMLElement>(host, '.reference-stage')
-}
-
-function renderFeatureInventoryFrame (host: HTMLElement): HTMLElement {
-  host.innerHTML = `
-    <header class="experiment-header reference-header">
-      <div>
-        <p class="eyebrow">Cosmos → WebGPU · Feature inventory</p>
-        <h1>Cosmos feature coverage</h1>
-        <p>The production WebGL behavior, the evidence in our experiments and the remaining WebGPU validation.</p>
-      </div>
-    </header>
-    <section class="experiment-stage reference-stage">
-      <div class="loading">Loading feature inventory…</div>
     </section>
   `
   return requiredElement<HTMLElement>(host, '.reference-stage')
@@ -191,8 +166,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         </a>
         <nav class="lab-navigation" aria-label="Lab navigation">
           <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a>
-          <a data-nav="roadmap" href="#/roadmap">Roadmap</a>
-          <a data-nav="feature-inventory" href="#/feature-inventory">Feature coverage</a>
+          <a data-nav="roadmap" href="${roadmapHref()}">WebGPU migration</a>
           <a data-nav="learn" href="#/learn">Learn</a>
         </nav>
         <form class="global-search" id="lab-search-form" role="search" aria-label="Quick jump">
@@ -317,6 +291,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   const render = async (): Promise<void> => {
     const route = readRoute()
+    if (route.kind === 'roadmap') {
+      const href = roadmapHref(route.section)
+      if (href !== window.location.hash) window.history.replaceState(null, '', href)
+    }
     const brand = root.querySelector('.brand')!
     if (route.kind === 'home') brand.setAttribute('aria-current', 'page'); else brand.removeAttribute('aria-current')
     for (const link of root.querySelectorAll<HTMLAnchorElement>('[data-nav]')) {
@@ -330,6 +308,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     if (destination && destination.href !== window.location.hash) window.history.replaceState(null, '', destination.href)
     if (destination && mountedPage?.id === definition?.id) {
       await mountedPage!.visit(destination)
+      return
+    }
+    if (route.kind === 'roadmap' && workspace.querySelector('.migration-page > .prose')) {
+      if (!scrollToSection(workspace, route.section ?? null)) window.scrollTo(0, 0)
       return
     }
     mountedPage?.release(); mountedPage = undefined
@@ -407,27 +389,27 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       finish(); return
     }
 
-    if (route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory') {
-      const stage = route.kind === 'roadmap'
-        ? renderRoadmapFrame(workspace)
-        : route.kind === 'feature-inventory' ? renderFeatureInventoryFrame(workspace) : renderArchitectureFrame(workspace)
+    if (route.kind === 'roadmap') {
+      const stage = renderMigrationFrame(workspace)
+      try {
+        const renderer = await import('./migration-page')
+        if (version !== renderVersion) return
+        await renderer.renderMigrationPage(stage)
+        if (version === renderVersion) scrollToSection(workspace, route.section ?? null)
+      } catch (error) {
+        if (version === renderVersion) renderFailure(stage, error)
+      }
+      finish(); return
+    }
+
+    if (route.kind === 'architecture') {
+      const stage = renderArchitectureFrame(workspace)
       try {
         const [source, renderer] = await Promise.all([
-          route.kind === 'roadmap'
-            ? import('../docs/roadmap.md?raw')
-            : route.kind === 'feature-inventory' ? import('../docs/feature-inventory.md?raw') : import('../docs/architecture.md?raw'),
-          import('./markdown'),
+          import('../docs/architecture.md?raw'), import('./markdown'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default, {}, {
-          examples: {
-            migrationStatus: host => renderMigrationOverview(host, true),
-            journeyPlan: renderJourney,
-            journeyFlow: renderJourneyFlow,
-            featureCoverageSummary: renderCoverageSummary,
-          },
-        })
-        if (route.kind === 'feature-inventory') markCoverageRows(stage)
+        await renderer.renderMarkdown(stage, source.default)
         if (version === renderVersion) scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
@@ -495,7 +477,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   }
 
   const handleSameSection = (event: MouseEvent): void => {
-    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !mountedPage) return
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!mountedPage && previousPath !== roadmapHref()) return
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
     if (link && link.hash === window.location.hash && link.origin === window.location.origin && link.pathname === window.location.pathname) {
       event.preventDefault(); handleRoute()

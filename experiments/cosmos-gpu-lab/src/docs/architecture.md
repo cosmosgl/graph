@@ -1,4 +1,4 @@
-For the full migration journey and remaining production work, see the [WebGPU migration roadmap](#/roadmap).
+See [WebGPU migration](#/roadmap) for current priorities, production requirements and feature coverage.
 
 The lab is a **modular research app**: one shared interface hosts independent GPU experiments,
 their explanations and their results. It lives in the private workspace package
@@ -50,7 +50,7 @@ The reading-path view uses a curated catalog in `src/app/registry.ts`:
 | Validation and optimization | Production gates, timing, targeted optimizations and resource capacity |
 
 Experiments within each group follow a suggested prerequisite order. They have no sequence numbers;
-the [migration roadmap](#/roadmap) describes research progress and remaining work.
+the [migration page](#/roadmap) describes research progress and remaining work.
 
 The [validation workflow](#/validation-workflow) defines comparison and reporting rules; the
 [numerical research report](#/numerical-research) records their specification basis. `defineExperiment`
@@ -77,12 +77,11 @@ browser Back and Forward. The document remains readable after a GPU initializati
 The registry checks that every article is included and replacement links resolve. Experiments
 without a published matrix say so explicitly; a local run never becomes a recorded finding.
 
-`src/app/research.ts` and `research-catalog.ts` own the compact reviewed summaries, document
-assignments and milestone gates. The homepage and roadmap use the same assessment renderer;
-home and experiment pages read the same conclusion, next action and focused review date. Detailed measurements stay in their embedded source articles. These are editorial
-assessments, not status inferred from a test count or a completion percentage.
-
-Home leads with the current investigation and next action, then the feature coverage map. The shared inventory supplies its counts and feature links; the full milestone checklists stay on the roadmap. Execution and simulation remain open alongside rendering. The catalog retains both migration-area and prerequisite grouping.
+`src/app/research.ts` and `research-catalog.ts` hold reviewed summaries and document assignments.
+The [migration page](#/roadmap) reads its current focus from the experiment's research record. Its
+coverage groups, counts and search entries share the rows in `src/docs/feature-inventory.md`.
+The coverage list and notes are visible on load. Old feature-inventory URLs focus the matching row or
+section. Detailed measurements remain in the linked experiments.
 
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
 rail, with a visible short contents list above the article on smaller screens. The learning guide and
@@ -104,8 +103,6 @@ Recorded measurement articles carry explicit source, measurement date, device/br
 metadata in Markdown. Missing historical metadata stays marked as not recorded; the review date
 does not become a measurement date. Table scrolling and source labels change presentation only,
 not the numerical gates or exported raw measurements.
-
-Home starts with the feature coverage map. Its counts and rows are parsed from the inventory; they are not another hand-maintained checklist. The focused experiment supplies the current conclusion, next action and review date. `migrationFocus.step` selects one task in the shared five-row journey. The same step appears in the header and roadmap; the open milestone workstreams are a separate concept.
 
 The catalog can group the same experiments by migration area or reading path. Current investigation, bounded study, foundation and parked describe purpose, not approval. A parked sub-investigation does not park its whole experiment. Explicit method verdicts name retained controls or rejected alternatives only where the evidence has been reviewed; archive states alone never imply viability.
 

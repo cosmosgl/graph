@@ -10,7 +10,7 @@ type MarkdownOptions = {
   linkTerms?: boolean;
   excludedTermIds?: string[];
   examples?: Record<string, (host: HTMLElement) => void>;
-  sectionNavigation?: boolean;
+  sectionNavigation?: boolean | 'permalinks';
   headingLevelOffset?: number;
   tables?: boolean;
 }
@@ -90,6 +90,6 @@ export async function renderMarkdown (
   for (const element of host.querySelectorAll<HTMLElement>('[data-doc-example]')) {
     examples[element.dataset.docExample!](element)
   }
-  if (options.sectionNavigation !== false) addSectionNavigation(host)
+  if (options.sectionNavigation !== false) addSectionNavigation(host, options.sectionNavigation !== 'permalinks')
   if (options.tables !== false) presentDocumentTables(host)
 }

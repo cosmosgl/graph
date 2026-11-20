@@ -7,14 +7,12 @@ import { createAppShell } from './app-shell'
 import { startingCase } from './experiment-route'
 import { experimentGroups, experiments, findExperiment } from './registry'
 import { migrationFocus, research } from './research'
-import { journeySteps } from './journey'
 import { articleSectionId, readRoute } from './router'
 import { readinessFor } from './readiness'
 
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
-const currentStep = journeySteps.find(step => step.number === migrationFocus.step)!
 afterEach(async () => {
   shell?.destroy(); host?.remove(); vi.restoreAllMocks()
   window.history.replaceState(null, '', initial)
@@ -66,9 +64,11 @@ it('shows topic cards and the global search without starting GPU work', async ()
   expect(host.querySelector<HTMLInputElement>('#lab-search')!.value).toBe('')
   expect(host.querySelector<HTMLElement>('.global-search-results')!.hidden).toBe(true)
   expect(links.every(link => !link.closest('[hidden]'))).toBe(true)
-  for (const path of ['roadmap', 'feature-inventory', 'learn']) {
+  for (const path of ['roadmap', 'learn']) {
     expect(host.querySelector(`.lab-navigation a[href="#/${path}"]`)).not.toBeNull()
   }
+  expect(host.querySelector('[data-nav="roadmap"]')!.textContent).toBe('WebGPU migration')
+  expect(host.querySelector('[data-nav="feature-inventory"]')).toBeNull()
   for (const path of ['validation-workflow', 'architecture', 'vocabulary', 'concepts/reduction']) {
     expect(host.querySelector(`.home-references a[href="#/${path}"]`)).not.toBeNull()
   }
@@ -106,22 +106,41 @@ it('opens the workgroup repulsion experiment from the catalog', async () => {
   expect(create).toHaveBeenCalledOnce()
 })
 
-it('keeps the current step consistent on the roadmap and resolves feature-row links without starting a device', async () => {
+it('shows the migration content on load and focuses legacy coverage links without starting a device', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/roadmap')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector(`#journey-${currentStep.id}`)).not.toBeNull())
-  expect(host.querySelector('.lab-navigation a')!.getAttribute('href')).toBe('#/?section=experiment-catalog')
+  await vi.waitFor(() => expect(host!.querySelector('.migration-contents')).not.toBeNull())
+  const page = host.querySelector('.migration-page')!
+  expect(page.querySelectorAll('details, [hidden]')).toHaveLength(0)
+  const notes = Array.from(page.querySelectorAll<HTMLElement>('.coverage-evidence, .coverage-baseline'))
+  expect(notes).toHaveLength(74)
+  expect(notes.every(note => note.getClientRects().length > 0)).toBe(true)
+  expect(page.querySelector('#parked-investigations + p + ul')?.children).toHaveLength(8)
+  expect(page.querySelector('#future-directions ~ pre')?.textContent).toContain('createShaderExtension')
   expect(host.querySelector('[data-nav="roadmap"]')!.getAttribute('aria-current')).toBe('page')
-  expect(host.querySelector('.lab-position')).toBeNull()
-  expect(host.querySelector(`#journey-${currentStep.id}`)!.textContent).toContain(research[migrationFocus.experiment].next)
-  expect(host.querySelector('.flow-branches')!.textContent).toContain('Simulation')
-  expect(host.querySelector('.flow-branches')!.textContent).toContain('Rendering and interaction')
-  await route('#/feature-inventory?section=feature-curved-links', () => expect(document.activeElement?.id).toBe('feature-curved-links'))
-  expect(host.querySelector('[data-nav="feature-inventory"]')!.getAttribute('aria-current')).toBe('page')
-  expect(host.querySelector('[data-nav="roadmap"]')!.hasAttribute('aria-current')).toBe(false)
-  expect(host.querySelector('#feature-curved-links')!.textContent).toContain('Curved links')
-  expect(host.querySelector('.coverage-summary')!.textContent).toContain('37 feature rows')
+  expect(page.querySelector('.migration-focus')!.textContent).toContain(research[migrationFocus.experiment].next)
+
+  page.querySelector<HTMLAnchorElement>('.migration-contents a')!.click()
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('feature-coverage'))
+
+  for (const [legacy, target] of [
+    ['#/feature-inventory', 'feature-coverage'],
+    ['#/feature-inventory?section=1-simulation-forces', 'coverage-simulation'],
+    ['#/feature-inventory?section=force-order-is-part-of-the-behavior', 'force-order-is-part-of-the-behavior'],
+    ['#/feature-inventory?section=feature-curved-links', 'feature-curved-links'],
+    ['#/roadmap?section=parked-investigations', 'parked-investigations'],
+  ]) {
+    await route(legacy, () => {
+      expect(window.location.hash).toBe(`#/roadmap?section=${target}`)
+      expect(document.activeElement?.id).toBe(target)
+    })
+  }
+  const feature = page.querySelector<HTMLElement>('#feature-curved-links')!
+  expect(feature.tagName).toBe('LI')
+  expect(feature.tabIndex).toBe(-1)
+  expect(feature.querySelector('.coverage-evidence')?.textContent).toContain('28 of 64 M3 cases')
+  expect(host.querySelector('.migration-page')).toBe(page)
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
