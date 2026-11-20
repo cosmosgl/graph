@@ -597,21 +597,27 @@ it('opens a bookmarked YouTube size and switches sizes on the same page', async 
   window.history.replaceState(null, '', subset)
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  const chooser = host.querySelector<HTMLSelectElement>('.case-chooser select')!
+  const sizes = host.querySelector('[role="group"][aria-label="Graph size"]')!
+  const [fullSize, smallerSize] = sizes.querySelectorAll('button')
   const findings = host.querySelector('#recorded-findings')!
-  expect(chooser.value).toBe('friendships-262k')
+  expect(smallerSize.textContent).toBe('262,144 points')
+  expect(smallerSize.getAttribute('aria-pressed')).toBe('true')
+  expect(fullSize.getAttribute('aria-pressed')).toBe('false')
   expect(create.mock.calls[0][1]).toBe('friendships-262k')
   expect(host.querySelector('.case-description')?.textContent).toContain('262,144 points and 1,369,771 friendship links')
   expect(findings.closest('details')).toBeNull()
   expect(findings.querySelector('#finding-friendships-262k')).not.toBeNull()
 
   await route('#/youtube-network', () => expect(create.mock.calls[1]?.[1]).toBe('friendships'))
-  expect(chooser.value).toBe('friendships')
+  expect(fullSize.textContent).toBe('1,000,000 points')
+  expect(fullSize.getAttribute('aria-pressed')).toBe('true')
+  expect(smallerSize.getAttribute('aria-pressed')).toBe('false')
   expect(destroy).toHaveBeenCalledTimes(1)
 
-  chooser.value = 'friendships-262k'; chooser.dispatchEvent(new Event('change'))
+  smallerSize.click()
   await vi.waitFor(() => expect(create.mock.calls[2]?.[1]).toBe('friendships-262k'))
   expect(window.location.hash).toBe(subset)
+  expect(smallerSize.getAttribute('aria-pressed')).toBe('true')
   expect(host.querySelector('#recorded-findings')).toBe(findings)
 })
 

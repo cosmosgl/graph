@@ -17,9 +17,9 @@ type CaseFrame = {
   status: HTMLElement;
   retry: HTMLButtonElement;
   start: HTMLButtonElement;
-  chooser: HTMLSelectElement;
   openEvidence: (section: string) => Promise<string | undefined>;
   setLiveCase: (active: ExperimentCase) => void;
+  onChooseCase: (choose: (item: ExperimentCase, control: HTMLElement) => void) => void;
 }
 
 function paragraph (text: string, className?: string): HTMLParagraphElement {
@@ -255,14 +255,30 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const title = document.createElement('h2'); title.textContent = 'Try it'
   const instruction = paragraph('')
   intro.append(title, instruction)
-  const chooser = document.createElement('select')
   const liveCases = experiment.cases!.filter(candidate => candidate.kind !== 'recorded')
+  const caseButtons = new Map<ExperimentCase, HTMLButtonElement>()
+  let chooser: HTMLSelectElement | undefined
   if (liveCases.length > 1) {
-    for (const candidate of liveCases) {
-      const option = document.createElement('option'); option.value = candidate.id; option.textContent = candidate.title; chooser.append(option)
+    const labelText = experiment.caseChooserLabel ?? 'Case'
+    if (demo) {
+      const group = document.createElement('div'); group.className = 'case-chooser'
+      group.setAttribute('role', 'group'); group.setAttribute('aria-label', labelText)
+      const label = document.createElement('span'); label.textContent = labelText; group.append(label)
+      for (const candidate of liveCases) {
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = candidate.title
+        caseButtons.set(candidate, button)
+        group.append(button)
+      }
+      intro.insertBefore(group, instruction)
+    } else {
+      const select = document.createElement('select')
+      chooser = select
+      for (const candidate of liveCases) {
+        const option = document.createElement('option'); option.value = candidate.id; option.textContent = candidate.title; select.append(option)
+      }
+      const label = document.createElement('label'); label.className = 'case-chooser'
+      label.append(document.createTextNode(labelText), select); intro.insertBefore(label, instruction)
     }
-    const label = document.createElement('label'); label.className = 'case-chooser'
-    label.append(document.createTextNode(experiment.caseChooserLabel ?? 'Case'), chooser); intro.insertBefore(label, instruction)
   }
   const slot = document.createElement('div'); slot.className = 'case-live-slot'
   const status = paragraph('', 'case-load-status'); status.setAttribute('role', 'status')
@@ -284,7 +300,12 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     const guidance = active.tryIt?.trim() ?? ''
     instruction.textContent = guidance
     title.hidden = instruction.hidden = !guidance
-    chooser.value = active.id
+    if (chooser) chooser.value = active.id
+    for (const [candidate, button] of caseButtons) {
+      const selected = candidate.id === active.id
+      button.setAttribute('aria-pressed', String(selected))
+      button.classList.toggle('button-primary', selected)
+    }
     reference.textContent = active.reference; acceptance.textContent = active.acceptance
     if (demo) return
     const assessment = readinessFor(experiment.id, active)
@@ -302,5 +323,23 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   setLiveCase(item)
   stage.append(recorded, comparison)
   const openEvidence = mountCaseEvidence(recorded, experiment)
-  return { stage, slot, recorded, comparison, status, retry, start, chooser, openEvidence, setLiveCase }
+  return {
+    stage,
+    slot,
+    recorded,
+    comparison,
+    status,
+    retry,
+    start,
+    openEvidence,
+    setLiveCase,
+    onChooseCase (choose): void {
+      for (const [candidate, button] of caseButtons) button.addEventListener('click', () => choose(candidate, button))
+      const select = chooser
+      select?.addEventListener('change', () => {
+        const candidate = liveCases.find(item => item.id === select.value)
+        if (candidate) choose(candidate, select)
+      })
+    },
+  }
 }

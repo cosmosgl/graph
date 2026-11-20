@@ -19,7 +19,7 @@ export const experiment = defineExperiment({
     title: '1,000,000 points',
     kind: 'demonstrate',
     question,
-    description: '1,000,000 points and 2,852,734 friendship links from the Stanford SNAP dataset. Press Run to watch both layouts spread.',
+    description: '1,000,000 points and 2,852,734 friendship links from the Stanford SNAP dataset.',
     reference,
     acceptance,
     recorded: {
@@ -35,7 +35,7 @@ export const experiment = defineExperiment({
     title: '262,144 points',
     kind: 'demonstrate',
     question,
-    description: '262,144 points and 1,369,771 friendship links from the tested YouTube subset. Press Run to watch both layouts spread.',
+    description: '262,144 points and 1,369,771 friendship links from the tested YouTube subset.',
     reference,
     acceptance,
     recorded: {
