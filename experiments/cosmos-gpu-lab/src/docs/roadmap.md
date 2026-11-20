@@ -11,7 +11,7 @@ migrationFocus
 
 - **Performance** Bring 95% of steady frames within 33 ms on dense, hub and real graphs. [Earlier callbacks and depth-tested links](#/million-graph?section=doc-interactive-study) still miss the target.
 - **Simulation and rendering** [All eight forces](#/integrated-webgpu?section=doc-composed-interaction-native-m3-scaling-results) match the CPU at 16,384 points. Large hubs still miss timing. Validate longer layouts, larger graphs and the remaining [rendering features](#feature-coverage).
-- **Graph and host integration** Finish Graph setters, async readback and device recovery. Verify [Deck hosting](#/integrated-webgpu?section=doc-host-ownership) on a supported luma version.
+- **Graph and host integration** [Async selection and labels](#/integrated-webgpu?section=doc-readback) run through the production Graph on WebGL. Million-point WebGPU labels miss their latency target. Connect production Graph and [Deck hosting](#/integrated-webgpu?section=doc-host-ownership) to a supported WebGPU backend.
 - **Production acceptance** Apply the [M3 scope and working budgets](#/million-graph?section=doc-production-envelope) to the dense, hub and YouTube workloads. Verify the target GPUs and browsers.
 
 ## Feature coverage

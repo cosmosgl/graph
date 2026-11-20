@@ -125,8 +125,8 @@ with source archive SHA-256
 UMD SHA-256 `71f4cc54f0cf4912afead56d0ea865e85cb45078b44b378ae8cdae1360ef1f8d`.
 The earlier `captures/production-graph-readback-m3-20261120-043528/` run had
 a Vite dependency reload and retained 188.2 and 499.0 ms selection outliers.
-The clean replay prebundles the label renderer. The WebGPU moving
-million-point workflow still needs the same caller verification.
+The clean replay prebundles the label renderer. The full selection highlight
+on a moving million-point production WebGPU Graph remains open.
 
 Build the production bundle before the run and set its checksum and the Lab's
 source and capture variables.
@@ -135,6 +135,43 @@ source and capture variables.
 VITE_LAB_PRODUCTION_SHA256=$(shasum -a 256 dist/index.min.js | cut -d' ' -f1)
 export LAB_NATIVE_VISIBLE=1 VITE_LAB_GRAPH_READBACK=1 VITE_LAB_PRODUCTION_SHA256
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/graph-readback.test.ts
+```
+
+## Resident million-point selection and labels
+
+Use the dense and hub viewers' GPU buffers with the same asynchronous area
+and tracker implementation. Keep Four corners, Reduced drawing, a fixed Fit
+camera and the native 961 × 541 CSS viewport at DPR 2. After four warmup
+ticks, alternate rectangle and polygon queries after eight moving submissions.
+Each query updates a selection count, and the coalesced tracker drives the
+Storybook label renderer for 1,000 requested IDs. Record time to the count and
+to the next animation opportunity after the labels update. The full selection
+highlight has its own draw cost.
+
+At the final positions, compare both query results and every gathered
+coordinate to an independent CPU check. Use pending queries to verify that
+removing a point or replacing the topology discards their earlier results.
+
+Both fixtures returned exact area IDs and gathered positions, and both
+discarded the pending reads on removal or topology replacement. The native
+M3 run used Apple Metal 3, visible Chrome 157 and luma 10.0.0-alpha.15.
+
+| Workload | Area result median / max | Results within 100 ms | Label presentation median / max | Labels within 33 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Dense | 37.0 / 48.9 ms | 8/8 | 49.1 / 64.7 ms | 0/8 |
+| Hub | 41.4 / 42.5 ms | 8/8 | 49.1 / 65.8 ms | 0/8 |
+
+The area requests selected roughly 98,000–125,000 IDs. Sampled GPU memory
+peaked at 227.7 MiB in each lane, including the style and readback resources.
+Area queries meet the result budget. Label presentation misses its budget
+when a gather follows the full moving graph tick and the caller polls on
+animation frames. The capture is in `captures/resident-readback-m3-20261120-044912/`
+with source archive SHA-256
+`ac578cec74b2019be841645920a7d591138e402e97dad25e3152fb686d95e157`.
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_READBACK=1 \
+  pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-readback.test.ts
 ```
 
 ## Reproduce

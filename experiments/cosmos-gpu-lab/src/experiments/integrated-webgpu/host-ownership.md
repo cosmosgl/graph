@@ -126,6 +126,40 @@ style draws, overlay styling and unplanned recovery. The installed production
 Deck layer runs on the luma 9.3 family. Deck's published guide describes v9
 WebGPU as experimental. [Deck WebGPU guide](https://deck.gl/next/docs/developer-guide/webgpu)
 
+## Full production Graph and Deck control
+
+Run the shipped `Graph` and `CosmosGraphLayer` together on their shared
+luma 9.3 device in visible M3 Chrome. Verify draw placement, point and link
+IDs, ownership and layer teardown. Simulate WebGPU absence at the navigator
+boundary to exercise that startup path. Submit a fresh simulation tick and
+trigger Chrome GPU process loss. Record the browser's context loss event,
+dispose the old host and layer, then restore the checkpoint in a new Deck
+instance and pick the same items. This establishes the WebGL control and
+the available host behavior before a compatible production WebGPU build.
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_GPU_PROCESS_LOSS=1 VITE_LAB_NATIVE_PRODUCTION_HOST=1 \
+  pnpm test test/deck-layers.test.ts -t 'restores the native production Graph'
+```
+
+The M3 replay passed on visible Chrome 157, luma 9.3.6 and deck.gl 9.3.10.
+The original and replacement hosts reported native Apple M3 ANGLE Metal
+WebGL 2. A trusted `webglcontextlost` event accompanied the luma loss
+notification. That luma version labels the WebGL notification `destroyed`.
+The team-owned test browser's GPU process triggered the event while the
+graph was stepping. Finalizing Deck released the original Graph. The new
+Deck restored all coordinates and picked point 0 and link 0 on the same
+borrowed-device contract. This path starts and recovers with the WebGPU
+API hidden.
+
+The result is in `captures/production-deck-loss-m3-20261120-045119/` with
+source archive SHA-256
+`5d2f9e3642e8f7d2ac5500472e4754c34c0f3687a4fb7e57ae74f09f9570df44`.
+An earlier run in `captures/production-deck-loss-m3-20261120-044550/` checked
+the event before its listener ran. The passing replay waits for both the
+browser event and the luma loss promise. Full Graph and Deck on WebGPU remain
+pending a shared production backend.
+
 ### Replay the isolated Deck test
 
 The archived source includes the exact manifests and lockfile. Extract it

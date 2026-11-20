@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, inject, vi } from 'vitest'
+import { commands } from 'vitest/browser'
 import { Deck, MapView, OrthographicView } from '@deck.gl/core'
-import type { Device } from '@luma.gl/core'
+import { luma, type Device } from '@luma.gl/core'
 import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
 import {
   CosmosGraphLayer,
@@ -10,6 +11,16 @@ import {
   type CosmosGraphPickingInfo,
 } from '@cosmos.gl/deck-layers'
 import type { Layer, LayersList, PickingInfo } from '@deck.gl/core'
+
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    crashIsolatedGpu(): Promise<void>;
+    writeNativeHost(json: string): Promise<void>;
+  }
+}
+declare module 'vitest' {
+  interface ProvidedContext { nativeProductionHost: boolean }
+}
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layer runs a headless
@@ -139,6 +150,86 @@ const deckPixel = (deck: Deck<OrthographicView | MapView>, world: number[]): [nu
   const pixel = deck.getViewports()[0]!.project(world)
   return [pixel[0] as number, pixel[1] as number]
 }
+
+it.skipIf(!inject('nativeProductionHost'))('restores the native production Graph and Deck host after GPU process loss', async () => {
+  expect(document.visibilityState).toBe('visible')
+  expect(navigator.userAgent).not.toContain('HeadlessChrome')
+  const mount = async (positions: Float32Array): Promise<Awaited<ReturnType<typeof createDeck>> & { graph: Graph; device: Device }> => {
+    let graph: Graph | undefined
+    const host = await createDeck([new CosmosGraphLayer({
+      id: 'recovery',
+      points: { length: positions.length / 2, initialPositions: positions },
+      links: new Float32Array([0, 1]),
+      config: { ...STATIC, pointDefaultSize: 10, linkDefaultWidth: 6 },
+      onGraphCreated: (created): void => { graph = created },
+      pickable: true,
+    })])
+    try {
+      await waitUntil(() => graph?.getPointPositionTexture() !== undefined, 'production graph data')
+      const device = graph!.simulation.device!
+      expect(device).toBe((host.deck as unknown as { device: Device }).device)
+      expect(device.info.renderer).toContain('Apple M3')
+      await waitFrames(2)
+      expect(host.deck.pickObject(CENTER)).toMatchObject({ elementType: 'point', index: 0 })
+      expect(host.deck.pickObject(worldToScreen(1025, 1000))).toMatchObject({ elementType: 'link', index: 0 })
+      return { ...host, graph: graph!, device }
+    } catch (error) { host.deck.finalize(); host.container.remove(); throw error }
+  }
+
+  const webgpu = Object.getOwnPropertyDescriptor(navigator, 'gpu')
+  Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true })
+  let original: Awaited<ReturnType<typeof mount>> | undefined
+  let recovered: Awaited<ReturnType<typeof mount>> | undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    original = await mount(POSITIONS)
+    const { graph, device, deck } = original
+    const checkpoint = await graph.getPointPositionsAsync()
+    expect(checkpoint).toEqual(POSITIONS)
+    const canvas = device.canvasContext!.canvas
+    const contextLoss = new Promise<Event>((resolve) => {
+      canvas.addEventListener('webglcontextlost', resolve, { once: true })
+    })
+    const version = graph.getPointPositionTexture()!.version
+    graph.setConfigPartial({ simulationGravity: 0.1 })
+    graph.step()
+    deck.redraw('GPU loss replay')
+    expect(graph.getPointPositionTexture()!.version).toBeGreaterThan(version)
+
+    await commands.crashIsolatedGpu()
+    const [loss, event] = await Promise.race([
+      Promise.all([device.lost, contextLoss]),
+      new Promise<never>((resolve, reject) => { timeout = setTimeout(() => reject(new Error('No production WebGL loss event')), 12000) }),
+    ])
+    expect(event.isTrusted).toBe(true)
+    expect(device.isLost).toBe(true)
+    deck.finalize()
+    original.container.remove()
+    original = undefined
+    expect(graph.getPointPositionTexture()).toBeUndefined()
+
+    recovered = await mount(checkpoint)
+    expect(recovered.device).not.toBe(device)
+    expect((await recovered.graph.getPointPositionsAsync())).toEqual(checkpoint)
+    expect(recovered.device.isLost).toBe(false)
+    await commands.writeNativeHost(JSON.stringify({
+      browser: navigator.userAgent,
+      luma: luma.VERSION,
+      originalDevice: device.info,
+      recoveredDevice: recovered.device.info,
+      webgpuUnavailable: Reflect.get(navigator, 'gpu') === undefined,
+      loss,
+      trustedLoss: event.isTrusted,
+      pickedPoint: 0,
+      pickedLink: 0,
+    }))
+  } finally {
+    clearTimeout(timeout)
+    for (const host of [original, recovered]) { host?.deck.finalize(); host?.container.remove() }
+    if (webgpu) Object.defineProperty(navigator, 'gpu', webgpu)
+    else Reflect.deleteProperty(navigator, 'gpu')
+  }
+})
 
 describe('CosmosGraphLayer', () => {
   it('owns a headless graph on deck\'s device: creates, loads, draws under deck\'s view, destroys it', async () => {
