@@ -7,10 +7,11 @@ import { composedInput, crashIsolatedGpu, residentInput } from './scripts/reside
 // Keep the legacy flag for existing native-only tests and historical reproduction commands.
 // Expensive sweeps still require their own explicit flags.
 const deckHost = process.env.LAB_DECK_HOST === '1'
+const graphReadback = process.env.VITE_LAB_GRAPH_READBACK === '1'
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   optimizeDeps: {
-    include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array', ...(deckHost
+    include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array', ...(graphReadback ? ['@interacta/css-labels'] : []), ...(deckHost
       ? ['@deck.gl/core', '@luma.gl/core', '@luma.gl/core/webgl', '@luma.gl/core/webgpu', '@luma.gl/engine', '@luma.gl/graph']
       : [])],
   },

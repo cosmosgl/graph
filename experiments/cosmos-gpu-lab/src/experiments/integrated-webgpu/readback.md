@@ -86,6 +86,57 @@ The first passing capture `captures/viewer-readback-m3-mwnhu6ju/` recorded
 the backing dimensions before resize. The replay records the dimensions used
 for the requests, 768 × 480 backing pixels.
 
+## Actual Graph selection and labels
+
+The production Graph exposes asynchronous rectangle and polygon selection
+and tracked-coordinate reads. The Actions, Lasso selection and Labels stories
+use them. Selection uses the same geometry as the synchronous methods. Each
+request copies the GPU result before yielding and drops it when a setter
+replaces its point or link data. Label drawing coalesces pending requests.
+
+The native benchmark uses the built production Graph and the Storybook label
+renderer. Compare 16,384 points moving under gravity and a paused million-point
+scatter at 640 × 400 CSS pixels and DPR 2. Alternate rectangles and concave
+polygons, show the selection highlights and draw the 1,000 requested labels.
+Record GPU query and highlight feedback times separately, along with gather
+and label presentation times. Compare all IDs and coordinates to the existing
+Graph methods outside the timed intervals. Replace topology, shrink and regrow
+the point set while checking that pending requests are discarded and the tracked
+indices appear again when they exist. Record startup and sampled GPU allocation.
+
+The verified native M3 run returned exact IDs and coordinates in both lanes.
+The requests issued before point and topology replacement resolved to `null`.
+The tracked set appeared again after regrowth. The moving lane completed 16
+simulation ticks while the selections and overlays were exercised.
+
+| Graph | Selection read median / max | Selection with highlight max | Label gather median / max | Label presentation max |
+| --- | ---: | ---: | ---: | ---: |
+| 16,384 moving | 14.0 / 21.4 ms | 45.3 ms | 14.0 / 18.9 ms | 32.6 ms |
+| 1,000,000 paused | 18.5 / 47.4 ms | 72.8 ms | 5.8 / 7.4 ms | 21.9 ms |
+
+The million-point scene first rendered in 187 ms and used 194.5 MiB of
+sampled luma GPU memory above the initial viewer. Shrink and regrowth to
+one million took 14 and 148 ms. These are tests of the current WebGL Graph
+with a basic scatterplot and the given label requests.
+
+The verified run is in `captures/production-graph-readback-verified-m3-20261120-043650/`
+with source archive SHA-256
+`ec2832cd8fe34d9e33347551b35ca5ad3a7645cc997dcd30e266e812501a1165` and production
+UMD SHA-256 `71f4cc54f0cf4912afead56d0ea865e85cb45078b44b378ae8cdae1360ef1f8d`.
+The earlier `captures/production-graph-readback-m3-20261120-043528/` run had
+a Vite dependency reload and retained 188.2 and 499.0 ms selection outliers.
+The clean replay prebundles the label renderer. The WebGPU moving
+million-point workflow still needs the same caller verification.
+
+Build the production bundle before the run and set its checksum and the Lab's
+source and capture variables.
+
+```sh
+VITE_LAB_PRODUCTION_SHA256=$(shasum -a 256 dist/index.min.js | cut -d' ' -f1)
+export LAB_NATIVE_VISIBLE=1 VITE_LAB_GRAPH_READBACK=1 VITE_LAB_PRODUCTION_SHA256
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/graph-readback.test.ts
+```
+
 ## Reproduce
 
 Use the native adapter in visible Chrome. Set a unique `LAB_ARTIFACT_RUN`,

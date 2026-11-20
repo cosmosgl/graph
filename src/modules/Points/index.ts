@@ -2483,11 +2483,22 @@ export class Points extends CoreModule implements PointTrackerHost {
    * overlapping reads can't corrupt each other.
    */
   public async readPositionPixelsAsync (): Promise<Float32Array | undefined> {
-    const { device, store: { pointsTextureSize }, data: { pointsNumber } } = this
-    if (!pointsTextureSize) return undefined
-    if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
+    const { currentPositionFbo, store: { pointsTextureSize }, data: { pointsNumber } } = this
+    if (!pointsTextureSize || !currentPositionFbo) return undefined
+    return await this.readFramebufferPixelsAsync(currentPositionFbo, () => (
+      this.store.pointsTextureSize === pointsTextureSize && this.data.pointsNumber === pointsNumber &&
+      !!this.currentPositionFbo && !this.currentPositionFbo.destroyed
+    ), true)
+  }
 
-    const byteLength = pointsTextureSize * pointsTextureSize * 4 * 4 // RGBA × float32
+  /** Copies a float target before yielding so a later draw can safely reuse it. @internal */
+  public async readFramebufferPixelsAsync (
+    framebuffer: Framebuffer, isCurrent: () => boolean, allowBlockingOnTimeout = false
+  ): Promise<Float32Array | undefined> {
+    const { device } = this
+    if (framebuffer.destroyed || device.isLost || !isCurrent()) return undefined
+    const { width, height } = framebuffer
+    const byteLength = width * height * 4 * Float32Array.BYTES_PER_ELEMENT
     const stagingBuffer = device.createBuffer({
       byteLength,
       usage: Buffer.COPY_DST | Buffer.MAP_READ,
@@ -2497,24 +2508,23 @@ export class Points extends CoreModule implements PointTrackerHost {
       commandEncoder.copyTextureToBuffer({
         // The WebGL backend reads framebuffer sources via PIXEL_PACK_BUFFER;
         // the option type only names Texture, hence the cast.
-        sourceTexture: this.currentPositionFbo as unknown as Texture,
-        width: pointsTextureSize,
-        height: pointsTextureSize,
+        sourceTexture: framebuffer as unknown as Texture,
+        width,
+        height,
         destinationBuffer: stagingBuffer,
       })
       device.submit(commandEncoder.finish())
       // The WebGL `readAsync` below is a blocking `getBufferSubData`: reading
       // right away would wait for every queued command the copy depends on.
       // Let the GPU pass the copy first, so the read returns at once.
-      await this.waitForGpu()
-      // A real async gap lets data updates land mid-flight
-      if (this.store.pointsTextureSize !== pointsTextureSize || this.data.pointsNumber !== pointsNumber) return undefined
-      if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
+      const signaled = await this.waitForGpu()
+      if ((!signaled && !allowBlockingOnTimeout) || !isCurrent() || device.isLost) return undefined
       const bytes = await stagingBuffer.readAsync()
-      return new Float32Array(bytes.buffer, bytes.byteOffset, byteLength / 4)
-    } finally {
-      stagingBuffer.destroy()
-    }
+      return isCurrent() && !device.isLost ? new Float32Array(bytes.buffer, bytes.byteOffset, byteLength / 4) : undefined
+    } catch (error) {
+      if (!isCurrent() || device.isLost) return undefined
+      throw error
+    } finally { stagingBuffer.destroy() }
   }
 
   public findPointsInRect (): boolean {
@@ -3678,17 +3688,15 @@ export class Points extends CoreModule implements PointTrackerHost {
   /**
    * Resolves once the GPU has executed everything submitted so far, without
    * blocking the CPU: luma's WebGL fence polls `clientWaitSync` with a zero
-   * timeout. Bounded, because a lost context reports a failure status the poll
-   * never treats as signaled — then fall through to the blocking read rather
-   * than hang and leak the caller's staging buffer.
+   * timeout. The result distinguishes completion from the bounded wait.
    */
-  private async waitForGpu (timeoutMs = 1000): Promise<void> {
+  private async waitForGpu (timeoutMs = 1000): Promise<boolean> {
     const fence = this.device.createFence()
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      await Promise.race([
-        fence.signaled,
-        new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs) }),
+      return await Promise.race([
+        fence.signaled.then(() => true),
+        new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs) }),
       ])
     } finally {
       clearTimeout(timer)

@@ -655,6 +655,10 @@ Both modes exclude points with a zero resolved target size. In `'touch'` mode, t
 
 **Returns:** A `number[]` of point indices that match the configured hit rule.
 
+### <a name="async_area_selection" href="#async_area_selection">#</a> graph.<b>findPointsInRectAsync</b>(<i>rect</i>) and graph.<b>findPointsInPolygonAsync</b>(<i>polygonPath</i>)
+
+Use these methods after `await graph.ready` to await selection without waiting synchronously for the GPU. They use the same screen coordinates and selection rules as the methods above. The query captures the positions and view at the time of the call. The promise resolves to the selected indices, or `null` if the graph or its data changed before the read finished, the device was lost, or the copy timed out.
+
 ### <a name="get_neighboring_point_indices" href="#get_neighboring_point_indices">#</a> graph.<b>getNeighboringPointIndices</b>(<i>pointIndices</i>)
 
 Returns an array of point indices that are neighbors of the given point(s) — connected by a link in either direction.
@@ -720,6 +724,10 @@ Reading positions back from the GPU blocks until the GPU finishes its queued wor
 **Returns:**
 
 * A `Map` object where the keys are the indices of the tracked points and the values are their corresponding X and Y coordinates in the form of a `[number, number]` array.
+
+### <a name="get_tracked_point_positions_map_async" href="#get_tracked_point_positions_map_async">#</a> graph.<b>getTrackedPointPositionsMapAsync</b>()
+
+Captures the current coordinates of the tracked points and awaits the GPU copy. Use the resolved map to draw a label overlay. Absent points are omitted. The promise resolves to `null` if the tracked set or graph data was replaced before the copy completed, the device was lost, or the copy timed out.
 
 ### <a name="get_tracked_point_positions_array" href="#get_tracked_point_positions_array">#</a> graph.<b>getTrackedPointPositionsArray</b>()
 
