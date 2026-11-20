@@ -4,7 +4,7 @@ export function labBrowser (gpu) {
   // The lab investigates the current machine. Do not force a software adapter.
   const residentStudy = process.env.VITE_LAB_RESIDENT_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_DRAW_COST === '1' ||
     process.env.VITE_LAB_COMPOSED_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_REAL_GRAPH === '1' ||
-    process.env.VITE_LAB_MOTION_STYLES === '1' || process.env.VITE_LAB_GRAPH_READBACK === '1' ||
+    process.env.VITE_LAB_MOTION_STYLES === '1' || process.env.VITE_LAB_MOTION_FEATURES === '1' || process.env.VITE_LAB_GRAPH_READBACK === '1' ||
     process.env.VITE_LAB_RESIDENT_READBACK === '1'
   const provider = playwright({ launchOptions: {
     channel: 'chrome',

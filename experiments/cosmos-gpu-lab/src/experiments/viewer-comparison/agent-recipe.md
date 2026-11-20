@@ -182,3 +182,34 @@ Use the same source archive, production build checksum and capture variables.
 LAB_NATIVE_VISIBLE=1 VITE_LAB_MOTION_STYLES=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/motion-styles.test.ts
 ```
+
+## Advanced styles on changing geometry
+
+Replay three positions of the same points and link endpoints through the
+existing paired WebGL and WebGPU style renderers at DPR 1 and 2. Use the
+same fractional displacement on both backends, with zoom 1, 0.73 and
+1.23 and reversed draw order in the last frame. Keep both canvases visible
+in native Chrome. Render the existing shapes, overlap, image and size-limit
+fixtures using the source-visibility picking path. Vary the point size,
+greyout, and hover/focus state, including a hidden body with a visible ring.
+Use the independent point mask and composited color references.
+
+Replay the straight and curved link limit and crossing fixtures with
+fractional widths, endpoint RGB gradients, and solid, dashed or dotted
+strokes. Preserve link IDs as endpoints move. Compare the full RGBA
+attachments to each other and to the independent CPU geometry and color
+calculations. Require exact IDs and masks, no invisible picks and a 2/255
+color budget for this strict replay. Retain failed frames and their first
+pixel witnesses. A strict rejection calls for shape or boundary attribution
+before deciding the practical visual result.
+
+These draws use supplied positions and the isolated Lab renderer for each
+feature. The production Graph still needs a combined moving check, including
+arrows, link hover/focus, actual pointer behavior and the depth optimization.
+There is no latency target for this replay. Record exact source and the
+reported devices as above. Both style controls use the Lab's pinned luma.
+
+```sh
+LAB_NATIVE_VISIBLE=1 VITE_LAB_MOTION_FEATURES=1 \
+  pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/motion-features.test.ts
+```
