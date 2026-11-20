@@ -135,6 +135,59 @@ The full-force run is in `captures/composed-all-forces-m3-0d47b0f0/`.
 Its source archive SHA-256 is
 `50de858393da597769e97a72c541822dcd920908e528cb0dfea45c7034cd99a5`.
 
+## Scaling comparison with two collision passes
+
+Repeat the 8,192-point full-force communities control, then test communities
+and a chain with three large hubs at 16,384 points. On the hub graph, add one
+spring from one of IDs 2–4 to each point after ID 5, keeping the chain links.
+Keep two collision passes, eight repulsion slots, the 200-tick cooling
+schedule and the same pinned and absent IDs. The interaction comparison
+uses the first 64 ticks with changes to cluster and attractor channels,
+held and released mouse repulsion and the existing one-device-pixel screen.
+
+Use separate readback-free lanes for steady frame and pick timing. At the
+end of each timing lane, freeze its coordinates and profile seven identical
+force ticks, including mouse repulsion. Record each force and integration
+pass, and require exact agreement with the ordinary combined pass for the
+frozen tick. Those timestamps diagnose incremental costs. They do not
+determine the end-to-end frame verdict.
+
+### Native M3 scaling results
+
+The 8,192-point control and both 16,384-point graphs matched all 203
+independent CPU checkpoints. Their largest projected position and motion
+differences were zero. Pin, absent state, trusted input and the rendered
+point pick checks passed on each graph. The 16,384-point hub graph has
+32,761 links and three source groups of 5,461, 5,460 and 5,460 edges.
+
+| Graph | Frame p95 | Steady ≤33 ms | Picks ≤50 ms | Worst pick |
+| --- | ---: | ---: | ---: | ---: |
+| Communities, 8,192 | 18.7 ms | 48/48 | 8/8 | 28.2 ms |
+| Communities, 16,384 | 33.3 ms | 45/48 | 8/8 | 27.3 ms |
+| Three hubs, 16,384 | 51.6 ms | 24/48 | 3/8 | 64.9 ms |
+
+Median GPU milliseconds from the frozen profile include each force's
+integration pass. Springs combine both directions and collision includes
+both iterations. The two 16,384-point timing lanes miss the steady gate.
+
+| Force | 8,192 communities | 16,384 communities | 16,384 hubs |
+| --- | ---: | ---: | ---: |
+| Mouse | 0.21 | 0.30 | 0.29 |
+| Gravity | 1.51 | 2.15 | 2.17 |
+| Global centroid | 1.59 | 2.25 | 2.26 |
+| Repulsion | 5.89 | 8.60 | 8.39 |
+| Weighted springs | 0.12 | 0.18 | 5.81 |
+| Cluster attraction | 0.40 | 0.54 | 0.52 |
+| Point attractors | 0.25 | 0.37 | 0.36 |
+| Collision | 0.74 | 0.91 | 2.62 |
+
+This visible Chrome 157 run used native Apple Metal 3 WebGPU and luma
+10.0.0-alpha.15. The six lanes are in `captures/composed-scale-m3-20261120-040635/`
+with source archive SHA-256
+`e1af2861563fb4d7d165bf469bcd215813757a3200427c5ed2652946bff19098`.
+Long cooling, adaptive slot changes and larger full-force graphs still need
+checks. The hub spring and collision costs are the focus for larger graphs.
+
 ## Reproduce
 
 Set a unique `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
@@ -144,6 +197,8 @@ Set a unique `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
 LAB_NATIVE_VISIBLE=1 VITE_LAB_COMPOSED_INTERACTION=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/integrated-webgpu/composed-interaction.test.ts
 ```
+
+Set `VITE_LAB_COMPOSED_SCALE=1` to select the full-force capacity comparison.
 
 Set `VITE_LAB_MOUSE_ARITHMETIC=native` to replay the baseline with the
 original pointer calculation and retain the failed screen checks.

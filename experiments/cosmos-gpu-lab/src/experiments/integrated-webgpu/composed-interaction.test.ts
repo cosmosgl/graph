@@ -1,14 +1,17 @@
 import { expect, it, vi } from 'vitest'
 import { commands } from 'vitest/browser'
 import { describeEnvironment } from '../../gpu/force-preview'
+import { waitForGpu } from '../../gpu/luma'
 import { writeArtifact } from '../../testing/artifacts'
 import { changedMembership } from '../cluster-attraction/study'
 import { createCompositionOracle } from '../combined-layout/force-composition'
 import { ALL_PAIRS_MAX_POINTS } from '../combined-layout/repulsion-policy'
+import { stageDurations } from '../combined-layout/stage-timing'
 import { buildReference, cellOf, frameFor, layout } from '../many-body-grid/data'
 import { compareArray, type Snapshot } from '../many-body/reference'
 import { motionChecks, percentile } from '../million-graph/field-metrics'
 import { changedTargets } from '../point-attractors/data'
+import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 import { createIntegrated, nextFrame, type Integrated, type IntegratedForceStep } from './runtime'
 import { fit } from './validation'
 
@@ -31,14 +34,21 @@ const screenLimit = 1
 const frameTarget = 33
 const pickTarget = 50
 const nativeStudy = import.meta.env.VITE_LAB_COMPOSED_INTERACTION === '1'
+const scaleStudy = import.meta.env.VITE_LAB_COMPOSED_SCALE === '1'
 const mouseArithmetic = import.meta.env.VITE_LAB_MOUSE_ARITHMETIC === 'native' ? 'native' : 'expanded'
-const layouts = [
-  { kind: 'karate', count: 34, forces: 'composed-collision' },
-  { kind: 'communities', count: 256, forces: 'composed-collision' },
-  { kind: 'chain', count: 8192, forces: 'composed' },
-  { kind: 'star', count: 8192, forces: 'composed' },
-  { kind: 'communities', count: 8192, forces: 'composed-collision' },
-] as const
+const layouts = scaleStudy
+  ? [
+    { kind: 'communities', count: 8192, forces: 'composed-collision' },
+    { kind: 'communities', count: 16384, forces: 'composed-collision' },
+    { kind: 'hubs', count: 16384, forces: 'composed-collision' },
+  ] as const
+  : [
+    { kind: 'karate', count: 34, forces: 'composed-collision' },
+    { kind: 'communities', count: 256, forces: 'composed-collision' },
+    { kind: 'chain', count: 8192, forces: 'composed' },
+    { kind: 'star', count: 8192, forces: 'composed' },
+    { kind: 'communities', count: 8192, forces: 'composed-collision' },
+  ] as const
 
 type Fixture = NonNullable<Integrated['composition']>
 type Witness = {
@@ -205,6 +215,51 @@ async function panOnBackground (runtime: Integrated): Promise<void> {
     await vi.waitFor(() => expect(runtime.renderer.camera.x).toBeLessThan(before.x))
     expect(runtime.renderer.camera.y).toBeGreaterThan(before.y)
   } finally { await commands.composedInput('left-up') }
+}
+
+async function profileFullForces (backend: Integrated['backend']): Promise<{
+  status: TimerStatus; stages: string[]; samples: number[][];
+}> {
+  const { device } = backend.positionSource!()
+  if (!device.features.has('timestamp-query')) return { status: 'unavailable', stages: [], samples: [] }
+  const frozen = (await backend.read()).positions
+  const alpha = 0.64
+  const tick = 11
+  backend.setMouseRepulsion!({ world: [0, 0], strength: 0.2 })
+  backend.stepTick!(alpha, tick)
+  const ordinary = await backend.read()
+  const stages: string[] = []
+  const samples: number[][] = []
+  const query = device.createQuerySet({ type: 'timestamp', count: 64 })
+  try {
+    for (let i = 0; i < 7; i++) {
+      visible()
+      backend.setPositions(frozen)
+      const names: string[] = []
+      backend.stepProfiledTick!(alpha, tick, (name, encode) => {
+        const index = names.length * 2
+        names.push(name)
+        const pass = device.beginComputePass({ timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 })
+        try { encode(pass) } finally { pass.end() }
+      })
+      await waitForGpu(device)
+      if (!stages.length) stages.push(...names)
+      else expect(names).toEqual(stages)
+      const result: { durations: number[] | null } = { durations: null }
+      const timer = await readLumaTimer({
+        async readTimestampDuration (): Promise<number> {
+          result.durations = stageDurations(await query.readResults({ firstQuery: 0, queryCount: names.length * 2 }), names.length)
+          return result.durations?.reduce((total, duration) => total + duration, 0) ?? NaN
+        },
+      })
+      if (timer.status !== 'valid' || !result.durations) return { status: timer.status, stages, samples }
+      samples.push(result.durations)
+    }
+    const profiled = await backend.read()
+    expect(compareArray(profiled.positions, ordinary.positions).maxError).toBe(0)
+    expect(compareArray(profiled.forces, ordinary.forces).maxError).toBe(0)
+    return { status: 'valid', stages, samples }
+  } finally { query.destroy(); backend.setMouseRepulsion!(undefined) }
 }
 
 for (const { kind, count, forces } of layouts) {
@@ -381,7 +436,7 @@ for (const { kind, count, forces } of layouts) {
   }, 240000)
 }
 
-for (const { kind, count, forces } of layouts.filter(layout => layout.count === 8192 && layout.forces === 'composed')) {
+for (const { kind, count, forces } of layouts.filter(layout => scaleStudy || (layout.count === 8192 && layout.forces === 'composed'))) {
   it.skipIf(!nativeStudy)(`measures readback-free composed frames on ${kind} / ${count}`, async () => {
     const run = sourceInfo()
     const { host, canvas } = createCanvas()
@@ -424,6 +479,7 @@ for (const { kind, count, forces } of layouts.filter(layout => layout.count === 
       }
       record.picks = runtime.feedback.slice(start)
       record.pickWithinTarget = runtime.feedback.slice(start).filter(pick => pick.ms <= pickTarget).length
+      if (scaleStudy) record.forceProfile = await profileFullForces(runtime.backend)
       record.status = 'complete'
     } catch (error) {
       record.status = 'failed'

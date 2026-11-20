@@ -12,9 +12,8 @@ import { compareArray, type Snapshot } from '../many-body/reference'
 import { median } from '../many-body/timing'
 import type { BackendContext } from '../many-body/webgpu'
 import { COLLISION, COLLISION_EXACT_LIMIT } from './data'
-import { HASHED_COLLISION_LIMIT } from './hashed-grid'
 
-const COUNT = HASHED_COLLISION_LIMIT
+const COUNT = 8192
 const TICK = 11
 const ALPHA = 0.64
 const COLLISION_SETTINGS = { ...COLLISION, cooling: 0.5, iterations: 2 }

@@ -314,12 +314,13 @@ export async function createCombinedWebGPU (
         encode (source, timing, sharedPass, profile): void {
           if (stage === 'collision') {
             if (!collision) throw new Error('Collision was not allocated')
-            if (profile) throw new Error('Collision-enabled frames require normal-frame timing')
-            const pass = sharedPass ?? device.beginComputePass(timing)
-            try {
+            const encodeCollision = (pass: ComputePass): void => {
               if (hashed && count > COLLISION_EXACT_LIMIT) hashed.encode(pass, positions[source], collisionIteration)
               else collision.encode(pass, positions[source], p.alpha)
-            } finally { if (!sharedPass) pass.end() }
+            }
+            if (profile) { profile('force', encodeCollision); return }
+            const pass = sharedPass ?? device.beginComputePass(timing)
+            try { encodeCollision(pass) } finally { if (!sharedPass) pass.end() }
             return
           }
           if (stage === 'center') {
@@ -550,9 +551,8 @@ export async function createCombinedWebGPU (
     stepProfiledTick: overrides.gpuBounds
       ? (alpha, tick, scope): void => {
         base.resourceIdentity!()
-        if (settings.collision?.strength || additional) throw new Error('Optional forces require normal-frame timing')
         beginFrame(tick)
-        for (const next of stagesFor(settings.center, settings.collision)) {
+        for (const next of frameStages()) {
           stage = next; p.alpha = alpha
           base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
         }
