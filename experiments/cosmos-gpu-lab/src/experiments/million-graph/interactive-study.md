@@ -72,6 +72,35 @@ and `captures/resident-depth-moving-m3-1-20261120-035833/`. The source archive
 in the first folder has SHA-256
 `b540b882478b4b9d8ee852e0f5d2913f23a1ae139c40bd2fd54cfdf190341ccb`.
 
+### Sharing distant pushes at six levels
+
+Adding the 128 × 128 and 256 × 256 fields cut median GPU repulsion from
+6.58 to 4.70 ms for dense and 6.49 to 4.70 ms for hubs. Building the
+additional fields added under 0.1 ms. Draw remained the largest GPU stage
+at about 13–14 ms. Peak sampled allocation increased from 189.5 to 192.0 MiB.
+
+| Workload | Frame p95, four → six levels | Intervals ≤33 ms | Worst pick |
+| --- | ---: | ---: | ---: |
+| Dense | 50.9 → 50.0 ms | 19/48 → 21/48 | 45.8 → 48.2 ms |
+| Hub | 50.0 → 50.0 ms | 8/48 → 14/48 | 40.9 → 42.8 ms |
+
+All 32 picks returned exact IDs and met 50 ms. Both workloads missed the
+frame gate. In the separate 200-tick layout replay, the maximum one-tick
+sampled displacement between variants projected to 0.32 backing pixels in
+both layouts. At tick 200 the sampled p95 drift was 1.85 pixels for dense
+and 1.52 for hubs. The density histograms differed by under 0.2%.
+Both variants kept valid positions, fixed points and presence flags.
+The projection uses the Fit scale and the target canvas height. It describes
+world positions at checkpoints. Moving visibility at higher zoom remains open.
+The demo keeps four shared levels.
+
+The layout capture and exact source are in
+`captures/resident-deep-field-m3-20261120-050554/`, with SHA-256
+`bf9a8153535e3dee0a79ff529af8a7be4540106de8f9c71b107d22c70ca9e069`.
+The same run name with suffix `-timing-0` contains the visible-browser frame
+and click lanes. The `-timing-1` run contains the split GPU timings. All used
+native Apple Metal 3, visible Chrome 157 and luma 10.0.0-alpha.15.
+
 ### Reduced drawing replay
 
 The matched one-million-point replay compared Standard and Reduced drawing
@@ -230,6 +259,15 @@ Check exact output pixels against the original draw before testing moving frame
 and pick times on both million-point fixtures. Measure draw GPU time and added
 allocation. This probe uses basic opaque links and preserves point occlusion.
 
+### Four corners at more grid levels
+
+Test sharing the distant pushes at 128 × 128 and 256 × 256 too. The control
+shares from 8 × 8 through 64 × 64. Both keep the 512 × 512 level and nearby
+sampled forces per point. Measure the same moving interactions and split GPU
+stages, and track the extra field storage. Check motion on both graphs at
+ticks 1 and 200 against the four-level control. Use the one-backing-pixel
+one-tick screen and inspect the settled drift separately.
+
 ## Replay
 
 Set a unique lowercase `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
@@ -245,3 +283,5 @@ Set `VITE_LAB_RESIDENT_FRAME_PACING=1` to compare callback scheduling. Add
 Set `VITE_LAB_RESIDENT_DEPTH_LINKS=1` instead of the pacing flag to compare
 the depth-tested draw path. The same flag selects the frozen depth comparison
 with `VITE_LAB_RESIDENT_DRAW_COST=1` in `resident-draw-cost.test.ts`.
+Use `VITE_LAB_RESIDENT_DEEP_FIELD=1` for the additional grid levels. Use the
+same flag with `resident-dense-communities.test.ts` for the layout comparison.

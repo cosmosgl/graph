@@ -72,7 +72,7 @@ ${residentProjection}
 export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
 type ResidentOptions = {
-  pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean;
+  pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean; coarseLevels?: number;
 }
 export type ResidentMotionSample = { points: Float32Array; normalized: Float32Array; fieldBox: Float32Array; view: Float32Array }
 export const RESIDENT_STAGES = ['gravity', 'bounds and normalization', 'hierarchy and cell field', 'repulsion', 'springs and camera', 'draw'] as const
@@ -130,7 +130,7 @@ export async function createResidentGraph (
     const positions = [own(upload(device, input.points)), own(upload(device, input.points))]
     const samples = own(upload(device, input.samples))
     const forces = own(device.createBuffer({ byteLength: count * 16, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-    const hierarchy = own(await createResidentHierarchy(device, positions, samples, forces, count, REPULSION, 8, distantForce))
+    const hierarchy = own(await createResidentHierarchy(device, positions, samples, forces, count, REPULSION, 8, distantForce, options.coarseLevels))
     const topology = own(createLinkResources(device, input.points, graph))
     const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
     const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))

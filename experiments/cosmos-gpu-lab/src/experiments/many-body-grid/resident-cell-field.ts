@@ -4,9 +4,10 @@ import cellField from './resident-cell-field.wgsl?raw'
 
 export type DistantForce = 'per-point' | 'cell-center' | 'four-corners'
 
-export function fieldLayout (grid: Layout, mode: DistantForce): { levels: number; cells: number; rows: number } {
+export function fieldLayout (grid: Layout, mode: DistantForce, coarseLevels = 4): { levels: number; cells: number; rows: number } {
+  if (!Number.isInteger(coarseLevels) || coarseLevels < 1) throw new Error('Expected a positive number of shared levels')
   // Always keep the finest level and its sampled neighbors individual.
-  const levels = mode === 'per-point' ? 0 : Math.min(4, grid.sizes.length - 1)
+  const levels = mode === 'per-point' ? 0 : Math.min(coarseLevels, grid.sizes.length - 1)
   return { levels, cells: grid.offsets[levels], rows: mode === 'four-corners' ? 2 : 1 }
 }
 

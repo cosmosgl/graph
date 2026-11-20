@@ -26,6 +26,7 @@ type Study = {
   pointCulling?: boolean;
   cachedHighlight?: boolean;
   depthLinks?: boolean;
+  coarseLevels?: number;
   scheduleAhead?: boolean;
   callback?(animationTime: number, busy: boolean): void;
   timestamps?(tick: number): ResidentStageTimestamps | undefined;
@@ -237,6 +238,7 @@ export async function createMillionGraphView (host: HTMLElement, study?: Study, 
         pointCulling: study?.pointCulling ?? useCoverage,
         cachedHighlight: study?.cachedHighlight ?? useCoverage,
         depthLinks: study?.depthLinks,
+        coarseLevels: study?.coarseLevels,
       })
       if (destroyed || version !== generation) { next.destroy(); return }
       backend = next
