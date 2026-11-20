@@ -152,6 +152,25 @@ At the final positions, compare both query results and every gathered
 coordinate to an independent CPU check. Use pending queries to verify that
 removing a point or replacing the topology discards their earlier results.
 
+### Label scheduling comparison
+
+Repeat both million-point workloads with the same graph draw, area queries
+and 1,000 labels. The control polls the tracked-position cache on animation
+callbacks. Compare awaiting the same gather after the area request, then
+submitting the gather just after simulation and before drawing and selection.
+Only publish labels once the matching graph draw has completed. Continue
+measuring the next animation opportunity and keep the 33 ms and 100 ms gates.
+Record observed coordinate availability, draw completion, label-update CPU
+time and time since the tick started. Verify the last displayed label values
+and the invalidation checks in every lane. The draw fence adds instrumentation
+to all three scheduling lanes. Use the original run to interpret the earlier
+unfenced measurements.
+
+Set `VITE_LAB_RESIDENT_LABEL_SCHEDULING=1` along with the resident readback
+flag for the matched scheduling comparison.
+
+### Native M3 result
+
 Both fixtures returned exact area IDs and gathered positions, and both
 discarded the pending reads on removal or topology replacement. The native
 M3 run used Apple Metal 3, visible Chrome 157 and luma 10.0.0-alpha.15.
@@ -168,6 +187,38 @@ when a gather follows the full moving graph tick and the caller polls on
 animation frames. The capture is in `captures/resident-readback-m3-20261120-044912/`
 with source archive SHA-256
 `ac578cec74b2019be841645920a7d591138e402e97dad25e3152fb686d95e157`.
+
+### What determines label latency
+
+The matched replay found that the gather can finish earlier when queued
+before drawing. In the dense run its median availability fell from 36.6
+to 13.6 ms, but the matching draw still finished in a median 37.9 ms.
+For hubs the gather usually became available around the same time as the
+draw. The label renderer itself took 0.9–1.3 ms at the median.
+
+| Workload | Polling, label median / slowest | Await after draw | Gather before draw | All samples within 33 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Dense | 50.1 / 66.7 ms | 50.2 / 50.4 ms | 50.2 / 50.3 ms | 1/24 |
+| Hub | 50.1 / 66.7 ms | 50.2 / 66.9 ms | 50.1 / 52.2 ms | 0/24 |
+
+Times include the tick submission and the next animation opportunity.
+All 48 area requests met 100 ms, with a maximum of 57.4 ms. All lanes
+displayed the exact final tracked coordinates and invalidated pending
+reads on replacement. Four lanes matched every independent selection ID.
+The dense await lane and the hub early gather each had a one-ID polygon
+disagreement at the final check. Their centers were 0.000001 and
+0.000023 CSS pixels from the polygon edges, consistent with rounding
+between shader and CPU geometry. Keep those checks failed until the
+selection boundary policy is made consistent. Earlier gather improved
+availability without meeting the presentation target.
+
+The first comparison is in
+`captures/resident-label-scheduling-m3-20261120-051841/`, source archive
+SHA-256 `3c64ea09d8a2209ce1dc197e4d930b0b565c1beae3fbb4289af89ead0d62593a`.
+It also retained two exact-selection failures. The repeat with pixel and ID
+witnesses is in `captures/resident-label-scheduling-m3-20261120-052025/`,
+SHA-256 `651543d91adabb06d2a67d95527e497c433b19c0167149043e7a2ce700a04615`.
+Both used visible Chrome 157, native Apple Metal 3 and luma 10.0.0-alpha.15.
 
 ```sh
 LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_READBACK=1 \
