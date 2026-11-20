@@ -12,9 +12,9 @@ export const validationContracts: Record<string, ValidationContract> = {
   'million-graph': {
     question: 'How does shared repulsion change the layout, and how responsive is the moving graph through a million points?',
     reference: 'Matched per-point force runs, frozen paint layers, and expected IDs and camera behavior during native input.',
-    acceptance: 'Keep flags, pins and pick results exact. Check local pixel drift and report frame and pick timing against the small pilot references.',
+    acceptance: 'Keep flags, pins and pick results exact. Check local pixel drift and report frame and pick timings with the study’s reference values.',
     coverage: 'Uniform and dense layouts on M3, frozen draw passes, and pan, zoom and picks on moving dense and high-degree graphs.',
-    limits: 'The local study uses basic styles and a partial force set. Production drawing, graph updates and portability require separate validation.',
+    limits: 'The local study uses basic styles and a partial force set. Matched production WebGL timing, full drawing and portability remain open.',
   },
   'mouse-repulsion': {
     question: 'Does WebGPU match Cosmos mouse repulsion and its independent execution gate?',
@@ -49,8 +49,8 @@ export const validationContracts: Record<string, ValidationContract> = {
   'pilot-viewer': {
     question: 'Can the bounded WebGPU backend support a useful Karate Club exploration workflow?',
     reference: 'Existing corrected integrated runtime, original Karate topology, sampled CPU pixel audit and retained production viewer comparison.',
-    acceptance: 'At least 95% of complete intervals <= 33 ms; input feedback <= 50 ms; exact IDs, no invisible picks; ' +
-      'unchanged one-device-pixel geometric boundary and 2/255 interior color gates.',
+    acceptance: 'Pilot timing checks require at least 95% of complete intervals <= 33 ms and input feedback <= 50 ms. ' +
+      'Check exact IDs, visible picks and the 2/255 interior color limit beyond a one-device-pixel geometric boundary.',
     coverage: '34-member / 78-link Karate Club explorer on native M3; controlled intervals and interaction, native exploration and degree sizes.',
     limits: 'Research-only pilot. Strict production color compatibility remains rejected; ' +
       'larger viewer workloads, full API and full migration are not approved.',
@@ -59,8 +59,8 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Can the small candidate viewer support the production appearance, update and running-interaction workflow?',
     reference: 'Unchanged workspace production Graph with luma v9, corrected integrated luma v10 runtime, ' +
       'supplied styles and independent candidate pixel audit.',
-    acceptance: '95% of complete intervals <= 33 ms; feedback <= 50 ms; exact IDs, no invisible picks, ' +
-      '<= 2/255 interior color error outside a geometric one-device-pixel boundary.',
+    acceptance: 'Small-graph timing checks use 95% of complete intervals <= 33 ms and feedback <= 50 ms. ' +
+      'Check exact IDs, visible picks and <= 2/255 interior color error outside a geometric one-device-pixel boundary.',
     coverage: 'Karate Club 34/78; early/cooled views, point/link styles, 32-point replacement, running picks/drags, resize and recreation on native M3.',
     limits: 'Public host-driven production scheduler, not its default autonomous loop. Independent trajectories are quality observations. ' +
       'Strict compatibility and full migration remain unapproved.',
@@ -68,7 +68,8 @@ export const validationContracts: Record<string, ValidationContract> = {
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',
-    acceptance: '95% of complete paced frame intervals <= 33 ms; pick feedback <= 50 ms; no interior ID errors or invisible picks; <= 2/255 color error away from a geometry-derived one-device-pixel boundary.',
+    acceptance: 'Pilot timing checks use 95% of complete intervals <= 33 ms and pick feedback <= 50 ms. Require no interior ID errors or invisible picks ' +
+      'and <= 2/255 color error away from a geometry-derived one-device-pixel boundary.',
     coverage: 'Core forces, circles, solid straight links, point picking/dragging, camera, replacement, pause, resize and destruction. Local sampled evidence only.',
     limits: 'No strict compatibility or full migration approval. Historical failures remain. Faint nonzero opacity < 0.02 and advanced features are explicitly unsupported. Browser feedback is a GPU-completed presentation opportunity, not measured physical scanout.',
   },

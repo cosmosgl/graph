@@ -16,14 +16,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'million-graph': entry('million-graph', {
-      conclusion: 'The three-force viewer runs near 50 ms p95 at one million points. The eight-force replay takes about 267 ms with collision enabled.',
+      conclusion: 'At one million points, the three-force WebGPU viewer reaches about 50 ms frame p95. The eight-force replay reaches about 267 ms.',
       reviewed: '2026-11-20',
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
       comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       method: 'overview',
       methodPages: ['production-envelope'],
       evidence: 'interactive-study',
-      next: 'Measure the collision build, slot selection and correction separately before improving the full moving frame.',
+      next: 'Run production WebGL on the same million-point workloads and compare frame and interaction latency.',
       reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
       investigations: [
         { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
@@ -271,7 +271,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'scope',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Keep the 50-ms gate and use the recorded frame and pick phases if the intermittent delay recurs in a representative integrated workload.',
+      next: 'Compare input-to-feedback timing with production WebGL and use the recorded timing phases to investigate recurring stalls.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {

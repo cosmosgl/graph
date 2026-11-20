@@ -5,14 +5,11 @@ checks remain unchanged; the first migration has a separate practical contract.
 
 ## First migration rules
 
-Agreed **17 November 2026**. The immediate goal is a useful, integrated,
-experimental WebGPU backend on the current Apple M3 and native browser. This
-is a first migration attempt, not a complete replacement or production approval.
-**The [integrated candidate](#/integrated-webgpu) has now been assessed in bounded
-M3 workloads.** Small-graph and selected 8,192-point controls pass; large-star and
-intermittent latency failures remain recorded. This is neither blanket first-slice
-acceptance nor production approval. See the [migration page](#/roadmap) for the
-decision and next gate; isolated experiment passes cannot substitute for it.
+First-slice scope agreed **17 November 2026**. The goal is a useful,
+integrated WebGPU backend on the current Apple M3 and native browser.
+The integrated candidate has bounded M3 evidence, including passing
+small-graph checks and recorded large-star and intermittent latency failures.
+[Integrated candidate](#/integrated-webgpu) · [Migration roadmap](#/roadmap)
 
 ### Supported first slice
 
@@ -41,7 +38,7 @@ Full feature migration remains the destination.
 | Rendering | Correct shapes, widths, colors, ordering and transparency | Minor boundary/antialiasing differences under the boundary rule below |
 | Picking | Correct visible source and overlap order; hidden sources cannot intercept selection | Selectable edges can differ slightly between backends under the declared visible-footprint policy |
 | Interaction and lifecycle | Pan, zoom, dragging, updates, pause/resume, resize and destruction work together | Advanced unsupported features are explicitly outside scope |
-| Responsiveness | At least 95% of steady-state frame intervals at or below 33 ms; picking feedback within 50 ms on the M3 | No requirement to beat WebGL in the first attempt |
+| Responsiveness | No meaningful slowdown against the current production WebGL Graph on matched workloads | Declare a tolerable slowdown for each measured workflow before judging WebGPU |
 
 **Rendering boundary rule:** allow at most one device pixel of boundary
 displacement between backends for this practical assessment. Keep the existing
@@ -66,6 +63,37 @@ an agreed numerical budget stay “Measured only.” Do not invent a tolerance a
 seeing a failure. A practical pilot decision may use a documented side-by-side
 quality review while strict compatibility remains failed or unassessed.
 
+### Performance against production WebGL
+
+Run the production WebGL Graph and the WebGPU candidate on the same
+machine and browser. Match graph data and starting layout, enabled forces
+and cooling, styles, camera, canvas size and pixel ratio, and the interaction
+sequence. Use normal application render loops. Require comparable layout and
+rendered output so each timed run delivers the same functionality.
+
+Repeat the WebGL control to estimate normal variation. Before judging the
+candidate, declare how much slower each user-facing metric can be, based on
+that variation and the impact on users. Repeat paired runs in fresh browser
+sessions and alternate which backend runs first. For each workload, report
+both timings and their difference in milliseconds and percent. Performance
+passes when the candidate stays within the declared limits without new
+recurring stalls. Use **Not assessed** when the matched baseline or limits
+are missing. Repeat inconclusive runs.
+
+Measure p95 frame intervals during steady motion and interactions. Time
+actual graph updates and record skipped animation opportunities. Measure
+pick and drag feedback from the same input event to the updated frame on
+both backends. Include p95, the slowest samples and the first request.
+Compare cold startup, graph updates, selection and labels where supported.
+Track peak GPU allocation and record what each measurement includes.
+
+If a backend cannot complete a fixture, record the failure and the
+largest tested workload it completes. Assess the new capacity against
+the declared workload and quality requirements. A speed comparison needs
+completed matched runs. The 33 ms frame and 50 ms pick references describe
+the earlier pilot studies. Set any absolute responsiveness requirement
+for the intended product workload explicitly.
+
 ### Workload and measurement
 
 Start with chain, communities and star at about 1,000 points, then 8,192. The
@@ -82,8 +110,8 @@ validation readbacks in the timed path. Report steady-state frame intervals
 separately from initialization and uploads; record picking request-to-visible-
 feedback latency, including scheduling and readback. Declare the measurement
 window and input sequence before each run. Keep GPU timestamps, CPU submission
-and end-to-end responsiveness distinct. A 33 ms GPU-only timing is not a pass for
-the frame target. Raw captures remain local exports.
+and end-to-end responsiveness distinct. Use end-to-end measurements for the
+performance verdict. Raw captures remain local exports.
 
 ### Verdicts and stopping rule
 
@@ -93,10 +121,11 @@ rules. “Usable for the first slice” must name the supported features, tested
 workloads, machine and accepted differences. Until that assessment is actually
 run, the practical verdict is **Not assessed**.
 
-Investigate further now when a difference breaks behavior, is visibly distracting,
-destabilizes a layout, exceeds the boundary rule or misses the responsiveness
-target. Otherwise, record it and continue integration. Profile the integrated
-application before optimizing arithmetic or adding expensive exact picking paths.
+Investigate further when a difference breaks behavior, is visibly distracting,
+destabilizes a layout, exceeds the boundary rule or causes a meaningful slowdown
+against the matched WebGL control. Otherwise, record it and continue integration.
+Profile the integrated application before optimizing arithmetic or adding
+expensive exact picking paths.
 Do not require a green broad GPU suite to continue this research.
 
 A parked investigation is **stopped for the first attempt, not resolved**. Retain
@@ -207,7 +236,8 @@ Then validate candidate integration and independently evolving layouts in the ex
 Keep deterministic shared sampling for controlled port comparisons. Also require independently
 adapting runtime tests before production approval; the matched comparison's CPU sampling tape does
 not validate runtime scheduling. Evaluate several graph families, seeds and intended native devices.
-Agree quality, frame-time, update and memory budgets for the supported feature set.
+Agree quality, startup, update and memory requirements for the supported
+features. Use the WebGL control for migration timing. [Performance rule](#performance-against-production-webgl)
 
 Keep CPU prediction and validation readback outside timed work. Name GPU timestamp, CPU submission
 and synchronized completion separately; identify excluded setup, uploads, presentation and features.

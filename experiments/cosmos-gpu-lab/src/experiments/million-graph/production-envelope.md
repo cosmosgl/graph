@@ -1,10 +1,11 @@
 # Acceptance scope for the WebGPU investigation
 
-The first decision is for a native WebGPU adapter on Apple M3 in visible
-Chrome. Record the browser, adapter, luma version, source and input identity
-in each replay. Use 961 × 541 CSS pixels at DPR 2 for the moving performance
-runs, with the whole canvas visible. Validate visual behavior at DPR 1 and 2.
-The device and browser coverage for a public release needs its own evidence.
+Start with the production WebGL Graph and a native WebGPU candidate on
+Apple M3 in visible Chrome. Record the browser, adapter, luma version,
+source and input identity for both backends. Use 961 × 541 CSS pixels at
+DPR 2 for moving performance, with the whole canvas visible. Validate
+visual behavior at DPR 1 and 2. Extend the device and browser coverage
+for a public release.
 
 ## Workloads
 
@@ -30,11 +31,11 @@ the repository root to create the binary fixture. Its SHA-256 is
 The script checks the [source archive](https://snap.stanford.edu/data/bigdata/communities/com-youtube.ungraph.txt.gz)
 and prints the fixture hash and actual degree counts.
 
-For the first real graph run, use Four corners, Reduced drawing and the
-unchanged browser scheduler. Record eight warmup ticks and 48 steady
-intervals or stop after 45 seconds and retain partial frames. Time startup
-from the in-memory fixture, with download, digest and fixture construction
-outside the measurement. Read position invariants after timing.
+To replay the first WebGPU real-graph run, use Four corners, Reduced drawing
+and the recorded browser scheduler. Record eight warmup ticks and 48
+steady intervals or stop after 45 seconds and retain partial frames.
+Time startup from the in-memory fixture, with download, digest and fixture
+construction outside the measurement. Read position invariants after timing.
 
 ```sh
 LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_REAL_GRAPH=1 \
@@ -50,7 +51,8 @@ All points moved and the final positions were finite. This native Chrome 157
 run used the Apple Metal 3 adapter and luma 10.0.0-alpha.15. The results are in
 `captures/resident-youtube-m3-20261120-040053/` with source archive SHA-256
 `df386359d7dc437273aaecad184f2ecf319f824e6f1b030caaf8489bf01cb9bf`.
-This initial run covers basic styles, startup and steady motion.
+This initial run covers basic styles, startup and steady motion. The
+matched production WebGL run is still pending.
 
 Retain the 8,192-point full-force community as a correctness control. Scale
 gravity, global centroid, repulsion, weighted springs, cluster attraction,
@@ -67,18 +69,28 @@ faint objects and overlapping point and link picks.
 
 ## Acceptance before comparisons
 
-| Area | Working target on M3 |
-| --- | --- |
-| Steady motion | At least 95% of consecutive moving graph frame intervals ≤33 ms. Measure actual completed updates and retain missed opportunities. |
-| Picking | Every pick ≤50 ms from input to highlighted frame and the next animation opportunity. Include background and overlapping objects. |
-| Startup | First usable graph frame ≤2 s after the application hands over in-memory arrays, including upload and cold pipeline setup. Record warmed startup separately. |
-| Updates | Whole-graph point and topology replacement visible ≤2 s. Incremental position or style edits visible ≤50 ms. Time from the application call through the next animation opportunity with the result. |
-| CPU consumers | Area selection available ≤100 ms after the request. For 1,000 tracked coordinates, at least 95% of label updates within 33 ms. Check snapshot identity across graph, point and camera changes. |
-| Memory | Peak app-owned GPU buffers and textures ≤512 MiB, including resize, updates and allocations that coexist during replacement. Report browser or driver memory separately when observable. |
+Run the same data, settings and interactions on both backends for each
+of the three graphs. Use repeated production WebGL runs to set a
+meaningful slowdown limit for each workload and metric before judging the
+candidate. The Lab's million-point results provide WebGPU timings.
+Comparative performance at that size is **Not assessed**.
+[Performance rule](#/validation-workflow?section=performance-against-production-webgl)
 
-Keep steady, input, update and startup windows separate. Repeat passing timing
-lanes in a fresh browser session. Log all failed lanes, including the pilot's
-[68.2 and 100.4 ms pick stalls](#/pilot-viewer?section=doc-findings).
+| Area | Measure on both backends |
+| --- | --- |
+| Motion | p95 frame interval and missed animation opportunities, during steady updates and actual pan, zoom and clicks. |
+| Picking and dragging | Time from the same input event to visible feedback. Include p95 and the slowest samples, with background and overlapping objects. |
+| Startup | Time from in-memory input to the first usable frame, including upload and cold pipeline setup. Record warm startup as well. |
+| Updates | Time from the setter call to visible point or topology replacement and incremental position or style edits. |
+| CPU consumers | Rectangle and polygon selection time and presentation of 1,000 tracked labels. Check that graph or camera changes discard stale results. |
+| Memory | Peak app-owned GPU buffers and textures during startup, resize and replacement. Record which allocations each measurement includes. |
+
+The earlier M3 plan used 33 ms for steady frames and label updates, 50 ms for
+picks and incremental updates, 100 ms for area selection, 2 s for startup
+and full replacement, and 512 MiB for peak tracked GPU allocation. Read
+the recorded outcomes against their stated checks. Keep the
+[68.2 and 100.4 ms pick stalls](#/pilot-viewer?section=doc-findings) visible
+in the new comparison.
 
 Use the [practical rendering rules](#/validation-workflow?section=first-migration-rules)
 of one backing pixel at boundaries and 2/255 channel error in interiors.
