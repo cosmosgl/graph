@@ -9,10 +9,10 @@ migrationFocus
 
 ## What remains
 
-- **Performance** Bring 95% of steady frames within 33 ms on dense graphs and graphs with large hubs.
+- **Performance** Bring 95% of steady frames within 33 ms on dense, hub and real graphs. [Earlier callbacks and depth-tested links](#/million-graph?section=doc-interactive-study) still miss the target.
 - **Simulation and rendering** Validate the remaining [features](#feature-coverage) and check layout quality across longer runs and more graph shapes.
 - **Graph and host integration** Finish Graph setters, async readback and device recovery. Verify [Deck hosting](#/integrated-webgpu?section=doc-host-ownership) on a supported luma version.
-- **Production acceptance** Set quality, latency and memory budgets. Verify the target GPUs and browsers.
+- **Production acceptance** Apply the [M3 scope and working budgets](#/million-graph?section=doc-production-envelope) to the dense, hub and YouTube workloads. Verify the target GPUs and browsers.
 
 ## Feature coverage
 

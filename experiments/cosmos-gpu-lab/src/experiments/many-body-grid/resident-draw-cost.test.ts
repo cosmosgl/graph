@@ -25,7 +25,8 @@ const viewports = [
 ] as const
 const cameras = ['fit', 'community'] as const
 const drawCost = import.meta.env.VITE_LAB_RESIDENT_DRAW_COST === '1'
-const renderCandidates = import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
+const depthCandidates = import.meta.env.VITE_LAB_RESIDENT_DEPTH_LINKS === '1'
+const renderCandidates = depthCandidates || import.meta.env.VITE_LAB_RESIDENT_RENDER_CANDIDATES === '1'
 const pointCount = 1000000
 const freezeTick = 50
 const coolingTicks = 200
@@ -407,11 +408,18 @@ it.skipIf(!drawCost || !renderCandidates)('compares frozen million-point draw an
     const failures: string[] = []
     for (const viewport of viewports) {
       const references = new Map<typeof cameras[number], FrozenDrawCheck>()
-      const order = [
-        { variant: 'baseline' },
-        ...(viewport.name === 'small' ? drawVariants : [...drawVariants].reverse()),
-        { variant: 'baseline-repeat' },
-      ]
+      const reduced = { pointCulling: true, cachedHighlight: true }
+      const order = depthCandidates
+        ? [
+          { variant: 'baseline', ...reduced },
+          { variant: 'depth', ...reduced, depthLinks: true },
+          { variant: 'baseline-repeat', ...reduced },
+        ]
+        : [
+          { variant: 'baseline' },
+          ...(viewport.name === 'small' ? drawVariants : [...drawVariants].reverse()),
+          { variant: 'baseline-repeat' },
+        ]
       for (const { variant, ...options } of order) {
         const canvas = makeCanvas(viewport)
         let graph: ResidentGraph | undefined

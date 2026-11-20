@@ -35,7 +35,7 @@ ${RESIDENT_OWNER_WGSL}
 
 // Palette-only presentation over the opaque resident graph. A change in the
 // selected ID needs one fullscreen triangle and no point or link draws.
-export function createResidentHighlight (device: Device, width: number, height: number, display: Buffer): {
+export function createResidentHighlight (device: Device, width: number, height: number, display: Buffer, depth = false): {
   framebuffer: Framebuffer;
   present(timestamps?: TimestampWrites): void;
   destroy(): void;
@@ -45,7 +45,9 @@ export function createResidentHighlight (device: Device, width: number, height: 
     const owners = scope.own(device.createTexture({
       width, height, format: 'r32uint', usage: Texture.RENDER | Texture.SAMPLE,
     }))
-    const framebuffer = scope.own(device.createFramebuffer({ width, height, colorAttachments: [owners] }))
+    const framebuffer = scope.own(device.createFramebuffer({
+      width, height, colorAttachments: [owners], depthStencilAttachment: depth ? 'depth24plus' : undefined,
+    }))
     const { kernel, vertexArray } = scope.own(createStorageRenderer(device, source, 'triangle-list', [
       { name: 'owners', location: 0, group: 0, type: 'texture', sampleType: 'uint', viewDimension: '2d' },
       { name: 'display', location: 1, group: 0, type: 'uniform' },

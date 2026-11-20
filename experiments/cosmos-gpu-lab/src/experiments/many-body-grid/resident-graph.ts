@@ -3,7 +3,7 @@ import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { graphRgb, graphRgba } from '../../runtime/palette'
-import { createLinkResources } from '../combined-layout/topology'
+import { createLinkResources, type LinkInput } from '../combined-layout/topology'
 import { GRAVITY, REPULSION, SPRINGS } from '../combined-layout/data'
 import { createFixture, nearLimit, type Input } from '../many-body/data'
 import type { Snapshot } from '../many-body/reference'
@@ -56,24 +56,26 @@ struct Vertex {
   if (input.flags.x <= 0.5 && dot(input.uv, input.uv) > 1.) { discard; }
   ${owners ? 'return input.owner;' : pointColor}
 }`
-const linksSource = (owners: boolean): string => `
+const linksSource = (owners: boolean, depth: boolean): string => `
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
 ${residentProjection}
 @group(0) @binding(3) var<storage, read> links: array<u32>;
 @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
   let a = positions[links[(i / 2u) * 2u]]; let b = positions[links[(i / 2u) * 2u + 1u]];
   if (a.w > 0.5 || b.w > 0.5) { return vec4f(3.,3.,0.,1.); }
-  return vec4f(project(select(a.xy, b.xy, i % 2u == 1u)), 0., 1.);
+  return vec4f(project(select(a.xy, b.xy, i % 2u == 1u)), ${depth ? '0.5' : '0.'}, 1.);
 }
 @fragment fn fragmentMain() -> @location(0) ${owners ? 'u32 { return 1u;' : `vec4f { return vec4f(${graphRgb.link}, 1.);`} }
 `
 
 export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
-type ResidentOptions = { pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean }
+type ResidentOptions = {
+  pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean;
+}
 export type ResidentMotionSample = { points: Float32Array; normalized: Float32Array; fieldBox: Float32Array; view: Float32Array }
 export const RESIDENT_STAGES = ['gravity', 'bounds and normalization', 'hierarchy and cell field', 'repulsion', 'springs and camera', 'draw'] as const
-type ResidentStageTimestamps = (stage: typeof RESIDENT_STAGES[number]) => TimestampWrites
+export type ResidentStageTimestamps = (stage: typeof RESIDENT_STAGES[number]) => TimestampWrites
 
 export function createResidentChain (count: number, distribution: Distribution = 'uniform'): { input: Input; graph: GraphInput } {
   if (!Number.isInteger(count) || count < 4 || count > 1000000) throw new Error('Expected 4–1,000,000 points')
@@ -95,6 +97,8 @@ export async function createResidentGraph (
   readonly hierarchyBytes: number;
   readonly linkBytes: number;
   readonly topologyMs: number;
+  readonly linkCount: number;
+  updateLinks(input: LinkInput): void;
   frame(tick: number, alpha: number, draw?: boolean, timestamps?: ResidentStageTimestamps, gridTimestamps?: GridPassTimestamps): void;
   redraw(layers?: ResidentLayers, timestamps?: TimestampWrites): void;
   redrawHighlight(timestamps?: TimestampWrites): boolean;
@@ -158,18 +162,20 @@ export async function createResidentGraph (
     const culling = options.pointCulling
       ? own(await createResidentPointCulling(device, count, viewBuffer, display, width, height, pointsSource(false, true)))
       : undefined
-    const highlight = options.cachedHighlight ? own(createResidentHighlight(device, width, height, display)) : undefined
+    const depthLinks = !!(options.cachedHighlight && options.depthLinks)
+    const highlight = options.cachedHighlight ? own(createResidentHighlight(device, width, height, display, depthLinks)) : undefined
     const pointBindings = bindingLayout(culling
       ? [
         ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['visibleIds', 'read-only-storage'],
       ]
       : [['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform']])
     const pointRenderer = own(createStorageRenderer(
-      device, pointsSource(!!culling, !!highlight), 'triangle-list', pointBindings, {}, undefined, highlight?.framebuffer
+      device, pointsSource(!!culling, !!highlight), 'triangle-list', pointBindings,
+      depthLinks ? { depthWriteEnabled: true, depthCompare: 'always' } : {}, undefined, highlight?.framebuffer
     ))
-    const lineRenderer = own(createStorageRenderer(device, linksSource(!!highlight), 'line-list', bindingLayout([
+    const lineRenderer = own(createStorageRenderer(device, linksSource(!!highlight, depthLinks), 'line-list', bindingLayout([
       ['positions', 'read-only-storage'], ['view', 'read-only-storage'], ['display', 'uniform'], ['links', 'read-only-storage'],
-    ]), {}, undefined, highlight?.framebuffer))
+    ]), depthLinks ? { depthWriteEnabled: true, depthCompare: 'less' } : {}, undefined, highlight?.framebuffer))
     await waitForGpu(device, 30000)
     let current = 0; let destroyed = false; let autoFit = true
     let highlightValid = false; let drewPoints = false
@@ -212,20 +218,22 @@ export async function createResidentGraph (
       const pass = device.beginRenderPass({
         framebuffer: highlight?.framebuffer,
         clearColor: highlight ? [0, 0, 0, 0] : graphRgba.background,
-        clearDepth: false,
+        clearDepth: depthLinks ? 1 : false,
         timestampQuerySet: begin === undefined && end === undefined ? undefined : timestampQuerySet,
         beginTimestampIndex: begin,
         endTimestampIndex: end,
       })
       const bindings = { positions: positions[current], view: viewBuffer, display }
+      const withLinks = layers === 'links' || layers === 'both'
+      const drawLinks = (): void => {
+        lineRenderer.kernel.draw(pass, {
+          vertexArray: lineRenderer.vertexArray,
+          vertexCount: topology.edgeCount * 2,
+          bindings: { ...bindings, links: topology.links },
+        })
+      }
       try {
-        if (layers === 'links' || layers === 'both') {
-          lineRenderer.kernel.draw(pass, {
-            vertexArray: lineRenderer.vertexArray,
-            vertexCount: topology.edgeCount * 2,
-            bindings: { ...bindings, links: topology.links },
-          })
-        }
+        if (withLinks && !depthLinks) drawLinks()
         if (filtered) {
           pointRenderer.kernel.drawIndirect(pass, {
             vertexArray: pointRenderer.vertexArray,
@@ -240,6 +248,8 @@ export async function createResidentGraph (
             bindings,
           })
         }
+        // All links have the same opaque color in this resident renderer.
+        if (withLinks && depthLinks) drawLinks()
       } finally { pass.end() }
       highlight?.present(endTimestampIndex === undefined ? undefined : { timestampQuerySet, endTimestampIndex })
       highlightValid = !!highlight && layers === 'both'
@@ -249,7 +259,13 @@ export async function createResidentGraph (
       device,
       hierarchyBytes: hierarchy.bytes,
       linkBytes: topology.bytes,
-      topologyMs: topology.buildMs,
+      get topologyMs (): number { return topology.buildMs },
+      get linkCount (): number { return topology.edgeCount },
+      updateLinks (links): void {
+        healthy()
+        topology.update(input.points, links)
+        highlightValid = false
+      },
       frame (tick, alpha, draw = true, timestamps, gridTimestamps): void {
         healthy(); hierarchy.prepare(tick, alpha)
         highlightValid = false

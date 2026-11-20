@@ -1,6 +1,6 @@
 import {
   Buffer, luma, type Device, type CanvasContext, type Framebuffer, type BindingDeclaration, type PrimitiveTopology,
-  type RenderPipelineParameters, type TextureFormatColor,
+  type RenderPipelineParameters, type TextureFormatColor, type TextureFormatDepthStencil,
 } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { webgl2Adapter } from '@luma.gl/core/webgl'
@@ -86,6 +86,7 @@ export function createStorageRenderer (
     shaderLayout,
     parameters: target.depthStencilAttachment ? { depthWriteEnabled: false, depthCompare: 'always', ...parameters } : parameters,
     colorAttachmentFormats: [target.colorAttachments[0].texture.format as TextureFormatColor],
+    depthStencilAttachmentFormat: target.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined,
   })
   const vertexArray = device.createVertexArray({ shaderLayout, bufferLayout: [] })
   return { kernel, vertexArray, destroy (): void { kernel.destroy(); vertexArray.destroy() } }

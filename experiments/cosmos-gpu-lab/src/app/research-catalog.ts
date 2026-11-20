@@ -21,6 +21,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
       comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       method: 'overview',
+      methodPages: ['production-envelope'],
       evidence: 'interactive-study',
       next: 'Improve slow frames at one million points and verify the full force and rendering workload.',
       reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
