@@ -1,5 +1,8 @@
 # Graph interaction comparison method
 
+This method reproduces the original pilot. For matched production timings
+with native loops, use the [migration benchmark](#/viewer-comparison?section=doc-migration-benchmark).
+
 The WebGL panel uses the unchanged workspace production `Graph` from its standalone UMD bundle with luma v9.
 It runs in a same-origin iframe so the two major luma versions have separate windows.
 The WebGPU panel uses the lab's resident luma v10 backend and corrected arithmetic.

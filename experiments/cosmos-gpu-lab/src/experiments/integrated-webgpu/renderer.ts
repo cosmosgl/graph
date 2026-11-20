@@ -11,7 +11,11 @@ import linkSmoothing from './link-smoothing.wgsl?raw'
 export type Camera = { x: number; y: number; zoom: number }
 export type PaintLayers = { links?: boolean; points?: boolean }
 export type LinkDistanceOpacity = { range: readonly [number, number]; minimum: number }
-export type ViewerPaint = { smoothLinks?: boolean; linkDistanceOpacity?: LinkDistanceOpacity }
+type Rgba = [number, number, number, number]
+export type ViewerPaint = {
+  smoothLinks?: boolean; linkDistanceOpacity?: LinkDistanceOpacity;
+  background?: Rgba; defaultPoint?: { color: Rgba; size: number };
+}
 type PaintOptions = ViewerPaint & { linkIndex?: number }
 type PickedObject = { kind: 'point' | 'link'; id: number }
 const entries = {
@@ -29,7 +33,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
   pickObject(x: number, y: number): Promise<PickedObject | null>;
   snapshot(options?: PaintOptions): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }>;
   snapshotColor(layers: PaintLayers & PaintOptions): Promise<Uint8Array>;
-  replace(graph: GraphInput): void; setStyle(index: number, color: number[], size: number): void;
+  replace(graph: GraphInput): void; setLinks(links: Float32Array): void; setStyle(index: number, color: number[], size: number): void;
   destroy(): void;
 } {
   const { device } = position(); const scope = resourceScope()
@@ -81,7 +85,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
         canvas.width, canvas.height, ratio, 0, ...origin, framebuffer.width, framebuffer.height, selected, api.linkStyle.width, selectedLink, 0,
         ...api.linkStyle.color, ...(visibility ? [...visibility.range, visibility.minimum, 1] : [0, 0, 0, 0])]))
       const pass = device.beginRenderPass({
-        ...timestamps, framebuffer, clearColor: ids || transparent ? [0, 0, 0, 0] : graphRgba.background, clearDepth: false,
+        ...timestamps, framebuffer, clearColor: ids || transparent ? [0, 0, 0, 0] : paint.background ?? graphRgba.background, clearDepth: false,
       })
       const bindings = { positions: position().buffer, styles: styleBuffer, links: linkBuffer, params }
       const format = framebuffer.colorAttachments[0].texture.format as TextureFormatColor
@@ -123,12 +127,23 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       ratio: 1,
       replace (next: GraphInput): void {
         const data = new Float32Array(next.points.length * 2)
-        for (let i = 0; i < next.points.length / 4; i++) data.set([...graphRgba.point, 6, 0, 0, 0], i * 8)
+        const defaults = [...(paint.defaultPoint?.color ?? graphRgba.point), paint.defaultPoint?.size ?? 6, 0, 0, 0]
+        for (let i = 0; i < next.points.length / 4; i++) data.set(defaults, i * 8)
         const freshStyles = upload(device, data)
         let freshLinks: Buffer
         try { freshLinks = upload(device, new Uint32Array(next.links)) } catch (error) { freshStyles.destroy(); throw error }
         styleBuffer?.destroy(); linkBuffer?.destroy(); styleBuffer = freshStyles; linkBuffer = freshLinks
         api.styles = data; api.selected = -1; api.selectedLink = -1; edges = next.links.length / 2
+      },
+      setLinks (links: Float32Array): void {
+        const values = new Uint32Array(links)
+        if (linkBuffer && values.byteLength <= linkBuffer.byteLength) {
+          if (values.length) linkBuffer.write(values)
+        } else {
+          const fresh = upload(device, values)
+          linkBuffer?.destroy(); linkBuffer = fresh
+        }
+        edges = values.length / 2
       },
       setStyle (index: number, color: number[], size: number): void {
         if (!Number.isInteger(index) || index < 0 || index >= position().count || color.length !== 4 ||

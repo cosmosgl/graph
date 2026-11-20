@@ -3,47 +3,21 @@ import { expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
 import { describeEnvironment } from '../../gpu/force-preview'
 import { writeArtifact } from '../../testing/artifacts'
-import { createFixture } from '../many-body/data'
 import type { createResidentGraph } from '../many-body-grid/resident-graph'
-import type { GraphInput } from '../weighted-links/data'
 import { motionChecks, percentile } from './field-metrics'
 import { createMillionGraphView, type MovingFrame } from './view'
+import { loadYoutubeFixture, youtubeFixtureHash } from './youtube-fixture'
 
-const fixtureSha256 = '1b4f834c6acf374905934cc4fd65ded5ef8116fd73016db5e15ee8177da0f8b5'
 const viewport = { width: 961, height: 541, pixelRatio: 2 }
 const pointCount = 1000000
 const linkCount = 2852734
 const warmup = 8
 const intervals = 48
 
-async function loadFixture (): Promise<{
-  input: ReturnType<typeof createFixture>;
-  graph: GraphInput;
-}> {
-  const response = await fetch('/captures/fixtures/youtube-million.bin')
-  if (!response.ok) throw new Error('Prepare the SNAP YouTube fixture before running the replay')
-  const bytes = await response.arrayBuffer()
-  const hash = await crypto.subtle.digest('SHA-256', bytes)
-  const checksum = Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('')
-  expect(checksum, 'SNAP YouTube fixture checksum').toBe(fixtureSha256)
-  const data = new Uint32Array(bytes)
-  expect([data[0], data[1], data.length]).toEqual([pointCount, linkCount, 2 + pointCount + linkCount * 2])
-  const input = createFixture('uniform', pointCount)
-  return {
-    input,
-    graph: {
-      points: input.points,
-      links: Float32Array.from(data.subarray(2 + pointCount)),
-      weights: new Float32Array(linkCount).fill(1),
-      sizes: new Float32Array(pointCount).fill(2),
-    },
-  }
-}
-
 it.skipIf(import.meta.env.VITE_LAB_RESIDENT_REAL_GRAPH !== '1')('measures the moving million-point YouTube graph', async () => {
   const frames: MovingFrame[] = []
   const record: Record<string, unknown> = {
-    fixtureSha256,
+    fixtureSha256: youtubeFixtureHash,
     pointCount,
     linkCount,
     warmup,
@@ -70,7 +44,7 @@ it.skipIf(import.meta.env.VITE_LAB_RESIDENT_REAL_GRAPH !== '1')('measures the mo
     expect(navigator.userAgent).not.toContain('HeadlessChrome')
     expect(devicePixelRatio).toBe(viewport.pixelRatio)
     expect(hidden).toBe(false)
-    const fixture = await loadFixture()
+    const fixture = await loadYoutubeFixture()
     const memory = luma.stats.getStats('GPU Time and Memory').get('GPU Memory')
     const baseline = memory.count
     let peak = 0

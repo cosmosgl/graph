@@ -9,6 +9,12 @@ production switch. Each **Feature coverage** row shows the WebGL behavior, the W
 checks. The links at the top jump to the coverage, parked investigations or future ideas. Existing
 `#/feature-inventory` links jump to the corresponding section or feature.
 
+**Viewer Comparison** links to the matched migration benchmark. Build the
+production bundle with `pnpm run build`, then use
+`pnpm --filter @cosmos.gl/gpu-lab benchmark:migration --fixture karate`
+to replay it on the M3. The benchmark page lists large fixtures and the
+declared method, and its results link to each workload.
+
 Home groups experiment cards by topic. Each card opens the experiment and shows a recorded outcome or open question
 with a concise finding. The header links to the catalog, migration page and learning guide;
 other references appear above the catalog.

@@ -18,11 +18,29 @@ export const experiment = defineExperiment({
   pages: [
     {
       kind: 'markdown',
+      id: 'migration-results',
+      title: 'Matched migration benchmark results',
+      load: async (): Promise<string> => (await import('./benchmark-findings.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'migration-benchmark',
+      title: 'Run the migration benchmark',
+      load: async (): Promise<string> => (await import('./benchmark-method.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'performance-audit',
+      title: 'What each performance example measures',
+      load: async (): Promise<string> => (await import('./performance-audit.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
       id: 'link-color-evidence',
       title: 'Link-color evidence',
       load: async (): Promise<string> => (await import('./link-color-evidence.md?raw')).default,
     },
-    { kind: 'markdown', id: 'method', title: 'Comparison method', load: async (): Promise<string> => (await import('./method.md?raw')).default },
+    { kind: 'markdown', id: 'method', title: 'Historical comparison method', load: async (): Promise<string> => (await import('./method.md?raw')).default },
     { kind: 'markdown', id: 'findings', title: 'Graph comparison findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
     {
       kind: 'markdown',

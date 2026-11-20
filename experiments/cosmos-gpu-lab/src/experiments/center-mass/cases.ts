@@ -55,7 +55,7 @@ export const centerMassPage: SinglePageCase = {
       title: 'Calculate the center once',
       date: '18 November 2026',
       evidence: 'At one million points, calculating the center per point took 2.431 ms and calculating it once took 2.447 ms.',
-      limits: 'The paired GPU timings varied from −0.201 to +0.105 ms on one device, leaving the speed difference inconclusive.',
+      limits: 'GPU time covers reduction plus the linear center force. Paired differences of −0.201 to +0.105 ms leave the speed difference inconclusive.',
     },
   ],
   legacyCases: {

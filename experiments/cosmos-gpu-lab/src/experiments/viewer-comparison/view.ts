@@ -40,14 +40,15 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="style">Toggle style A / B</button><button data-action="chain">Replace with 32-point chain</button>
     <button data-action="karate">Restore Karate Club</button><button data-action="resize">Toggle height 320 / 280</button>
     <button data-action="recreate">Destroy and recreate</button>
-    <button data-action="assess">Measure frame times</button>
+    <button data-action="assess">Replay historical frame timing</button>
     <button data-action="paint">Compare same-geometry paint</button><button data-action="paint-layers">Attribute paint differences</button>
     <button data-action="paint-link-smoothing">Test link edge smoothing</button>
     <button data-action="paint-corrected-links">Compare corrected link paint</button>
     <button data-action="check">Check current updates</button>
     <button data-action="cancel">Cancel assessment</button><button data-action="export">Export JSON</button></div>
     <p>Paint checks use the same fixed positions in both panels and replace the current production layout.
-    The recorded evidence describes the test conditions and limits.</p></section>`
+    The recorded evidence describes the test conditions and limits.
+    <a href="#/viewer-comparison?section=doc-migration-benchmark">Run the matched migration benchmark</a>.</p></section>`
   host.querySelectorAll<HTMLButtonElement>('button').forEach(button => { button.disabled = true })
   const status = host.querySelector<HTMLElement>('[role=status]')!; const results = host.querySelector<HTMLElement>('[data-results]')!
   const glHost = host.querySelector<HTMLDivElement>('[data-webgl]')!; const canvas = host.querySelector<HTMLCanvasElement>('canvas')!

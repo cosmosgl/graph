@@ -70,6 +70,7 @@ machine and browser. Match graph data and starting layout, enabled forces
 and cooling, styles, camera, canvas size and pixel ratio, and the interaction
 sequence. Use normal application render loops. Require comparable layout and
 rendered output so each timed run delivers the same functionality.
+[Viewer Comparison benchmark](#/viewer-comparison?section=doc-migration-benchmark)
 
 Repeat the WebGL control to estimate normal variation. Before judging the
 candidate, declare how much slower each user-facing metric can be, based on

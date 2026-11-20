@@ -63,7 +63,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     area: 'Integration',
     status: 'Target missed',
     evidence: [
-      { tone: 'fail', text: 'Earlier pick: 68.2 ms vs 50 ms target' },
+      { tone: 'fail', text: 'Original pilot pick took 68.2 ms' },
       { tone: 'pass', text: '102 later picks passed' },
       { tone: 'unknown', text: 'Cause remains open' },
     ],
@@ -149,7 +149,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'pilot-viewer/explore-graph': {
     badge: 'Pick target missed',
     tone: 'fail',
-    finding: 'The explorer worked; an earlier pick missed 50 ms despite later passing controls.',
+    finding: 'The explorer worked. A slow click in the original pilot remains unexplained after later replays.',
     area: 'Integration',
     status: 'Selection delay unresolved',
     evidence: [
@@ -166,7 +166,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     area: 'Integration',
     status: 'Target missed',
     evidence: [
-      { tone: 'fail', text: 'Earlier pick: 100.4 ms vs 50 ms target' },
+      { tone: 'fail', text: 'Original pilot pick took 100.4 ms' },
       { tone: 'pass', text: '320 later wider-window picks passed' },
       { tone: 'unknown', text: 'Cause remains open' },
     ],
@@ -199,22 +199,22 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Repeat with the current center reduction',
   },
   'million-graph/moving-graph': {
-    badge: 'WebGL baseline pending',
-    tone: 'neutral',
-    finding: 'At 1M points, reduced drawing on WebGPU reached about 50 ms frame p95 and completed all 16 sampled picks within 50 ms.',
+    badge: 'Community motion faster',
+    tone: 'review',
+    finding: 'Matched steady frame p95 fell by about 55% on both million-point community fixtures.',
     area: 'Integration',
-    status: 'WebGL baseline pending',
+    status: 'Real-graph workflow open',
     evidence: [
-      { tone: 'pass', text: '196,608 points met the earlier frame and pick thresholds' },
-      { tone: 'fail', text: '1M missed the study’s 33 ms frame target' },
-      { tone: 'pass', text: '1M reduced drawing: 16/16 picks within 50 ms' },
+      { tone: 'pass', text: 'Dense frame p95: 151.4 → 67.0 ms' },
+      { tone: 'pass', text: 'Hub frame p95: 151.7 → 68.5 ms' },
+      { tone: 'warn', text: 'WebGL moving selection failed on the full YouTube graph' },
     ],
-    next: 'Measure production WebGL with the same workload',
+    next: 'Investigate the real-graph selection limit and retest variable click tails',
   },
   'million-graph/shared-repulsion': {
     badge: 'Frame cost varied',
     tone: 'review',
-    finding: 'Four-corner sharing saved about 9 ms per tick on one GPU; frame p95 increased on one input.',
+    finding: 'Four-corner sharing cut the median WebGPU tick by about 9 ms. The even-input p95 increased.',
     area: 'Integration',
     status: 'Broader performance open',
     evidence: [
@@ -227,7 +227,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'million-graph/large-graph-drawing': {
     badge: 'Frozen drawing faster',
     tone: 'neutral',
-    finding: 'Reduced drawing cut wide-view frozen GPU time from 24.5 to 13.7 ms on one GPU.',
+    finding: 'Reduced drawing cut median GPU-fenced draw time from 24.5 to 13.7 ms in the frozen wide view.',
     area: 'Integration',
     status: 'Frame cost open',
     evidence: [

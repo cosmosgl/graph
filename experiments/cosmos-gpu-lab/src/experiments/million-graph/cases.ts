@@ -11,13 +11,15 @@ export const cases: ExperimentCase[] = [
     reference: 'The recorded interaction study compares WebGPU variants on the same graph and input sequence.',
     acceptance: 'Check movement, pan, zoom and point selection in the live view. Use the recorded study for timings.',
     recorded: {
-      conclusion: 'Both workloads met the study’s frame and pick thresholds at 196,608 points. At one million, reduced drawing reached ' +
-        'about 50 ms frame p95 and completed all 16 sampled picks within 50 ms.',
-      date: 'Not recorded',
-      environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
-      scope: 'Dense-community and high-degree graphs, using the four-corner distant-force option.',
-      limits: 'One machine and a bounded interaction sequence. The matched million-point WebGL comparison is pending.',
-      evidence: [{ label: 'Moving-graph interaction evidence', page: 'interactive-study' }, { label: 'How the graph works', page: 'overview' }],
+      conclusion: 'The separate matched study cut steady frame p95 by about 55% on the two million-point community fixtures.',
+      date: '20 November 2026',
+      environment: 'Apple M3, visible Chrome 157, luma 9.3.6 and 10.0.0-alpha.15.',
+      scope: 'Dense-community and high-degree graphs, using the four-corner distant-force option. The matched run uses production-style circles and links.',
+      limits: 'The full YouTube speed verdict is open after the WebGL moving selection failure. The live viewer uses a simpler draw path.',
+      evidence: [
+        { label: 'Matched benchmark scope', page: 'production-envelope' },
+        { label: 'Original WebGPU interaction evidence', page: 'interactive-study' },
+      ],
     },
   },
   {
@@ -29,11 +31,11 @@ export const cases: ExperimentCase[] = [
     reference: 'The existing per-point WebGPU solver on the same initial graphs.',
     acceptance: 'Frame cost and layout differences are measured separately; no universal visual error threshold is claimed.',
     recorded: {
-      conclusion: 'Four-corner sharing saved about 9 ms per tick on both tested inputs and stayed closer to the reference than a single cell center.',
+      conclusion: 'Four-corner sharing saved about 9 ms in median WebGPU tick time on both inputs and matched the reference more closely than one cell center.',
       date: 'Not recorded',
       environment: 'Apple M3, visible Chrome, luma WebGPU.',
       scope: 'Two starting distributions, one million points, 200 ticks and three timing runs per method.',
-      limits: 'Dense long-lived communities and other devices remain open; the even-input frame p95 increased.',
+      limits: 'Time includes field build, simulation and drawing through GPU completion. The even-input p95 increased.',
       evidence: [{ label: 'Shared-repulsion evidence', page: 'cell-field' }, { label: 'Dense-community study', page: 'dense-communities' }],
     },
   },
@@ -46,7 +48,7 @@ export const cases: ExperimentCase[] = [
     reference: 'Matching camera and graph positions across separately timed draw layers.',
     acceptance: 'Paint and state checks accompany GPU timestamps; simulation and display presentation are outside the timing.',
     recorded: {
-      conclusion: 'On the wide frozen view, reduced drawing lowered the median draw time from 24.5 to 13.7 ms. ' +
+      conclusion: 'On the wide frozen view, reduced drawing lowered median draw completion time from 24.5 to 13.7 ms. ' +
         'The tested images and pick IDs still matched.',
       date: 'Not recorded',
       environment: 'Apple M3, Chrome 157, luma 10.0.0-alpha.15.',

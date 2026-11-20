@@ -1,7 +1,7 @@
 import { cellOf, layout } from '../many-body-grid/data'
 import { createFixture, type Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
-import { percentile } from './field-metrics'
+import { percentile } from './motion-metrics'
 
 const communityCount = 8
 const anchorDegree = 64
