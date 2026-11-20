@@ -82,7 +82,7 @@ const catalogTopics = [
     title: 'Whole graphs and layouts',
     description: 'Complete layouts and interactive graphs.',
     ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
-      'viewer-comparison', 'pilot-viewer', 'matched-layout'],
+      'viewer-comparison', 'dense-communities', 'pilot-viewer', 'matched-layout'],
   },
   {
     id: 'gpu-foundations',

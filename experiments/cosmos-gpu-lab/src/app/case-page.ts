@@ -178,17 +178,20 @@ export async function renderEvidenceContent (
   presentDocumentTables(target)
 }
 
-function evidenceDisclosures (recorded: HTMLElement, experiment: ExperimentDefinition): (section: string) => Promise<string | undefined> {
+function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinition): (section: string) => Promise<string | undefined> {
+  const inline = experiment.presentation === 'demo'
   const area = document.createElement('section'); area.className = 'case-evidence'
-  const heading = document.createElement('h3'); heading.textContent = 'Detailed evidence'; area.append(heading)
-  type EvidenceBlock = { disclosure: HTMLDetailsElement; load: () => Promise<void> }
+  if (!inline) {
+    const heading = document.createElement('h3'); heading.textContent = 'Detailed evidence'; area.append(heading)
+  }
+  type EvidenceBlock = { disclosure?: HTMLDetailsElement; load: () => Promise<void> }
   const documents = new Map<string, EvidenceBlock>()
   const add = (page: ExperimentPage): EvidenceBlock => {
     const existing = documents.get(page.id)
     if (existing) return existing
     if (!area.parentElement) recorded.append(area)
-    const disclosure = document.createElement('details'); disclosure.className = 'advanced-controls case-evidence-detail'
-    const summary = document.createElement('summary'); summary.textContent = page.title
+    const disclosure = inline ? undefined : document.createElement('details')
+    const title = document.createElement(inline ? 'h3' : 'summary'); title.textContent = page.title
     const content = document.createElement('div'); content.id = articleSectionId(page.id); content.dataset.evidenceContent = ''
     let ready: Promise<void> | undefined
     const load = (): Promise<void> => {
@@ -203,16 +206,23 @@ function evidenceDisclosures (recorded: HTMLElement, experiment: ExperimentDefin
       }
       return ready
     }
-    disclosure.addEventListener('toggle', () => { if (disclosure.open) load().catch(() => {}) })
-    disclosure.append(summary, content); area.append(disclosure)
+    if (disclosure) {
+      disclosure.className = 'advanced-controls case-evidence-detail'
+      disclosure.addEventListener('toggle', () => { if (disclosure.open) load().catch(() => {}) })
+      disclosure.append(title, content); area.append(disclosure)
+    } else area.append(title, content)
     const block = { disclosure, load }; documents.set(page.id, block)
     return block
   }
-  for (const page of caseEvidencePages(experiment)) add(page)
+  for (const page of caseEvidencePages(experiment)) {
+    const block = add(page)
+    if (inline) block.load().catch(() => {})
+  }
   return async (section): Promise<string | undefined> => {
     const page = evidencePageAt(experiment, section)
     if (!page || !isReaderPage(experiment, page)) return undefined
-    const block = add(page); block.disclosure.open = true
+    const block = add(page)
+    if (block.disclosure) block.disclosure.open = true
     await block.load()
     return articleSectionId(page.id)
   }
@@ -220,10 +230,12 @@ function evidenceDisclosures (recorded: HTMLElement, experiment: ExperimentDefin
 
 export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefinition): CaseFrame {
   const item = startingCase(experiment)
+  const demo = experiment.presentation === 'demo'
   host.innerHTML = `<div class="case-document case-single-page"><header class="case-header"><p class="case-kind"></p><h1></h1>
     <p class="case-question"></p><p class="case-description"></p></header><section class="case-stage" aria-busy="false"></section></div>`
   const header = host.querySelector('.case-header')!
   const question = header.querySelector<HTMLElement>('.case-question')!
+  question.hidden = demo
   const description = header.querySelector<HTMLElement>('.case-description')!
   header.querySelector('h1')!.textContent = experiment.title
   header.querySelector<HTMLElement>('.case-kind')!.textContent = item.kind === 'recorded' ? 'Recorded study' : ''
@@ -234,10 +246,10 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
   }
   const summary = document.createElement('div'); summary.className = 'case-recorded-summary'
-  header.append(summary)
+  if (!demo) header.append(summary)
 
   const stage = host.querySelector<HTMLElement>('.case-stage')!
-  const navigation = groupNavigation(experiment, topic)
+  const navigation = demo ? undefined : groupNavigation(experiment, topic)
   if (navigation) stage.after(navigation)
   const intro = document.createElement('section'); intro.className = 'case-intro'
   const title = document.createElement('h2'); title.textContent = 'Try it'
@@ -264,7 +276,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     stage.append(status, start, retry, slot)
   }
   const recorded = recordedFindings(experiment)
-  const openEvidence = evidenceDisclosures(recorded, experiment)
   const comparison = document.createElement('section'); comparison.className = 'case-comparison'; comparison.id = 'case-comparison'
   comparison.innerHTML = '<h2>What this compares</h2><dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
   const [reference, acceptance] = comparison.querySelectorAll('dd')
@@ -275,6 +286,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     title.hidden = instruction.hidden = !guidance
     chooser.value = active.id
     reference.textContent = active.reference; acceptance.textContent = active.acceptance
+    if (demo) return
     const assessment = readinessFor(experiment.id, active)
     summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), paragraph(assessment.finding))
     const evidence = active.recorded?.evidence[0] ?? active.evidence?.[0]
@@ -289,5 +301,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   }
   setLiveCase(item)
   stage.append(recorded, comparison)
+  const openEvidence = mountCaseEvidence(recorded, experiment)
   return { stage, slot, recorded, comparison, status, retry, start, chooser, openEvidence, setLiveCase }
 }

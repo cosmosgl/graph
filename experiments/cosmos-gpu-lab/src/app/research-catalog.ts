@@ -290,6 +290,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         { page: 'findings', state: 'Historical baseline', description: 'Original Karate Club timing and appearance checks.' },
       ],
     }),
+    'dense-communities': entry('dense-communities', {
+      conclusion: 'Both viewers kept the eight communities visible as the free points moved in the matched benchmark.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same starting layout, topology, styles and linked cameras',
+      method: 'layout',
+      next: 'Zoom into one community to see the short links and moving points.',
+      reproduce: 'Press Run to start both viewers. Drag or scroll either graph to move both cameras.',
+      investigations: [],
+    }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',

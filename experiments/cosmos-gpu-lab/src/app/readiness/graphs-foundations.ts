@@ -263,6 +263,15 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Check moving layouts and more styles',
   },
+  'dense-communities/dense-communities': {
+    badge: 'Live demo',
+    tone: 'neutral',
+    finding: 'Both backends preserved the eight communities as the free points moved.',
+    area: 'Integration',
+    status: 'Matched motion measured',
+    evidence: [{ tone: 'pass', text: 'Both backends preserved pinned and absent points' }],
+    next: 'Compare the linked views at Fit and while zoomed in',
+  },
   'repulsion-trajectories/trajectory-drift': {
     badge: 'Paths diverged',
     tone: 'review',

@@ -4,6 +4,9 @@ The Lab records bounded research for people to understand and for agents to
 reproduce. Follow the repository's root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
+Keep demo explanations, findings and limits visible as regular page sections.
+Place supporting material below the live example.
+
 For an existing study, read its `agent-recipe.md` when one is present. Check the
 declared workload, reference, acceptance rules, environment and output location
 before running it. A test completing, a finite result and an accepted candidate
