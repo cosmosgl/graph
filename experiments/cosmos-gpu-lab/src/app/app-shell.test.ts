@@ -427,6 +427,9 @@ for (const [id, caseId] of [
     expect(host.querySelector('.case-intro')!.textContent).toContain(item.tryIt)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.reference)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.acceptance)
+    const summary = host.querySelector('.case-header .case-recorded-summary')!
+    expect(summary.querySelector('.readiness-badge')?.textContent).toContain(readinessFor(id, item).badge)
+    expect(summary.querySelector('p')?.textContent).toBe(readinessFor(id, item).finding)
     const lookup = host.querySelector('.case-recorded')!
     expect(lookup.querySelectorAll('.case-observations > li')).toHaveLength(experiment.cases!.length)
     if (item.recorded) expect(lookup.querySelector(`#finding-${caseId}`)!.textContent).toContain(item.recorded.limits)
@@ -443,6 +446,8 @@ for (const [id, caseId] of [
     expect(create.mock.calls[1][1]).toBe(first.id)
     expect(destroy).toHaveBeenCalledTimes(1)
     expect(host.querySelector('.case-question')!.textContent).toBe(first.question)
+    expect(summary.querySelector('.readiness-badge')?.textContent).toContain(readinessFor(id, first).badge)
+    expect(summary.querySelector('p')?.textContent).toBe(readinessFor(id, first).finding)
     expect(host.querySelector('.case-recorded')).toBe(lookup)
     expect(details.open).toBe(true)
     expect(host.querySelector(`.case-group-navigation a[href^="#/${id}"]`)).toBeNull()

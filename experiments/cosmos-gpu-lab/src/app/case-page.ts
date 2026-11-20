@@ -7,7 +7,7 @@ import { unlinkOtherExperiments } from './independent-experiment'
 import { experimentGroups } from './registry'
 import { readinessFor } from './readiness'
 import { readinessBadge, recordedObservations } from './readiness/presentation'
-import { articleSectionId, experimentHref } from './router'
+import { articleSectionId, experimentHref, experimentSectionHref } from './router'
 
 type CaseFrame = {
   stage: HTMLElement;
@@ -233,16 +233,8 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     const arrow = document.createElement('span'); arrow.textContent = '← '; arrow.setAttribute('aria-hidden', 'true')
     link.append(arrow, document.createTextNode(topic.title)); header.prepend(link)
   }
-  const evidence = item.recorded?.evidence[0]
-  if (experiment.showRecordedSummary && evidence) {
-    const assessment = readinessFor(experiment.id, item)
-    const summary = document.createElement('div'); summary.className = 'case-recorded-summary'
-    const details = document.createElement('a')
-    details.href = experimentHref(experiment.id, evidence.page, evidence.section)
-    details.textContent = 'View test details'
-    summary.append(readinessBadge(assessment.badge, assessment.tone), paragraph(assessment.finding), details)
-    header.append(summary)
-  }
+  const summary = document.createElement('div'); summary.className = 'case-recorded-summary'
+  header.append(summary)
 
   const stage = host.querySelector<HTMLElement>('.case-stage')!
   const navigation = groupNavigation(experiment, topic)
@@ -283,6 +275,17 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     title.hidden = instruction.hidden = !guidance
     chooser.value = active.id
     reference.textContent = active.reference; acceptance.textContent = active.acceptance
+    const assessment = readinessFor(experiment.id, active)
+    summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), paragraph(assessment.finding))
+    const evidence = active.recorded?.evidence[0] ?? active.evidence?.[0]
+    if (evidence) {
+      const details = document.createElement('a')
+      details.href = experiment.singlePage
+        ? experimentSectionHref(experiment.id, 'recorded-findings')
+        : experimentHref(experiment.id, evidence.page, evidence.section)
+      details.textContent = active.recorded ? 'View test details' : evidence.label
+      summary.append(details)
+    }
   }
   setLiveCase(item)
   stage.append(recorded, comparison)
