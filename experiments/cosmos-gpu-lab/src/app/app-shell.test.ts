@@ -594,11 +594,12 @@ it('opens the standalone demo from the previous Dense Communities bookmark', asy
 it('opens a bookmarked YouTube size and switches sizes on the same page', async () => {
   const { create, destroy } = mockRun('youtube-network')
   const subset = '#/youtube-network?section=try-friendships-262k'
+  const sparse = '#/youtube-network?section=try-friendships-300k'
   window.history.replaceState(null, '', subset)
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const sizes = host.querySelector('[role="group"][aria-label="Graph size"]')!
-  const [fullSize, smallerSize] = sizes.querySelectorAll('button')
+  const [fullSize, smallerSize, sparseSize] = sizes.querySelectorAll('button')
   const findings = host.querySelector('#recorded-findings')!
   expect(smallerSize.textContent).toBe('262,144 points')
   expect(smallerSize.getAttribute('aria-pressed')).toBe('true')
@@ -619,6 +620,14 @@ it('opens a bookmarked YouTube size and switches sizes on the same page', async 
   expect(window.location.hash).toBe(subset)
   expect(smallerSize.getAttribute('aria-pressed')).toBe('true')
   expect(host.querySelector('#recorded-findings')).toBe(findings)
+
+  expect(sparseSize.textContent).toBe('300,000 points · 300,000 links')
+  sparseSize.click()
+  await vi.waitFor(() => expect(create.mock.calls[3]?.[1]).toBe('friendships-300k'))
+  expect(window.location.hash).toBe(sparse)
+  expect(sparseSize.getAttribute('aria-pressed')).toBe('true')
+  expect(smallerSize.getAttribute('aria-pressed')).toBe('false')
+  expect(host.querySelector('.case-description')?.textContent).toContain('300,000 points and 300,000 friendship links')
 })
 
 it('keeps the Forces and motion peers discoverable from the center case', async () => {

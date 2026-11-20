@@ -92,8 +92,8 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'How do both viewers draw and move the same real friendship network?',
     reference: 'Production WebGL with the same starting positions, links, styles and camera.',
     acceptance: 'Inspect each moving layout from the same camera.',
-    coverage: 'The prepared SNAP YouTube graph at 1,000,000 points and 2,852,734 links, or 262,144 points and 1,369,771 links.',
-    limits: 'Live step rates reflect concurrent playback. At one million points, the recorded WebGL comparison stopped at moving rectangle selection.',
+    coverage: 'SNAP YouTube presets with 1,000,000 points and 2,852,734 links, 262,144 points and 1,369,771 links, or 300,000 points and 300,000 links.',
+    limits: 'Use solo playback for individual rates. At one million points, recorded WebGL playback stopped at moving rectangle selection.',
   },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',

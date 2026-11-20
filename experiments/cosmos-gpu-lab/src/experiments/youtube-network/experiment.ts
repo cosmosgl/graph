@@ -1,6 +1,8 @@
 import { defineExperiment } from '../../runtime/experiment'
 
 const subsetId = 'friendships-262k'
+const sparseId = 'friendships-300k'
+const title = 'YouTube Network'
 const question = 'How do both viewers draw and move the same real friendship network?'
 const reference = 'Production WebGL with the same starting positions, links, styles and camera.'
 const acceptance = 'Watch both layouts evolve, then pan or zoom to compare the same area.'
@@ -9,8 +11,8 @@ const evidence = [{ label: 'About the layout', page: 'layout' }]
 
 export const experiment = defineExperiment({
   id: 'youtube-network',
-  title: 'YouTube Network',
-  summary: 'Run the YouTube friendship network at 262,144 or 1,000,000 points in WebGL and WebGPU.',
+  title,
+  summary: 'Compare WebGL and WebGPU on three YouTube friendship graphs, including a sample with 300,000 points and 300,000 links.',
   tags: ['integration', 'rendering', 'interaction'],
   presentation: 'demo',
   caseChooserLabel: 'Graph size',
@@ -46,13 +48,26 @@ export const experiment = defineExperiment({
       limits: 'Production WebGL frame intervals varied across runs, leaving the steady-motion timing verdict inconclusive.',
       evidence,
     },
+  }, {
+    id: sparseId,
+    title: '300,000 points · 300,000 links',
+    kind: 'demonstrate',
+    question,
+    description: '300,000 points and 300,000 friendship links sampled from the YouTube network. Every point has a link.',
+    reference,
+    acceptance,
+    evidence,
+    recorded: null,
   }],
   create: async (host, caseId) => {
-    const subset = caseId === subsetId
     const { createLargeComparisonView } = await import('../viewer-comparison/large-comparison-view')
+    if (caseId === sparseId) {
+      return createLargeComparisonView(host, { kind: 'youtube', title, pointCount: 300000, youtubeTopology: 'sparse' })
+    }
+    const subset = caseId === subsetId
     return createLargeComparisonView(host, {
       kind: 'youtube',
-      title: 'YouTube Network',
+      title,
       pointCount: subset ? 262144 : 1000000,
       benchmarkSection: subset ? 'youtube-capacity' : 'youtube-1-000-000-points-2-852-734-edges',
     })

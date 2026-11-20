@@ -317,7 +317,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Two live viewers with the same YouTube friendship links, seeded positions, styles and linked cameras',
       method: 'layout',
       next: 'Compare the moving layout, and use the recorded benchmark for what each backend completed.',
-      reproduce: 'Choose the point count, then press Run. Drag or scroll either graph to move both cameras.',
+      reproduce: 'Choose a graph size, then use Run WebGL or Run WebGPU for solo playback. Drag or scroll either graph to move both cameras.',
       investigations: [],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {

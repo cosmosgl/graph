@@ -302,6 +302,15 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Compare the smaller real graph as its layout moves',
   },
+  'youtube-network/friendships-300k': {
+    badge: 'Live demo',
+    tone: 'neutral',
+    finding: 'The sample uses 300,000 YouTube accounts and 300,000 friendship links.',
+    area: 'Integration',
+    status: 'Live comparison',
+    evidence: [{ tone: 'info', text: 'Every account has at least one sampled link' }],
+    next: 'Try WebGL and WebGPU solo on the same graph',
+  },
   'repulsion-trajectories/trajectory-drift': {
     badge: 'Paths diverged',
     tone: 'review',
