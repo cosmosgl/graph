@@ -242,6 +242,9 @@ source archive above.
 
 ## All eight forces with the resident hierarchy
 
+The resident timing runs compare WebGPU variants. Full-force performance
+relative to production WebGL is **Not assessed**. [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
+
 Run the full force set on the GPU-resident dense and hub fixtures at 65,536,
 262,144 and 1,000,000 points. Compare with the three-force resident viewer
 at one million. Use the same fixed Fit camera, basic opaque points and

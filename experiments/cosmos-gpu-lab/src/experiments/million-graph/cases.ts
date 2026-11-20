@@ -8,15 +8,15 @@ export const cases: ExperimentCase[] = [
     question: 'How does a large graph move and respond to interaction on the GPU?',
     description: 'A dense-community graph updates and draws on WebGPU. Start with 65,536 points and increase the count up to one million.',
     tryIt: 'Press Run graph, then pan or select a point. The status shows the selected point ID.',
-    reference: 'The recorded interaction study compares frame and picking times with its stated responsiveness targets.',
-    acceptance: 'The live view shows a new session; it does not automatically measure those timing targets.',
+    reference: 'The recorded interaction study compares WebGPU variants on the same graph and input sequence.',
+    acceptance: 'Check movement, pan, zoom and point selection in the live view. Use the recorded study for timings.',
     recorded: {
-      conclusion: 'Both workloads met the frame and pick targets at 196,608 points in two sessions. At one million, standard drawing ' +
-        'missed both targets; reduced drawing met all 16 sampled pick targets but still missed the steady-frame target.',
+      conclusion: 'Both workloads met the study’s frame and pick thresholds at 196,608 points. At one million, reduced drawing reached ' +
+        'about 50 ms frame p95 and completed all 16 sampled picks within 50 ms.',
       date: 'Not recorded',
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'Dense-community and high-degree graphs, using the four-corner distant-force option.',
-      limits: 'One machine and a bounded interaction sequence; these times do not establish production or cross-device performance.',
+      limits: 'One machine and a bounded interaction sequence. The matched million-point WebGL comparison is pending.',
       evidence: [{ label: 'Moving-graph interaction evidence', page: 'interactive-study' }, { label: 'How the graph works', page: 'overview' }],
     },
   },

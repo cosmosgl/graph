@@ -16,6 +16,10 @@ intermittent miss at 262,144.
 Repeat the highest passing intermediate size once with the same protocol
 to check whether the result holds in a fresh browser session.
 
+The timing results below compare WebGPU variants using the original pilot
+references. Migration performance at one million points requires paired
+production WebGL timings. [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
+
 ## Native M3 findings
 
 ### Requesting the next frame early
@@ -221,9 +225,9 @@ measured runs use the declared visible viewport with the Vitest UI closed.
   resources. CPU allocations, driver memory and unobserved transient peaks
   are outside this measurement.
 
-Use 95% of moving frame intervals within 33 ms and feedback within 50 ms
-as reference points from the small pilot. Keep missed timings and incomplete
-lanes visible. A running fixture and exact picks establish bounded behavior.
+The recorded checks use 95% of moving frame intervals within 33 ms and
+feedback within 50 ms as references from the small pilot. Keep missed timings
+and incomplete lanes visible. A running fixture and exact picks establish bounded behavior.
 Production appearance, remaining forces, arbitrary pointer targets and other
 devices require separate checks.
 
