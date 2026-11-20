@@ -5,7 +5,7 @@ import { COLLISION_EXACT_LIMIT, validateCollision, type CollisionParameters } fr
 
 export type CollisionOrigin = readonly [number, number]
 export type CollisionSlotFrame = { tick: number; seed: number; alpha: number }
-export const HASHED_COLLISION_LIMIT = 32768
+export const HASHED_COLLISION_LIMIT = 1000000
 
 // Rotation counts collision passes, including repeated passes within a tick.
 // Use the Lab's deterministic samples to replay the same seed on CPU and GPU.
@@ -19,7 +19,7 @@ export function collisionSlotGrid (sizes: Float32Array, settings: CollisionParam
   validateCollision(settings)
   if (sizes.length <= COLLISION_EXACT_LIMIT || sizes.length > HASHED_COLLISION_LIMIT ||
     !sizes.every(size => Number.isFinite(size) && size >= 0) || !origin.every(Number.isFinite)) {
-    throw new Error('The collision slot experiment covers 4,097–32,768 points with resolved sizes and a finite origin')
+    throw new Error('Expected 4,097–1,000,000 points with resolved sizes and a finite collision origin')
   }
   const maxSize = sizes.reduce((largest, size) => Math.max(largest, size), 0)
   const maxRadius = (settings.radius > 0 ? settings.radius : maxSize * 0.5) + settings.padding

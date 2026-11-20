@@ -163,7 +163,7 @@ for (const [count, kind, variant] of renderCases) {
         ? (tick): ResidentStageTimestamps | undefined => {
           if (!query || tick < warmup || tick > warmup + intervals) return undefined
           return (stage): TimestampWrites => {
-            const idx = 2 * ((tick - warmup) * RESIDENT_STAGES.length + RESIDENT_STAGES.indexOf(stage))
+            const idx = 2 * ((tick - warmup) * RESIDENT_STAGES.length + RESIDENT_STAGES.findIndex(name => name === stage))
             return { timestampQuerySet: query, beginTimestampIndex: idx, endTimestampIndex: idx + 1 }
           }
         }

@@ -3,12 +3,22 @@ import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { graphRgb, graphRgba } from '../../runtime/palette'
+import { SETTINGS as CLUSTER, type ClusterInput } from '../cluster-attraction/data'
+import { createClusterWebGPU } from '../cluster-attraction/webgpu'
+import type { CollisionParameters } from '../collision/data'
+import { collisionPassFrame } from '../collision/hashed-grid'
+import { createCollisionSlotsWebGPU } from '../collision/hashed-webgpu'
+import { createCenterWebGPU } from '../combined-layout/center-webgpu'
 import { createLinkResources, type LinkInput } from '../combined-layout/topology'
 import { GRAVITY, REPULSION, SPRINGS } from '../combined-layout/data'
+import type { MouseForce } from '../combined-layout/webgpu'
 import type { PositionSource } from '../many-body/backend'
 import { createFixture, nearLimit, type Input } from '../many-body/data'
 import type { Snapshot } from '../many-body/reference'
 import type { TimestampWrites } from '../many-body/timing'
+import { createMouseWebGPU } from '../mouse-repulsion/webgpu'
+import { packAttractors, SETTINGS as ATTRACTOR, type AttractorInput } from '../point-attractors/data'
+import { createAttractorWebGPU } from '../point-attractors/webgpu'
 import type { GridPassTimestamps } from '../spatial-grid/resources'
 import type { GraphInput } from '../weighted-links/data'
 import springSource from '../weighted-links/force.wgsl?raw'
@@ -73,10 +83,13 @@ export type Distribution = 'uniform' | 'clusters'
 export type ResidentLayers = 'clear' | 'points' | 'links' | 'both'
 type ResidentOptions = {
   pixelRatio?: number; picking?: boolean; pointCulling?: boolean; cachedHighlight?: boolean; depthLinks?: boolean; coarseLevels?: number;
+  fullForces?: { centerStrength: number; cluster: ClusterInput; attractor: AttractorInput; collision: CollisionParameters; cacheCollisionCells?: boolean };
 }
 export type ResidentMotionSample = { points: Float32Array; normalized: Float32Array; fieldBox: Float32Array; view: Float32Array }
 export const RESIDENT_STAGES = ['gravity', 'bounds and normalization', 'hierarchy and cell field', 'repulsion', 'springs and camera', 'draw'] as const
-export type ResidentStageTimestamps = (stage: typeof RESIDENT_STAGES[number]) => TimestampWrites
+export const RESIDENT_FORCE_STAGES = ['mouse', 'centroid', 'cluster attraction', 'point attractors', 'collision'] as const
+export type ResidentStage = typeof RESIDENT_STAGES[number] | typeof RESIDENT_FORCE_STAGES[number]
+export type ResidentStageTimestamps = (stage: ResidentStage) => TimestampWrites
 
 export function createResidentChain (count: number, distribution: Distribution = 'uniform'): { input: Input; graph: GraphInput } {
   if (!Number.isInteger(count) || count < 4 || count > 1000000) throw new Error('Expected 4–1,000,000 points')
@@ -100,8 +113,10 @@ export async function createResidentGraph (
   readonly topologyMs: number;
   readonly linkCount: number;
   updateLinks(input: LinkInput): void;
+  readLinks(): Promise<Uint32Array>;
   positionSource(): PositionSource;
   patchPositions(first: number, values: Float32Array): void;
+  setMouseRepulsion(pointer?: MouseForce): void;
   frame(tick: number, alpha: number, draw?: boolean, timestamps?: ResidentStageTimestamps, gridTimestamps?: GridPassTimestamps): void;
   redraw(layers?: ResidentLayers, timestamps?: TimestampWrites): void;
   redrawHighlight(timestamps?: TimestampWrites): boolean;
@@ -137,6 +152,22 @@ export async function createResidentGraph (
     const integrationParams = own(upload(device, new Float32Array([
       count, 0, 0, nearLimit(count, REPULSION), REPULSION.friction, REPULSION.referenceLength, 0, 0,
     ]), Buffer.UNIFORM))
+    const config = options.fullForces
+    if (config && (config.cluster.points !== input.points || config.attractor.points !== input.points || !Number.isFinite(config.centerStrength))) {
+      throw new Error('Full forces require channels for the current point data and a finite center strength')
+    }
+    const extra = config && {
+      center: own(await createCenterWebGPU(device, count, forces, undefined, 'linear', 'once')),
+      cluster: own(await createClusterWebGPU(device, config.cluster, forces)),
+      attractor: own(await createAttractorWebGPU(device, count, forces)),
+      mouse: own(await createMouseWebGPU(device, forces, undefined, 'expanded')),
+      collision: own(await createCollisionSlotsWebGPU(device, graph.sizes, forces, config.collision, [0, 0], undefined, config.cacheCollisionCells)),
+      collisionIntegration: own(upload(device, new Float32Array([count, 0, 0, 0, 1, REPULSION.referenceLength, 0, 0]), Buffer.UNIFORM)),
+      collisionSettings: config.collision,
+      centerStrength: config.centerStrength,
+    }
+    if (extra && config) extra.attractor.update(packAttractors(config.attractor).values)
+    let pointer: MouseForce | undefined
     const viewBuffer = own(upload(device, new Float32Array(4)))
     const viewBounds = own(await createGpuBounds(device, count, layout(count).finest, viewBuffer))
     const display = own(upload(device, new Float32Array([width, height, ratio, -1]), Buffer.UNIFORM))
@@ -183,9 +214,9 @@ export async function createResidentGraph (
     let current = 0; let destroyed = false; let autoFit = true
     let highlightValid = false; let drewPoints = false
     const healthy = (): void => { if (destroyed || device.isLost || failure) throw new Error(failure || 'GPU graph unavailable') }
-    const move = (pass: ComputePass): void => {
+    const move = (pass: ComputePass, params = integrationParams): void => {
       integrate.dispatch(pass, {
-        x: Math.ceil(count / 64), bindings: { positions: positions[current], forces, params: integrationParams, output: positions[1 - current] },
+        x: Math.ceil(count / 64), bindings: { positions: positions[current], forces, params, output: positions[1 - current] },
       })
       current = 1 - current
     }
@@ -266,8 +297,16 @@ export async function createResidentGraph (
       get linkCount (): number { return topology.edgeCount },
       updateLinks (links): void {
         healthy()
+        const resizeCollision = extra?.collision.prepareResize(links.sizes)
         topology.update(input.points, links)
+        resizeCollision?.()
         highlightValid = false
+      },
+      async readLinks (): Promise<Uint32Array> {
+        healthy()
+        if (!topology.edgeCount) return new Uint32Array()
+        const bytes = await topology.links.readAsync(0, topology.edgeCount * 8)
+        return new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
       },
       positionSource (): PositionSource { healthy(); return { device, buffer: positions[current], count } },
       patchPositions (first, values): void {
@@ -284,17 +323,33 @@ export async function createResidentGraph (
         if (values.byteLength) positions.forEach(buffer => buffer.write(values, first * 16))
         highlightValid = false
       },
+      setMouseRepulsion (next): void {
+        healthy()
+        if (!extra) throw new Error('Resident mouse repulsion was not enabled')
+        pointer = next
+      },
       frame (tick, alpha, draw = true, timestamps, gridTimestamps): void {
         healthy(); hierarchy.prepare(tick, alpha)
         highlightValid = false
         const updateView = draw && autoFit
         if (updateView) viewBounds.prepare(tick)
         gravityParams.write(new Float32Array([count, alpha, GRAVITY, 0]))
-        springParams.write(new Float32Array([SPRINGS.spring, SPRINGS.distance, 1, 1, alpha, SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
+        const collisionSettings = extra?.collisionSettings
+        springParams.write(new Float32Array([
+          SPRINGS.spring, SPRINGS.distance, 1, 1, alpha, SPRINGS.friction, SPRINGS.maxStep,
+          collisionSettings?.strength ? 1 : 0, collisionSettings?.radius ?? 0, collisionSettings?.padding ?? 0, count, 0,
+        ]))
+        if (extra && pointer) {
+          extra.mouse.prepare(count, pointer.world, pointer.strength)
+          compute(pass => { extra.mouse.encode(pass, positions[current]); move(pass) }, timestamps?.('mouse'))
+        }
         compute(pass => {
           gravity.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], params: gravityParams, forces } })
           move(pass)
         }, timestamps?.('gravity'))
+        if (extra) {
+          compute(pass => { extra.center.encode(pass, positions[current], alpha, extra.centerStrength); move(pass) }, timestamps?.('centroid'))
+        }
         hierarchy.encodeIndex(current, timestamps?.('bounds and normalization'), gridTimestamps)
         // Measure each split pass against its own timestamp pair. The timing
         // sweep keeps the ordinary hierarchy/repulsion/springs pass intact.
@@ -303,13 +358,28 @@ export async function createResidentGraph (
           compute(pass => { hierarchy.encodeRepulsion(pass, current); move(pass) }, timestamps('repulsion'))
           compute(pass => {
             moveAlongLinks(pass)
-            if (updateView) viewBounds.encode(pass, positions[current])
+            if (updateView && !extra) viewBounds.encode(pass, positions[current])
           }, timestamps('springs and camera'))
         } else {
           compute(pass => {
             hierarchy.encodeForce(pass, current); move(pass); moveAlongLinks(pass)
-            if (updateView) viewBounds.encode(pass, positions[current])
+            if (updateView && !extra) viewBounds.encode(pass, positions[current])
           })
+        }
+        if (extra) {
+          const { cluster, attractor, collision, collisionSettings, collisionIntegration } = extra
+          cluster.prepare(alpha, CLUSTER.strength)
+          compute(pass => { cluster.encode(pass, positions[current]); move(pass) }, timestamps?.('cluster attraction'))
+          attractor.prepare(alpha, ATTRACTOR.strength)
+          compute(pass => { attractor.encode(pass, positions[current]); move(pass) }, timestamps?.('point attractors'))
+          compute(pass => {
+            for (let i = 0; i < collisionSettings.iterations; i++) {
+              collision.prepare(collisionPassFrame(tick * collisionSettings.iterations + i, alpha), i)
+              collision.encode(pass, positions[current], i)
+              move(pass, collisionIntegration)
+            }
+            if (updateView) viewBounds.encode(pass, positions[current])
+          }, timestamps?.('collision'))
         }
         if (draw) paint('both', timestamps?.('draw'))
         device.submit()

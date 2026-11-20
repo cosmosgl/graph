@@ -90,6 +90,33 @@ outside both production ranges. Sharing a Lab luma device establishes a
 prototype contract. A production host still needs one mutually supported
 luma package family and the production draw and position-sharing contracts
 on that family.
+
+### Chrome default WebGPU availability
+
+Repeat the two moving [viewer checks](#/viewer-comparison?section=doc-agent-recipe-fractional-styles-on-moving-geometry)
+on M3 without the runner's `--enable-unsafe-webgpu` argument. Require the
+non-fallback adapter, visible style comparisons and actual object picks.
+Use the built production WebGL Graph as the paint control. This checks the
+initialized backend and actual interaction on the stated Chrome build.
+
+The replay passed in visible Chrome 157 on the native M3 Metal 3 adapter.
+All eight style frames matched interior colors and point IDs. The test
+kept the 993 boundary color differences and passed all eight pointer
+checks on the crossing fixture. The full production Deck check below
+also exercised the current WebGL path with `navigator.gpu` unavailable.
+This initial browser scope covers Chrome on M3.
+
+The native-flag replay is in `captures/default-chrome-m3-20261120-052344/`
+with source archive SHA-256
+`1c786d611d72fad0c8e76ab7274c9581fdbe756fe06a058b73431020a98e68be`
+and production UMD SHA-256
+`71f4cc54f0cf4912afead56d0ea865e85cb45078b44b378ae8cdae1360ef1f8d`.
+
+```sh
+LAB_NATIVE_VISIBLE=1 LAB_DEFAULT_GPU_FLAGS=1 VITE_LAB_MOTION_STYLES=1 \
+  pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/motion-styles.test.ts
+```
+
 ## Deck host on one luma family
 
 The published deck.gl `10.0.0-alpha.1` Core package uses luma

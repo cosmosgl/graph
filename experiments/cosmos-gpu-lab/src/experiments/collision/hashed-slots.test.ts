@@ -88,8 +88,9 @@ function movementChecks (
 }
 
 it('uses the slot tier above the exact limit and exposes the declared duplicate and overflow controls', () => {
-  expect(() => collisionSlotGrid(new Float32Array(4096), COLLISION, ORIGIN)).toThrow('4,097–32,768')
-  expect(() => collisionSlotGrid(new Float32Array(32769), COLLISION, ORIGIN)).toThrow('4,097–32,768')
+  expect(() => collisionSlotGrid(new Float32Array(4096), COLLISION, ORIGIN)).toThrow('4,097–1,000,000')
+  expect(() => collisionSlotGrid(new Float32Array(1000001), COLLISION, ORIGIN)).toThrow('4,097–1,000,000')
+  expect(collisionSlotGrid(new Float32Array(1000000), COLLISION, ORIGIN)).toMatchObject({ edge: 512, capacity: 8 })
   const small = fixture(4097)
   const project = collisionSlotsReference(small.points, small.sizes, small.settings, ORIGIN, small.frames[0])
   const seamSlots = [project.slots.indexOf(7), project.slots.indexOf(8)]
@@ -110,6 +111,29 @@ it('uses the slot tier above the exact limit and exposes the declared duplicate 
   expect(setup.slots.indexOf(5363)).toBe(-1)
   expect(setup.forces[3288 * 4]).toBe(0)
   expect(setup.forces[5362 * 4]).toBeCloseTo(2.875, 5)
+})
+
+it('reuses each point cell without changing slots or correction bytes', async () => {
+  const { points, sizes, settings, frames } = fixture(8192)
+  const scope = resourceScope()
+  try {
+    const device = scope.own(await createDevice('webgpu'))
+    const positions = scope.own(upload(device, points))
+    const directForces = scope.own(upload(device, new Float32Array(points.length)))
+    const cachedForces = scope.own(upload(device, new Float32Array(points.length)))
+    const direct = scope.own(await createCollisionSlotsWebGPU(device, sizes, directForces, settings, ORIGIN))
+    const cached = scope.own(await createCollisionSlotsWebGPU(device, sizes, cachedForces, settings, ORIGIN, undefined, true))
+    for (const frame of frames) {
+      direct.prepare(frame); cached.prepare(frame)
+      const pass = device.beginComputePass()
+      try { direct.encode(pass, positions); cached.encode(pass, positions) } finally { pass.end() }
+      await waitForGpu(device)
+      expect(compareSlots(await cached.readSlots(), await direct.readSlots())).toMatchObject({ failures: 0 })
+      const directBytes = await directForces.readAsync()
+      const cachedBytes = await cachedForces.readAsync()
+      expect(cachedBytes.every((value, offset) => value === directBytes[offset])).toBe(true)
+    }
+  } finally { scope.destroy() }
 })
 
 for (const count of COUNTS) {

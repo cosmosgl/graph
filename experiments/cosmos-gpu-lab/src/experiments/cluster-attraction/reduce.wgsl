@@ -14,7 +14,16 @@ fn main(@builtin(local_invocation_id) local: vec3u, @builtin(workgroup_id) group
     if (SOURCE_POINTS) {
       let point = points[members[range.x + local.x]];
       if (point.w <= 0.5) { value.x = vec2f(point.x, 0.); value.y = vec2f(point.y, 0.); value.count = 1u; }
-    } else { value = previous[range.x + local.x]; }
+    } else {
+      // A large group can span more partials than the workgroup has lanes.
+      value = previous[range.x + local.x];
+      for (var offset = local.x + 256u; offset < range.y; offset += 256u) {
+        let partial = previous[range.x + offset];
+        value.x = sum_fp64(value.x, partial.x);
+        value.y = sum_fp64(value.y, partial.y);
+        value.count += partial.count;
+      }
+    }
   }
   scratch[local.x] = value; workgroupBarrier();
   for (var stride = 128u; stride > 0u; stride /= 2u) {

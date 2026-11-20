@@ -4,10 +4,11 @@ import { bindingLayout, upload } from '../../gpu/luma'
 import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import type { CollisionParameters } from './data'
 import { collisionSlotGrid, collisionSlotUniforms, type CollisionOrigin, type CollisionSlotFrame } from './hashed-grid'
-import { collisionSlotBuildSource, collisionSlotForceSource } from './hashed-source'
+import { cachedCollisionSlotBuildSource, collisionSlotBuildSource, collisionSlotForceSource } from './hashed-source'
 
 export async function createCollisionSlotsWebGPU (
-  device: Device, sizes: Float32Array, forces: Buffer, settings: CollisionParameters, origin: CollisionOrigin, ledger?: BufferLedger
+  device: Device, sizes: Float32Array, forces: Buffer, settings: CollisionParameters, origin: CollisionOrigin, ledger?: BufferLedger,
+  cacheCells = false
 ): Promise<{
     bytes: number;
     prepareResize(sizes: Float32Array): () => void;
@@ -30,6 +31,7 @@ export async function createCollisionSlotsWebGPU (
     const heads = storage(buckets)
     const next = storage(capacity)
     const slots = storage(buckets * grid.capacity, true)
+    const pointCells = cacheCells ? storage(capacity * 2) : undefined
     const sizeBuffer = own(upload(device, sizes))
     // Several iterations can share a command submission. Bind each to its
     // own uniforms so the final queue write cannot replace earlier seeds.
@@ -40,26 +42,27 @@ export async function createCollisionSlotsWebGPU (
     const buildBindings = bindingLayout([
       ['positions', 'read-only-storage'], ['grid', 'uniform'], ['heads', 'storage'], ['next', 'storage'], ['slots', 'storage'],
     ])
+    const linkBindings = buildBindings.slice(0, 4)
+    if (cacheCells) linkBindings.push({ name: 'pointCells', location: 5, group: 0, type: 'storage' })
     const clear = own(await Kernel.createAsync(device, {
       source: collisionSlotBuildSource, entryPoint: 'clearHeads', shaderLayout: { bindings: buildBindings.slice(2, 3) },
     }))
     const link = own(await Kernel.createAsync(device, {
-      source: collisionSlotBuildSource, entryPoint: 'linkPoints', shaderLayout: { bindings: buildBindings.slice(0, 4) },
+      source: cacheCells ? cachedCollisionSlotBuildSource : collisionSlotBuildSource,
+      entryPoint: 'linkPoints',
+      shaderLayout: { bindings: linkBindings },
     }))
     const select = own(await Kernel.createAsync(device, {
       source: collisionSlotBuildSource, entryPoint: 'selectSlots', shaderLayout: { bindings: buildBindings.slice(1) },
     }))
-    const force = own(await Kernel.createAsync(device, {
-      source: collisionSlotForceSource(),
-      shaderLayout: {
-        bindings: bindingLayout([
-          ['positions', 'read-only-storage'], ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
-          ['grid', 'uniform'], ['slots', 'read-only-storage'],
-        ]),
-      },
-    }))
+    const forceBindings = bindingLayout([
+      ['positions', 'read-only-storage'], ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
+      ['grid', 'uniform'], ['slots', 'read-only-storage'],
+    ])
+    if (cacheCells) forceBindings.push({ name: 'pointCells', location: 6, group: 0, type: 'read-only-storage' })
+    const force = own(await Kernel.createAsync(device, { source: collisionSlotForceSource(cacheCells), shaderLayout: { bindings: forceBindings } }))
     return {
-      bytes: [heads, next, slots, sizeBuffer, ...uniforms.flatMap(({ grid, params }) => [grid, params])]
+      bytes: [heads, next, slots, sizeBuffer, ...(pointCells ? [pointCells] : []), ...uniforms.flatMap(({ grid, params }) => [grid, params])]
         .reduce((total, buffer) => total + buffer.byteLength, 0),
       prepareResize (sizes): () => void {
         if (sizes.length > capacity) throw new Error('Hashed collision size capacity exceeded')
@@ -79,10 +82,11 @@ export async function createCollisionSlotsWebGPU (
         const { grid: gridParams, params } = uniforms[iteration]
         const workgroups = Math.ceil(count / 64)
         const bucketGroups = Math.ceil(grid.edge ** 2 / 64)
+        const cellBinding: Record<string, Buffer> = pointCells ? { pointCells } : {}
         clear.dispatch(pass, { x: bucketGroups, bindings: { heads } })
-        link.dispatch(pass, { x: workgroups, bindings: { positions, grid: gridParams, heads, next } })
+        link.dispatch(pass, { x: workgroups, bindings: { positions, grid: gridParams, heads, next, ...cellBinding } })
         select.dispatch(pass, { x: bucketGroups, bindings: { grid: gridParams, heads, next, slots } })
-        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params, forces, grid: gridParams, slots } })
+        force.dispatch(pass, { x: workgroups, bindings: { positions, sizes: sizeBuffer, params, forces, grid: gridParams, slots, ...cellBinding } })
       },
       async readSlots (): Promise<Uint32Array> {
         const bytes = await slots.readAsync(0, grid.edge ** 2 * grid.capacity * 4)
