@@ -16,20 +16,26 @@ type ComparisonDemo = {
   kind: InteractiveFixtureKind | 'youtube';
   title: string;
   pointCount?: number;
-  benchmarkSection: string;
+  benchmarkSection?: string;
+  youtubeTopology?: 'sparse';
   frameIntervals?: { webglMs: number; webgpuMs: number };
 }
 
 type Playback = 'both' | 'webgl' | 'webgpu'
 
 export function createLargeComparisonView (
-  host: HTMLElement, { kind, title, pointCount = 1000000, benchmarkSection, frameIntervals }: ComparisonDemo
+  host: HTMLElement, { kind, title, pointCount = 1000000, benchmarkSection, frameIntervals, youtubeTopology }: ComparisonDemo
 ): ExperimentInstance {
   const youtube = kind === 'youtube'
   const rateUnit = youtube ? 'frames/s' : 'steps/s'
   const benchmarkSummary = frameIntervals
     ? `Separate M3 runs · 95th-percentile frame interval during steady motion ·
       WebGL <strong>${frameIntervals.webglMs.toFixed(1)} ms</strong> · WebGPU <strong>${frameIntervals.webgpuMs.toFixed(1)} ms</strong>.`
+    : ''
+  const benchmarkLink = benchmarkSection
+    ? `<p class="demo-note comparison-benchmark">${benchmarkSummary}
+        <a href="#/viewer-comparison?section=doc-migration-results-${benchmarkSection}">Benchmark results</a>
+      </p>`
     : ''
   const modes: Playback[] = youtube ? ['webgl', 'webgpu', 'both'] : ['both']
   const labels = { webgl: ' WebGL', webgpu: ' WebGPU', both: youtube ? ' both' : '' }
@@ -50,9 +56,7 @@ export function createLargeComparisonView (
         <p class="comparison-step-rate" data-webgpu-rate>— ${rateUnit}</p></section>
     </div>
     <p class="demo-note">Drag or scroll either graph to pan or zoom both. ${playbackNote}</p>
-    <p class="demo-note comparison-benchmark">${benchmarkSummary}
-      <a href="#/viewer-comparison?section=doc-migration-results-${benchmarkSection}">Benchmark results</a>
-    </p>`
+    ${benchmarkLink}`
   const playButtons = modes.map(mode => ({
     mode, button: host.querySelector<HTMLButtonElement>(`[data-comparison-run="${mode}"]`)!,
   }))
@@ -267,7 +271,9 @@ export function createLargeComparisonView (
     if (signal.aborted) return
     let scene: ComparisonInput['scene']
     try {
-      scene = kind === 'youtube' ? await loadYoutubeFixture(pointCount, signal) : createInteractiveFixture(pointCount, kind)
+      scene = kind === 'youtube'
+        ? await loadYoutubeFixture(pointCount, signal, youtubeTopology)
+        : createInteractiveFixture(pointCount, kind)
     } catch (error) { fail('The dataset could not load.', error); return }
     if (signal.aborted) return
     status.textContent = 'Loading the graphs…'
