@@ -69,7 +69,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'point-images/images': {
     badge: 'Compatibility failed',
     tone: 'fail',
-    finding: 'The candidate passed 40 atlas cases; production compatibility failed.',
+    finding: 'The revised rule removed invisible picks in the overlap test. Color differences from production exceeded tolerance at 81 pixels.',
     area: 'Integration',
     status: 'Compatibility failed',
     evidence: [
@@ -195,7 +195,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'mouse-repulsion/pointer-force': {
     badge: 'Pointer checks passed',
     tone: 'pass',
-    finding: 'Pointer checks passed to 8,192 points; full-frame latency is untested.',
+    finding: 'Both backends kept pinned and absent points unchanged in tests up to 8,192 points.',
     area: 'Integration',
     status: 'Frame latency untested',
     evidence: [

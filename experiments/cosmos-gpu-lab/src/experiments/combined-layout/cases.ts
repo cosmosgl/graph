@@ -28,7 +28,7 @@ export const cases: ExperimentCase[] = [
     reference: 'A staged same-input CPU reference and independently evolving WebGPU positions.',
     acceptance: 'Position and force checkpoints retain their existing tolerance; a one-pixel screen is reported separately.',
     recorded: {
-      conclusion: 'Both tested layouts passed the 40-tick one-pixel screen, while strict CPU trajectory checks still failed.',
+      conclusion: 'At the tested zoom, the largest projected position difference was about 0.014 pixels over 40 ticks.',
       date: 'Not recorded',
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'Two communities graphs at 256 and 8,192 points, with selected stage replays and frozen cost checks.',
