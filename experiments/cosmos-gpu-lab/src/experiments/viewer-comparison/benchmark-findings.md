@@ -184,6 +184,10 @@ both backends had **262,144 points and 1,369,771 edges**. That is a tested
 size for the specific workload and interactions below. The exact limit between
 the tested sizes is unknown.
 
+```example
+youtubeCapacity
+```
+
 | Points | Edges | Production WebGL outcome | Lab WebGPU outcome |
 | ---: | ---: | --- | --- |
 | 1,000,000 | 2,852,734 | Two full attempts drew and moved the graph, then stopped at the first rectangle selection. | Full workflow completed. |

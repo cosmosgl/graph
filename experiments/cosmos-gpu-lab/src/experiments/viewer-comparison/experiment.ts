@@ -2,6 +2,7 @@ import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
 import recordedSummary from './recorded-summary.json'
 import { cases } from './cases'
+import { renderYoutubeCapacity } from './youtube-capacity-figure'
 export const experiment = defineExperiment({
   id: 'viewer-comparison',
   title: 'Graph interaction in WebGL and WebGPU',
@@ -21,6 +22,7 @@ export const experiment = defineExperiment({
       id: 'migration-results',
       title: 'Matched migration benchmark results',
       load: async (): Promise<string> => (await import('./benchmark-findings.md?raw')).default,
+      examples: { youtubeCapacity: renderYoutubeCapacity },
     },
     {
       kind: 'markdown',

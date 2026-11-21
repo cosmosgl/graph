@@ -507,6 +507,85 @@ input:disabled {
 .result-chart .result-chart-over-limit .result-chart-bar { background: var(--danger-text); }
 .result-chart-value.result-chart-over-limit { color: var(--danger-text); }
 
+.prose .result-workflow-table {
+  margin-top: 10px;
+  table-layout: fixed;
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+}
+.prose .result-workflow-table :is(th, td) {
+  padding: 5px 4px;
+  border: 0;
+  background: none;
+  line-height: 1.35;
+}
+.prose .result-workflow-table thead { color: var(--text-secondary); }
+.prose .result-workflow-table thead th { color: inherit; }
+.prose .result-workflow-table tbody tr { border-top: 1px solid var(--control-border); }
+.prose .result-workflow-table tr > :first-child { width: 27%; padding-inline-start: 0; white-space: nowrap; }
+.result-workflow-table [data-outcome='completed'], .result-workflow-note span { color: var(--accent); }
+.result-workflow-table :is([data-outcome='no-result'], [data-outcome='timeout']) { color: var(--danger-text); }
+.result-workflow-table [data-outcome='not-reached'] { color: var(--text-secondary); }
+.result-workflow-note { margin-top: 8px; }
+
+.result-pick-plot { margin-top: 12px; }
+.result-pick-axis {
+  display: flex;
+  position: relative;
+  justify-content: space-between;
+  padding-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: var(--type-meta);
+  font-variant-numeric: tabular-nums;
+}
+.result-pick-target {
+  position: absolute;
+  left: var(--pick-target-position);
+  transform: translateX(-50%);
+  color: var(--highlight);
+  white-space: nowrap;
+}
+.result-pick-bar { position: relative; display: grid; height: 7px; }
+.result-pick-bar::after {
+  content: '';
+  position: absolute;
+  inset-block: -3px;
+  left: var(--pick-target-position);
+  border-left: 1px solid var(--highlight);
+}
+.result-pick-timing [data-phase='readback'] { background: color-mix(in srgb, var(--text-secondary) 65%, transparent); }
+.result-pick-timing [data-phase='highlight'] { background: var(--accent); }
+.result-pick-timing [data-phase='wait'] { background: var(--danger-text); }
+.result-pick-phases { display: grid; grid-template-columns: 1fr 1fr 1.3fr; gap: 8px; margin: 10px 0 0; }
+.result-pick-phases > div { display: grid; grid-template-columns: 6px minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 2px 5px; }
+.result-pick-swatch { align-self: center; width: 6px; height: 6px; }
+.result-pick-phases dt { grid-column: 2; color: var(--text-secondary); font-size: var(--type-meta); line-height: 1.3; }
+.result-pick-phases dd { grid-column: 2; grid-row: 1; margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.result-capacity-timeline {
+  --capacity-plot-height: 82px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 3px 8px;
+  margin-top: 14px;
+}
+.result-capacity-plot { display: block; width: 100%; height: var(--capacity-plot-height); }
+.result-capacity-idle { fill: color-mix(in srgb, var(--highlight) 13%, transparent); }
+.result-capacity-guide { stroke: var(--control-border); }
+.result-capacity-active { stroke: var(--accent); stroke-width: 1.8; }
+.result-capacity-held { stroke: var(--highlight); stroke-width: 1.3; stroke-dasharray: 4 3; }
+.result-capacity-plot circle { fill: var(--accent); }
+.result-capacity-end { position: relative; height: var(--capacity-plot-height); line-height: 1.2; }
+.result-capacity-end span { position: absolute; left: 0; transform: translateY(-7px); }
+.result-capacity-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); text-align: center; }
+.result-capacity-steps, .result-capacity-end { color: var(--text-secondary); font-size: var(--type-meta); font-variant-numeric: tabular-nums; }
+.result-capacity-timeline strong { color: var(--text-primary); font-weight: 500; }
+.result-capacity-steps strong { display: block; }
+@media (max-width: 420px) {
+  .result-capacity-timeline { grid-template-columns: minmax(0, 1fr) 62px; column-gap: 5px; }
+  .result-capacity-end strong { display: block; }
+}
+
 .scale-toolbar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));

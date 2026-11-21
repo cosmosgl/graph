@@ -1,5 +1,6 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { cases } from './cases'
+import { renderRetainedCapacity } from './retained-capacity-figure'
 export const experiment = defineExperiment({
   id: 'point-capacity',
   title: 'Point capacity and memory',
@@ -12,6 +13,7 @@ export const experiment = defineExperiment({
     id: 'reuse',
     title: 'Retained capacity',
     load: async (): Promise<string> => (await import('./reuse.md?raw')).default,
+    examples: { retainedCapacity: renderRetainedCapacity },
   }, {
     kind: 'markdown',
     id: 'findings',

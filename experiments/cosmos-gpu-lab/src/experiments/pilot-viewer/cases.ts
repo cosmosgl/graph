@@ -1,4 +1,5 @@
 import type { ExperimentCase } from '../../runtime/experiment'
+import { originalPickTotalMs, pickFeedbackTargetMs } from './selection-timing-figure'
 
 export const cases: ExperimentCase[] = [{
   id: 'explore-graph',
@@ -38,8 +39,8 @@ export const cases: ExperimentCase[] = [{
       title: 'The original run missed the 50 ms target',
       context: 'Slowest click while the graph was moving · Wide canvas at DPR 2',
       unit: 'ms',
-      bars: [['Original inline run', 100.4], ['Standalone replay', 20.0]],
-      reference: { value: 50, label: '50 ms target', upperLimit: true },
+      bars: [['Original inline run', originalPickTotalMs], ['Standalone replay', 20.0]],
+      reference: { value: pickFeedbackTargetMs, label: `${pickFeedbackTargetMs} ms target`, upperLimit: true },
     }],
   },
 }]

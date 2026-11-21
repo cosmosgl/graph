@@ -3,6 +3,7 @@ import { readStudyRecord } from '../../runtime/study-record'
 import recordedSummary from './recorded-summary.json'
 import { agentFindings } from './agent-findings'
 import { cases } from './cases'
+import { renderSelectionTiming } from './selection-timing-figure'
 export const experiment = defineExperiment({
   id: 'pilot-viewer',
   title: 'Karate Club on WebGPU',
@@ -17,6 +18,7 @@ export const experiment = defineExperiment({
       id: 'latency-evidence',
       title: 'Selection feedback evidence',
       load: async (): Promise<string> => (await import('./latency-evidence.md?raw')).default,
+      examples: { selectionTiming: renderSelectionTiming },
     },
     { kind: 'markdown', id: 'scope', title: 'First pilot contract', load: async (): Promise<string> => (await import('./scope.md?raw')).default },
     {

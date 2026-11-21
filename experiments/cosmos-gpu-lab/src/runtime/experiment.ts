@@ -19,6 +19,7 @@ export type MarkdownPage = {
   title: string;
   load: () => Promise<string>;
   assets?: Record<string, string>;
+  examples?: Record<string, (host: HTMLElement) => void>;
 }
 
 export type ExperimentReportResult = {
