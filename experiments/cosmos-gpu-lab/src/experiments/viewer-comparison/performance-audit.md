@@ -13,7 +13,7 @@ original results and acceptance checks remain attached to those experiments.
 | [Karate Club pilot](#/pilot-viewer?section=doc-latency-evidence) | Time through the next animation opportunity after drawing the highlight. Includes the original 100.4 ms stall and smaller/different replays. | Keep the original 50 ms check with those captures. The new click metric starts at the same trusted event on both backends and shows a common page marker. |
 | [Selection and labels](#/integrated-webgpu?section=doc-readback) | Area results and label presentation. The earlier million-point WebGL input was paused, and the resident WebGPU inputs were moving. | Use the same moving graph and the same `CosmosLabels` consumer for a relative timing verdict. |
 | [Resident layout and updates](#/resident-layout?section=doc-timing-updates) | GPU work, CPU submission, and GPU completion on bounded WebGPU layouts, plus sparse position and link edits. | Use to explain costs within the candidate. Use the matched renderer and normal viewer loops for workflow latency. |
-| [Point capacity](#/point-capacity?section=doc-findings) | Retained buffers, copied bytes and bounded resize/append checks. | Evidence about the allocation and update strategy. Compare memory during the same viewer workflow. |
+| [Buffer reuse](#/point-capacity?section=doc-reuse) and [point copies](#/point-buffer-copy?section=doc-findings) | Retained buffers, copied bytes and bounded resize/append checks. | Evidence about the allocation and update strategy. Compare memory during the same viewer workflow. |
 
 ## Force and rendering diagnostics
 

@@ -95,6 +95,9 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   const explanation = slot('#run-explanation')
   if (explanation.children.length === 1) explanation.remove()
   if (context?.secondarySettings) placeSecondarySettings(frame, context.secondarySettings)
+  for (const toolbar of frame.querySelectorAll('.run-settings > .scale-toolbar')) {
+    if (!toolbar.childElementCount && !toolbar.textContent?.trim()) toolbar.remove()
+  }
   const selectedValues = Array.from(frame.querySelectorAll<HTMLSelectElement>('.run-settings select, .run-secondary-settings select')).map(select => {
     const hint = document.createElement('span'); hint.className = 'run-selected-value'; hint.setAttribute('aria-hidden', 'true')
     select.after(hint)

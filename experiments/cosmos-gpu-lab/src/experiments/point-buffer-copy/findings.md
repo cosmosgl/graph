@@ -5,9 +5,8 @@ device: Apple M3; standalone Chrome 156
 scope: Exact-size rebuild baseline with retained IDs, data preservation and tracked buffer cleanup.
 ---
 
-This page records the **exact-size rebuild baseline**. Select **CPU copy vs GPU rebuild** in the demo to
-reproduce it. The [retained-capacity follow-up](#/point-capacity?section=doc-reuse) compares two GPU-bound lanes and
-reuses storage and kernels within a high-water allocation.
+Both copy paths rebuild their GPU buffers to fit the new point count. The [buffer reuse follow-up](#/point-capacity?section=doc-reuse)
+compares two GPU-bound lanes and reuses storage and kernels when the new count fits the existing buffers.
 
 Point-count changes affect more than the position buffer. Cosmos must also update random samples, hierarchy
 dimensions, force scratch space, integration limits, sizes, adjacency and rendering counts. This experiment
@@ -15,7 +14,7 @@ checks those dependencies while **retaining the same luma device** for each lane
 
 ## Two update contracts
 
-**Resize + preserve** is an internal storage operation. It copies the surviving prefix of the current GPU
+**Change point count** is an internal storage operation. It copies the surviving prefix of the current GPU
 positions, including pinned and absent flags, into both new ping-pong buffers. Newly added indices receive
 fresh fixture positions. Shrinking truncates the GPU tail; growing again initializes coordinates and presence
 rather than reviving old GPU records. Cosmos's separate **CPU pinned-index set** persists, including indices
@@ -105,8 +104,8 @@ FPS or directly compare their medians with the fixed-initial-state frame benchma
 
 ## Reproduce
 
-Open [Point capacity and memory](#/point-capacity), select **CPU copy vs GPU rebuild**, choose a graph, leave **Check unchanged CPU tolerance** on,
-and run **Run resize cycles**. The cycle returns to 2,048 points so retained memory can be checked again:
+Open [CPU copy vs GPU copy](#/point-buffer-copy), choose a graph, leave **Check against CPU** on, and click **Add and remove points**.
+The run returns to 2,048 points so you can compare memory at the starting and ending point counts.
 
 ```flow row
 2,048 · Initial
@@ -116,9 +115,9 @@ and run **Run resize cycles**. The cycle returns to 2,048 points so retained mem
 2,048 · Return to the starting count
 ```
 
-Use point 0 pinning and point 1 absence before a cycle to exercise their preservation. Individual resize and
-replacement controls support direct inspection. **Stop** retains completed rows; **Export JSON** saves local
-results, edit history, transfer counts and memory accounting. Routine exports stay outside Git.
+Use point 0 pinning and point 1 absence before a run to exercise their preservation. Individual point-count
+and replacement controls support direct inspection. **Export JSON** saves local results, edit history,
+transfer counts and memory accounting. Routine exports stay outside Git.
 
 ```sh
 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout/capacity.test.ts

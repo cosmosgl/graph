@@ -338,17 +338,32 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Check production routing and varied workloads',
   },
   'point-capacity/resize-preservation': {
-    badge: 'Resize checks passed',
+    badge: 'Remaining points stayed in place',
     tone: 'pass',
-    finding: 'Reusing GPU buffers cut the median resize time from 19.3 ms to 0.6 ms when the chain shrank from 8,192 to 2,048 points.',
+    finding: 'When the test graph went from 8,192 to 2,048 points, reusing GPU buffers cut the median update time from 19.3 ms to 0.6 ms. ' +
+      'Rebuilding used less buffer memory afterward, holding 3.640 MiB compared with 14.656 MiB for reuse.',
     area: 'Integration',
     status: 'Production API open',
     evidence: [
-      { tone: 'pass', text: '36 paired resize checks passed' },
+      { tone: 'pass', text: 'Both previews passed 36 point-count checks' },
       { tone: 'info', text: 'Reuse lowered update cost' },
       { tone: 'unknown', text: 'Full production API untested' },
     ],
     next: 'Validate production setters and recovery',
+  },
+  'point-buffer-copy/copy-during-rebuild': {
+    badge: 'GPU copy avoided position downloads',
+    tone: 'review',
+    finding: 'Both previews rebuild their WebGPU buffers. When the recorded chain grew from 2,048 to 8,192 points, ' +
+      'copying on GPU avoided a 32 KiB position download. The median full rebuild took 23.4 ms with GPU copy and 14.9 ms with CPU copy.',
+    area: 'Integration',
+    status: 'Rebuild cost needs isolation',
+    evidence: [
+      { tone: 'pass', text: 'Both paths passed 36 point-count checks' },
+      { tone: 'info', text: 'GPU copy downloaded no position data during the update' },
+      { tone: 'warn', text: 'The full rebuild took longer with GPU copy' },
+    ],
+    next: 'Compare copy paths with matched rebuild setup',
   },
   'scalable-reduction/reduce-center': {
     badge: 'Not assessed',
