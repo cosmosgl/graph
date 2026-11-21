@@ -27,9 +27,9 @@ raw captures and temporary live-run values are not indexed. Search loads its loc
 Coverage counts describe bounded evidence, not migration completion. Reviewed findings remain separate
 from this browser's live run.
 
-Each experiment starts with a practical example and shows its recorded findings, evidence, scope and limits
-on the same page. When several live examples are available, the **Case** selector changes the run while the
-findings stay in place. Open a document under **Detailed evidence** to read the underlying measurements and methods.
+Each experiment opens with its title, catalogue badge and short finding, followed by its controls and
+live example. Diagnostics, measurements, methods and limits continue below in the same column.
+When several live examples are available, the case selector changes the run and the short finding.
 The topic link returns to the matching catalogue group, and the row below the content lists the other experiments in that group.
 Recorded-only studies and direct evidence links can be read before a live device starts.
 
@@ -49,7 +49,7 @@ readable if live setup fails.
 
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
-Every experiment includes **What this compares**, describing its reference and how to interpret the result.
+Each experiment explains the comparison reference and how to interpret the result below its live example.
 Recorded scope and limits apply to the historical observation, not automatically to the current run.
 
 ## Run
@@ -185,6 +185,7 @@ These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
 
 ## Interactive documentation
 
+Use the shared `reading-document` column for experiments, migration, and guides.
 Keep settings, explanations, validation tables and chapter navigation visible in ordinary sections.
 Use headings and section links to organize long content instead of accordions, including reports
 created after running an experiment. Use the shared body typography for these section headings.
@@ -196,9 +197,10 @@ scroll container, with all rows visible. These rules apply to the whole lab, inc
 
 ### Live experiment frame
 
-For new and redesigned pages, follow the [experiment page design guide](AGENTS.md#experiment-page-design).
-Existing demos that use `src/runtime/run-layout.ts` can display Configuration beside Run at widths
-of 1,200px and above. Smaller screens stack those sections.
+Follow the [experiment page design guide](AGENTS.md#experiment-page-design).
+The shared `src/runtime/run-layout.ts` frame stacks settings, the preview, results and diagnostics
+at every width. Use `secondarySettings` to place less frequently used settings in a visible section
+below the preview.
 
 The run summary names the run state, checks, failures/unavailable backends and unchecked scope for
 the current browser session. For a measurement without a pass budget, `showChecks: false` avoids
@@ -207,7 +209,7 @@ Rendering-only demos and benchmarks do not acquire a numerical pass merely by co
 
 Author regions with `data-run-part="configuration|visualization|metrics|status|results|explanation|diagnostics"`
 and actions with `data-run-action="primary|diagnostic|export"`. Primary actions drive or stop the
-workload; tracing, replay, precision comparisons and sweeps remain in the visible Diagnostics section.
+workload. Tracing, replay, precision comparisons and sweeps appear in Diagnostics.
 Collision and Combined layout also use authored `data-run-section` regions and presets.
 Section links scroll without restarting or pausing a run.
 

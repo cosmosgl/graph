@@ -29,14 +29,14 @@ it('preserves controls, listeners and canvas identity while separating diagnosti
   expect(host.lastElementChild!.textContent).toBe('Unclassified guidance stays in place.')
 })
 
-it('puts the action and status before a preview with a fixed layout', () => {
+it('puts the action before the preview and keeps status changes below it', () => {
   host = document.createElement('div'); document.body.append(host)
   host.innerHTML = `<button data-run-action="primary">Run</button><p data-run-part="status">Paused</p>
     <section data-run-part="visualization"><iframe></iframe></section>`
-  mountRunLayout(host, () => summarizeRun('Paused', [], 'Unrun cases'), { experiment: 'viewer-comparison', fixedOrder: true })
+  mountRunLayout(host, () => summarizeRun('Paused', [], 'Unrun cases'), { experiment: 'viewer-comparison' })
   const preview = host.querySelector('#run-run')!
-  expect(Array.from(preview.children, element => element.textContent)).toEqual(['Run', 'Paused', ''])
-  expect(preview.lastElementChild?.querySelector('iframe')).not.toBeNull()
+  expect(Array.from(preview.children, element => element.textContent)).toEqual(['Run', '', 'Paused'])
+  expect(preview.querySelector('.run-visualization iframe')).not.toBeNull()
 })
 
 it('never turns pending work or benchmark completion into a numerical pass', () => {
@@ -58,27 +58,27 @@ it('places the selected case results before session details and uses its own sco
   expect(results.querySelector('[data-run-scope]')!.textContent).toBe('Selected addition input only.')
 })
 
-it('keeps the integrated canvas first on narrow screens and preserves controls when the columns change', () => {
-  const media = Object.assign(new EventTarget(), { matches: false })
-  vi.spyOn(window, 'matchMedia').mockReturnValue(media as MediaQueryList)
+it('keeps primary settings above the render and secondary settings visible below it', () => {
   host = document.createElement('div'); document.body.append(host)
-  host.innerHTML = `<section data-run-part="configuration"><input value="custom"></section>
+  host.innerHTML = `<section data-run-part="configuration"><label>Points <input value="custom"></label>
+    <label>Mode <select data-mode><option value="a">A</option><option value="b" selected>B</option></select></label></section>
     <button data-run-action="primary">Step</button><section data-run-part="visualization"><canvas></canvas></section>
-    <p data-run-part="results">Measured value</p>`
+    <p data-run-part="results">Measured value</p><div data-run-part="diagnostics"><button data-check>Check</button></div>`
   const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
-  mountRunLayout(host, () => summarizeRun('Ready', [], 'Unrun cases'), { experiment: 'center-mass' })
-  const order = (): string[] => Array.from(host!.querySelector('.run-workbench')!.children, child => child.id || child.className)
-  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
-  media.matches = true; media.dispatchEvent(new Event('change'))
-  expect(order()).toEqual(['run-display', 'run-configuration'])
-  expect(host.querySelector('.run-display #run-results')).not.toBeNull()
-  media.matches = false; media.dispatchEvent(new Event('change'))
-  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
-  expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('input')).toBe(input)
-  expect(host.querySelector('.run-contents,details')).toBeNull()
-  disposeRunLayout(host)
-  media.matches = true; media.dispatchEvent(new Event('change'))
-  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
+  const mode = host.querySelector<HTMLSelectElement>('[data-mode]')!; const changed = vi.fn()
+  mode.addEventListener('change', changed)
+  const check = host.querySelector<HTMLButtonElement>('[data-check]')!
+  mountRunLayout(host, () => summarizeRun('Ready', [], 'Unrun cases'), { experiment: 'center-mass', secondarySettings: ['[data-mode]'] })
+  const order = Array.from(host.querySelector('.run-workbench')!.children, child => child.id)
+  expect(order).toEqual(['run-configuration', 'run-run', 'run-more-settings', 'run-results'])
+  expect(host.querySelector('#run-run canvas')).toBe(canvas)
+  expect(host.querySelector('#run-configuration input')).toBe(input)
+  expect(host.querySelector('#run-more-settings select')).toBe(mode)
+  expect(mode.value).toBe('b')
+  mode.value = 'a'; mode.dispatchEvent(new Event('change'))
+  expect(changed).toHaveBeenCalledOnce()
+  expect(host.querySelector('#run-diagnostics button')).toBe(check)
+  expect(host.querySelector('details')).toBeNull()
 })
 
 it('keeps guidance accessible and adds scrolling to new result tables without changing their values', async () => {

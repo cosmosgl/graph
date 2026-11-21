@@ -73,57 +73,51 @@ it('opens every experiment with its starting case and all its evidence and limit
         expect(host.querySelectorAll('main h1'), label).toHaveLength(1)
         expect(host.querySelector('h1')?.textContent, label).toBe(experiment.title)
         const summary = host.querySelector('.case-header .case-recorded-summary')
-        if (experiment.presentation === 'finding-first') {
-          const assessment = readinessFor(label, first)
-          expect(summary?.querySelector('.readiness-badge')?.textContent, label).toContain(assessment.badge)
-          expect(summary?.querySelector('p')?.textContent, label).toBe(assessment.finding)
-          expect(host.querySelector('#case-live canvas'), label).not.toBeNull()
-          expect(host.querySelectorAll('main details'), label).toHaveLength(0)
-          const evidenceId = articleSectionId(first.recorded!.evidence[0].page)
-          await vi.waitFor(() => expect(host.querySelector(`#${evidenceId} .prose`), label).not.toBeNull())
-          expect(create, label).toHaveBeenCalledOnce()
-          continue
-        }
-        expect(host.querySelector('.case-question')?.textContent, label).toBe(first.question)
-        const demo = experiment.presentation === 'demo'
-        if (demo) expect(summary, label).toBeNull()
-        else {
-          const assessment = readinessFor(label, first)
-          const badge = summary?.querySelector<HTMLElement>('.readiness-badge')
-          expect(badge?.textContent, label).toContain(assessment.badge)
-          expect(badge?.dataset.tone, label).toBe(assessment.tone)
-          expect(summary?.querySelector('p')?.textContent, label).toBe(assessment.finding)
-          expect(summary?.querySelector('a'), label).toBeTruthy()
-        }
+        const assessment = readinessFor(label, first)
+        const badge = summary?.querySelector<HTMLElement>('.readiness-badge')
+        expect(badge?.textContent, label).toContain(assessment.badge)
+        expect(badge?.dataset.tone, label).toBe(assessment.tone)
+        expect(summary?.querySelector('p')?.textContent, label).toBe(assessment.finding)
+        expect(summary?.querySelector('a'), label).toBeNull()
+        expect(host.querySelectorAll('.case-header p'), label).toHaveLength(1)
+        expect(host.querySelector('.case-header')?.nextElementSibling?.className, label).toBe('case-stage')
+        expect(host.querySelectorAll('main details'), label).toHaveLength(0)
+        const article = experiment.presentation === 'finding-first'
         if (first.kind === 'recorded') {
           expect(create, label).not.toHaveBeenCalled()
           expect(host.querySelector('#case-live'), label).toBeNull()
         } else {
           expect(create, label).toHaveBeenCalledOnce()
           expect(create.mock.calls[0][1], label).toBe(first.id)
-          const live = host.querySelector('#case-live')
-          expect(live, label).not.toBeNull()
-          if (first.tryIt) expect(live?.textContent, label).toContain(first.tryIt)
-          else expect(host.querySelector('.case-intro h2:not([hidden]), .case-intro p:not([hidden])'), label).toBeNull()
-          expect(host.querySelector('#run-results')!.compareDocumentPosition(host.querySelector('#recorded-findings')!) &
-            Node.DOCUMENT_POSITION_FOLLOWING, label).toBeTruthy()
+          const live = host.querySelector('#case-live')!
+          expect(host.querySelector('.case-stage')?.firstElementChild, label).toBe(live)
+          const canvas = live.querySelector('canvas')!
+          expect(canvas, label).not.toBeNull()
+          const configuration = live.querySelector('#run-configuration')!
+          expect(configuration.compareDocumentPosition(canvas) & Node.DOCUMENT_POSITION_FOLLOWING, label).toBeTruthy()
+          if (!article) {
+            expect(canvas.compareDocumentPosition(host.querySelector('#recorded-findings')!) &
+              Node.DOCUMENT_POSITION_FOLLOWING, label).toBeTruthy()
+            if (first.tryIt) expect(host.querySelector('#case-comparison .case-instruction')?.textContent, label).toBe(first.tryIt)
+          }
         }
         const topic = experimentGroups.find(group => group.experiments.includes(experiment))!
         expect(host.querySelector('.case-topic-link')?.getAttribute('href'), label).toBe(`#/?section=catalog-${topic.id}`)
         const peers = Array.from(host.querySelectorAll('.case-group-navigation a'), link => link.getAttribute('href'))
-        expect(peers, label).toEqual(demo ? [] : topic.experiments.filter(peer => peer !== experiment).map(peer => `#/${peer.id}`))
-        const findings = host.querySelector('.case-recorded')!
-        expect(findings.closest('details'), label).toBeNull()
-        const pages = caseEvidencePages(experiment)
-        expect(host.querySelectorAll('[data-evidence-content]'), label).toHaveLength(pages.length)
-        expect(host.querySelectorAll('.case-evidence-detail summary'), label).toHaveLength(demo ? 0 : pages.length)
+        expect(peers, label).toEqual(experiment.presentation ? [] : topic.experiments.filter(peer => peer !== experiment).map(peer => `#/${peer.id}`))
+        const evidence = Array.from(host.querySelectorAll('[data-evidence-content]'))
+        expect(evidence, label).toHaveLength(article ? 1 : caseEvidencePages(experiment).length)
+        await vi.waitFor(() => {
+          for (const page of evidence) expect(page.querySelector('.prose, .report'), `${label}/${page.id}`).not.toBeNull()
+        })
+        const findings = host.querySelector('.case-recorded')
         if (experiment.singlePage) {
           for (const observation of experiment.singlePage.observations) {
-            const row = findings.querySelector(`#${observation.id}`)!
+            const row = findings!.querySelector(`#${observation.id}`)!
             expect(row.textContent, label).toContain(observation.evidence)
             expect(row.textContent, label).toContain(observation.limits)
           }
-        } else {
+        } else if (findings) {
           expect(findings.querySelectorAll('.case-observations > li'), label).toHaveLength(experiment.cases!.length)
           for (const item of experiment.cases!) {
             const row = findings.querySelector(`#${findingSection(item)}`)!
@@ -153,8 +147,7 @@ it('opens every published evidence document inside its experiment without exposi
         await frame.openEvidence(id)
         const content = frame.recorded.querySelector(`#${id}`)
         if (!content?.querySelector('.prose, .report')) issues.push(`${label}: missing evidence body`)
-        const disclosure = content?.closest('details')
-        if (experiment.presentation ? disclosure : !disclosure?.open) issues.push(`${label}: evidence is hidden`)
+        if (content?.closest('details')) issues.push(`${label}: evidence is hidden`)
         if (content?.querySelector('a[href*="agent-recipe"]')) issues.push(`${label}: agent recipe link`)
         const instruction = content?.textContent?.match(/\b(?:LAB_[A-Z0-9_]+|pnpm|npx|captures\/)/i)
         if (instruction) issues.push(`${label}: ${instruction[0]}`)

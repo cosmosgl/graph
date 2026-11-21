@@ -1,6 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import { sharedView } from '../matched-layout/metrics'
 import { replaceCanvas } from '../../gpu/force-preview'
@@ -158,8 +157,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: error || (failed ? `${failed} failed checks` : 'None recorded'),
     unchecked: 'Unsampled ticks; combined forces; complete frame cost; production integration',
   }),
-  { experiment: 'point-attractors', fixedOrder: true, devices: () => Object.values(backends).map(b => b.info) })
-  compactRunControls(host, { diagnostics: true })
+  { experiment: 'point-attractors', devices: () => Object.values(backends).map(b => b.info) })
   await initialize()
   return {
     pause: stop,

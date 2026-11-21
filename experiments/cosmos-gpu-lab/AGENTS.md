@@ -4,12 +4,15 @@ The Lab records bounded research for people to understand and for agents to
 reproduce. Follow the repository's root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
+Use the shared `reading-document` column for experiments, the migration page,
+and guides at every width. Stack prose and keep section links in the reading
+flow. Use the shared typography and controls across the Lab.
+
 ## Experiment page design
 
-- **Use one reading column at every width.** On new and redesigned pages, lead
-  with the title, the same badge as the catalogue card, and one short finding
-  when available. Put the controls and live renders next. Keep diagnostics,
-  run data, limits, and evidence visible in the same column below the demo.
+- **Lead with the finding.** Show the title, the same badge as the catalogue
+  card, and one short finding when available. Put the controls and live renders
+  next. Keep diagnostics, run data, limits, and evidence visible below the demo.
 - **Keep headings and copy concise.** Let the badge stand on its own. Describe
   what the check found in plain words. Add a heading when it helps readers find
   a distinct section, and use section links to jump to visible content.

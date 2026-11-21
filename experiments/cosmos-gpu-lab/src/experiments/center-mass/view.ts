@@ -44,22 +44,11 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
   host.classList.add('center-mass-run')
   host.innerHTML = `
     <section class="center-mass-demo">
-      <div class="demo-toolbar"
-      data-run-part="configuration">
-        <div>
-          <p class="eyebrow">Starting case</p>
-          <p>Reset restores the same starting positions.</p>
-        </div>
-        <div class="controls">
-          <button class="button-primary" data-action="initialize" type="button" hidden
-      data-run-action="primary">Start the live comparison</button>
-          <button class="button-primary" data-action="step" type="button" disabled
-      data-run-action="primary">Step</button>
-          <button data-action="play" type="button" disabled
-      data-run-action="primary">Play</button>
-          <button data-action="reset" type="button" disabled
-      data-run-action="primary">Reset</button>
-        </div>
+      <div class="controls">
+        <button class="button-primary" data-action="initialize" type="button" hidden data-run-action="primary">Start the live comparison</button>
+        <button class="button-primary" data-action="step" type="button" disabled data-run-action="primary">Step</button>
+        <button data-action="play" type="button" disabled data-run-action="primary">Play</button>
+        <button data-action="reset" type="button" disabled data-run-action="primary">Reset</button>
       </div>
 
       <p class="demo-note" data-run-part="status">Each yellow square marks a GPU center. Errors are distances to the CPU center.</p>
@@ -74,10 +63,7 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
       data-run-part="visualization" class="backend-panels">
         <article class="backend-panel">
           <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Cosmos-style calculation</p>
-              <h2>WebGL · additive blending</h2>
-            </div>
+            <h2>WebGL · additive blending</h2>
             <span data-status="webgl" class="status">Starting…</span>
           </div>
           <canvas data-canvas="webgl" width="420" height="320" role="img" aria-label="WebGL points and calculated center"></canvas>
@@ -89,10 +75,7 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
 
         <article class="backend-panel">
           <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Compute calculation</p>
-              <h2>WebGPU · two-stage reduction</h2>
-            </div>
+            <h2>WebGPU · two-stage reduction</h2>
             <span data-status="webgpu" class="status">Starting…</span>
           </div>
           <canvas data-canvas="webgpu" width="420" height="320" role="img" aria-label="WebGPU points and calculated center"></canvas>
@@ -110,11 +93,10 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
       <p class="demo-note" data-run-part="visualization">
         This demo has no accuracy pass threshold. Tick time includes upload, execution, synchronization, readback and drawing.
       </p>
-      <details class="advanced-controls" data-run-part="diagnostics">
-        <summary>Run local measurements</summary>
+      <section data-run-part="diagnostics">
         <section data-center-scale></section>
         <section data-center-once></section>
-      </details>
+      </section>
     </section>
   `
 
@@ -259,7 +241,6 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
     runError), {
     experiment: 'center-mass',
     devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []),
-    fixedOrder: true,
     showChecks: false,
     scope: 'The selected tick of one shared 8,192-point input; GPU centers are compared with the CPU average.',
   })

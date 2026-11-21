@@ -2,7 +2,6 @@ import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/core/webgpu'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { BATCH_POLICY } from './gpu-timer'
 import { COMPARISON_SEED, createPrecisionPlan, runPrecisionComparison, type PrecisionRow } from './precision-comparison'
@@ -631,10 +630,12 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     frame ? 'Ticks after the last explicit validation; global Cosmos forces.' : 'Current inputs until Validate is run; global Cosmos forces.',
     [],
     runError,
-    'latest backend validations'), { experiment: 'neighborhood-forces', devices: () => device ? [JSON.stringify(device.info)] : [] })
-  compactRunControls(host, {
-    diagnostics: true,
-    settings: ['[data-control="density"]', '[data-control="grid"]', '[data-control="accumulation"]'],
+    'latest backend validations'), {
+    experiment: 'neighborhood-forces',
+    devices: () => device ? [JSON.stringify(device.info)] : [],
+    secondarySettings: [
+      '[data-control="density"]', '[data-control="grid"]', '[data-control="accumulation"]',
+    ],
   })
   describePlan()
   configure()

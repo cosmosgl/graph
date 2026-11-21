@@ -1,6 +1,5 @@
 import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createScalableReductionBackend,
@@ -299,7 +298,6 @@ export async function createScalableReductionExperiment (
     'Center accuracy budget; unsampled GPU-resident ticks and pixel parity.',
     [],
     runError), { experiment: 'scalable-reduction', devices: () => backend?.info ? [backend.info] : [] })
-  compactRunControls(host, { diagnostics: true })
   await configure()
 
   return {

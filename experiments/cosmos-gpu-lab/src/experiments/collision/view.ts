@@ -3,7 +3,6 @@ import { count as formatCount, milliseconds, scientific } from '../../runtime/re
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { collisionView } from './camera'
 import { FIXTURES, TOPOLOGIES, COLLISION, overlap, radius, type Settings } from './data'
@@ -472,16 +471,16 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     'Larger collision routes, unrun fixtures and rendering parity.',
     Object.keys(session?.report.errors ?? {}),
     runError,
-    'tick and trajectory gates'), { experiment: 'collision', devices: () => Object.values(session?.report.devices ?? {}) })
-  compactRunControls(host, {
-    diagnostics: true,
-    settings: [
-      '[data-control="evolution"]', '[data-control="topology"]', '[data-control="coolingTicks"]', '[data-control="iterations"]',
-      '[data-control="centerReduction"]', '[data-control="radius"]', '[data-control="padding"]', '[data-control="strength"]',
-      '[data-control="alpha"]', '[data-control="cooling"]',
+    'tick and trajectory gates'), {
+    experiment: 'collision',
+    devices: () => Object.values(session?.report.devices ?? {}),
+    secondarySettings: [
+      '.run-presets', '[data-control="evolution"]', '[data-control="topology"]',
+      '[data-control="coolingTicks"]', '[data-control="iterations"]',
+      '[data-control="centerReduction"]', '[data-control="radius"]', '[data-control="padding"]',
+      '[data-control="strength"]', '[data-control="alpha"]', '[data-control="cooling"]',
     ],
   })
-  host.querySelector('#run-configuration .advanced-controls > div')?.prepend(host.querySelector('.run-presets')!)
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

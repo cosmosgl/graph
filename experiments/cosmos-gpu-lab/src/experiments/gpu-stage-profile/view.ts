@@ -1,6 +1,5 @@
 import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createControlledProfiler, profileSummary, PROFILE_POLICY, type ControlledProfiler } from '../combined-layout/controlled-profile'
 import { PROFILE_STAGES } from '../combined-layout/stage-timing'
@@ -145,7 +144,10 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     'Incomplete timing samples; broader inputs and runtime performance.',
     [],
     runError,
-    'trial checks'), { experiment: 'gpu-stage-profile', devices: () => profiler?.report.info ?? [] })
-  compactRunControls(host, { settings: ['[data-control="history"]'] })
+    'trial checks'), {
+    experiment: 'gpu-stage-profile',
+    devices: () => profiler?.report.info ?? [],
+    secondarySettings: ['[data-control="history"]'],
+  })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; profiler?.destroy() } }
 }

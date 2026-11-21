@@ -1,7 +1,6 @@
 import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
@@ -351,11 +350,13 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     'Non-checkpoint ticks; no agreed quality budget or full runtime scheduler.',
     Object.keys(session?.report.errors ?? {}),
     runError,
-    'backend checkpoints'), { experiment: 'matched-layout', devices: () => Object.values(session?.report.devices ?? {}) })
-  compactRunControls(host, {
-    settings: ['[data-control="distribution"]', '[data-control="ticks"]', '[data-control="preset"]',
-      '[data-control="pinned"]', '[data-control="center"]'],
-    diagnostics: true,
+    'backend checkpoints'), {
+    experiment: 'matched-layout',
+    devices: () => Object.values(session?.report.devices ?? {}),
+    secondarySettings: [
+      '[data-control="distribution"]', '[data-control="ticks"]', '[data-control="preset"]',
+      '[data-control="pinned"]', '[data-control="center"]',
+    ],
   })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }

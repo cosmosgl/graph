@@ -205,10 +205,11 @@ function rendering (host: HTMLElement): void {
   const body = frame(host, 'From a square to a circle', 'Switch stages and change the radius. The center stays fixed; only the point’s footprint changes.')
   let stage = 0
   let radius = 42
-  const controls = element('div', undefined, 'controls')
-  controls.classList.add('learning-stages')
+  const controls = element('div', undefined, 'choice-control learning-stages')
   controls.setAttribute('role', 'group')
   controls.setAttribute('aria-label', 'Rendering stage')
+  const options = element('div', undefined, 'choice-options')
+  controls.append(element('span', 'Stage', 'choice-label'), options)
   const picture = element('div', undefined, 'learning-picture')
   const result = status()
   const labels = ['1 · Vertices', '2 · Triangles', '3 · Circle coverage']
@@ -234,12 +235,10 @@ function rendering (host: HTMLElement): void {
     </svg>`
     result.textContent = descriptions[stage]
   }
-  controls.append(...buttons)
-  const explanation = element('div', undefined, 'learning-render-explanation')
-  explanation.append(choice('Radius (illustration units)', [24, 42, 65], radius, value => { radius = value; render() }), result)
-  const preview = element('div', undefined, 'learning-render-preview')
-  preview.append(picture, explanation)
-  body.append(controls, preview)
+  options.append(...buttons)
+  const radiusControl = choice('Radius (illustration units)', [24, 42, 65], radius, value => { radius = value; render() })
+  radiusControl.classList.add('learning-radius')
+  body.append(controls, radiusControl, picture, result)
   render()
 }
 
@@ -253,7 +252,7 @@ export const learningExamples: Record<string, (host: HTMLElement) => void> = {
 
 export function addLearningContents (host: HTMLElement, sectionId?: string): void {
   const contents = element('section', undefined, 'learning-contents')
-  const title = element('h2', 'Chapters · 12 lessons and references')
+  const title = element('h2', 'Chapters')
   title.tabIndex = -1
   contents.append(title)
   const links = element('nav')

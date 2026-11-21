@@ -13,7 +13,8 @@ it('keeps unavailable lanes explicit, stops the run and exports the partial comp
   try {
     const center = host.querySelector<HTMLSelectElement>('[data-control="center"]')!
     expect(center.value).toBe('0')
-    expect(center.closest('details')?.querySelector('summary')?.textContent).toBe('More settings')
+    expect(center.closest('#run-more-settings')).not.toBeNull()
+    expect(center.closest('details')).toBeNull()
     expect(host.querySelector('[role="status"]')!.textContent).toContain('Partial comparison')
     button('run').click()
     await vi.waitFor(() => expect(button('step').disabled).toBe(false))

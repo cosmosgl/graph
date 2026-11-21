@@ -68,68 +68,26 @@ function renderHome (host: HTMLElement): void {
   }
 }
 
-function renderVocabularyFrame (host: HTMLElement): HTMLElement {
+function renderReferenceFrame (host: HTMLElement, title: string, description: string): HTMLElement {
   host.innerHTML = `
-    <header class="experiment-header reference-header">
-      <div>
-        <p class="eyebrow">Lab reference · WebGPU</p>
-        <h1>Vocabulary</h1>
-        <p>
-          A shared language for WebGPU resources, commands, shaders and the parallel
-          data structures used by Cosmos.
-        </p>
-      </div>
-    </header>
-    <section class="experiment-stage reference-stage">
-      <div class="loading">Loading vocabulary…</div>
-    </section>
+    <div class="reading-document">
+      <header class="reference-header"><h1></h1><p></p></header>
+      <section class="reference-stage"><div class="loading" role="status">Loading…</div></section>
+    </div>
   `
+  requiredElement(host, '.reference-header h1').textContent = title
+  requiredElement(host, '.reference-header p').textContent = description
   return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
 function renderMigrationFrame (host: HTMLElement): HTMLElement {
   host.innerHTML = `
-    <div class="migration-document">
+    <div class="reading-document migration-document">
       <header><h1 id="migration-status">Cosmos → WebGPU</h1></header>
       <section class="migration-page"><div class="loading">Loading migration…</div></section>
     </div>
   `
   return requiredElement<HTMLElement>(host, '.migration-page')
-}
-
-function renderArchitectureFrame (host: HTMLElement): HTMLElement {
-  host.innerHTML = `
-    <header class="experiment-header reference-header">
-      <div>
-        <p class="eyebrow">Lab reference · Architecture</p>
-        <h1>Lab architecture</h1>
-        <p>One shared interface for independent GPU experiments, explanations and results.</p>
-      </div>
-    </header>
-    <section class="experiment-stage reference-stage">
-      <div class="loading">Loading architecture guide…</div>
-    </section>
-  `
-  return requiredElement<HTMLElement>(host, '.reference-stage')
-}
-
-function renderReductionFrame (host: HTMLElement): HTMLElement {
-  host.innerHTML = `
-    <header class="experiment-header reference-header">
-      <div>
-        <p class="eyebrow">Concept deep dive · Parallel compute</p>
-        <h1>Parallel reduction</h1>
-        <p>
-          How millions of independent values become one trustworthy result through
-          local trees, partial buffers and recursively scheduled compute passes.
-        </p>
-      </div>
-    </header>
-    <section class="experiment-stage reference-stage">
-      <div class="loading">Loading reduction research…</div>
-    </section>
-  `
-  return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
 function renderMissing (host: HTMLElement, id: string): void {
@@ -216,36 +174,23 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   function mountCasePage (experiment: ExperimentDefinition, owner: ReturnType<typeof createRetainedRun>): MountedCasePage {
     const frame = renderCaseFrame(workspace, experiment)
-    const { comparison } = frame
     let active = experiment.cases!.find(item => owner.id === experiment.id && item.id === owner.caseId) ?? startingCase(experiment)
-    frame.setLiveCase?.(active)
+    frame.setLiveCase(active)
     let focusRequest = 0
     let launch = 0
     let opening: { id: string; ready: Promise<void> } | undefined
-    const moveFindingsAfterRun = (): void => {
-      if (comparison) frame.slot.after(frame.recorded, comparison)
-    }
-
     const openCase = (item: ExperimentCase, deferComparison = false): Promise<void> => {
       if (opening?.id === item.id) return opening.ready
       if (owner.id === experiment.id && owner.caseId === item.id && frame.slot.firstElementChild) return Promise.resolve()
       const request = ++launch
-      active = item; frame.setLiveCase?.(item); moveFindingsAfterRun()
+      active = item; frame.setLiveCase(item)
       frame.stage.setAttribute('aria-busy', 'true')
       frame.start.hidden = frame.retry.hidden = true
-      frame.status.textContent = 'Creating the live experiment…'
+      frame.status.textContent = ''
       const isCurrent = (): boolean => request === launch && frame.stage.isConnected
       const ready = (async (): Promise<void> => {
         try {
           await owner.show(experiment, frame.slot, item.id, deferComparison ? { deferComparison } : undefined)
-          if (!isCurrent()) return
-          const layout = frame.slot.querySelector<HTMLElement>('.run-layout')
-          if (layout && comparison) {
-            const supplementary = layout.querySelector('#run-explanation, #run-live-explanation, #run-diagnostics')
-            if (supplementary) (supplementary.closest('details') ?? supplementary).before(frame.recorded, comparison)
-            else layout.append(frame.recorded, comparison)
-          }
-          frame.status.textContent = ''
         } catch (error) {
           if (!isCurrent()) return
           frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
@@ -260,7 +205,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const launchActive = (): void => { focusRequest++; openCase(active).catch(() => {}) }
     frame.retry.addEventListener('click', launchActive)
     frame.start.addEventListener('click', launchActive)
-    frame.onChooseCase?.((item, control) => {
+    frame.onChooseCase((item, control) => {
       const section = item === startingCase(experiment) ? null : liveCaseSection(item)
       window.history.replaceState(null, '', experimentSectionHref(experiment.id, section))
       const keepFocus = document.activeElement === control
@@ -271,7 +216,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     })
     return {
       id: experiment.id,
-      release (): void { moveFindingsAfterRun(); focusRequest++; launch++ },
+      release (): void { focusRequest++; launch++ },
       async visit (destination: ExperimentDestination): Promise<void> {
         const request = ++focusRequest
         const { section } = destination
@@ -282,13 +227,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         }
         if (request !== focusRequest || !frame.stage.isConnected) return
         if (!section) { window.scrollTo(0, 0); return }
-        if (section === 'run-diagnostics') {
-          const tools = frame.slot.querySelector<HTMLDetailsElement>('#run-diagnostics > details')
-          if (tools) tools.open = true
-        }
         const fallback = await frame.openEvidence(section)
         if (request !== focusRequest || !frame.stage.isConnected) return
-        if (!scrollToSection(workspace, section) && fallback) scrollToSection(workspace, fallback)
+        const target = section === 'run-configuration' && !frame.slot.querySelector('#run-configuration:not(:empty)') ? 'case-live' : section
+        if (!scrollToSection(workspace, target) && fallback) scrollToSection(workspace, fallback)
       },
     }
   }
@@ -349,17 +291,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     }
 
     if (route.kind === 'learn') {
-      workspace.innerHTML = `
-        <header class="experiment-header reference-header">
-          <div>
-            <p class="eyebrow">Learn · From point data to pixels</p>
-            <h1>How WebGPU works</h1>
-            <p>A guided introduction through one Cosmos simulation tick. Read, try, then explore the real experiments.</p>
-          </div>
-        </header>
-        <section class="experiment-stage reference-stage"><div class="loading">Loading guide…</div></section>
-      `
-      const stage = requiredElement<HTMLElement>(workspace, '.reference-stage')
+      const stage = renderReferenceFrame(workspace, 'How WebGPU works', 'Follow one Cosmos simulation tick with interactive examples.')
       try {
         const [source, renderer, examples] = await Promise.all([
           import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
@@ -376,11 +308,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
     if (route.kind === 'validation-workflow' || route.kind === 'numerical-research') {
       const title = route.kind === 'validation-workflow' ? 'Validation workflow' : 'Numerical research'
-      workspace.innerHTML = `<header class="experiment-header reference-header"><div>
-        <p class="eyebrow">Migration evidence</p><h1>${title}</h1>
-        <p>Behavior, numerical accuracy, compatibility, layout quality and cost.</p>
-        </div></header><section class="experiment-stage reference-stage"></section>`
-      const stage = requiredElement<HTMLElement>(workspace, '.reference-stage')
+      const stage = renderReferenceFrame(workspace, title, 'Behavior, numerical accuracy, compatibility, layout quality and cost.')
       try {
         const [source, renderer] = await Promise.all([
           route.kind === 'validation-workflow' ? import('../docs/validation-workflow.md?raw') : import('../docs/numerical-research.md?raw'),
@@ -407,7 +335,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     }
 
     if (route.kind === 'architecture') {
-      const stage = renderArchitectureFrame(workspace)
+      const stage = renderReferenceFrame(workspace, 'Lab architecture', 'How the Lab connects independent GPU experiments, explanations and results.')
       try {
         const [source, renderer] = await Promise.all([
           import('../docs/architecture.md?raw'), import('./markdown'),
@@ -423,11 +351,11 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     }
 
     if (route.kind === 'vocabulary') {
-      const stage = renderVocabularyFrame(workspace)
+      const stage = renderReferenceFrame(workspace, 'Vocabulary', 'WebGPU resources, commands, shaders and data structures used by Cosmos.')
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, vocabularySource, {}, { linkTerms: false, sectionNavigation: false })
+        await renderer.renderMarkdown(stage, vocabularySource, {}, { omitTitle: true, linkTerms: false, sectionNavigation: false })
         indexVocabularyTerms(stage)
         if (route.termId) {
           const target = document.getElementById(route.termId)
@@ -448,12 +376,13 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         renderMissing(workspace, `concepts/${route.conceptId}`)
         return
       }
-      const stage = renderReductionFrame(workspace)
+      const stage = renderReferenceFrame(workspace, 'Parallel reduction', 'How local trees and partial buffers combine millions of values into one.')
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
         const assets = Object.fromEntries([['diagrams/reduction-tree.svg', reductionTreeUrl]])
         await renderer.renderMarkdown(stage, reductionSource, assets, {
+          omitTitle: true,
           excludedTermIds: ['reduction'],
         })
         if (version === renderVersion) scrollToSection(stage, currentSection())

@@ -71,7 +71,8 @@ it('keeps a method available without inventing a finding and shows the experimen
   const host = document.createElement('div')
   renderCaseFrame(host, experiment)
   expect(host.querySelector('.case-recorded')!.textContent).toContain('No recorded finding is available')
-  expect(host.querySelector('.case-evidence-detail summary')?.textContent).toBe(source.pages[0].title)
+  expect(host.querySelector('.case-evidence > h2')?.textContent).toBe(source.pages[0].title)
+  expect(host.querySelector('.case-evidence details')).toBeNull()
   const group = host.querySelector<HTMLElement>('.case-group-navigation')!
   expect(group.getAttribute('aria-label')).toBe('More in Rendering and interaction')
   expect(group.querySelector('a[href="#/straight-links"]')).not.toBeNull()

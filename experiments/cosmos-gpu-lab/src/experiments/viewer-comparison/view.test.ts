@@ -70,10 +70,8 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(host.querySelector('[data-results]')!.textContent).toContain('style A')
       expect(check.disabled).toBe(false)
     }, { timeout: 30000 })
-    const additionalChecks = host.querySelector<HTMLDetailsElement>('#run-diagnostics .advanced-controls')!
-    additionalChecks.querySelector('summary')!.click()
-    expect(additionalChecks.open).toBe(true)
-    const paint = host.querySelector<HTMLButtonElement>('[data-action="paint"]')!
+    expect(host.querySelector('#run-diagnostics details')).toBeNull()
+    const paint = host.querySelector<HTMLButtonElement>('#run-diagnostics [data-action="paint"]')!
     paint.click()
     await vi.waitFor(() => {
       expect(host.querySelector('[data-results]')!.textContent).toContain('Same-geometry paint · karate · style A')

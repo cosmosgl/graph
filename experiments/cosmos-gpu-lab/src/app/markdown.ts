@@ -13,6 +13,7 @@ type MarkdownOptions = {
   examples?: Record<string, (host: HTMLElement) => void>;
   sectionNavigation?: boolean | 'permalinks';
   headingLevelOffset?: number;
+  omitTitle?: boolean;
   tables?: boolean;
 }
 
@@ -89,6 +90,7 @@ export async function renderMarkdown (
     if (title?.matches('h1,h2,h3,h4,h5,h6')) title.after(evidenceSourceNote(evidence))
     else article.prepend(evidenceSourceNote(evidence))
   }
+  if (options.omitTitle && article.firstElementChild?.matches('h1')) article.firstElementChild.remove()
   if (options.linkTerms !== false) {
     linkVocabularyTerms(host, new Set(options.excludedTermIds))
   }

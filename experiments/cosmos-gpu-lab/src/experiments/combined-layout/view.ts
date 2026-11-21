@@ -3,7 +3,6 @@ import { count as formatCount, scientific, milliseconds } from '../../runtime/re
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { TOLERANCE as repulsionTolerance } from '../many-body/reference'
@@ -506,14 +505,14 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     `${session?.rows.filter(r => !r.checked).length ?? 0} unchecked ticks; layout quality and rendering parity.`,
     Object.keys(session?.errors ?? {}),
     runError,
-    'backend checkpoints'), { experiment: 'combined-layout', devices: () => session?.lanes.map(l => l.backend.info) ?? [] })
-  compactRunControls(host, {
-    diagnostics: true,
-    settings: [
-      '[data-control="decay"]', '[data-control="checkpoint"]', '[data-control="center"]',
+    'backend checkpoints'), {
+    experiment: 'combined-layout',
+    devices: () => session?.lanes.map(l => l.backend.info) ?? [],
+    secondarySettings: [
+      '.run-presets', '[data-control="decay"]', '[data-control="checkpoint"]',
+      '[data-control="center"]',
     ],
   })
-  host.querySelector('#run-configuration .advanced-controls > div')?.prepend(host.querySelector('.run-presets')!)
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

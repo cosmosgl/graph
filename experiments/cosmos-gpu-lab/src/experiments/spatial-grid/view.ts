@@ -1,6 +1,5 @@
 import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createSpatialGridBackend,
@@ -374,8 +373,11 @@ export async function createSpatialGridExperiment (
     'Force accuracy, layout quality and rendering parity.',
     [],
     runError,
-    'exhaustive grid builds'), { experiment: 'spatial-grid', devices: () => backend?.info ? [backend.info] : [] })
-  compactRunControls(host, { settings: ['[data-control="distribution"]'], diagnostics: true })
+    'exhaustive grid builds'), {
+    experiment: 'spatial-grid',
+    devices: () => backend?.info ? [backend.info] : [],
+    secondarySettings: ['[data-control="distribution"]'],
+  })
   configure().catch(console.error)
 
   return {

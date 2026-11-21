@@ -2,7 +2,6 @@ import { luma } from '@luma.gl/core'
 import { setStatus } from '../../runtime/presentation'
 import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createPassDiagnostic } from './diagnostic'
 import { buildTopology, createFixture, FIXTURES, PARAMETERS, type Fixture } from './data'
@@ -377,6 +376,5 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     deviceFailed ? ['GPU device'] : [],
     runError,
     'directional CPU comparisons'), { experiment: 'weighted-links', devices: () => backends.map(b => b.info) })
-  compactRunControls(host, { diagnostics: true })
   return { pause (): void { stop = true }, destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
 }
