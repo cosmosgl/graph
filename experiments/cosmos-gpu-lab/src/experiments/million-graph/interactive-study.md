@@ -135,8 +135,8 @@ cached scene to paint its highlight. Only 18/48 dense and 10/48 hub steady
 intervals met 33 ms, with p95 near 50 ms. Peak sampled luma allocation rose
 from 154.3 to 189.5 MiB. This is one session with opaque points and basic links.
 The results and exact source are in `captures/resident-coverage-m3-cf134e46/`.
-Set `VITE_LAB_RESIDENT_RENDER_CANDIDATES=1` on the reproduction command to
-repeat these four lanes. [Drawing and pixel checks](#/million-graph?section=doc-draw-cost)
+Use that capture’s source snapshot to repeat the four lanes with
+`VITE_LAB_RESIDENT_RENDER_CANDIDATES=1`. [Drawing and pixel checks](#/million-graph?section=doc-draw-cost)
 
 ### Standard drawing sweep
 
@@ -295,6 +295,10 @@ Set a unique lowercase `LAB_ARTIFACT_RUN`, `LAB_SOURCE_REVISION` and
 LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_INTERACTION=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-interaction.test.ts
 ```
+
+The command above runs the current baseline. For the following historical
+variants, use the study’s recorded source snapshot or the archived suite at
+`08e5ff5d`.
 
 Set `VITE_LAB_RESIDENT_FRAME_PACING=1` to compare callback scheduling. Add
 `VITE_LAB_RESIDENT_FRAME_PROFILE=1` in a fresh capture for GPU timestamps.

@@ -17,10 +17,21 @@ export async function prepareFixture (workloadName: Workload, points: number): P
   digest: string;
   pickIndices: number[];
 }> {
-  const scene = workloadName === 'karate'
-    ? workload('karate', 34)
-    : workloadName === 'youtube' ? await loadYoutubeFixture(points) : createInteractiveFixture(points, workloadName)
+  const interactive = workloadName === 'dense' || workloadName === 'hubs'
+    ? createInteractiveFixture(points, workloadName)
+    : undefined
+  const scene = interactive ?? (workloadName === 'karate' ? workload('karate', 34) : await loadYoutubeFixture(points))
   const { input, graph } = scene
+  if (workloadName === 'hubs' && points === 1_000_000) {
+    const hub = interactive?.metadata.hubId ?? -1
+    let sourceDegree = 0
+    for (let i = 0; i < graph.links.length; i += 2) {
+      if (graph.links[i] === hub) sourceDegree++
+    }
+    if (sourceDegree !== 8192 || input.points[hub * 4 + 2] !== 0 || input.points[hub * 4 + 3] !== 0) {
+      throw new Error(`The million-point hub fixture requires a present, unpinned hub with 8,192 source-grouped links (found ${sourceDegree})`)
+    }
+  }
   const count = input.points.length / 4
   const size = workloadName === 'youtube' ? 2 : 4
   const comparison = prepareComparisonInput(scene, size)

@@ -85,12 +85,6 @@ const trials: Trial[] = [
   { name: 'Replacement polygons ignore texture padding', points: replacement, camera: base, query: wholeViewport, expected: [1, 2] },
 ]
 
-it('checks the independent selection reference against explicit boundary witnesses', () => {
-  for (const { name, points, camera, query, expected } of trials) {
-    if (expected) expect(selectedByReference(points, camera, query), name).toEqual(expected)
-  }
-})
-
 it('matches exact ordered rectangle and polygon IDs against production shaders and the CPU reference', async () => {
   const apis = ['webgl', 'webgpu'] as const
   const canvases = apis.map(() => document.createElement('canvas'))
@@ -104,8 +98,10 @@ it('matches exact ordered rectangle and polygon IDs against production shaders a
       devices.push(device)
       backends.push(api === 'webgl' ? createSelectionWebGL(device) : await createSelectionWebGPU(device))
     }
-    for (const { name, points, camera, query } of trials) {
-      const row: typeof rows[number] = { name, count: points.length, reference: selectedByReference(points, camera, query) }
+    for (const { name, points, camera, query, expected } of trials) {
+      const reference = selectedByReference(points, camera, query)
+      if (expected) expect(reference, name).toEqual(expected)
+      const row: typeof rows[number] = { name, count: points.length, reference }
       rows.push(row)
       for (const [i, api] of apis.entries()) {
         try { row[api] = await backends[i].select(points, camera, query) } catch (error) { errors.push(`${name} ${api}: ${String(error)}`) }

@@ -1,56 +1,6 @@
-import { luma } from '@luma.gl/core'
 import { expect, it, vi } from 'vitest'
 import { createMillionGraphView } from '../million-graph/view'
 import type { createResidentGraph } from './resident-graph'
-
-it.each(['clusters', 'persistent-communities'])('draws, runs and resets the resident graph with a %s start', async (start) => {
-  const host = document.createElement('div'); document.body.append(host)
-  const createDevice = vi.spyOn(luma, 'createDevice')
-  const view = await createMillionGraphView(host)
-  const find = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
-  const play = find<HTMLButtonElement>('[data-play]')
-  const status = find('[data-status]')
-  const canvas = find<HTMLCanvasElement>('[data-canvas]')
-  const ready = async (): Promise<void> => {
-    await vi.waitFor(() => {
-      expect(status.textContent).toBe('Starting layout · tick 0 / 200.')
-      expect(play.textContent).toBe('Run graph')
-      expect(play.disabled).toBe(false)
-    }, { timeout: 30000 })
-  }
-  const change = async (selector: string, value: string): Promise<void> => {
-    const input = find<HTMLSelectElement>(selector)
-    input.value = value
-    input.dispatchEvent(new Event('change'))
-    await ready()
-  }
-  try {
-    await ready()
-    expect(host.querySelectorAll('canvas')).toHaveLength(1)
-    expect(find<HTMLSelectElement>('[data-count]').value).toBe('1000000')
-    expect(createDevice).toHaveBeenCalledOnce()
-    expect(createDevice).toHaveBeenCalledWith(expect.objectContaining({ type: 'webgpu', createCanvasContext: expect.objectContaining({ canvas }) }))
-    expect(find('[data-run-scope]').textContent).toContain('Recorded results list the settings used in each run')
-    expect(host.querySelector('[data-run-summary-value="passed"]')).toBeNull()
-    await change('[data-count]', '65536')
-    await change('[data-distribution]', start)
-    await change('[data-force]', 'four-corners')
-    if (start === 'persistent-communities') await change('[data-drawing]', 'coverage')
-    const devicesBeforeRun = createDevice.mock.calls.length
-    const force = find<HTMLSelectElement>('[data-force]')
-    play.click()
-    await vi.waitFor(() => expect(status.textContent).toMatch(/tick [1-9]/), { timeout: 30000 })
-    expect(createDevice).toHaveBeenCalledTimes(devicesBeforeRun)
-    expect(play.disabled).toBe(true)
-    expect(force.disabled).toBe(true)
-    find<HTMLButtonElement>('[data-pause]').click()
-    expect(status.textContent).toContain('Paused')
-    expect(play.textContent).toBe('Resume')
-    find<HTMLButtonElement>('[data-reset]').click()
-    await ready()
-    expect(force.value).toBe('four-corners')
-  } finally { view.destroy(); host.remove(); createDevice.mockRestore() }
-}, 60000)
 
 it('uses a centered, fixed camera after both Run and Fit', async () => {
   const host = document.createElement('div')

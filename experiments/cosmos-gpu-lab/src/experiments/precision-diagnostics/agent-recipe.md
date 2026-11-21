@@ -123,11 +123,9 @@ the existing `input-order.json` as a complete example and include:
   The Lab marks missing headings as unavailable. The steps must still be useful
   without these links.
 
-Run `pnpm --filter @cosmos.gl/gpu-lab test:ui src/runtime/agent-findings.test.ts`
-to check the records. An invalid file is reported on the page without hiding
-other findings or the experiment; fix it rather than treating it as evidence.
-This checks the record's format, not whether its claims or snapshot are correct;
-verify the underlying evidence and retained source before reporting completion.
+Open the experiment and check that the finding appears without a record-loading
+warning. Verify the underlying evidence and retained source before reporting
+completion.
 
 ### Replay the input-order follow-up
 

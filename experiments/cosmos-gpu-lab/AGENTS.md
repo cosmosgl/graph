@@ -4,6 +4,20 @@ The Lab records bounded research for people to understand and for agents to
 reproduce. Follow the repository's root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
+## WebGPU migration tests
+
+Every Lab test must directly help answer whether Cosmos is ready to migrate to
+WebGPU. Add or extend a test only when it checks a requirement in the current
+[migration scope](src/docs/validation-workflow.md) and can catch a specific
+failure in the candidate or the code it uses. Assert the observable result
+against the expected behavior or an independent reference. For example, render
+overlapping circles and verify that picking returns the visible point's ID.
+
+Add a separate test only for a distinct failure mode or acceptance condition.
+Extend an existing test when a new fixture exercises a meaningful boundary of
+the same requirement. Keep Lab navigation, report formatting, mock-only
+bookkeeping, and parked experiments out of the migration suite.
+
 ## Page and demo design
 
 - **Use one reading column.** Use `reading-document`, shared typography, and
@@ -46,6 +60,9 @@ are different statements. Report missing, skipped, interrupted and unavailable
 checks explicitly. Record the actual adapter; do not infer it from the browser or
 from an earlier run. Keep visible-browser and timing requirements for the chosen
 study, and do not run builds or tests alongside a timed measurement.
+
+For a historical recipe that names a retired test, use the source snapshot or
+revision recorded for that study. The Lab README identifies the earlier suite.
 
 Use a unique `LAB_ARTIFACT_RUN` directory for test-produced captures. Raw
 measurement JSON stays in ignored `captures/`; retain concise findings and small

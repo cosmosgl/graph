@@ -1,12 +1,14 @@
 import { expect, it } from 'vitest'
 import { createOracle } from '../combined-layout/reference'
 import { forceSettings } from '../combined-layout/production-settings'
-import { compareArray } from '../many-body/reference'
+import { compare, compareArray } from '../many-body/reference'
+import { createComparisonCandidate } from '../viewer-comparison/comparison-candidate'
+import { prepareComparisonInput } from '../viewer-comparison/comparison-input'
 import { writeArtifact } from '../../testing/artifacts'
 import { validateFrame } from './validation'
 import { interactionCheck } from './evaluate'
-import { integratedProfileStages } from './star-profile'
-import { createIntegrated, nextFrame, type FrameTrace } from './runtime'
+import { createIntegrated, nextFrame } from './runtime'
+import { workload } from './data'
 
 it('renders 1,024 shared positions, picks/drags before scaling, preserves state and destroys safely', async () => {
   const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 600
@@ -18,9 +20,7 @@ it('renders 1,024 shared positions, picks/drags before scaling, preserves state 
     const identity = r.backend.resourceIdentity!()
     const oracle = createOracle(r.data.graph, r.data.input, 'production', { ...forceSettings('reference', 1024), center: 0.1 })
     const expected = oracle.tick(r.data.input.points, 1, 0)
-    const trace: FrameTrace = { encodeSimulationMs: -1, encodeDrawMs: -1, completionWaitMs: -1 }
-    await r.frame(true, trace)
-    expect(Object.values(trace).every(v => Number.isFinite(v) && v >= 0)).toBe(true)
+    await r.frame(true)
     expect(r.tick).toBe(1)
     expect(compareArray((await r.backend.read()).positions, expected).valid).toBe(true)
     const checks = await interactionCheck(r); await writeArtifact('integrated-preflight', { info: r.info, checks })
@@ -33,6 +33,28 @@ it('renders 1,024 shared positions, picks/drags before scaling, preserves state 
       await r.replace(kind, count); expect(r.tick).toBe(0); expect(r.backend.positionSource!().count).toBe(count)
       expect(r.backend.positionSource!().device.id).toBe(identity.device)
       await r.step(); expect(Array.from((await r.backend.read()).positions).every(Number.isFinite)).toBe(true)
+      if (kind === 'star') {
+        const { input, graph } = r.data
+        let points: Float32Array = input.points.slice()
+        points[6] = 1 // Pin one neighbor.
+        points[11] = 1 // Mark a different neighbor absent.
+        const links = graph.links.slice()
+        // Keep the hub high-degree in both spring passes after replacing its links.
+        for (let i = 2; i < links.length; i += 4) links.set([links[i + 1], links[i]], i)
+        const weights = graph.weights.map((_, i) => 0.25 + (i % 7) / 4)
+        const replacement = { ...graph, points, links, weights }
+        const hubOracle = createOracle(replacement, { ...input, points })
+        r.backend.setPositions(points)
+        r.backend.replaceLinks!(replacement)
+        for (const stage of ['incoming', 'outgoing'] as const) {
+          const reference = hubOracle.stage(stage, points, r.alpha, r.tick)
+          r.backend.stepStage(stage, r.alpha)
+          const snapshot = await r.backend.read()
+          const check = compare(snapshot, reference)
+          expect(check.valid, `${stage} hub springs: ${JSON.stringify(check)}`).toBe(true)
+          points = snapshot.positions
+        }
+      }
     }
     r.resume(); await nextFrame(); await nextFrame(); r.pause(); const tick = r.tick
     await nextFrame(); await nextFrame(); expect(r.tick).toBe(tick)
@@ -75,7 +97,7 @@ it('keeps zero-opacity foreground unpickable, preserves 0.35/1 colors and isolat
   } finally { r.destroy() }
 })
 
-it('keeps a thin solid link visible rather than excluding its entire footprint as a boundary', async () => {
+it('paints hard-edged and default one-pixel smooth links at DPR 1', async () => {
   const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64
   const r = await createIntegrated(canvas, 'chain', 4)
   try {
@@ -103,93 +125,31 @@ it('keeps a thin solid link visible rather than excluding its entire footprint a
       if (width > 0 && alpha > 0) expect(Math.abs(styled.color[offset] - 204)).toBeLessThanOrEqual(2)
     }
   } finally { r.destroy() }
-})
 
-it('timestamps the existing passes without changing position, force or color bits', async (context) => {
-  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
-  const r = await createIntegrated(canvas, 'communities', 1024)
+  const candidateCanvas = document.createElement('canvas')
+  candidateCanvas.width = 256; candidateCanvas.height = 96
+  const scene = workload('chain', 6)
+  scene.input.points.set([-25, 24, 0, 0, 25, 24, 0, 0, -50, 0, 0, 0, 50, 0, 0, 0, -90, -24, 0, 0, 90, -24, 0, 0])
+  scene.graph.links = new Float32Array([0, 1, 2, 3, 4, 5])
+  scene.graph.weights = new Float32Array(3).fill(1)
+  const candidate = await createComparisonCandidate(candidateCanvas, prepareComparisonInput(scene, 4), 1)
   try {
-    const device = r.backend.positionSource!().device
-    if (!device.features.has('timestamp-query')) { context.skip(); return }
-    for (let i = 0; i < 3; i++) await r.frame(true)
-    const control = await r.backend.read(); const color = (await r.renderer.snapshot()).color
-    await r.replace('communities', 1024)
-    const query = device.createQuerySet({ type: 'timestamp', count: 12 })
-    try {
-      for (let i = 0; i < 3; i++) await r.frame(true, undefined, { query, offset: i * 4 })
-      const measured = await r.backend.read()
-      for (const key of ['positions', 'forces'] as const) {
-        expect(new Uint32Array(measured[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
+    candidate.drawing.camera.zoom = 1
+    candidate.drawing.draw()
+    const copy = document.createElement('canvas')
+    copy.width = candidateCanvas.width; copy.height = candidateCanvas.height
+    const context = copy.getContext('2d')!
+    context.drawImage(candidateCanvas, 0, 0)
+    expect([...context.getImageData(128, 12, 1, 1).data]).toEqual([34, 34, 34, 255])
+    // The centerlines fall between pixel centers. Each adjoining row gets half
+    // coverage, with opacities 1, 0.5 and 0.25 at 50, 100 and 180 CSS pixels.
+    for (const [y, expected] of [[24, 68], [48, 51], [72, 43]]) {
+      for (const x of [112, 128, 144]) {
+        const pixels = context.getImageData(x, y - 1, 1, 2).data
+        for (const [channel, value] of pixels.entries()) {
+          expect(Math.abs(value - (channel % 4 === 3 ? 255 : expected)), `Link at (${x}, ${y}), channel ${channel}`).toBeLessThanOrEqual(2)
+        }
       }
-      expect((await r.renderer.snapshot()).color).toEqual(color)
-      const times = await query.readResults({ firstQuery: 0, queryCount: 12 })
-      expect(times.length).toBe(12)
-      let total = 0n
-      for (let i = 0; i < times.length; i += 2) {
-        expect(times[i + 1] >= times[i]).toBe(true); total += times[i + 1] - times[i]
-      }
-      expect(total > 0n).toBe(true)
-    } finally { query.destroy() }
-  } finally { r.destroy() }
-}, 30000)
-
-it('profiles every integrated star stage including center without changing state or color bits', async context => {
-  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
-  const r = await createIntegrated(canvas, 'star', 8192)
-  try {
-    const device = r.backend.positionSource!().device
-    if (!device.features.has('timestamp-query')) { context.skip(); return }
-    for (let i = 0; i < 3; i++) await r.frame(true)
-    const control = await r.backend.read(); const colors = (await r.renderer.snapshot()).color
-    await r.replace('star', 8192)
-    const query = device.createQuerySet({ type: 'timestamp', count: integratedProfileStages.length * 2 * 3 })
-    try {
-      for (let frame = 0; frame < 3; frame++) {
-        const names: string[] = []; const offset = frame * integratedProfileStages.length * 2
-        await r.frame(true, undefined, {
-          scope: (name, work) => {
-            const index = offset + names.length * 2; names.push(name)
-            const pass = device.beginComputePass({ timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 })
-            try { work(pass) } finally { pass.end() }
-          },
-          draw: {
-            timestampQuerySet: query,
-            beginTimestampIndex: offset + (integratedProfileStages.length - 1) * 2,
-            endTimestampIndex: offset + integratedProfileStages.length * 2 - 1,
-          },
-        })
-        expect(names).toEqual(integratedProfileStages.slice(0, -1))
-      }
-      const measured = await r.backend.read()
-      for (const key of ['positions', 'forces'] as const) {
-        expect(new Uint32Array(measured[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
-      }
-      expect((await r.renderer.snapshot()).color).toEqual(colors)
-      const times = await query.readResults({ firstQuery: 0, queryCount: integratedProfileStages.length * 2 * 3 })
-      for (let i = 0; i < times.length; i += 2) expect(times[i + 1] >= times[i]).toBe(true)
-      expect(times.some((value, i) => i % 2 === 1 && value > times[i - 1])).toBe(true)
-    } finally { query.destroy() }
-  } finally { r.destroy() }
-}, 30000)
-
-it('keeps ordered prefetch equivalent in star and low-degree controls and restores the default', async () => {
-  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
-  const r = await createIntegrated(canvas)
-  try {
-    for (const kind of ['star', 'chain', 'communities'] as const) {
-      await r.replace(kind, 8192)
-      expect(r.springOptimization).toBe('hoist')
-      for (let i = 0; i < 3; i++) await r.frame(true)
-      const control = await r.backend.read(); const color = (await r.renderer.snapshot()).color
-      await r.replace(kind, 8192, 'prefetch')
-      expect(r.springOptimization).toBe('prefetch')
-      for (let i = 0; i < 3; i++) await r.frame(true)
-      const candidate = await r.backend.read()
-      for (const key of ['positions', 'forces'] as const) {
-        expect(new Uint32Array(candidate[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
-      }
-      expect((await r.renderer.snapshot()).color).toEqual(color)
     }
-    await r.replace('chain', 1024); expect(r.springOptimization).toBe('hoist')
-  } finally { r.destroy() }
-}, 60000)
+  } finally { candidate.destroy() }
+})

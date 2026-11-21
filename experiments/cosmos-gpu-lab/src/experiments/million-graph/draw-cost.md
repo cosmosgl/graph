@@ -102,7 +102,7 @@ and luma 10.0.0-alpha.15. Raw data and source snapshots are in
 `captures/resident-coverage-m3-cf134e46/` and
 `captures/resident-render-m3-0iregzwm-a/`. The coverage snapshot SHA-256 is
 `2969aac9155ce9b4686a397a50f9b33b84c5f5dc938f90e8b62342a170bae866`.
-Use the reproduction command below with `VITE_LAB_RESIDENT_RENDER_CANDIDATES=1`
+Use the recorded source snapshot with `VITE_LAB_RESIDENT_RENDER_CANDIDATES=1`
 to compare drawing modes. [Moving rerun](#/million-graph?section=doc-interactive-study)
 
 ## Comparison
@@ -134,6 +134,7 @@ the first community at world coordinate (3200, 0).
 
 ## Reproduce
 
+Use the study’s recorded source snapshot or the archived suite at `08e5ff5d`.
 Set a unique `LAB_ARTIFACT_RUN` and record the exact source revision and snapshot
 with `LAB_SOURCE_REVISION` and `LAB_SOURCE_SNAPSHOT`. Stop other timing, build
 and test work during the run.
