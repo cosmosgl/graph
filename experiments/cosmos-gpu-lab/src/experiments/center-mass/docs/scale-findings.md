@@ -86,7 +86,7 @@ buffer: at one million that is 800 MB, exceeding the recorded 128 MiB
 storage-binding limit. This is an identified architectural obstacle, not a
 measured maximum graph size. **A million-point combined graph has not run.**
 
-A follow-up [center-once investigation](#/center-mass?section=doc-once-findings-computing-the-center-once)
+A follow-up [center-once investigation](#/center-mass?section=center-once)
 keeps the mean on the GPU and removes per-point division. Its tested results
 matched the linear control, but its timings did not show a clear improvement.
 
@@ -107,7 +107,7 @@ Raw measurements and the exact source/dependency snapshots are retained locally:
 
 The WebGPU adapter exposed Apple/metal-3 and `fallback: false`, but not the
 chip model; the same session's WebGL renderer identified Apple M3. See
-[M3 scale study](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
+[M3 scale study](#/center-mass?section=run-diagnostics)
 for the protocol, the unchanged strict gates, and the opt-in commands. More
 distributions, sustained moving interaction, integrated larger graphs, memory
 behavior and practical visual quality remain to be checked.

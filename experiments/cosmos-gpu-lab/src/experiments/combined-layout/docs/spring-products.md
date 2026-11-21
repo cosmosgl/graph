@@ -86,7 +86,7 @@ The original distance-only counterexample is retained as a negative control. Pro
 Separate standalone Chrome 156 timings reran all seven modes on 2,048-point stars and communities: 56 rows,
 392 measured batches and 560 validations including pilots and warmups. All eight new-candidate rows passed every
 batch check. The old distance-only community incoming force-plus-integration row still failed.
-The [spring timing method](#/combined-layout/docs/spring-cost) uses fixed CPU inputs, rotated order, two warmups,
+The [spring timing method](#/combined-layout?section=doc-spring-cost) uses fixed CPU inputs, rotated order, two warmups,
 seven samples and GPU timestamps; it excludes upload, compilation, validation and readback.
 
 This table is **milliseconds per directional spring force plus integration**, median with min–max range:
@@ -102,7 +102,7 @@ The star hub is about 39× faster than refined arithmetic, but still 3.4× its 0
 2× the rejected 0.885 ms distance-only candidate. Community ranges are broad. These are spring-pass measurements,
 not complete simulation ticks, rendering FPS or cross-device performance claims.
 
-The follow-up [8,192-point study](#/combined-layout/docs/scaling) passes scheduled checkpoints but exposes a
+The follow-up [8,192-point study](#/combined-layout?section=doc-scaling) passes scheduled checkpoints but exposes a
 whole-tick star-probe failure. The larger acceptance gate is not yet passed.
 
 ## Reproduce

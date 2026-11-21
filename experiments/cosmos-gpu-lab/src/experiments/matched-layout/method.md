@@ -10,7 +10,7 @@ assessed** here. These labels preserve the original thresholds and failures. See
 
 The WebGL lane imports the production gravity, exact/hierarchical repulsion, springs and integration GLSL, hosted through luma v10. It is not the complete production `Graph` runtime. The WebGPU lane uses luma kernels with the strict arithmetic candidate, ordered cached-small aggregation and order-preserving hub prefetch. The scalar CPU reference reproduces float32 operation order independently.
 
-The optional [center attraction](#/matched-layout/docs/center) now inserts centroid reduction, center force and integration after gravity. The current demo selects strength 1 for comparison; the production default and the original baseline are center **off**. Center-on bounds and the shared occupancy tape use post-center positions. Its independent CPU aggregate uses double-precision summation followed by float32 format rounding.
+The optional [center attraction](#/matched-layout?section=doc-center) now inserts centroid reduction, center force and integration after gravity. The current demo selects strength 1 for comparison; the production default and the original baseline are center **off**. Center-on bounds and the shared occupancy tape use post-center positions. Its independent CPU aggregate uses double-precision summation followed by float32 format rounding.
 
 ```flow
 One graph, initial positions and deterministic random samples
@@ -70,7 +70,7 @@ Inspect the shared-camera drawings alongside scores. [Same Quality Metrics, Diff
 
 ## Scope and reproduction
 
-Open **Matched layout comparison**, choose the fixture/count/preset, then **Run comparison**, **Probe at α = 1**, and **Replay failures** if available. Export JSON for machine-local evidence. The [findings](#/matched-layout/docs/findings) state the measured configurations; results on other devices can differ.
+Open **Matched layout comparison**, choose the fixture/count/preset, then **Run comparison**, **Probe at α = 1**, and **Replay failures** if available. Export JSON for machine-local evidence. The [findings](#/matched-layout?section=doc-findings) state the measured configurations; results on other devices can differ.
 
 GPU computation and drawing use luma public APIs; the CPU preview uses Canvas2D. This study reads positions after gravity and after every tick, and additionally reads diagnostic stages. It cannot supply an FPS or end-to-end WebGL/WebGPU speed ratio. Use the separate timing experiments for GPU costs.
 

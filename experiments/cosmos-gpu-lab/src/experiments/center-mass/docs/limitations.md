@@ -10,7 +10,7 @@
 - Device-loss recovery is not implemented.
 - The saved result is an illustrative smoke run, not a cross-device benchmark.
 
-The separate [M3 scale study](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
+The separate [M3 scale study](#/center-mass?section=run-diagnostics)
 uses the newer recursive GPU-resident center force and reports its own limits;
 it does not change these historical demo boundaries.
 

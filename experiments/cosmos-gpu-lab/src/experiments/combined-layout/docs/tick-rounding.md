@@ -12,7 +12,7 @@ controlled rounding and explicitly rounded repulsion integration. It removes the
 failures without changing the tolerance, CPU reference or force laws. Both star schedules pass, but communities
 regress at tick 1, so this is not an accepted replacement. The original mode remains available to reproduce the counterexample.
 
-The follow-up [gravity-math investigation](#/combined-layout/docs/gravity-trig) isolates native trigonometry
+The follow-up [gravity-math investigation](#/combined-layout?section=doc-gravity-trig) isolates native trigonometry
 as the first divergence and adds a candidate that passes the complete 8,192-point M3 matrix. The results
 below preserve the earlier aligned negative control and its cost.
 

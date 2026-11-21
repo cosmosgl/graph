@@ -24,7 +24,6 @@ export const centerMassCase: ExperimentCase = {
   },
 }
 
-/* eslint-disable @typescript-eslint/naming-convention -- Aliases are public URL slugs. */
 export const centerMassPage: SinglePageCase = {
   observations: [
     {
@@ -64,25 +63,4 @@ export const centerMassPage: SinglePageCase = {
       limits: 'GPU time covers reduction plus the linear center force. Paired differences of −0.201 to +0.105 ms leave the speed difference inconclusive.',
     },
   ],
-  legacyCases: {
-    'center-measurements': 'run-diagnostics',
-    'center-force-scale': 'center-trajectories',
-  },
-  pageSections: {
-    'cost-evidence': 'center-force-cost',
-    'trajectory-evidence': 'center-trajectories',
-    overview: 'case-comparison',
-    algorithm: 'case-comparison',
-    implementation: 'case-comparison',
-    correctness: 'center-accuracy',
-    results: 'center-accuracy',
-    performance: 'center-force-cost',
-    'scale-method': 'run-diagnostics',
-    'scale-findings': 'center-force-cost',
-    'once-findings': 'center-once',
-    limitations: 'recorded-findings',
-    references: 'case-comparison',
-    'validation-contract': 'case-comparison',
-  },
 }
-/* eslint-enable @typescript-eslint/naming-convention */

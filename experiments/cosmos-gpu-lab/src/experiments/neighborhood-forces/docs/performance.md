@@ -74,9 +74,9 @@ JSON exports contain preset parameters, browser metadata, validation details, ra
 completion samples, and GPU timestamp pairs with summaries. Add physical GPU, power state and the tested implementation variant when sharing
 a report; browser metadata alone does not identify hardware reliably.
 
-The [parameter sweep](#/neighborhood-forces/docs/sweep) varies count, density, radius and cell size with
+The [parameter sweep](#/neighborhood-forces?section=doc-sweep) varies count, density, radius and cell size with
 seeded order and reversed method order across repetitions. Historical reports in Results predate GPU
-timestamp support; their numbers are wall time only. The [batched findings](#/neighborhood-forces/docs/batched-results)
+timestamp support; their numbers are wall time only. The [batched findings](#/neighborhood-forces?section=doc-batched-results)
 include two larger native-device sweeps, raw data and validation failures.
 
 Useful next optimizations to compare, rather than assume, include sorting/reordering positions for

@@ -5,12 +5,12 @@ device: Apple M3; standalone Chrome 156
 scope: Historical threshold-64 hub optimization; per-frame readback and frozen controls.
 ---
 
-For current controls and stronger acceptance evidence, see [Trajectories and thresholds](#/hub-springs/docs/acceptance).
+For current controls and stronger acceptance evidence, see [Trajectories and thresholds](#/hub-springs?section=doc-acceptance).
 The first study below used threshold 64, no plain-direction fallback and per-frame readback. Its timings
 are historical observations; do not pool them with the newer GPU-batched measurements. The follow-up also
 checks spring stages against their original tighter CPU budget.
 
-This experiment follows the [controlled stage profile](#/gpu-stage-profile/docs/method), where the star's
+This experiment follows the [controlled stage profile](#/gpu-stage-profile?section=doc-method), where the star's
 first directional spring pass dominated GPU time. It adds an **unpinned hub control**, a **degree sweep** and
 order-preserving shader candidates. Existing CPU references and tolerances stay unchanged.
 

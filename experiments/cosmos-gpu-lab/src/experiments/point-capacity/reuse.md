@@ -9,7 +9,7 @@ Growing storage and shrinking a graph are different operations. **Logical count*
 belong to the graph. **Capacity** says how many records its allocation can hold. Keeping those separate lets
 Cosmos change the count without rebuilding its entire GPU workload each time.
 
-The [rebuild baseline](#/point-capacity/docs/findings) established preservation and cleanup, but recreated
+The [rebuild baseline](#/point-capacity?section=doc-findings) established preservation and cleanup, but recreated
 count-dependent resources on every update. This follow-up compares **GPU rebuild** with **GPU retained
 capacity**. Both use GPU bounds, the same force sequence, refined arithmetic and minimal renderer.
 
@@ -158,7 +158,7 @@ The lower candidate median is an observation of this evolved star workload, not 
 Both variants keep the baseline's buffer initialization and usage flags; frame measurements still span broad,
 overlapping ranges and remain sensitive to execution order.
 
-The [controlled stage profiler](#/gpu-stage-profile/docs/method) now replays frozen inputs with balanced
+The [controlled stage profiler](#/gpu-stage-profile?section=doc-method) now replays frozen inputs with balanced
 lane/method order and exact instrumentation checks. Its first M3 runs do not reproduce a consistent large
 retained-buffer penalty; hub springs and grid aggregation are the main diagnostic targets. Broader timing
 and retention policy are still open before trying larger stars. The diagnostic hierarchy still has
@@ -183,4 +183,4 @@ LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combi
 ```
 
 The previous **CPU copy vs GPU rebuild** mode remains available. It tests a different transfer contract and
-should be interpreted with the limits in its [baseline findings](#/point-capacity/docs/findings).
+should be interpreted with the limits in its [baseline findings](#/point-capacity?section=doc-findings).

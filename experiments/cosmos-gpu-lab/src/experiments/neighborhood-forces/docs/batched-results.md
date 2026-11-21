@@ -7,7 +7,7 @@ scope: Historical serial-kernel sweep; dense precision failures are retained and
 
 # Batched timing: where the grid wins
 
-> Historical measurements of the original serial kernel. The [precision investigation](#/neighborhood-forces/docs/precision)
+> Historical measurements of the original serial kernel. The [precision investigation](#/neighborhood-forces?section=doc-precision)
 > fixes its dense-case errors and records the added cost. The timings below do not describe the fixed kernel.
 
 Measured on **9 November 2026**, using the browser's native Apple GPU / Metal 3 adapter, with timestamp
@@ -30,7 +30,7 @@ reproduction steps to collect your own results with the lab’s JSON export. Raw
 
 The normal sweep now uses the precision-fixed baseline, so this repeats the workload and measurement
 method, not the historical serial kernel or its timings. To compare the preserved original serial
-shader with the fix, use **Check dense precision**; see [Precision findings](#/neighborhood-forces/docs/precision).
+shader with the fix, use **Check dense precision**; see [Precision findings](#/neighborhood-forces?section=doc-precision).
 
 ## Scope and measurement
 
@@ -47,7 +47,7 @@ Every stage calibrates a batch targeting 4 ms, capped at 64 operations, then rec
 two warm-ups. Reported GPU times divide the timestamp interval by the number of operations in that
 batch. Inputs stay frozen, and rendering uses a detached 480×480 canvas. This measures repeated GPU
 work, not interactive frame rate or presentation cost. Expensive stages use one operation per batch.
-See [Performance](#/neighborhood-forces/docs/performance) for exact timing boundaries.
+See [Performance](#/neighborhood-forces?section=doc-performance) for exact timing boundaries.
 
 The sweeps ran at 08:04–08:07 and 08:08–08:11 UTC. Development checks briefly overlapped the beginning
 of the first sweep; the second ran after they finished. Power state, temperature and other system load

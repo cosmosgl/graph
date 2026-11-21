@@ -705,7 +705,7 @@ The corrected software run also exposes an environment-specific UI expectation:
 the normalized polygon audit produces **8 rows**, while the test expects the
 **30** recorded on the M3. The status still correctly says **not accepted**. That
 assertion remains unchanged and failing; neither count makes those pixels
-acceptable. [Weighted-link isolation](#/weighted-links/docs/results) records the
+acceptable. [Weighted-link isolation](#/weighted-links?section=doc-results) records the
 separate spring checks and their remaining limits.
 
 The third failing test is the ring/greyout CPU color comparison: **10 of 24

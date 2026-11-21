@@ -43,12 +43,12 @@ it does not require Cosmos to adopt their reproducible accumulator.
 
 | Observation | Implication | Scope |
 | --- | --- | --- |
-| Dense local-force contributions re-summed in double precision reduced the recorded error from about `0.0005026` to `0.000000445` | An independent reference isolated accumulation loss and motivated a useful blocked sum | Captured contributions and sampled native-device cases; see [dense precision](#/neighborhood-forces/docs/precision) |
-| Refined gravity increased a recorded stage median from `0.1720` to `2.9819` ms | Reproducing polar arithmetic can have substantial cost without establishing its production necessity | Historical 8,192-point M3 frozen-stage comparison; see [gravity study](#/combined-layout/docs/gravity-trig) |
+| Dense local-force contributions re-summed in double precision reduced the recorded error from about `0.0005026` to `0.000000445` | An independent reference isolated accumulation loss and motivated a useful blocked sum | Captured contributions and sampled native-device cases; see [dense precision](#/neighborhood-forces?section=doc-precision) |
+| Refined gravity increased a recorded stage median from `0.1720` to `2.9819` ms | Reproducing polar arithmetic can have substantial cost without establishing its production necessity | Historical 8,192-point M3 frozen-stage comparison; see [gravity study](#/combined-layout?section=doc-gravity-trig) |
 | The gravity reference reproduces distance, angle, sine and cosine although the intended force is linear | Compare direct Cartesian evaluation against the intended law as well as the compatibility model | Algebraic equivalence holds in exact arithmetic; floating-point domain and integration still require testing |
-| Matched-layout WebGL results retain numerical failures despite close quality scores | Existing GLSL is a comparison implementation, not an unquestionable oracle | The documented fixture/device matrix; see [matched findings](#/matched-layout/docs/findings) |
+| Matched-layout WebGL results retain numerical failures despite close quality scores | Existing GLSL is a comparison implementation, not an unquestionable oracle | The documented fixture/device matrix; see [matched findings](#/matched-layout?section=doc-findings) |
 | Resident and retained-capacity studies compare state bits with staged/rebuilt controls | Exact equality is appropriate when storage or scheduling is the intended change | Shared force code can share bugs; independent force checks remain necessary |
-| Matched adaptive runs share CPU-derived sampling decisions | They isolate force differences but do not validate independent runtime adaptation | See the [matched method](#/matched-layout/docs/method) |
+| Matched adaptive runs share CPU-derived sampling decisions | They isolate force differences but do not validate independent runtime adaptation | See the [matched method](#/matched-layout?section=doc-method) |
 
 Source anchors: `combined-layout/reference.ts` (polar gravity model), `many-body/reference.ts`
 (float32 operations and tolerance), `weighted-links/reference.ts` (independent edge lists),
@@ -63,7 +63,7 @@ changes. Do not require every new algorithm to preserve an old reduction order o
 Accept an alternative only after its behavioral, numerical, quality and cost requirements are met.
 Language conformance alone is insufficient, and historical gate failures are never silently waived.
 
-Standardize the [validation contract](#/matched-layout/docs/validation-contract) in each example and
+Standardize the [validation contract](#/matched-layout?section=doc-validation-contract) in each example and
 follow the [validation workflow](#/validation-workflow). The matched comparison separates limited
 flag/restoration evidence, legacy compatibility and measured-only quality. It does not manufacture
 an independent mathematical accuracy verdict or a complete behavioral pass from those checks.
@@ -87,7 +87,7 @@ the bounded cases expose consequential errors, not merely differing bits.
 
 ## First application of the workflow
 
-The [native M3 findings](#/precision-diagnostics/docs/method) record nine completed UI runs on
+The [native M3 findings](#/precision-diagnostics?section=doc-method) record nine completed UI runs on
 12 November 2026, Chrome 157 and pinned luma v10, through 4,096 records. Cartesian WGSL has lower
 maximum mathematical force error than the CPU polar model while passing its legacy gate. The
 native polar diagnostic exposes two wrong-direction vertical-axis cases, outside `atan2`'s ordinary

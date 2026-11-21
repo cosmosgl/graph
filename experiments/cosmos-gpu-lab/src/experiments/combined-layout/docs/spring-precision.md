@@ -9,11 +9,11 @@ scope: Early spring arithmetic and captured-stage controls; later composition fi
 
 The larger combined runs exposed a specific problem: a spring force could pass its own check, yet produce a
 position outside the original budget when the displacement nearly cancelled the starting coordinate. The
-[checkpoint investigation](#/combined-layout/docs/checkpoints) records the baseline failures and a concrete example.
+[checkpoint investigation](#/combined-layout?section=doc-checkpoints) records the baseline failures and a concrete example.
 
 The new arithmetic modes investigate that problem **without changing the CPU reference, tolerance, force order,
 adjacency order, cooling, gravity, repulsion or production WebGL shaders**. Native f32 remains the default.
-These are correctness candidates. The follow-up [Spring cost study](#/combined-layout/docs/spring-cost) measures
+These are correctness candidates. The follow-up [Spring cost study](#/combined-layout?section=doc-spring-cost) measures
 their cost and adds narrower alternatives; none is a production recommendation.
 
 ## Why integration alone is insufficient
@@ -103,10 +103,10 @@ still visible rather than corrected by this option.
 At each checkpoint, the original stage, hierarchy, centroid and whole-tick checks all pass. Unchecked intermediate
 ticks remain unvalidated. The independent CPU trajectory is unchanged. This is bounded evidence for correcting the
 WebGPU spring-position failures, not a claim of identical trajectories, general convergence or cross-device readiness.
-The later [Spring cost study](#/combined-layout/docs/spring-cost) extends the trajectory checks to the force-only
+The later [Spring cost study](#/combined-layout?section=doc-spring-cost) extends the trajectory checks to the force-only
 and refined division/root candidates.
 
-**Follow-up:** [Spring cost](#/combined-layout/docs/spring-cost) measures fixed-input GPU batches and tests narrower
+**Follow-up:** [Spring cost](#/combined-layout?section=doc-spring-cost) measures fixed-input GPU batches and tests narrower
 corrections. The fully rounded candidate remains the correctness control. CPU readbacks and these correctness-test
 durations are not GPU timing evidence.
 

@@ -21,7 +21,7 @@ Maximum absolute, RMS and relative L2 errors use force x/y components only. The 
 uses the original `many-body/reference.ts` mixed component tolerance. Neither budget nor shader is
 changed to make a row pass. The CPU model's compatibility self-match is not independent validation.
 The refined strict candidate and its historical cost remain in the existing
-[gravity study](#/combined-layout/docs/gravity-trig).
+[gravity study](#/combined-layout?section=doc-gravity-trig).
 
 Axis and non-axis mathematical errors are reported separately. Native `atan2` has restricted
 accuracy guarantees for zero or extremely small components; those cases must remain visible rather

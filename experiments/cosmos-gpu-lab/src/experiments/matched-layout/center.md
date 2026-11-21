@@ -7,7 +7,7 @@ scope: Optional center attraction, independent layout gates and paired added GPU
 
 # Center attraction in the combined layout
 
-Cosmos’s optional `simulationCenter` force attracts each point toward the current centroid. It runs **after gravity and before repulsion**, with its own integration pass. The production default is **0 (off)**; this experiment also offers strengths 0.1 and 1. The earlier [matched baseline](#/matched-layout/docs/findings) uses center off.
+Cosmos’s optional `simulationCenter` force attracts each point toward the current centroid. It runs **after gravity and before repulsion**, with its own integration pass. The production default is **0 (off)**; this experiment also offers strengths 0.1 and 1. The earlier [matched baseline](#/matched-layout?section=doc-findings) uses center off.
 
 ```flow
 Gravity · integrate positions
@@ -21,7 +21,7 @@ Outgoing springs · integrate, then cool
 
 Production GLSL calculates `delta = centroid − point`, its length and angle, then a correction of `alpha × center × length × 0.01` in that direction. The WebGL lane imports those shaders unchanged. A clear precedes every additive accumulation, and blending is explicitly disabled for the following force/integration/draw passes.
 
-WebGPU uses luma kernels to reduce present `vec4` positions into sums/count in 256-invocation workgroups, recursively reducing partials until one aggregate remains. The current default retains high/low limbs per coordinate through every level, using integer-controlled luma `sum_fp64`, before writing one float32 aggregate. This [center correction](#/collision/docs/findings) fixes the observed dense four-pass collision failure at unchanged tolerance. The original float32 tree remains a selectable control in the collision experiment.
+WebGPU uses luma kernels to reduce present `vec4` positions into sums/count in 256-invocation workgroups, recursively reducing partials until one aggregate remains. The current default retains high/low limbs per coordinate through every level, using integer-controlled luma `sum_fp64`, before writing one float32 aggregate. This [center correction](#/collision?section=doc-findings) fixes the observed dense four-pass collision failure at unchanged tolerance. The original float32 tree remains a selectable control in the collision experiment.
 
 The polar force still uses the existing refined arithmetic helpers and integrates through the strict candidate. All stages, including reduction and the next force, consume GPU-resident buffers in the resident normal frame’s compute pass. No float atomics, CPU centroid upload or per-tick reduction readback is required by this path. The [parallel reduction guide](#/concepts/reduction) explains the tree.
 
@@ -51,7 +51,7 @@ Timing backends reserve the selected sample tier in both controls; the interacti
 
 ## Native findings · 11–12 November 2026
 
-**Historical float32-tree baseline:** the trajectory, quality and center-cost measurements in the following sections precede the high/low correction. They have not been rerun for the new reduction and must not be attributed to it. Current matched reports record the effective reduction in their parameters; center-cost exports record it separately. See the [new bounded correction evidence and paired cost](#/collision/docs/findings).
+**Historical float32-tree baseline:** the trajectory, quality and center-cost measurements in the following sections precede the high/low correction. They have not been rerun for the new reduction and must not be attributed to it. Current matched reports record the effective reduction in their parameters; center-cost exports record it separately. See the [new bounded correction evidence and paired cost](#/collision?section=doc-findings).
 
 Apple M3, standalone Chrome 156, pinned luma `10.0.0-alpha.4`. Every run uses center **1**, a pin on point 0, explicit unit link weights, production spring variation and the shared adaptive policy. Distributions are uniform except dense 8,192-point communities, which start in two clusters.
 
@@ -67,7 +67,7 @@ Across **seven runs and 5,600 ticks**, WebGPU passes **567 / 567** frozen checkp
 | 8,192 | Star | 100 | 9 / 11 | 11 / 11 | 0.425401 | 0.18413% |
 | 512 | Communities | 5,000 | 490 / 501 | 501 / 501 | 0.576157 | 2.50139% |
 
-Stress uses all connected pairs at 128 points and the [documented landmark estimate](#/matched-layout/docs/method) above that count. Drift is from the independent trajectory, with no alignment. The long run’s WebGPU stress is `0.576267`, close to CPU’s `0.576157`, despite the **2.50% radius-normalized positional drift**. Passing frozen-input gates does not establish trajectory identity.
+Stress uses all connected pairs at 128 points and the [documented landmark estimate](#/matched-layout?section=doc-method) above that count. Drift is from the independent trajectory, with no alignment. The long run’s WebGPU stress is `0.576267`, close to CPU’s `0.576157`, despite the **2.50% radius-normalized positional drift**. Passing frozen-input gates does not establish trajectory identity.
 
 ### Precision findings remain visible
 
@@ -103,7 +103,7 @@ WebGL’s paired samples are much noisier: for example, the cooled dense-communi
 
 The current refined polar center kernel is a correctness reference with a material measured cost. A cheaper Cartesian formulation of the real-arithmetic force is the next optimization candidate; its floating-point behavior must pass these unchanged gates before adopting it. Broader strengths, masks inside complete force composition, other GPUs and full Graph scheduling remain open.
 
-Timings are machine-specific; measurement JSON stays local. The center-off [baseline findings](#/matched-layout/docs/findings) remain separate.
+Timings are machine-specific; measurement JSON stays local. The center-off [baseline findings](#/matched-layout?section=doc-findings) remain separate.
 
 The timing API follows luma’s [query-set model](https://luma.gl/docs/api-reference/core/resources/query-set) and [explicit GPU command model](https://luma.gl/docs/api-guide/gpu/gpu-commands). This lab pins its dependency version; implementation details are checked against that installed version.
 

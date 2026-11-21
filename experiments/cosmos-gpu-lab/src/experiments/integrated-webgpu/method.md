@@ -256,7 +256,7 @@ passes remain controls; normal-frame evaluation must confirm any later optimizat
 
 After the stage measurements identified incoming springs as the largest measured stage,
 **Compare hub prefetch** was declared before evaluation: star, then chain and communities,
-all at 8,192 points. Reuse the [existing ordered prefetch candidate](#/hub-springs/docs/acceptance)
+all at 8,192 points. Reuse the [existing ordered prefetch candidate](#/hub-springs?section=doc-acceptance)
 with its provisional 1,024-neighbor threshold. Each tile loads 64 neighbors cooperatively;
 one lane retains the serial velocity correction in original adjacency order. No arithmetic,
 force law, colors or acceptance rules change. The default integrated path stays `hoist`.

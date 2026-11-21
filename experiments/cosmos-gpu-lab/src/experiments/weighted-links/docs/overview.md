@@ -56,5 +56,5 @@ still contribute to topology degrees, matching the distinction between graph con
 presence. The demo uses finite hidden coordinates for absent points; NaN-based ingest and transitions
 remain engine integration work.
 
-Open the [live comparison](#/weighted-links), [CSR implementation](#/weighted-links/docs/implementation)
-and [validation guide](#/weighted-links/docs/results).
+Open the [live comparison](#/weighted-links), [CSR implementation](#/weighted-links?section=doc-implementation)
+and [validation guide](#/weighted-links?section=doc-results).

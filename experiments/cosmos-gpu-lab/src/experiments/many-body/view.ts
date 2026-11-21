@@ -92,7 +92,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       <p class="many-body-status" data-output="benchmark-status" role="status">
         Ready. Seven measured batches per backend and workload, 4–64 operations per batch after calibration and warmup.</p>
       <p class="demo-note">Keep this tab visible. GPU time is per operation; completion time also includes submission and fence waiting.
-        Unavailable or invalid GPU timers remain unavailable. <a href="#/many-body/docs/timing">Method and findings</a>.</p>
+        Unavailable or invalid GPU timers remain unavailable. <a href="#/many-body?section=doc-timing">Method and findings</a>.</p>
       <div class="many-body-results" data-output="benchmark-results"></div>
     </section>
   `

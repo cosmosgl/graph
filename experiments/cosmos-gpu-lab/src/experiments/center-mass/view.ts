@@ -1,6 +1,6 @@
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import type { ExperimentInstance, ExperimentStartOptions } from '../../runtime/experiment'
+import type { ExperimentInstance } from '../../runtime/experiment'
 import type { BackendResult, CenterMassBackend } from './backend'
 import {
   advancePointState,
@@ -39,13 +39,12 @@ function centerDistance (left: Center, right: Center): number {
   return Math.hypot(left.x - right.x, left.y - right.y)
 }
 
-export async function createCenterMassExperiment (host: HTMLElement, { deferComparison = false }: ExperimentStartOptions = {}): Promise<ExperimentInstance> {
+export async function createCenterMassExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
   host.classList.add('center-mass-run')
   host.innerHTML = `
     <section class="center-mass-demo">
       <div class="controls">
-        <button class="button-primary" data-action="initialize" type="button" hidden data-run-action="primary">Start the live comparison</button>
         <button class="button-primary" data-action="step" type="button" disabled data-run-action="primary">Step</button>
         <button data-action="play" type="button" disabled data-run-action="primary">Play</button>
         <button data-action="reset" type="button" disabled data-run-action="primary">Reset</button>
@@ -100,7 +99,6 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
     </section>
   `
 
-  const startButton = element<HTMLButtonElement>(host, '[data-action="initialize"]')
   const stepButton = element<HTMLButtonElement>(host, '[data-action="step"]')
   const playButton = element<HTMLButtonElement>(host, '[data-action="play"]')
   const resetButton = element<HTMLButtonElement>(host, '[data-action="reset"]')
@@ -114,14 +112,12 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
   let isPlaying = false
   let isRunning = false
   let isMeasuring = false
-  let isInitializing = false
-  let started = false
+  let ready = false
   let destroyed = false
   let playTimer: number | undefined
 
   const updateButtons = (): void => {
-    startButton.disabled = isInitializing || isMeasuring
-    playButton.disabled = !started || isMeasuring
+    playButton.disabled = !ready || isMeasuring
     stepButton.disabled = resetButton.disabled = playButton.disabled || isRunning
   }
 
@@ -234,7 +230,7 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
   ]
 
   mountRunLayout(host, () => summarizeRun(
-    isMeasuring ? 'Measuring' : isPlaying || isRunning ? 'Running' : started ? 'Ready' : isInitializing ? 'Preparing' : 'Ready to start',
+    !ready ? 'Preparing' : isMeasuring ? 'Measuring' : isPlaying || isRunning ? 'Running' : 'Ready',
     [],
     'Center accuracy budget and rendered-pixel parity.',
     slots.filter(s => s.error).map(s => s.id),
@@ -244,44 +240,12 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
     showChecks: false,
     scope: 'The selected tick of one shared 8,192-point input; GPU centers are compared with the CPU average.',
   })
-  const visualization = element(host, '.run-visualization')
-  const guide = element(host, '[data-run-part="status"]')
-  const liveControls = [stepButton, playButton, resetButton]
-  const initialize = async (): Promise<void> => {
-    if (started || isInitializing || isMeasuring || destroyed) return
-    isInitializing = true; updateButtons()
-    startButton.textContent = 'Starting comparison…'
-    try {
-      await Promise.all(constructors.map(async ({ slot, create }) => {
-        try {
-          const backend = await create()
-          if (destroyed) { backend.destroy(); return }
-          slot.backend = backend; setStatus(slot.id, 'Ready')
-        } catch (error) {
-          if (destroyed) return
-          runError = String(error)
-          slot.error = error instanceof Error ? error.message : String(error)
-          setStatus(slot.id, 'Unavailable', true)
-          element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
-        }
-      }))
-      if (destroyed) return
-      await runTick(false)
-      if (destroyed) return
-      started = true; startButton.hidden = true
-      guide.hidden = visualization.hidden = false
-      liveControls.forEach(control => { control.hidden = false })
-    } finally {
-      isInitializing = false
-      if (!destroyed) updateButtons()
-    }
-  }
   const setMeasurement = (measuring: boolean): void => {
     isMeasuring = measuring
     updateButtons()
   }
   const begin = (): boolean => {
-    if (isMeasuring || isRunning || isInitializing || destroyed) return false
+    if (!ready || isMeasuring || isRunning || destroyed) return false
     setPlayback(false)
     setMeasurement(true)
     return true
@@ -289,12 +253,22 @@ export async function createCenterMassExperiment (host: HTMLElement, { deferComp
   const end = (): void => { setMeasurement(false) }
   const scale = mountCenterScale(element(host, '[data-center-scale]'), begin, end)
   const once = mountCenterOnce(element(host, '[data-center-once]'), begin, end)
-  if (deferComparison) {
-    startButton.hidden = false
-    guide.hidden = visualization.hidden = true
-    liveControls.forEach(control => { control.hidden = true })
-    startButton.addEventListener('click', () => { initialize().catch(reportUnexpectedError) })
-  } else await initialize()
+
+  await Promise.all(constructors.map(async ({ slot, create }) => {
+    try {
+      slot.backend = await create()
+      setStatus(slot.id, 'Ready')
+    } catch (error) {
+      runError = String(error)
+      slot.error = error instanceof Error ? error.message : String(error)
+      setStatus(slot.id, 'Unavailable', true)
+      element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
+    }
+  }))
+  await runTick(false)
+  ready = true
+  updateButtons()
+
   return {
     pause (): void {
       setPlayback(false); scale.pause(); once.pause()

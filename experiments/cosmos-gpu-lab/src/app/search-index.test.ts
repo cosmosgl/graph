@@ -9,7 +9,6 @@ it('indexes published experiments, evidence, guides and feature coverage with di
   expect(gravity.some(result => result.href.startsWith('#/precision-diagnostics?section=doc-gravity-evidence'))).toBe(true)
   expect(gravity.some(result => result.href === '#/roadmap?section=feature-gravity')).toBe(true)
   expect(searchIndex(index, 'webgpu migration').some(result => result.href === '#/roadmap')).toBe(true)
-  expect(index.entries.some(result => result.href.startsWith('#/feature-inventory'))).toBe(false)
   const storedAlpha = searchIndex(index, 'stored alpha')
   expect(storedAlpha.some(result => result.href === '#/point-picking?section=finding-picking')).toBe(true)
   expect(storedAlpha.some(result => result.href.startsWith('#/point-picking?section=doc-picking-evidence'))).toBe(true)
@@ -54,7 +53,7 @@ The retained failure is important.
 pnpm secret-command
 \`\`\`
 
-Use the [agent recipe](#/test/docs/agent-recipe) to replay.
+Use the [agent recipe](#/test?section=doc-agent-recipe) to replay.
 `, {
     key: 'test',
     title: 'Evidence',

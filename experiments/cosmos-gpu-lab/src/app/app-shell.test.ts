@@ -7,7 +7,7 @@ import { createAppShell } from './app-shell'
 import { startingCase } from './experiment-route'
 import { experimentGroups, experiments, findExperiment } from './registry'
 import { migrationFocus, research } from './research'
-import { articleSectionId, readRoute } from './router'
+import { articleSectionId } from './router'
 import { readinessFor } from './readiness'
 
 let host: HTMLElement | undefined
@@ -52,7 +52,6 @@ it('shows topic cards and the global search without starting GPU work', async ()
   for (const group of experimentGroups) expect(host.querySelector(`#catalog-${group.id}`)?.textContent).toBe(group.title)
   const pointLinks = host.querySelectorAll<HTMLAnchorElement>('[aria-labelledby="catalog-point-styling"] .experiment-card')
   expect(Array.from(pointLinks, link => link.hash).sort()).toEqual(['#/point-images', '#/point-picking', '#/point-rings-greyout', '#/point-shapes'])
-  expect(links.some(link => link.hash === '#/point-styling')).toBe(false)
   for (const experiment of experiments) {
     const item = startingCase(experiment)
     const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}"]`)
@@ -110,7 +109,7 @@ it('opens the workgroup repulsion experiment from the catalog', async () => {
   expect(create).toHaveBeenCalledOnce()
 })
 
-it('shows the migration content on load and focuses legacy coverage links without starting a device', async () => {
+it('shows the migration page and focuses its sections without starting a device', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/roadmap')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
@@ -128,17 +127,8 @@ it('shows the migration content on load and focuses legacy coverage links withou
   page.querySelector<HTMLAnchorElement>('.migration-contents a')!.click()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('feature-coverage'))
 
-  for (const [legacy, target] of [
-    ['#/feature-inventory', 'feature-coverage'],
-    ['#/feature-inventory?section=1-simulation-forces', 'coverage-simulation'],
-    ['#/feature-inventory?section=force-order-is-part-of-the-behavior', 'force-order-is-part-of-the-behavior'],
-    ['#/feature-inventory?section=feature-curved-links', 'feature-curved-links'],
-    ['#/roadmap?section=parked-investigations', 'parked-investigations'],
-  ]) {
-    await route(legacy, () => {
-      expect(window.location.hash).toBe(`#/roadmap?section=${target}`)
-      expect(document.activeElement?.id).toBe(target)
-    })
+  for (const section of ['coverage-simulation', 'force-order-is-part-of-the-behavior', 'feature-curved-links', 'parked-investigations']) {
+    await route(`#/roadmap?section=${section}`, () => expect(document.activeElement?.id).toBe(section))
   }
   const feature = page.querySelector<HTMLElement>('#feature-curved-links')!
   expect(feature.tagName).toBe('LI')
@@ -148,26 +138,7 @@ it('shows the migration content on load and focuses legacy coverage links withou
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
-it('opens a legacy center method link on the same page without starting a device', async () => {
-  const create = vi.spyOn(findExperiment('center-mass')!, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/center-mass/docs/algorithm?section=webgpu-reduction')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe('case-comparison'))
-  expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
-  expect(host.querySelector('#recorded-findings')).not.toBeNull()
-  expect(host.querySelector('.case-evidence-page, #doc-agent-recipe')).toBeNull()
-  expect(create).not.toHaveBeenCalled()
-})
-
-it('rejects an unknown legacy article without creating a device', async () => {
-  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
-  window.history.replaceState(null, '', '#/center-mass/docs/unknown')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.textContent).toContain('Unknown experiment'))
-  expect(create).not.toHaveBeenCalled()
-})
-
-it('preserves old base-route Run bookmarks and focuses the requested result', async () => {
+it('opens the demo directly at its live results section', async () => {
   const { create } = mockRun('point-rendering')
   window.history.replaceState(null, '', '#/point-rendering?section=run-results')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
@@ -176,20 +147,23 @@ it('preserves old base-route Run bookmarks and focuses the requested result', as
   expect(create).toHaveBeenCalledTimes(1)
 })
 
-it('preserves explicit isolated-link diagnostic entry points', () => {
-  for (const backend of ['WebGL', 'WebGPU']) {
-    window.history.replaceState(null, '', `?linkDiagnostic=${backend}#/weighted-links`)
-    expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: 'run' })
-    window.history.replaceState(null, '', `?linkDiagnostic=${backend}#/weighted-links/run`)
-    expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: 'run' })
-    window.history.replaceState(null, '', `?linkDiagnostic=${backend}#/weighted-links/evidence`)
-    expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: 'evidence' })
-  }
-  window.history.replaceState(null, '', '?#/weighted-links')
-  expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: undefined })
+it('allows weighted-link diagnostics to change the query on the same route', async () => {
+  mockRun('weighted-links')
+  window.history.replaceState(null, '', '#/weighted-links')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+
+  const link = document.createElement('a'); link.href = '?linkDiagnostic=WebGPU#/weighted-links'; host.append(link)
+  let intercepted: boolean | undefined
+  document.addEventListener('click', event => {
+    intercepted = event.defaultPrevented
+    event.preventDefault()
+  }, { once: true })
+  link.click()
+  expect(intercepted).toBe(false)
 })
 
-it('redirects an old agent recipe link to the human-facing recorded finding', async () => {
+it('opens recorded findings from an agent recipe link', async () => {
   mockRun('precision-diagnostics')
   window.history.replaceState(null, '', '#/precision-diagnostics?section=doc-agent-recipe')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
@@ -219,7 +193,7 @@ it('keeps the selected case finding and retry available when live setup fails', 
   const item = experiment.cases!.find(entry => entry.id === 'center-comparison')!
   const { create } = mockRun(experiment.id)
   create.mockRejectedValueOnce(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  window.history.replaceState(null, '', '#/center-mass')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
@@ -232,45 +206,12 @@ it('keeps the selected case finding and retry available when live setup fails', 
   expect(create.mock.calls[1][1]).toBe('center-comparison')
 })
 
-it('keeps the trajectory finding visible with an opt-in live comparison from the legacy URL', async () => {
-  const { create } = mockRun('center-mass')
-  window.history.replaceState(null, '', '#/center-mass?case=center-force-scale')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  expect(document.activeElement?.id).toBe('center-trajectories')
-  expect(host.querySelector('#center-trajectories')!.textContent).toContain('failed the strict position comparison from tick 10')
-  expect(host.querySelector('canvas')).toBeNull()
-  expect(create).not.toHaveBeenCalled()
-  const start = host.querySelector<HTMLButtonElement>('#case-live > [data-start-comparison]:not([hidden])')!
-  expect(start.textContent).toBe('Start the live comparison'); start.click()
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
-  expect(create.mock.calls[0][1]).toBe('center-comparison')
-})
-
-it('opens the old center measurement URL on the page with both local controls', async () => {
-  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
-  window.history.replaceState(null, '', '#/center-mass?case=center-measurements')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector<HTMLInputElement>('[data-scale-counts]')?.value).toBe('8192'))
-  expect(host.querySelector<HTMLInputElement>('[data-once-count]')!.value).toBe('8192')
-  expect(host.querySelector('[data-scale-status]')!.textContent).toContain('Not run')
-  expect(host.querySelector('[data-once-status]')!.textContent).toContain('Not run')
-  expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
-  expect(document.activeElement?.id).toBe('run-diagnostics')
-  expect(host.querySelector('#run-diagnostics > h2')!.textContent).toBe('Diagnostics')
-  expect(host.querySelector('#run-diagnostics details')).toBeNull()
-  expect(host.querySelector<HTMLButtonElement>('[data-action="initialize"]')!.hidden).toBe(false)
-  expect(create).toHaveBeenCalledTimes(1)
-  expect(create.mock.calls[0][1]).toBe('center-comparison')
-  expect(create.mock.calls[0][2]).toEqual({ deferComparison: true })
-})
-
 for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
   it(`keeps ${id} findings and limits readable when live setup fails`, async () => {
     const experiment = findExperiment(id)!
     const item = experiment.cases![0]
     vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-    window.history.replaceState(null, '', `#/${id}?case=${item.id}`)
+    window.history.replaceState(null, '', `#/${id}`)
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
     const finding = host.querySelector<HTMLElement>('.case-recorded')!
@@ -293,9 +234,9 @@ for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
   })
 }
 
-it('opens the recorded pilot latency investigation without creating a GPU device', async () => {
-  const create = vi.spyOn(findExperiment('pilot-viewer')!, 'create')
-  window.history.replaceState(null, '', '#/pilot-viewer?case=selection-feedback')
+it('opens the recorded pilot latency investigation beside the live viewer', async () => {
+  const { create } = mockRun('pilot-viewer')
+  window.history.replaceState(null, '', '#/pilot-viewer?section=finding-selection-feedback')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain('100.4 ms')
@@ -306,7 +247,7 @@ it('opens the recorded pilot latency investigation without creating a GPU device
   await route(`#/pilot-viewer?section=${doc}`, () => expect(document.activeElement?.id).toBe(doc))
   expect(host.querySelector(`#${doc}`)?.closest('details')).toBeNull()
   expect(host.textContent).not.toContain('Instructions for agents')
-  expect(create).not.toHaveBeenCalled()
+  expect(create).toHaveBeenCalledOnce()
 })
 
 it('keeps the finding and evidence available while delayed live setup fails', async () => {
@@ -372,7 +313,7 @@ it.each([
   window.history.replaceState(null, '', `#/${id}`)
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-live-slot canvas')).not.toBeNull())
-  expect(create).toHaveBeenCalledWith(expect.any(HTMLElement), caseId, undefined)
+  expect(create).toHaveBeenCalledWith(expect.any(HTMLElement), caseId)
   expect(host.querySelector('.case-chooser')).toBeNull()
   expect(host.querySelectorAll('.case-observations > li')).toHaveLength(1)
   expect(host.querySelector('.case-topic-link')?.textContent).toContain('Point styling and picking')
@@ -384,30 +325,6 @@ it.each([
   await route(`#/${id}?section=${section}`, () => expect(document.activeElement?.id).toBe(section))
   expect(host.querySelector(`#${section}`)?.closest('details')).toBeNull()
   expect(create).toHaveBeenCalledTimes(1)
-})
-
-it('opens older point styling bookmarks at the matching demo or archived evidence', async () => {
-  const picking = mockRun('point-picking')
-  const images = mockRun('point-images')
-  window.history.replaceState(null, '', '#/point-styling?section=run-diagnostics')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-diagnostics'))
-  expect(window.location.hash).toBe('#/point-picking?section=run-diagnostics')
-  expect(picking.create).toHaveBeenCalledWith(expect.any(HTMLElement), 'picking', undefined)
-
-  await route('#/point-styling?case=images', () => {
-    expect(window.location.hash).toBe('#/point-images')
-    expect(images.create).toHaveBeenCalledWith(expect.any(HTMLElement), 'images', undefined)
-  })
-  await route('#/point-styling/docs/shapes-evidence?section=fractional-positions-and-sizes', () => {
-    expect(window.location.hash).toBe('#/point-shapes?section=doc-shapes-evidence-fractional-positions-and-sizes')
-    expect(document.activeElement?.id).toBe('doc-shapes-evidence-fractional-positions-and-sizes')
-  })
-  const archived = 'doc-method-stored-alpha-picking-prototype-16-november-2026'
-  await route(`#/point-styling?section=${archived}`, () => {
-    expect(window.location.hash).toBe(`#/point-shapes?section=${archived}`)
-    expect(document.activeElement?.id).toBe(archived)
-  })
 })
 
 it('shows the line-edge trace, run data and evidence alongside the comparison', async () => {
@@ -426,8 +343,7 @@ it('shows the line-edge trace, run data and evidence alongside the comparison', 
   const canvas = host.querySelector('#run-run canvas')
   await route('#/smoothstep-coverage?section=run-diagnostics', () => expect(document.activeElement?.id).toBe('run-diagnostics'))
   await route('#/smoothstep-coverage?section=doc-findings', () => expect(document.activeElement?.id).toBe('doc-findings'))
-  await route('#/smoothstep-coverage?section=case-comparison', () => expect(document.activeElement?.id).toBe('doc-method'))
-  expect(window.location.hash).toBe('#/smoothstep-coverage?section=doc-method')
+  await route('#/smoothstep-coverage?section=doc-method', () => expect(document.activeElement?.id).toBe('doc-method'))
   for (const id of ['run-run', 'run-diagnostics', 'run-results', 'doc-findings', 'doc-method']) {
     expect(host.querySelector(`#${id}`)?.getClientRects().length, id).toBeGreaterThan(0)
   }
@@ -445,7 +361,7 @@ for (const [id, caseId] of [
     const experiment = findExperiment(id)!
     const item = experiment.cases!.find(entry => entry.id === caseId)!
     const first = startingCase(experiment)
-    window.history.replaceState(null, '', `#/${id}?case=${caseId}`)
+    window.history.replaceState(null, '', `#/${id}?section=try-${caseId}`)
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
     expect(host.querySelector('h1')!.textContent).toBe(experiment.title)
@@ -480,21 +396,15 @@ for (const [id, caseId] of [
   })
 }
 
-it('preserves the live center comparison through every inline finding and old evidence link', async () => {
+it('preserves the live center comparison across section jumps', async () => {
   const { create, pause, destroy } = mockRun('center-mass')
-  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  window.history.replaceState(null, '', '#/center-mass')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const canvas = host.querySelector('canvas')!; const input = host.querySelector('.experiment-run input')!
   host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
-  for (const [href, section] of [
-    ['#/center-mass?case=center-comparison&section=center-force-cost', 'center-force-cost'],
-    ['#/center-mass?case=center-measurements&evidence=trajectory-evidence', 'center-trajectories'],
-    ['#/center-mass?case=center-comparison&evidence=results', 'center-accuracy'],
-    ['#/center-mass?section=doc-once-findings-computing-the-center-once', 'center-once'],
-    ['#/center-mass/docs/algorithm?section=webgpu-reduction', 'case-comparison'],
-  ]) {
-    await route(href, () => expect(document.activeElement?.id).toBe(section))
+  for (const section of ['center-force-cost', 'center-trajectories', 'center-accuracy', 'center-once', 'case-comparison']) {
+    await route(`#/center-mass?section=${section}`, () => expect(document.activeElement?.id).toBe(section))
     expect(host.querySelector('canvas')).toBe(canvas)
     expect(host.querySelector('.experiment-run input')).toBe(input)
     expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
@@ -507,7 +417,7 @@ it('preserves the live center comparison through every inline finding and old ev
 
 it('keeps the current run intact while searching and restores it after visiting another experiment', async () => {
   const original = mockRun('center-mass'); const next = mockRun('precision-diagnostics')
-  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  window.history.replaceState(null, '', '#/center-mass')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const canvas = host.querySelector('canvas')!; const setting = host.querySelector<HTMLInputElement>('.experiment-run input')!
@@ -566,7 +476,7 @@ it('restores completed evidence after searching away from an embedded viewer tha
   })
   const next = mockRun('precision-diagnostics')
   try {
-    window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+    window.history.replaceState(null, '', '#/center-mass')
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
     const search = host.querySelector<HTMLInputElement>('#lab-search')!
@@ -585,13 +495,13 @@ it('restores completed evidence after searching away from an embedded viewer tha
   }
 }, 30000)
 
-it('opens a recorded viewer bookmark on the same page and preserves a running comparison', async () => {
+it('keeps the live viewer mounted when opening a recorded finding', async () => {
   const { create, pause, destroy } = mockRun('viewer-comparison')
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const canvas = host.querySelector('canvas')!
-  await route('#/viewer-comparison?case=link-color-evidence', () =>
+  await route('#/viewer-comparison?section=finding-link-color-evidence', () =>
     expect(document.activeElement?.id).toBe('finding-link-color-evidence'))
   expect(host.querySelector('h1')?.textContent).toBe('Graph interaction in WebGL and WebGPU')
   expect(host.querySelector('canvas')).toBe(canvas)
@@ -600,24 +510,20 @@ it('opens a recorded viewer bookmark on the same page and preserves a running co
   expect(destroy).not.toHaveBeenCalled()
 })
 
-it('opens the standalone demo from the previous Dense Communities bookmark', async () => {
+it('opens Dense Communities directly at its layout notes', async () => {
   const { create } = mockRun('dense-communities')
-  window.history.replaceState(null, '', '#/viewer-comparison?section=try-dense-communities')
+  window.history.replaceState(null, '', '#/dense-communities?section=doc-layout')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  expect(window.location.hash).toBe('#/dense-communities?section=try-dense-communities')
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-layout'))
   expect(host.querySelector('h1')?.textContent).toBe('Dense Communities')
   expect(host.querySelector('.case-chooser')).toBeNull()
-  expect(create).toHaveBeenCalledTimes(1)
-
-  await vi.waitFor(() => expect(host!.querySelector('#doc-layout .prose')?.textContent).toContain('pinned anchors'))
+  expect(host.querySelector('#doc-layout .prose')?.textContent).toContain('pinned anchors')
   expect(host.querySelector('#doc-layout')?.closest('details')).toBeNull()
   expect(host.querySelector('#case-comparison')?.closest('details')).toBeNull()
-  await route('#/dense-communities?section=doc-layout', () => expect(document.activeElement?.id).toBe('doc-layout'))
   expect(create).toHaveBeenCalledTimes(1)
 })
 
-it('opens a bookmarked YouTube size and switches sizes on the same page', async () => {
+it('opens a specific YouTube size and switches sizes on the same page', async () => {
   const { create, destroy } = mockRun('youtube-network')
   const subset = '#/youtube-network?section=try-friendships-262k'
   const sparse = '#/youtube-network?section=try-friendships-300k'

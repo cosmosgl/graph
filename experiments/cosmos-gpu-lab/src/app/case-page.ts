@@ -16,7 +16,6 @@ type CaseFrame = {
   recorded: HTMLElement;
   status: HTMLElement;
   retry: HTMLButtonElement;
-  start: HTMLButtonElement;
   openEvidence: (section: string) => Promise<string | undefined>;
   setLiveCase: (active: ExperimentCase) => void;
   onChooseCase: (choose: (item: ExperimentCase, control: HTMLElement) => void) => void;
@@ -239,7 +238,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     <header class="case-header"><h1></h1><div class="case-recorded-summary"></div></header>
     <div class="case-stage" aria-busy="false">
       <div id="case-live">
-        <button class="button-primary" type="button" data-start-comparison hidden>Start the live comparison</button>
         <div class="case-live-slot"></div>
         <p class="case-load-status" role="status"></p>
         <button type="button" data-retry-comparison hidden>Retry live experiment</button>
@@ -256,7 +254,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const live = stage.querySelector<HTMLElement>('#case-live')!
   const slot = live.querySelector<HTMLElement>('.case-live-slot')!
   const status = live.querySelector<HTMLElement>('.case-load-status')!
-  const start = live.querySelector<HTMLButtonElement>('[data-start-comparison]')!
   const retry = live.querySelector<HTMLButtonElement>('[data-retry-comparison]')!
   if (item.kind === 'recorded') live.remove()
   const navigation = demo || article ? undefined : groupNavigation(experiment, topic)
@@ -319,7 +316,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
     recorded,
     status,
     retry,
-    start,
     openEvidence,
     setLiveCase,
     onChooseCase (choose): void {

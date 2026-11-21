@@ -100,4 +100,4 @@ The in-app browser could not create a WebGL context after the earlier losses. A 
 Chrome 156 on Apple M3 / ANGLE Metal ran the corrected baseline: the 1k control passed 25 ticks;
 the 100k star passed snapshots 1 and 10, then lost its context during the fence wait at tick 18.
 The capture confirms bounds [99,999, 1]. No second trajectory or performance measurement was attempted
-after loss. The [native investigation](#/weighted-links/docs/context-loss) records the evidence and limits.
+after loss. The [native investigation](#/weighted-links?section=doc-context-loss) records the evidence and limits.

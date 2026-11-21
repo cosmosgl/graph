@@ -20,7 +20,7 @@ original results and acceptance checks remain attached to those experiments.
 | Example | Timed work and scope |
 | --- | --- |
 | [Performance lab](#/performance-lab?section=doc-methodology) | Identical circle draw and center reduction microbenchmarks. Wall completion includes submission and the wait. Each measures one operation at fixed inputs. |
-| [Global center of mass](#/center-mass?section=doc-once-findings) | GPU timestamps for the reduction plus the isolated linear center force. Dividing once versus per point has no clear timing difference. A separate frozen compute-and-draw run also stayed within run-to-run variation. |
+| [Global center of mass](#/center-mass?section=center-once) | GPU timestamps for the reduction plus the isolated linear center force. Dividing once versus per point has no clear timing difference. A separate frozen compute-and-draw run also stayed within run-to-run variation. |
 | [Scalable reduction](#/scalable-reduction?section=doc-performance) | Hierarchical GPU reduction and optional readback. The ten-million-point result uses GPU-generated inputs, a capped preview and limited CPU verification. |
 | [Spatial grid](#/spatial-grid?section=doc-performance) | Count, scan, and scatter. The live timing describes index construction. |
 | [Neighborhood forces](#/neighborhood-forces?section=doc-performance) | GPU batch time per grid build, force, integration, draw, or a complete frozen tick. The batch amortizes submission and completion. |

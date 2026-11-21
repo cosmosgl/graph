@@ -12,13 +12,13 @@ full-strength probe after the 100-tick star schedule fails the whole-tick budget
 The 300-tick star probe passes. The acceptance gate therefore **does not pass**, and 32,768-point testing is held.
 All tolerances and reference arithmetic remain unchanged.
 
-This extends [Targeted rounding](#/combined-layout/docs/spring-products), using **Distance + rounded products**,
+This extends [Targeted rounding](#/combined-layout?section=doc-spring-products), using **Distance + rounded products**,
 native Chrome 157 and Apple M3 on 11 November 2026. Both production WebGL and WebGPU evolve independently
 alongside the CPU trajectory. Hierarchical repulsion is used throughout this experiment.
 
-The follow-up [tick-precision investigation](#/combined-layout/docs/tick-rounding) isolates repulsion-integration
+The follow-up [tick-precision investigation](#/combined-layout?section=doc-tick-rounding) isolates repulsion-integration
 rounding and gravity evaluation order. Its diagnostic candidate fixes both star schedules but regresses the
-communities tick-1 whole-tick check. The subsequent [gravity-math correction](#/combined-layout/docs/gravity-trig) passes the full 8,192-point
+communities tick-1 whole-tick check. The subsequent [gravity-math correction](#/combined-layout?section=doc-gravity-trig) passes the full 8,192-point
 M3 matrix with the original budget, at a measurable gravity cost. The original controls below retain their failures.
 
 ## Correctness results

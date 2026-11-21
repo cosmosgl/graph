@@ -30,7 +30,7 @@ The two linear variants also ran independent 200-tick community layouts with
 512 and 8,192 points. At every recorded checkpoint their positions were
 numerically identical, and pin, absence and flag checks passed. This does not
 erase the earlier strict trajectory failure between the **refined** force and
-the linear candidate; see [M3 scale findings](#/center-mass?section=doc-scale-findings-m3-center-force-scale-findings).
+the linear candidate; see [M3 scale findings](#/center-mass?section=center-force-cost).
 
 ## GPU timing
 
@@ -76,5 +76,5 @@ is retained separately.
 
 These are limited workloads on one machine. They do not measure a million-point
 full graph, resolve the existing 16,384-point prototype guard or change the
-production migration decision. The [study method](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
+production migration decision. The [study method](#/center-mass?section=run-diagnostics)
 describes the controls and reproduction flags.

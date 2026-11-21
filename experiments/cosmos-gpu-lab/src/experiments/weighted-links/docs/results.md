@@ -7,7 +7,7 @@ scope: Weighted incoming/outgoing springs; bounded fixtures and original directi
 
 The current WebGL baseline is `luma-model-directional-v1`: luma `Model`/`UniformStore`, explicit render
 passes and independent directional shader bounds. Historical raw-WebGL captures are not comparable
-performance samples; see the [baseline correction](#/weighted-links/docs/context-loss).
+performance samples; see the [baseline correction](#/weighted-links?section=doc-context-loss).
 
 ## What this experiment establishes
 
@@ -113,12 +113,12 @@ after connectivity replacement, plus a reset check.
 
 Press **Measure stages** for the selected interactive fixture, or use **Sweep 1k–10k** / **Sweep 1k–100k**
 for matched topology comparisons. Sweep filters select one backend, topology or point count when diagnosing
-a case. [Native findings and reproduction details](#/weighted-links/docs/performance).
+a case. [Native findings and reproduction details](#/weighted-links?section=doc-performance).
 
 **WebGL spring loop** selects the production shader with separate per-direction bounds or a lab variant that stops
 once the point's adjacency is exhausted. Exports record the choice; do not mix results from the two variants.
 **Check WebGL rendering only** isolates the initial 100k-star image from simulation and timer queries.
-See the [reset investigation](#/weighted-links/docs/context-loss) for the native pass-isolation results, the failed WebGL-only trajectory, and the finer context-loss event trace.
+See the [reset investigation](#/weighted-links?section=doc-context-loss) for the native pass-isolation results, the failed WebGL-only trajectory, and the finer context-loss event trace.
 
 A 25-tick CPU trajectory gates measurements, with full snapshots checked at ticks 1, 10 and 25.
 Validation submissions are completed one backend/tick at a time and are outside every timing interval.
@@ -179,5 +179,5 @@ steps, distinguishing native hardware from the Chromium software adapter used by
 These should be answered before interpreting this link-only demo as production readiness.
 
 The temporary production replay tools have been removed and their investigation is parked.
-The [WebGL reset investigation](#/weighted-links/docs/context-loss) retains the historical comparison
+The [WebGL reset investigation](#/weighted-links?section=doc-context-loss) retains the historical comparison
 and unresolved native limitation. The remaining lab tests use the independent CPU reference.

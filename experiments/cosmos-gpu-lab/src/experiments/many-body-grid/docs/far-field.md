@@ -18,7 +18,7 @@ agreement with production WebGL from agreement with the independent CPU referenc
 
 ## What happens at 128×128?
 
-After the [centroid division correction](#/many-body-grid/docs/centroids), centroid bits agree with the CPU, but the
+After the [centroid division correction](#/many-body-grid?section=doc-centroids), centroid bits agree with the CPU, but the
 first cumulative far-field tolerance failure appears at 128×128. A new replay selects the worst target at that level
 and records each visited cell, displacement, squared distance, direction, force contribution and running sum.
 The diagnostic also compares its final force with the ordinary execution; a replay mismatch invalidates its verdict.
@@ -190,7 +190,7 @@ pipelines within WebGPU's minimum eight-storage-buffer limit.
 
 These are additional working buffers versus the inline path, not total device memory. Diagnostic readback buffers
 are temporary and excluded. These are the original full-buffer costs; the follow-up
-[precision cost comparison](#/many-body-grid/docs/precision-cost) measures GPU time and reduces extra storage by about 80%. This deliberately simple storage layout is capped by
+[precision cost comparison](#/many-body-grid?section=doc-precision-cost) measures GPU time and reduces extra storage by about 80%. This deliberately simple storage layout is capped by
 this experiment's 16,384-point limit and is not a million-point design.
 
 Keep this as an opt-in correctness reference. The streamed candidate now preserves these rounding boundaries

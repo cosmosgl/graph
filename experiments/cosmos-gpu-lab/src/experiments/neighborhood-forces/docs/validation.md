@@ -51,7 +51,7 @@ Benchmarking resets both paths and requires validation to pass before recording 
 JSON includes the checked population, errors and raw measurements. A sampled pass at 65,536 points
 does not establish correctness for every point or every future state.
 
-The [batched study](#/neighborhood-forces/docs/batched-results) records dense-case force-tolerance
+The [batched study](#/neighborhood-forces?section=doc-batched-results) records dense-case force-tolerance
 failures from the native Apple GPU separately from the passing automated regression suite.
 
 ## Dense precision investigation
@@ -60,4 +60,4 @@ failures from the native Apple GPU separately from the passing automated regress
 points, density 16×, radius 0.16. Each run checks the union of the baseline 128 sample points and an
 additional 1,024-point grid (1,148 distinct points). The export includes the worst force error relative
 to its existing tolerance, exact count mismatch details and CPU re-sums of captured GPU contributions.
-The [precision findings](#/neighborhood-forces/docs/precision) document the fix and its cost.
+The [precision findings](#/neighborhood-forces?section=doc-precision) document the fix and its cost.

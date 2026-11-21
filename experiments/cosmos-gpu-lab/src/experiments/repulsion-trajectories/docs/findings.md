@@ -7,7 +7,7 @@ scope: Independently evolving repulsion-only layouts; local compatibility and de
 
 ## Independent repulsion trajectories
 
-This experiment follows the [precision cost comparison](#/many-body-grid/docs/precision-cost). Each backend now
+This experiment follows the [precision cost comparison](#/many-body-grid?section=doc-precision-cost). Each backend now
 keeps its own positions between ticks. It asks whether a one-step precision improvement also limits accumulated drift,
 before introducing springs, gravity and cooling.
 

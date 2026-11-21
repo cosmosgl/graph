@@ -9,13 +9,13 @@ scope: Frozen spring arithmetic timings; selected trajectory controls and histor
 
 A fully rounded spring force and integration passed the larger combined-layout checks without changing the
 acceptance budget. The next question is whether that precision is affordable, and which operations need it.
-[Spring precision](#/combined-layout/docs/spring-precision) retains the original cancellation evidence.
+[Spring precision](#/combined-layout?section=doc-spring-precision) retains the original cancellation evidence.
 
 Refined division and square root reduced the measured 2,048-point star hub pass from **119.4 ms to 67.1 ms** while
 passing the same trajectory checks. That is about 44% less GPU time, but still far too costly beside the 0.51 ms baseline.
 A more targeted distance-only variant is faster again and fails the unchanged budget; it remains a diagnostic.
 
-The follow-up [targeted product correction](#/combined-layout/docs/spring-products) fixes that counterexample and
+The follow-up [targeted product correction](#/combined-layout?section=doc-spring-products) fixes that counterexample and
 passes the expanded M3 matrix at a measured 1.74 ms star hub cost. The measurements below retain the earlier controls.
 
 ## A narrower correction

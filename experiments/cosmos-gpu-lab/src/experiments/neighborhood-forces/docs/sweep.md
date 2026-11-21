@@ -61,4 +61,4 @@ experiment, so export partial results before navigating away.
 
 GPU timestamps may be unavailable or quantized. A zero interval is not infinite performance, and
 missing or invalid samples are not zeros. Raw timestamp values are decimal strings to preserve the
-64-bit integers in JSON. See [Performance](#/neighborhood-forces/docs/performance) for exact boundaries.
+64-bit integers in JSON. See [Performance](#/neighborhood-forces?section=doc-performance) for exact boundaries.

@@ -14,21 +14,21 @@ their explanations and their results. It lives in the private workspace package
 
 ## 1. The shell manages navigation and lifecycle
 
-The shell provides the sidebar, experiment tabs, loading states and errors. Hash routes let us
-link directly to a demo, documentation page or vocabulary term without server rewrite rules:
+The shell handles navigation, loading states and errors. Hash routes open experiments,
+their sections, and reference pages.
 
 ```text
 #/architecture
 #/point-rendering
-#/center-mass/docs/algorithm
+#/center-mass?section=case-comparison
 #/vocabulary/invocation
 #/concepts/reduction
 ```
 
-Only one experiment run is retained. Reading its method, evidence, overview or a shared reference
-pauses playback/sweeps at a safe boundary and detaches the run’s DOM. Returning reattaches the
-same controls, canvases, positions, tick, reports and settings. Playback stays stopped until an
-explicit Run/Play action; an operation already in flight may finish its current atomic step.
+Section links within an experiment keep its live view in place. Opening a separate guide or reference
+pauses playback and sweeps at a safe boundary and detaches the view. Returning reattaches the same
+controls, canvases, positions, tick, reports and settings. Playback resumes from its Run or Play control.
+An operation already in flight may finish its current step.
 Incomplete timing batches remain unaccepted and can be restarted.
 
 Opening another experiment or the homepage destroys the retained run. There is no cache of live
@@ -242,7 +242,7 @@ We distinguish **CPU submission time** from **time until GPU completion**. These
 browser-level measurements. Neighborhood forces additionally measures GPU pass intervals with
 optional timestamp queries, keeping those results separate from wall time. Its repeatable sweep
 varies count, density, radius and cell size. The WebGL completion measurement in Performance Lab includes an amortized pixel readback, while
-WebGPU waits for queue completion. See the [benchmark methodology](#/performance-lab/docs/methodology)
+WebGPU waits for queue completion. See the [benchmark methodology](#/performance-lab?section=doc-methodology)
 for the precise boundaries and comparison limits.
 
 The current “simulation” benchmark measures center-mass reduction, not the entire Cosmos

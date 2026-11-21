@@ -65,7 +65,7 @@ on the GPU through luma APIs; CPU bounds/readback overhead makes this unsuitable
 GPU points and links draw from resident positions. The CPU panel uses Canvas 2D and the same camera.
 
 The default now checks first, every tenth and final ticks. **Every tick · diagnostic** retains full validation.
-See [Checkpoints and larger graphs](#/combined-layout/docs/checkpoints) for failure replay, the 512/2,048-point sweep,
+See [Checkpoints and larger graphs](#/combined-layout?section=doc-checkpoints) for failure replay, the 512/2,048-point sweep,
 and the remaining spring-position mismatches. The 128-point evidence below used full validation on every tick.
 
 ## Native Apple M3 findings

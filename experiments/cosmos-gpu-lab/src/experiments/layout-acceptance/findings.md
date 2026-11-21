@@ -7,7 +7,7 @@ scope: Historical fixed-setting 8,192-point matrix with eight near-field samples
 
 ## What this gate tests
 
-The [production-settings follow-up](#/layout-acceptance/docs/production) adds
+The [production-settings follow-up](#/layout-acceptance?section=doc-production) adds
 32-sample and varied-spring controls, adaptive sampling, state-preserving cutoff
 crossings and selected 5,000-tick runs. This page records the earlier fixed-setting
 matrix; its measurements retain that scope.

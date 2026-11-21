@@ -57,7 +57,7 @@ function headingsFor (tokens: Token[]): Heading[] {
     if (tokens[index].type !== 'heading_open') continue
     headings.push({ index, level: Number(tokens[index].tag.slice(1)), title: inlineText(tokens[index + 1]), articleSlug: '' })
   }
-  // Match the article renderer: h2/h3 receive legacy IDs before deeper headings.
+  // Match the article renderer by assigning level-two and level-three headings first.
   const used = new Set<string>()
   for (const heading of [...headings.filter(item => item.level === 2 || item.level === 3),
     ...headings.filter(item => item.level !== 2 && item.level !== 3)]) {

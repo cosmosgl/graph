@@ -7,7 +7,7 @@ scope: Separate-centroid and targeted division controls; neither is complete far
 
 ## Does a separate centroid pass fix dense precision?
 
-The follow-up [far-field correction](#/many-body-grid/docs/far-field) now passes both checked dense sizes by refining
+The follow-up [far-field correction](#/many-body-grid?section=doc-far-field) now passes both checked dense sizes by refining
 force arithmetic and storing contributions before accumulation. The division-only findings below remain unchanged.
 
 **The ordinary separate pass does not fix it on the checked Apple M3 cases.** Storing centroids prevents the centroid division from being fused with the later
@@ -146,7 +146,7 @@ and bit loop have **not been timed**. It remains an opt-in candidate, not the de
 ## Decision and reproduction
 
 Keep inline evaluation as the default and retain the separate pass as an opt-in diagnostic. Do not promote it as a
-precision fix or relax the tolerance. The [per-cell investigation](#/many-body-grid/docs/far-field) now isolates downstream rounding and demonstrates a passing candidate.
+precision fix or relax the tolerance. The [per-cell investigation](#/many-body-grid?section=doc-far-field) now isolates downstream rounding and demonstrates a passing candidate.
 Its extra memory and GPU time still need evaluation. A generic extra pass alone is not enough.
 
 ```sh

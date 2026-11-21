@@ -7,7 +7,7 @@ scope: 8,192 clustered points; cumulative far-field precision isolation at hiera
 
 ## Where the dense mismatch begins
 
-This page describes the original path. The follow-up [far-field precision experiment](#/many-body-grid/docs/far-field)
+This page describes the original path. The follow-up [far-field precision experiment](#/many-body-grid?section=doc-far-field)
 now passes the checked dense cases with refined arithmetic and stored contributions, without changing the CPU budget.
 
 The dense fixture's first tolerance failures occur in **cumulative far-field force after the 64×64 grid level** on Apple M3.
@@ -104,7 +104,7 @@ Kahan-style correction is not, by itself, a verified precision fix.
 
 ## What to do with this evidence
 
-The [separate centroid pass comparison](#/many-body-grid/docs/centroids) now tests the storage-boundary hypothesis.
+The [separate centroid pass comparison](#/many-body-grid?section=doc-centroids) now tests the storage-boundary hypothesis.
 It does not fix the dense mismatch: GPU-stored centroid values can still differ from CPU division by one ULP, and the
 8,192-point dense case gets worse. Feeding those same stored values into the CPU model removes most, but not all,
 failures. The targeted integer-count correction now matches centroid bits exactly but leaves 2 force / 2 position failures at

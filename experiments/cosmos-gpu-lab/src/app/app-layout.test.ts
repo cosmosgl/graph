@@ -6,6 +6,12 @@ import { createAppShell } from './app-shell'
 import { renderCaseFrame } from './case-page'
 import { experiments, findExperiment } from './registry'
 import { readinessFor } from './readiness'
+
+vi.mock('../gpu/luma', async importOriginal => ({
+  ...await importOriginal<typeof import('../gpu/luma')>(),
+  createDevice: async (): Promise<never> => { throw new Error('Test adapter unavailable') },
+}))
+
 let host: HTMLElement | undefined; let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
 afterEach(() => { shell?.destroy(); host?.remove(); vi.restoreAllMocks(); window.history.replaceState(null, '', initial) })
@@ -127,16 +133,18 @@ it('keeps Quick jump editable on a phone and shows experiment mini cards among t
   }
 })
 
-it('keeps the open center measurement preview inside a narrow page', async () => {
-  window.history.replaceState(null, '', '#/center-mass?section=center-force-cost')
+it('opens both center diagnostics at a narrow width', async () => {
+  window.history.replaceState(null, '', '#/center-mass?section=run-diagnostics')
   host = document.createElement('div'); host.style.width = '320px'; document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe('center-force-cost'))
-  window.location.hash = '#/center-mass?section=run-diagnostics'
-  await vi.waitFor(() => expect(host!.querySelector('#run-diagnostics [data-scale-preview]')).not.toBeNull())
-  const preview = host.querySelector('[data-scale-preview]')!.getBoundingClientRect()
-  const diagnostics = host.querySelector('#run-diagnostics')!.getBoundingClientRect()
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-diagnostics'))
+  const diagnostics = host.querySelector('#run-diagnostics')!
+  const preview = diagnostics.querySelector('[data-scale-preview]')!.getBoundingClientRect()
   expect(preview.width).toBeGreaterThan(0)
-  expect(preview.right).toBeLessThanOrEqual(diagnostics.right)
+  expect(preview.right).toBeLessThanOrEqual(diagnostics.getBoundingClientRect().right)
+  expect(diagnostics.querySelector<HTMLInputElement>('[data-scale-counts]')?.value).toBe('8192')
+  expect(diagnostics.querySelector<HTMLInputElement>('[data-once-count]')?.value).toBe('8192')
+  expect(diagnostics.querySelector('[data-scale-status]')?.textContent).toContain('Not run')
+  expect(diagnostics.querySelector('[data-once-status]')?.textContent).toContain('Not run')
 })
 
 it('keeps related experiment buttons in a single scrollable row below the live content', async () => {
