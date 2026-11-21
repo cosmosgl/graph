@@ -1,0 +1,51 @@
+.line-edge-run > section + section {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--control-border);
+}
+
+.line-edge-run h2 {
+  margin: 0 0 10px;
+  font-size: var(--type-subsection);
+  font-weight: 500;
+}
+
+.line-edge-run h3 { font-size: var(--type-subsection); font-weight: 500; }
+.line-edge-run p { margin: 0 0 10px; }
+.line-edge-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+.line-edge-heading h2 { margin: 0; }
+.line-edge-progress { color: var(--text-secondary); visibility: hidden; }
+.line-edge-run [aria-busy="true"] .line-edge-progress { visibility: visible; }
+.line-edge-run > section > .line-edge-progress {
+  display: block;
+  font-size: var(--type-meta);
+  line-height: 16px;
+  text-align: end;
+}
+.line-edge-run .line-edge-error { margin-top: 8px; }
+.line-edge-error:empty { display: none; }
+.line-edge-sample { margin: 0 0 12px; }
+.line-edge-sample figcaption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 4px;
+}
+.line-edge-sample figcaption span:last-child { font-variant-numeric: tabular-nums; }
+.line-edge-sample canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  background: #19202a;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+}

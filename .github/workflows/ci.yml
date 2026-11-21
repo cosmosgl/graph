@@ -38,7 +38,7 @@ jobs:
       # Covers stories and tests too, which the build never compiles, and exits
       # non-zero on its own.
       - run: pnpm run typecheck
-      # Real-GPU browser suite (headless Chromium on SwiftShader).
+      # Production engine/deck browser suite; the research lab runs locally.
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
       # The build exits 0 even when TypeScript reports errors; the grep turns

@@ -3,6 +3,7 @@
 # integrations/ and depend on it via the workspace: protocol.
 packages:
   - integrations/*
+  - experiments/*
 
 # Single home for the versions every workspace package must agree on. The
 # luma.gl pins are load-bearing: a Device shared between cosmos and a host

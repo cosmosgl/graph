@@ -1,0 +1,38 @@
+import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
+export const experiment = defineExperiment({
+  id: 'collision',
+  title: 'Collision constraints',
+  summary: 'Compare production all-pairs disc collision, luma WebGPU and CPU; validate composition and measure the added GPU cost.',
+  tags: ['simulation', 'collision', 'WebGL', 'WebGPU'],
+  cases,
+  create: async host => (await import('./view')).createCollisionView(host),
+  pages: [
+    {
+      kind: 'markdown',
+      id: 'precision',
+      title: 'Targeted collision correction',
+      load: async (): Promise<string> => (await import('./precision.md?raw')).default,
+    },
+    { kind: 'markdown', id: 'method', title: 'How collision works', load: async (): Promise<string> => (await import('./method.md?raw')).default },
+    {
+      kind: 'markdown',
+      id: 'trajectories',
+      title: 'Original native trajectories',
+      load: async (): Promise<string> => (await import('./trajectories.md?raw')).default,
+    },
+    { kind: 'markdown', id: 'findings', title: 'Center-sum correction', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
+    {
+      kind: 'markdown',
+      id: 'hashed-method',
+      title: 'Hash and slot selection method',
+      load: async (): Promise<string> => (await import('./hashed-method.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'hashed-findings',
+      title: 'Collision at 4,097 and 8,192 points',
+      load: async (): Promise<string> => (await import('./hashed-findings.md?raw')).default,
+    },
+  ],
+})

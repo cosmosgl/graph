@@ -417,6 +417,28 @@ describe('external device with host state', () => {
       const ys = corners.map(([, y]) => y)
       const rect: [[number, number], [number, number]] = [[Math.min(...xs) - 5, Math.min(...ys) - 5], [Math.max(...xs) + 5, Math.max(...ys) + 5]]
       expect(graph.findPointsInRect(rect)).toEqual([0, 1, 2, 3])
+      const [[left, top], [right, bottom]] = rect
+      const polygon: [number, number][] = [[left, top], [right, top], [right, bottom], [left, bottom]]
+      const [x, y] = corners[1]!
+      const one = graph.findPointsInRectAsync([[x - 2, y - 2], [x + 2, y + 2]])
+      const all = graph.findPointsInPolygonAsync(polygon)
+      expect(await Promise.all([one, all])).toEqual([[1], [0, 1, 2, 3]])
+      expect(gl.isEnabled(gl.BLEND)).toBe(true)
+      expect(gl.isEnabled(gl.DEPTH_TEST)).toBe(true)
+
+      const replaced = graph.findPointsInPolygonAsync(polygon)
+      graph.setPointPositions(positions.slice())
+      await expect(replaced).resolves.toBeNull()
+      graph.render(undefined, 0)
+      const staleTopology = graph.findPointsInRectAsync(rect)
+      graph.setLinks(new Float32Array([1, 2]))
+      await expect(staleTopology).resolves.toBeNull()
+      graph.render(undefined, 0)
+      await expect(graph.findPointsInRectAsync(rect)).resolves.toEqual([0, 1, 2, 3])
+
+      const destroyed = graph.findPointsInRectAsync(rect)
+      graph.destroy()
+      await expect(destroyed).resolves.toBeNull()
     } finally {
       graph.destroy()
       div.remove()

@@ -1,0 +1,507 @@
+import { validationContracts } from '../runtime/validation'
+import type { ResearchSummary } from './research'
+
+// Editorial summaries of existing documents, not verdicts inferred from a run.
+// Empty investigations mean no recorded measurement matrix is published here.
+export function additionalResearch (reviewed: string): Record<string, ResearchSummary> {
+  const entry = (id: string, details: Omit<ResearchSummary, 'question' | 'reviewed' | 'scope' | 'reproduce'> &
+    Partial<Pick<ResearchSummary, 'scope' | 'reproduce' | 'reviewed'>>): ResearchSummary => ({
+    question: validationContracts[id].question,
+    reviewed,
+    scope: validationContracts[id].coverage,
+    reproduce: 'Select the documented input above, then inspect the named checks and unchecked scope. How it works defines the comparison contract.',
+    ...details,
+    variant: details.variant.replace(/\.$/, ''),
+  })
+  /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
+  return {
+    'million-graph': entry('million-graph', {
+      conclusion: 'Matched WebGPU motion was about 55% faster on both million-point community fixtures. The full YouTube control stopped at moving selection.',
+      reviewed: '2026-11-20',
+      variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
+      comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
+      method: 'overview',
+      methodPages: ['production-envelope'],
+      evidence: 'interactive-study',
+      next: 'Investigate YouTube selection under load and confirm the variable click tails before production integration.',
+      reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
+      investigations: [
+        { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
+        { page: 'draw-cost', state: 'Supporting investigation', description: 'Frozen point and link drawing at two attachment sizes and two camera settings.' },
+        { page: 'interactive-study', state: 'Current evidence', description: 'Pointer input, frame intervals and tracked allocations through one million points.' },
+        { page: 'cell-field', state: 'Supporting investigation', description: 'Three solvers on two million-point inputs, including density and edge checks.' },
+        { page: 'results', state: 'Supporting investigation', description: 'Initial M3 hierarchy, replay and moving-frame measurements.' },
+      ],
+    }),
+    'mouse-repulsion': entry('mouse-repulsion', {
+      conclusion: 'The isolated pointer force passed the native M3 matrix through 8,192 points, including release and the paused execution gate.',
+      reviewed: '2026-11-19',
+      variant: 'Production GLSL, WebGPU pointer force and independent CPU reference',
+      comparison: 'CSS pointer coordinates, world-space force, integration and running and paused behavior',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Review the combined-force results for independent layout quality and full viewer responsiveness.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Pointer mapping, minimum distance, hold and release.' }],
+    }),
+    'point-attractors': entry('point-attractors', {
+      conclusion: 'Per-point targets and live updates pass through 8,192 points on M3. Corrected WebGPU costs more than WebGL in the isolated force timings.',
+      reviewed: '2026-11-18',
+      variant: 'Production attractor GLSL, corrected WebGPU arithmetic and independent raw-channel CPU reference',
+      comparison: 'Per-point target → correction → integration → independent trajectory and live updates',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Use the combined-force evidence to evaluate complete-frame cost, live target setters and longer layouts.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Isolated attractor investigation; full-frame cost remains unchecked.' }],
+    }),
+    'cluster-attraction': entry('cluster-attraction', {
+      conclusion: 'The bounded M3 cluster matrix passes through 8,192 points. WebGPU is faster for large/uneven groups; ' +
+        'WebGL has lower medians for balanced groups and supplied targets. Complete-frame cost remains unchecked.',
+      reviewed: '2026-11-18',
+      variant: 'Production cluster GLSL, grouped WebGPU high/low reduction and corrected force arithmetic, independent CPU reference',
+      comparison: 'Group sums → attraction → integration → independent trajectory and update checks',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Keep the isolated baseline and test the composed candidate in the interactive viewer with production setters.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Isolated cluster aggregation, force and live membership validation.' }],
+    }),
+    'center-mass': entry('center-mass', {
+      conclusion: 'The M3 linear center-force candidate is promising at scale, but the strict 8,192-point trajectory comparison fails.',
+      variant: 'Historical WebGL blend and two-stage reduction; newer recursive high/low and opt-in linear force on luma 10.0.0-alpha.15.',
+      comparison: 'CPU / WebGL / recursive WebGPU center → force cost and strict checks → independent graph trajectories',
+      method: 'overview',
+      evidence: 'scale-findings',
+      methodPages: ['algorithm', 'implementation', 'correctness', 'performance', 'scale-method', 'limitations', 'references'],
+      next: 'Compare visible trajectories with the refined force and measure center cost in the large resident graph.',
+      reproduce: 'Use Step or Play for the original 8,192-point demo. In Diagnostics, run the separate M3 scale study and export its checks.',
+      investigations: [{
+        page: 'results',
+        state: 'Historical baseline',
+        description: 'Initial correctness smoke run with explicitly incomplete environment metadata.',
+      }, {
+        page: 'scale-findings',
+        state: 'Current evidence',
+        description: 'M3 scale, force cost and bounded independent-layout results; strict trajectory differences remain.',
+      }, {
+        page: 'once-findings',
+        state: 'Supporting investigation',
+        description: 'Computing the center once preserved tested results, with no clear M3 timing benefit.',
+      }],
+    }),
+    'scalable-reduction': entry('scalable-reduction', {
+      conclusion: 'The recorded exploratory run reached ten million GPU-resident points; CPU reference coverage and the drawn preview remain capped.',
+      variant: 'Hierarchical WebGPU reduction; luma 10.0.0-alpha.4. Historical GPU identity was not recorded.',
+      comparison: 'GPU-generated positions → reduction hierarchy → optional center readback and capped preview',
+      method: 'overview',
+      evidence: 'results',
+      methodPages: ['algorithm', 'implementation', 'performance', 'limitations'],
+      next: 'Agree accuracy and resource budgets; validate larger reductions inside an accepted simulation workload.',
+      reproduce: 'Select a point count above. Step with readback to inspect the center; unsampled resident ticks remain unchecked.',
+      investigations: [{
+        page: 'results',
+        state: 'Current evidence',
+        description: 'Four exploratory count presets, center observations and bounded reduction timings.',
+      }],
+    }),
+    'spatial-grid': entry('spatial-grid', {
+      conclusion: 'The experiment can check grid counts, offsets and point membership exhaustively. It has no published native measurement matrix yet.',
+      variant: 'WebGPU count, scan and scatter through luma APIs; structural CPU reference.',
+      comparison: 'Shared positions → GPU grid build → independent CPU histogram, offsets and membership checks',
+      method: 'overview',
+      methodPages: ['algorithm', 'buffers', 'validation', 'performance'],
+      next: 'Record a bounded native grid matrix, then judge the force that consumes it separately.',
+      reproduce: 'Choose point count, distribution and grid size above; build and validate before interpreting timing.',
+      investigations: [],
+    }),
+    'point-rendering': entry('point-rendering', {
+      conclusion: 'WebGL point sprites and WebGPU quads can be viewed with matched circle inputs. This demo has no pixel-parity or picking gate.',
+      variant: 'WebGL sprites and instanced WebGPU quads through luma; visual comparison only.',
+      comparison: 'Shared positions, colors and diameter → WebGL sprites / WebGPU quads → visual inspection',
+      method: 'overview',
+      methodPages: ['implementation', 'limitations'],
+      next: 'Use the production styling/picking experiment for image-based checks; validate the remaining rendering features.',
+      reproduce: 'Change count and circle diameter above. For rendered-pixel and ID checks, continue to Point styling and picking.',
+      investigations: [],
+    }),
+    'neighborhood-forces': entry('neighborhood-forces', {
+      conclusion: 'Compensated sums and the cutoff correction fix the documented dense failures. Chunked ' +
+        'traversal helps selected dense cases, with small-case costs.',
+      variant: 'Fixed-radius WebGPU all-pairs/grid comparison; baseline and chunked loops; native Apple / Metal 3 evidence.',
+      comparison: 'Shared positions → WebGPU all-pairs / spatial grid → independent CPU force checks',
+      method: 'overview',
+      evidence: 'precision-cost',
+      methodPages: ['algorithm', 'validation', 'performance', 'sweep', 'research'],
+      next: 'Validate broader density/radius envelopes and devices before choosing a traversal policy; global repulsion is separate.',
+      reproduce: 'Use the live view for a local comparison. Diagnostics contains dense precision, paired precision cost and the repeatable parameter sweep.',
+      investigations: [
+        {
+          page: 'precision-cost',
+          state: 'Current evidence',
+          description: 'Corrected baseline versus chunked traversal, with unchanged tolerance and paired GPU ' +
+          'timing.',
+        },
+        { page: 'precision', state: 'Supporting investigation', description: 'Long force sums and the one-ULP cutoff correction behind the dense fix.' },
+        {
+          page: 'batched-results',
+          state: 'Historical baseline',
+          description: 'Original serial-kernel sweep; its dense failures and timings precede the precision ' +
+          'fix.',
+          replacement: 'precision-cost',
+        },
+        {
+          page: 'results',
+          state: 'Historical baseline',
+          description: 'Initial neighborhood implementation and its original measurement scope.',
+          replacement: 'precision',
+        },
+      ],
+    }),
+    'many-body': entry('many-body', {
+      conclusion: 'The bounded exact all-pairs study compares production GLSL, direct/tiled WebGPU and ' +
+        'CPU; its isolated timing results do not establish full-layout FPS.',
+      variant: 'Production all-pairs GLSL and luma WebGPU loops; recorded Apple M3 / Chromium evidence.',
+      comparison: 'Shared initial fixture → production WebGL / direct or tiled WebGPU / CPU → local checks and drift',
+      method: 'overview',
+      evidence: 'results',
+      methodPages: ['research'],
+      next: 'Keep this exact control while judging hierarchical approximation, composed forces and broader device coverage.',
+      reproduce: 'Choose direct or tiled WebGPU and shared-input or independent evolution above. Use the separate timing sweep for accepted frozen workloads.',
+      investigations: [
+        { page: 'results', state: 'Current evidence', description: 'Exact repulsion observations and explicit correctness limits.' },
+        { page: 'timing', state: 'Supporting investigation', description: 'Batched native M3 timing sweeps with checks outside the measured interval.' },
+      ],
+    }),
+    'workgroup-repulsion': entry('workgroup-repulsion', {
+      conclusion: 'A lab-only million-point graph now builds its hierarchy on the GPU; strict replay and viewer coverage remain open.',
+      reviewed: '2026-11-18',
+      variant: 'Workgroup-memory variant of the hierarchical global repulsion experiment on luma WebGPU.',
+      comparison: 'Same positions → production WebGL / workgroup WebGPU / CPU → structure, force and integration checks',
+      method: 'overview',
+      evidence: 'moving-million',
+      next: 'Test dense graphs, visual and interaction quality, and strict replay differences before integrating the existing viewer.',
+      reproduce: 'Workgroup memory is selected by default. Press Step + validate to compare the live outputs.',
+      investigations: [
+        { page: 'moving-million', state: 'Current evidence', description: 'A synthetic moving million-point graph with a GPU-built hierarchy.' },
+        { page: 'force-speed', state: 'Supporting investigation', description: 'GPU target grouping, faster arithmetic, timings and accuracy limits.' },
+        {
+          page: 'direct-alternatives',
+          state: 'Supporting investigation',
+          description: 'Workgroup memory removes the large contribution buffer in bounded checks.',
+        },
+      ],
+    }),
+    'many-body-grid': entry('many-body-grid', {
+      conclusion: 'Workgroup scratch matches stored force in bounded M3 checks; an isolated million-point force takes hundreds of milliseconds.',
+      variant: 'Production hierarchical GLSL and luma WebGPU variants; bounded Apple M3 evidence.',
+      comparison: 'Shared positions and sampling policy → hierarchy and force variants → CPU compatibility and separate approximation error',
+      method: 'overview',
+      evidence: 'far-field',
+      next: 'Optimize the million-point force and replace dense full-source scans, then test composed million-point behavior.',
+      reproduce: 'Use the clustered 8,192/16,384-point, eight-sample precise cases. Compare ' +
+        'centroid/far-field variants in Diagnostics; retain the failing inline control.',
+      investigations: [
+        {
+          page: 'far-field',
+          state: 'Current evidence',
+          description: 'Refined and stored contributions close the checked dense force mismatches at the ' +
+          'original budget.',
+        },
+        { page: 'precision-cost', state: 'Supporting investigation', description: 'Stored versus streamed contribution cost on matched frozen inputs.' },
+        { page: 'chunked-memory', state: 'Supporting investigation', description: 'Bounded scratch and million-point memory investigation.' },
+        {
+          page: 'direct-alternatives',
+          state: 'Supporting investigation',
+          description: 'Workgroup scratch preserves bounded results; isolated million-point force cost remains high.',
+        },
+        {
+          page: 'centroids',
+          state: 'Supporting investigation',
+          description: 'Separate centroid and targeted division controls; their remaining failures stay ' +
+          'visible.',
+        },
+        { page: 'precision', state: 'Supporting investigation', description: 'Hierarchy-level isolation of the original cumulative far-field discrepancy.' },
+        {
+          page: 'results',
+          state: 'Historical baseline',
+          description: 'Initial hierarchical port evidence, including its dense strict-CPU mismatch.',
+          replacement: 'far-field',
+        },
+      ],
+    }),
+    'weighted-links': entry('weighted-links', {
+      conclusion: 'The lab passes both 100,000-point M3 WebGL star replays using bounded ordered spring passes.',
+      variant: 'Directional GLSL with ordered continuation for large hubs, and luma WebGPU CSR traversal.',
+      comparison: 'Shared graph and weights → ordered incoming/outgoing spring passes → independent CPU substep checks',
+      method: 'overview',
+      evidence: 'results',
+      methodPages: ['implementation'],
+      next: 'Extend topology coverage and measure the full runtime with large hubs.',
+      reproduce: 'Select a graph and count above, then Step or Play and validate. Stage timing and isolated pass tools remain in Diagnostics.',
+      investigations: [
+        { page: 'results', state: 'Current evidence', description: 'Directional CPU reference, edge semantics and bounded native correctness findings.' },
+        {
+          page: 'performance',
+          state: 'Supporting investigation',
+          description: 'CSR and spring timings with explicit count/topology and WebGL availability limits.',
+        },
+        { page: 'context-loss', state: 'Parked', description: '100k-star reset investigation; temporary production debug controls have been removed.' },
+      ],
+    }),
+    'repulsion-trajectories': entry('repulsion-trajectories', {
+      conclusion: 'Independent evolution exposes accumulated drift even when local checks pass. The recorded study keeps drift and local failures separate.',
+      variant: 'Hierarchical WebGL/WebGPU and independent CPU trajectories; stored/streamed precision controls on M3.',
+      comparison: 'One initial fixture → independently evolving WebGL / WebGPU / CPU → local checks and accumulated drift',
+      method: 'validation-contract',
+      evidence: 'findings',
+      next: 'Judge cooling and composed forces explicitly; repulsion-only expansion cannot establish convergence or graph quality.',
+      reproduce: 'Select fixture, count, sample budget and quality above. Step or run 20 ticks, then compare local checks and descriptive drift.',
+      investigations: [{
+        page: 'findings',
+        state: 'Current evidence',
+        description: 'Independent repulsion trajectories and their bounded local-error/drift observations.',
+      }],
+    }),
+    'pilot-viewer': entry('pilot-viewer', {
+      conclusion: 'Wider DPR 1 and DPR 2 controls pass all 320 picks on M3. The historical 100.4-ms and 68.2-ms failures remain unexplained.',
+      reviewed: '2026-11-19',
+      variant: 'Existing corrected luma WebGPU runtime with a bounded Karate Club explorer',
+      comparison: 'Explore the real graph → verify identity and updates → measure complete frames and feedback',
+      method: 'scope',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Use the matched Viewer Comparison benchmark and the recorded timing phases to investigate recurring stalls.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
+    }),
+    'viewer-comparison': entry('viewer-comparison', {
+      conclusion: 'On the matched Karate graph, both backends ran at about 18 ms frame p95. WebGPU reduced steady frame p95 on the million-point communities.',
+      reviewed: '2026-11-20',
+      variant: 'Production Graph with luma v9 and the corrected resident WebGPU viewer with luma v10',
+      comparison: 'Same data, settings, camera and interactions through the autonomous loops, in separate visible Chrome sessions',
+      method: 'migration-benchmark',
+      evidence: 'migration-results',
+      methodPages: ['performance-audit', 'method', 'agent-recipe'],
+      next: 'Test box selection through the production WebGPU Graph API on the moving million-point YouTube graph. ' +
+        'Check that it selects the right points and shows the result promptly.',
+      reproduce: 'Run the migration benchmark for the chosen fixture. Use Compare corrected link paint for the frozen color check.',
+      investigations: [
+        { page: 'migration-results', state: 'Current evidence', description: 'Matched motion, click feedback, updates, selection, labels and memory on M3.' },
+        { page: 'link-color-evidence', state: 'Supporting investigation', description: 'Same-geometry opacity and edge comparisons for both Karate styles.' },
+        { page: 'findings', state: 'Historical baseline', description: 'Original Karate Club timing and appearance checks.' },
+      ],
+    }),
+    'dense-communities': entry('dense-communities', {
+      conclusion: 'Both viewers kept the eight communities visible as the free points moved in the matched benchmark.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same starting layout, topology, styles and linked cameras',
+      method: 'layout',
+      next: 'Zoom into one community to see the short links and moving points.',
+      reproduce: 'Press Run to start both viewers. Drag or scroll either graph to move both cameras.',
+      investigations: [],
+    }),
+    'hub-communities': entry('hub-communities', {
+      conclusion: 'Both viewers kept the hub visible, and WebGPU had a shorter frame interval in the steady-motion confirmation.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same starting layout, hub links, styles and linked cameras',
+      method: 'layout',
+      next: 'Check the motion of the hub and its neighbors in both viewers.',
+      reproduce: 'Press Run to start both viewers. Press Fit to see all eight communities.',
+      investigations: [],
+    }),
+    'youtube-network': entry('youtube-network', {
+      conclusion: 'Both viewers completed the 262,144-point workflow. At one million points, both WebGL controls stopped at moving rectangle selection.',
+      reviewed: '2026-11-20',
+      variant: 'Production WebGL and resident WebGPU with four-corner distant repulsion',
+      comparison: 'Two live viewers with the same YouTube friendship links, seeded positions, styles and linked cameras',
+      method: 'layout',
+      next: 'Compare the moving layout, and use the recorded benchmark for what each backend completed.',
+      reproduce: 'Choose a graph size, then use Run WebGL or Run WebGPU for solo playback. Drag or scroll either graph to move both cameras.',
+      investigations: [],
+    }),
+    'integrated-webgpu': entry('integrated-webgpu', {
+      conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
+        'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',
+      reviewed: '2026-11-19',
+      variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
+      comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
+      method: 'method',
+      evidence: 'findings',
+      next: 'Integrate the Lab readback contract with production Graph callers and verify end-to-end label and selection latency.',
+      reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
+        'or the current session’s assessment; keep the native tab visible.',
+      investigations: [
+        { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
+        { page: 'host-ownership', state: 'Supporting investigation', description: 'Borrowed luma device, shared draw pass and explicit checkpoint restart.' },
+        {
+          page: 'selection',
+          state: 'Supporting investigation',
+          description: 'Native rectangle and polygon selection parity and the remaining asynchronous readback contract.',
+        },
+        {
+          page: 'tracked-points',
+          state: 'Supporting investigation',
+          description: 'Compact readback of moving GPU positions and ordered snapshots across updates.',
+        },
+      ],
+    }),
+    'resident-layout': entry('resident-layout', {
+      conclusion: 'Resident execution and edits are demonstrated in isolation. ' +
+        'The integrated pilot has bounded timing passes; large-star and intermittent latency failures remain open.',
+      reviewed: '2026-11-17',
+      variant: 'Two luma WebGPU execution paths using the same force kernels; recorded Apple M3 / Chrome evidence.',
+      comparison: 'Same graph and kernels → staged CPU-bounds / GPU-resident execution → checkpoint bits, edits and frame timing',
+      method: 'validation-contract',
+      evidence: 'timing-updates',
+      next: 'Follow the integrated pilot for shared-position rendering, interaction and complete-frame M3 timing; retain these isolated resident controls.',
+      reproduce: 'Step and check the selected graph, apply a point/link edit, and continue. Use Time resident frames for separately validated timing batches.',
+      investigations: [
+        {
+          page: 'timing-updates',
+          state: 'Current evidence',
+          description: 'Resident frame timing, instrument controls and state-preserving point/link updates.',
+        },
+        {
+          page: 'dataflow',
+          state: 'Supporting investigation',
+          description: 'Execution dataflow and checkpoint equivalence against the staged WebGPU control.',
+        },
+      ],
+    }),
+    'performance-lab': entry('performance-lab', {
+      conclusion: 'This benchmark separates CPU submission from synchronized completion for isolated ' +
+        'drawing and reduction. It has no published cross-device measurement matrix.',
+      variant: 'Matched luma WebGL/WebGPU microbenchmarks; live measurements and local JSON export.',
+      comparison: 'Matched isolated workload → warmups and repeated samples → submit/completion distributions',
+      method: 'methodology',
+      methodPages: ['interpretation'],
+      next: 'Measure accepted complete-engine workloads under agreed latency and quality budgets; isolated completion time is not Graph FPS.',
+      reproduce: 'Choose rendering or simulation, count and sample preset above. Stop cancels ' +
+        'acceptance of an incomplete batch; export completed local measurements.',
+      investigations: [],
+    }),
+    'precision-diagnostics': entry('precision-diagnostics', {
+      conclusion: 'The diagnostic separates mathematical accuracy from legacy arithmetic compatibility. ' +
+        'It does not select a new accuracy threshold or production formula.',
+      variant: 'Analytic CPU references, production GLSL gravity and diagnostic WGSL force/sum kernels.',
+      comparison: 'Frozen numeric corpus → analytic / float32 / GLSL / WGSL paths → accuracy and compatibility separately',
+      method: 'method',
+      evidence: 'method',
+      methodPages: ['agent-recipe'],
+      next: 'Agree the intended mathematical contract and accuracy budget before choosing a production arithmetic policy.',
+      reproduce: 'Choose an addition or gravity case, then compare the live results with the recorded findings.',
+      investigations: [{
+        page: 'method',
+        state: 'Current evidence',
+        description: 'The 12 November M3 observations are recorded separately from a new local run.',
+      }],
+    }),
+    'point-capacity': entry('point-capacity', {
+      conclusion: 'The recorded resize cycles preserve checked state and show lower in-capacity update ' +
+        'cost with retained storage; faster steady-state frames are not established.',
+      variant: 'GPU rebuild versus retained-capacity luma WebGPU lanes on Apple M3 / Chrome 156.',
+      comparison: 'Same resident graph → grow/shrink/regrow → retained records, next-frame checks and tracked buffer cost',
+      method: 'validation-contract',
+      evidence: 'reuse',
+      next: 'Validate public setters, transitions, borrowed-device ownership and recovery; tracked buffers are not total VRAM.',
+      reproduce: 'Keep CPU checking enabled, apply pin and visibility edits, then press Add and remove points.',
+      investigations: [{
+        page: 'reuse',
+        state: 'Current evidence',
+        description: 'Paired GPU-bound resize cycles, retained capacity and explicit first-growth/update limits.',
+      }],
+    }),
+    'point-buffer-copy': entry('point-buffer-copy', {
+      conclusion: 'GPU copying avoided position downloads during the update. The full rebuild took longer in the recorded runs.',
+      variant: 'Exact-size WebGPU buffer rebuilds with CPU and GPU copy paths on Apple M3 / Chrome 156.',
+      comparison: 'Same point-count changes followed by a rebuild, position transfer checks and one simulation step.',
+      method: 'validation-contract',
+      evidence: 'findings',
+      next: 'Compare the paths with matched bounds setup and alternate their execution order.',
+      reproduce: 'Choose a graph, keep Check against CPU enabled, then press Add and remove points.',
+      investigations: [{
+        page: 'findings',
+        state: 'Current evidence',
+        description: 'Position transfers, full rebuild times, preservation and cleanup by copy path.',
+      }],
+    }),
+    'gpu-stage-profile': entry('gpu-stage-profile', {
+      conclusion: 'Controlled profiling identifies hub springs and aggregation as major costs in the ' +
+        'recorded cases. Split-pass sums are not normal-frame latency.',
+      variant: 'Frozen rebuilt/retained WebGPU controls; native Apple M3 / Chrome 156.',
+      comparison: 'Frozen checked input → normal frames / split-pass diagnostics → replay gates and separate timing populations',
+      method: 'validation-contract',
+      evidence: 'method',
+      next: 'Measure order-preserving optimizations in normal frames and keep instrumentation overhead separate.',
+      reproduce: 'Select graph, count and input history above, then prepare/profile. Inspect normal-frame and diagnostic tables as different workloads.',
+      investigations: [{
+        page: 'method',
+        state: 'Current evidence',
+        description: 'Frozen-input protocol, instrumentation validation and stage findings on M3.',
+      }],
+    }),
+    'hub-springs': entry('hub-springs', {
+      conclusion: 'Cooperative prefetch preserves the recorded ordered spring gates and helps large ' +
+        'hubs. Low-degree benefit and the activation threshold remain workload-dependent.',
+      variant: 'Plain versus cooperative luma WebGPU spring kernels; bounded 8,192-point broom fixtures on M3.',
+      comparison: 'Same ordered neighbors → plain / cooperative kernels → trajectory gates and paired normal-frame cost',
+      method: 'validation-contract',
+      evidence: 'acceptance',
+      next: 'Validate broader multi-hub graphs and devices before choosing a production threshold.',
+      reproduce: 'Compare a selected degree/pin state, then use the degree, threshold and trajectory ' +
+        'diagnostics. Read normal-frame costs separately from profiles.',
+      investigations: [
+        {
+          page: 'acceptance',
+          state: 'Current evidence',
+          description: 'Evolving trajectories, threshold crossover and normal-frame controls at the original ' +
+          'spring budget.',
+        },
+        {
+          page: 'findings',
+          state: 'Historical baseline',
+          description: 'First threshold-64 study with different readback/fallback conditions.',
+          replacement: 'acceptance',
+        },
+      ],
+    }),
+    'cell-aggregation': entry('cell-aggregation', {
+      conclusion: 'Cached membership with bounded sorting preserves the checked ordered sums; its ' +
+        'normal-frame benefit depends on occupancy and the chosen candidate.',
+      variant: 'Source-index-ordered baseline and cached-grid luma WebGPU kernels; recorded M3 reference settings.',
+      comparison: 'Same checked input and sum order → baseline / cached aggregation → exact structures and normal-frame cost',
+      method: 'validation-contract',
+      evidence: 'findings',
+      next: 'Judge production routing, sampling and varied springs separately from these fixed reference settings.',
+      investigations: [{
+        page: 'findings',
+        state: 'Current evidence',
+        description: 'Membership caching, bounded sorting, rejected cache-only controls and accepted ' +
+        'ordered comparisons.',
+      }],
+    }),
+    'layout-acceptance': entry('layout-acceptance', {
+      conclusion: 'Selected production-style sampling, varied springs and long-run controls pass the ' +
+        'recorded original gates. They do not establish complete production acceptance.',
+      variant: 'Strict baseline versus hub-prefetch/cached-grid WebGPU candidate; bounded M3 production-setting matrix.',
+      comparison: 'Selected production settings → evolving baseline / candidate → checkpoint gates, probes and normal-frame cost',
+      method: 'validation-contract',
+      evidence: 'production',
+      next: 'Broaden force coverage, graphs and devices, then agree quality/runtime budgets before integrating the complete engine.',
+      reproduce: 'Use the preset ladder, adaptive sampling and documented input history above. ' +
+        'Validate the full-strength probe and keep intermediate unchecked ticks explicit.',
+      investigations: [
+        { page: 'production', state: 'Current evidence', description: '32-sample/varied-spring controls, adaptive sampling and selected 5,000-tick runs.' },
+        {
+          page: 'findings',
+          state: 'Historical baseline',
+          description: 'Earlier fixed-setting matrix with eight near-field samples.',
+          replacement: 'production',
+        },
+      ],
+    }),
+  }
+  /* eslint-enable @typescript-eslint/naming-convention */
+}

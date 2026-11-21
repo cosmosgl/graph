@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "experiment": "pilot-viewer",
+  "status": "complete",
+  "recordedAt": "2026-11-19",
+  "question": "Does the running pick stall recur at the historical wider backing size in standalone Chrome?",
+  "result": "All four blocks passed. All 1,200 frame intervals were within 33 ms and all 160 picks were within 50 ms. The slowest running pick took 19.4 ms in a normal block and 20.0 ms in a traced block. Exact IDs, camera, drag, pause, resume, resize and all 8,372 sampled pixels passed.",
+  "limits": "The attachment matches the historical wider measurement. Chrome ran standalone and scheduling in the inline browser may differ. The historical latency failures and strict production color compatibility remain unresolved.",
+  "environment": "Visible standalone Playwright Chrome 157.0.8103.79 on Apple M3, Apple WebGPU metal-3, fallback false, luma 10.0.0-alpha.15. Displayed 961.203125 × 540.671875 CSS pixels at DPR 2 with 961 × 541 logical canvas and 1,922 × 1,082 attachment.",
+  "evidence": "Raw download, per-block analysis, driver, declared protocol, resolved dependencies and exact source snapshot in experiments/cosmos-gpu-lab/captures/pilot-wider-dpr2-20261119-b2qktw79/.",
+  "source": {
+    "revision": "d329feaffe12bfea0ea3e3f768befcb0ca0e6b4b",
+    "state": "modified",
+    "snapshot": "experiments/cosmos-gpu-lab/captures/pilot-wider-dpr2-20261119-b2qktw79/source.tar.gz"
+  },
+  "reproduction": [
+    "Extract the recorded source, install the frozen lockfile and build the production bundle and Lab before measuring.",
+    "Open the pilot in visible standalone Chrome via Playwright with a 1,280 × 900 viewport and device scale factor 2. Verify the Apple native adapter and exact 1,922 × 1,082 attachment.",
+    "Run the declared normal, traced, traced, normal sequence once. Keep the full 50 ms feedback endpoint and 33 ms frame limit.",
+    "Save the original JSON download in a unique capture directory and retain every completed or interrupted block."
+  ],
+  "evidenceSection": "wider-window-replay-at-dpr-2",
+  "replaySection": "wider-replay-at-dpr-2"
+}

@@ -26,6 +26,9 @@ import type { PointTracker } from '@/graph/modules/Points/point-tracker'
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
+type SelectionRect = [[number, number], [number, number]]
+type SelectionPolygon = [number, number][]
+
 export class Graph implements PositionTextureSource {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
@@ -47,6 +50,8 @@ export class Graph implements PositionTextureSource {
   public readonly simulation: GraphSimulation
   /** The graph's one tracker, following the set given to `trackPointPositionsByIndices`. */
   private tracker: PointTracker | undefined
+  /** Invalidates position and area reads on explicit data replacement. */
+  private queryRevision = 0
   /** Canvas element, assigned asynchronously during device initialization */
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
@@ -388,6 +393,7 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setPointPositions(pointPositions, dontRescale))) return
+    this.queryRevision++
     // The simulation ingests the array and marks its own update flags
     // (positions, sizes, forces, clusters)
     this.simulation.setPointPositions(pointPositions, dontRescale)
@@ -665,6 +671,7 @@ export class Graph implements PositionTextureSource {
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinks(links))) return
+    this.queryRevision++
     // The simulation ingests the array and marks the link-force rebuild
     this.simulation.setLinks(links)
     this.isLinksUpdateNeeded = true
@@ -1357,14 +1364,14 @@ export class Graph implements PositionTextureSource {
    * The coordinates should be from 0 to the width/height of the canvas.
    * @returns Array of point indices inside the rectangle.
    */
-  public findPointsInRect (rect: [[number, number], [number, number]]): number[] {
-    if (this._isDestroyed) return []
-    if (!this.isReady || !this.device || !this.points) return []
+  public findPointsInRect (rect: SelectionRect): number[] {
+    const target = this.renderAreaQuery({ rect })
+    return target && this.device ? extractIndicesFromPixels(readPixels(this.device, target), this.graph.pointsNumber) : []
+  }
 
-    const h = this.store.screenSize[1]
-    this.store.searchArea = [[rect[0][0], (h - rect[1][1])], [rect[1][0], (h - rect[0][1])]]
-    if (!this.points.findPointsInRect()) return []
-    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer), this.graph.pointsNumber)
+  /** Selects points in a rectangle and awaits the GPU copy. Returns null if the request cannot complete. */
+  public async findPointsInRectAsync (rect: SelectionRect): Promise<number[] | null> {
+    return await this.readAreaQuery(this.renderAreaQuery({ rect }))
   }
 
   /**
@@ -1378,20 +1385,15 @@ export class Graph implements PositionTextureSource {
    * The coordinates should be from 0 to the width/height of the canvas.
    * @returns Array of point indices inside the polygon.
    */
-  public findPointsInPolygon (polygonPath: [number, number][]): number[] {
-    if (this._isDestroyed) return []
-    if (!this.isReady || !this.device || !this.points) return []
+  public findPointsInPolygon (polygonPath: SelectionPolygon): number[] {
+    const target = this.renderAreaQuery({ polygon: polygonPath })
+    return target && this.device ? extractIndicesFromPixels(readPixels(this.device, target), this.graph.pointsNumber) : []
+  }
 
-    if (polygonPath.length < 3) {
-      console.warn('Polygon path requires at least 3 points to form a polygon.')
-      return []
-    }
-
-    const h = this.store.screenSize[1]
-    const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
-    this.points.updatePolygonPath(convertedPath)
-    if (!this.points.findPointsInPolygon()) return []
-    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer), this.graph.pointsNumber)
+  /** Selects points in a polygon and awaits the GPU copy. Returns null if the request cannot complete. */
+  public async findPointsInPolygonAsync (polygonPath: SelectionPolygon): Promise<number[] | null> {
+    if (polygonPath.length < 3) return []
+    return await this.readAreaQuery(this.renderAreaQuery({ polygon: polygonPath }))
   }
 
   /**
@@ -1504,6 +1506,15 @@ export class Graph implements PositionTextureSource {
   public getTrackedPointPositionsMap (options?: PositionsReadOptions): ReadonlyMap<number, [number, number]> {
     if (this._isDestroyed || !this.tracker) return new Map()
     return this.tracker.positions(options)
+  }
+
+  /** Captures the current tracked positions. Returns null if the request cannot complete. */
+  public async getTrackedPointPositionsMapAsync (): Promise<ReadonlyMap<number, [number, number]> | null> {
+    if (this._isDestroyed) return null
+    const { tracker, queryRevision } = this
+    if (!tracker) return new Map()
+    const positions = await tracker.positionsAsync?.()
+    return !this._isDestroyed && this.queryRevision === queryRevision && this.tracker === tracker ? positions ?? null : null
   }
 
   /**
@@ -1971,6 +1982,33 @@ export class Graph implements PositionTextureSource {
     }
 
     return arr
+  }
+
+  private renderAreaQuery (area: { rect: SelectionRect } | { polygon: SelectionPolygon }): Framebuffer | undefined {
+    if (this._isDestroyed || !this.isReady || !this.device || !this.points) return undefined
+    const h = this.store.screenSize[1]
+    if ('rect' in area) {
+      const [[left, top], [right, bottom]] = area.rect
+      this.store.searchArea = [[left, h - bottom], [right, h - top]]
+      return this.points.findPointsInRect() ? this.points.searchFbo : undefined
+    }
+    if (area.polygon.length < 3) {
+      console.warn('Polygon path requires at least 3 points to form a polygon.')
+      return undefined
+    }
+    this.points.updatePolygonPath(area.polygon.map(([x, y]) => [x, h - y]))
+    return this.points.findPointsInPolygon() ? this.points.searchFbo : undefined
+  }
+
+  private async readAreaQuery (target?: Framebuffer): Promise<number[] | null> {
+    const { points, queryRevision } = this
+    if (!target || !points) return null
+    const pointCount = this.graph.pointsNumber
+    const pointList = points.pointListVersion
+    const isCurrent = (): boolean => !this._isDestroyed && this.queryRevision === queryRevision &&
+      this.points === points && this.graph.pointsNumber === pointCount && points.pointListVersion === pointList
+    const pixels = await points.readFramebufferPixelsAsync(target, isCurrent)
+    return pixels && isCurrent() ? extractIndicesFromPixels(pixels, pointCount) : null
   }
 
   /**

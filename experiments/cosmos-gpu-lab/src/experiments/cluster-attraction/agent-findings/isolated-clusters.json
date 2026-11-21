@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "experiment": "cluster-attraction",
+  "status": "complete",
+  "recordedAt": "2026-11-18",
+  "question": "Can WebGPU preserve Cosmos cluster attraction and membership updates at useful cost?",
+  "result": "Yes for this bounded M3 study. Both backends pass all 45 checkpoint/update rows against CPU; all 18 shared-input WebGPU/WebGL comparisons pass. At 8,192 points, WebGPU’s force-only median is about 4.3–4.4× lower for one large or heavily uneven group. WebGL has lower medians for balanced groups and supplied targets.",
+  "limits": "One session, 30 fixed-alpha ticks and four checkpoints per input. Group sums, force and positions were checked; full-frame cost, long cooling trajectories, production Graph setters and combined-force integration were not. Timing ranges vary. This does not fix pilot picking stalls, accept historical color failures or establish full migration readiness.",
+  "environment": "User’s M3, visible inline Chromium 157. WebGL: ANGLE Metal Renderer Apple M3. WebGPU: Apple, metal-3, fallback false. luma 10.0.0-alpha.15; both timestamp APIs available. Attachments 480 × 340, displayed 304.5 × 216.27 CSS pixels; DPR 2, viewport 663 × 827.",
+  "evidence": "One declared nine-input run completed with 90 backend/CPU checkpoint-update rows, 18 shared-input comparisons and 18 post-timing sum checks, all passing. All 126 measured timestamp batches and 36 warmups are retained, with source/environment records and checksums, in experiments/cosmos-gpu-lab/captures/clusters-20261118-x9_mzqdc/.",
+  "source": {
+    "revision": "7deb5adabacd7244b29fc4b389a6044230d6532e",
+    "state": "clean",
+    "snapshot": null
+  },
+  "reproduction": [
+    "Use the recorded clean revision and frozen lockfile. Run the lab typecheck/build and focused cluster tests before measurement. Keep production shaders and the existing numerical gates unchanged.",
+    "Open #/cluster-attraction in the visible inline browser on the M3. Verify successful WebGL/WebGPU rendering and actual adapter identity; do not substitute another browser or software adapter.",
+    "Read the fixed plan, then choose Run declared study once. It covers the eight-point semantic input and four input families at 1,024 and 8,192 points; check ticks 1, 2, 10 and 30 and the membership/target/strength update.",
+    "Keep the page visible. The study alternates backends for two warmups plus seven samples of 16 frozen force evaluations per input. Keep readbacks, other tests and builds out of timed windows.",
+    "Export JSON to a unique ignored capture directory, including failed or interrupted results. Review every row, direct backend comparison, post-timing sum and timing range. Publish a reviewed finding; do not infer full-frame acceptance from force-only cost."
+  ],
+  "evidenceSection": "native-cluster-comparison",
+  "replaySection": "run-and-retain-the-evidence"
+}

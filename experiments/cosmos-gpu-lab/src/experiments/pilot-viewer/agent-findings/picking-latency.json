@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "experiment": "pilot-viewer",
+  "status": "complete",
+  "recordedAt": "2026-11-18",
+  "question": "Why did selecting a member sometimes take longer than 50 ms?",
+  "result": "We still do not know. One planned four-block run at a narrower canvas size completed 160 picks without reproducing the delay. Normal blocks peaked at 18.9 ms; blocks with extra tracing peaked at 25.3 ms. All 1,200 measured frame intervals and sampled pixel checks passed. No runtime fix was made.",
+  "limits": "This completed investigation was inconclusive about the cause. The earlier 100.4-ms and 68.2-ms failures remain unresolved. This was one session at 627 × 353 logical pixels, not a replay of the wider failing window. Tracing adds work; its timings are separate controls. Strict production colors remain rejected and full migration is not ready.",
+  "environment": "User's M3, visible Codex inline Chromium 157; reported Apple WebGPU, metal-3, fallback false, luma 10.0.0-alpha.15. Displayed canvas 627 × 352.6875 CSS pixels; logical 627 × 353, DPR 2, attachments 1254 × 706. The API did not report an exact adapter model.",
+  "evidence": "The original export, per-block analysis, declared protocol, environment, checksums and identical clean source records before/after the run are retained locally in experiments/cosmos-gpu-lab/captures/pilot-latency-20261118-kabaeoqz/. Four blocks ran once, in the declared normal/traced/traced/normal order, from 11:55:03 to 11:55:32 UTC.",
+  "source": {
+    "revision": "28af1c6d3811ebc599066190204a921b843f28c4",
+    "state": "clean",
+    "snapshot": null
+  },
+  "reproduction": [
+    "Use a clean isolated checkout of the recorded revision, install its frozen lockfile, run the lab typecheck/build, then start the lab. Do not change production, arithmetic or the 50-ms target.",
+    "Open the pilot in the visible Codex inline browser on the M3. Verify actual Apple/Metal adapter details, fallback false and a rendered graph. Record dimensions; this observation used a 627 × 353 logical canvas at DPR 2. A wider window is a separate control.",
+    "Read the fixed plan, stop competing tests/builds, and choose Investigate picking latency once. Keep the viewport and visibility fixed for all four blocks. Retain failures or interruptions; do not repeat until passing.",
+    "Export JSON into a unique ignored capture directory. Retain source/environment before and after. Inspect every block, separate its first 20 paused picks from its next 20 running picks, and retain the full original feedback metric. The linked recipe explains tracing and publication."
+  ],
+  "evidenceSection": "four-block-latency-investigation",
+  "replaySection": "run-and-retain-every-block"
+}

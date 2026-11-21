@@ -1,0 +1,419 @@
+Further curve/pattern investigation is **parked for the first migration**,
+not resolved. These features are outside the initial integrated slice. Reopen
+when they enter scope or a practical issue requires it; review retained failures
+before full readiness. Historical verdicts and reproduction steps below
+remain unchanged. See [first-migration rules](#/validation-workflow?section=first-migration-rules)
+and the [parked register](#/roadmap?section=parked-investigations).
+
+# Curved solid links: method and findings
+
+Can Cosmos preserve its actual curved-link geometry, color and picking when moving from WebGL to luma WebGPU?
+
+This experiment renders frozen links through unmodified production GLSL and a WGSL port, using public luma APIs only. It does not replace the production renderer or its padded host-picking policy. Straight-link boundary failures remain open in their own experiment.
+
+## Pattern boundary audit · 17 November 2026
+
+**A fine/coarse derivative switch does not resolve the sampled M3 curve
+witnesses.** The bounded replay isolates the blue source from the existing bows
+fixture and captures native float values at three previously rejected pixels.
+Ordinary colors and IDs remain byte-identical before, during and after probes.
+The independent CPU reference and all acceptance gates are unchanged.
+
+| Witness | Ordinary alpha byte · GL / GPU | Float coverage · GL probe / GPU probe | CPU coverage |
+|---|---|---|---|
+| Dashed `(135,79)` | 172 / 172 | 0.662559 / 0.674103 | 0.663491 |
+| Dotted `(121,79)` | 41 / 41 | 0.170714 / 0.160860 | 0.172014 |
+| Dotted `(43,118)` | 128 / 128 | 0.500299 / 0.501340 | 0.499227 |
+
+At the last pixel, both ordinary GPU ID passes pick the isolated source while
+the independent CPU mask rejects it. The source is visible in both images;
+this is not an invisible-picking failure. At the first two pixels, both GPUs
+agree on ordinary color while the CPU differs beyond the existing budget.
+This identifies a reference/native difference at those samples, not a reason
+to waive their failures or a proof that the whole WebGPU port is correct.
+
+The diagnostic phase, side and derivatives expose different native values
+around tessellated ribbon boundaries. However, the separate WebGL float
+program's coverage does **not always reconstruct the ordinary paint**: the
+dashed sample would round to alpha 169 from its probe, but ordinary alpha is
+172. A changed diagnostic program, primitive interpolation and derivative
+execution need further isolation before assigning a root cause. These float
+captures must not replace the actual image or supply expected CPU masks.
+
+WebGPU's default, explicitly fine and explicitly coarse diagnostic variants
+return identical phase/derivative/coverage tuples at all four replay witnesses
+(the three curves above and one straight edge). That rules out this simple
+mode switch as a diagnostic remedy on this device; it is not a full candidate
+renderer trial. [WGSL's derivative rules](https://www.w3.org/TR/WGSL/#derivative-builtin-functions)
+define the available modes and uniformity requirements, not equivalence to a
+particular CPU interpolation model. WebGL's vertical derivative sign is
+opposite in these probes because its window origin is inverted; the pattern
+ramps use absolute derivatives.
+
+Recorded **17 November 2026**, Apple M3 / ANGLE Metal and Apple WebGPU, inline
+Chromium 157, luma **10.0.0-alpha.15**. The ordinary patterned matrix is not
+rerun by this diagnostic and retains **4/24**, all four at zero opacity.
+The earlier solid diagnostics also pass, including identical-vertex replay.
+No production shader, color path, CPU rule or threshold changed.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/pattern-diagnostics.test.ts src/experiments/curved-links/diagnostics.test.ts
+```
+
+Open the printed session in the local native browser. The local ignored
+`link-pattern-boundaries.json` records the selected fixtures, source indices,
+2×2 pixel neighborhoods, devices and diagnostic values. No raw capture is
+committed. A passing preservation/probe test does not mean those pixels pass
+rendering acceptance.
+
+**Priority update:** the later first-migration decision parks this investigation
+and defers arrows in favor of the integrated core slice. These pattern and raster
+blockers remain. A common coverage renderer or an identical-primitive derivative
+replay is a possible future investigation when this feature returns to scope,
+not a silent adjustment to the current gates.
+
+## Dash and dot patterns · 17 November 2026
+
+**The patterned candidate passes 4/24 full-frame cases on Apple M3.**
+Every case preserves each backend's original production color bytes exactly.
+Production gap-picking remains a separate unchanged control; the candidate
+requires half coverage of the patterned paint and the existing source-alpha
+eligibility rule. The exact-ID, CPU-mask, 2/255 color and zero-invisible-pick
+gates are unchanged.
+
+| Stroke | Candidate passed / checked |
+|---|---|
+| Dashed | 2 / 12 |
+| Dotted | 2 / 12 |
+
+All four passing rows have zero global opacity. **None of the 20 visible
+curve cases passes the full gate.** Patterned color-face IDs make zero invisible
+frame/source picks, but independent CPU masks/colors and some paired GPU color
+boundaries disagree. The focused preservation/visibility test passes; that
+must not be confused with accepting the visible curve matrix.
+
+Recorded **17 November 2026**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. The 24 cases are two existing scenes × dashed/dotted ×
+six profiles: blended, hard, DPR 2, zoom-2 constant-screen patterns with dash
+length 7.5/gap 3.25, reversed endpoint gradients at opacity 0.35, and opacity
+zero. Other profiles use dash length/gap 5. This is a bounded local study;
+short-link extremes, arbitrary pattern parameters, animated updates and cost
+are not covered by it.
+
+### Production pattern rules
+
+Production uses the ribbon parameter times the endpoint **chord length**,
+including on curves. This is not distance integrated along the curved path.
+When widths scale with zoom, pattern units are world units; otherwise the
+chord and carrier width are multiplied by zoom to keep pattern units in CSS
+screen pixels. DPR enters the antialiasing ramp, not a second pattern zoom.
+
+Dashes repeat every `dashLength + dashGap`. Dots repeat every visible stroke
+diameter plus the gap; hard dots have production's minimum diameter of
+approximately √2 device pixels. Both multiply the existing ribbon coverage.
+Production deliberately omits the pattern mask in its ID pass, keeping gaps
+pickable. The visible-pixel candidate applies it to IDs too; it does not change
+production interaction policy or any rendered color.
+
+The port uses `dpdx`/`dpdy`/`fwidth` before any style branch or discard, as
+required for [WGSL derivative uniformity](https://www.w3.org/TR/WGSL/#derivative-builtin-functions).
+The CPU independently extrapolates each primitive's parameter and side values
+at four pixel centers and uses fine local differences. Native default
+derivatives may be fine or coarse. This CPU model is explicit, not a promise
+to predict every driver's derivative choice; its discrepancies stay failures.
+No GPU mask/readback supplies CPU expectations.
+
+### Reproduce the pattern comparison
+
+Choose **Stroke → dashed/dotted**, then set **Dash length** and **Pattern gap**.
+Dash length controls dashes; dot diameter comes from stroke width. Both color
+source modes remain available. The full scene sweep uses the selected color
+and pattern settings; fixed boundary-replay tools retain their recorded solid
+controls. For the bounded 24-case pattern study:
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/patterns.test.ts
+```
+
+Open the printed session URL in the local native browser. Local JSON captures
+retain every comparison, preservation result and isolated-source visibility
+count, including rejected rows. They are not committed. Solid and endpoint-
+gradient matrices remain separate regression controls.
+
+## Endpoint gradients · 17 November 2026
+
+**The color-face candidate passes 28/64 full-frame cases with endpoint
+RGB enabled.** All 64 cases preserve each backend's production gradient
+color bytes exactly and have zero invisible frame/source picks. The remaining
+36 cases stay rejected under the original exact-ID, independent CPU-mask
+and **2/255** color gates. A completed test run is not full rendering acceptance.
+
+Recorded on **Apple M3**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. This is a bounded local comparison, not a portability
+or performance claim. The existing solid-color matrix is replayed separately
+on the same setup; every row retains the same pass/fail verdict and mask/ID
+error counts with gradients enabled.
+
+| Scene | Gradient candidate passed / checked |
+|---|---|
+| Ordinary bows | 4 / 16 |
+| Overlap | 10 / 16 |
+| Width/default/absence limits | 10 / 16 |
+| Fractional boundaries | 4 / 16 |
+
+### What production interpolates
+
+With `linkColorInterpolateFromEndpoints` enabled, Cosmos reads the source and
+target **point colors** and mixes their RGB using the ribbon's interpolated
+parameter `t`, clamped to 0–1:
+
+```text
+RGB = sourceRGB × (1 − t) + targetRGB × t
+alpha = linkAlpha × globalOpacity × thinWidthFactor × coverage
+```
+
+Endpoint alpha does not fade the link. NaN endpoint channels use
+`pointDefaultColor`; absent endpoints still suppress their links. Hard-edge
+mode keeps the original opaque-output rule. No color-space conversion,
+source-alpha quantization or new picking threshold is introduced.
+
+The CPU carries each sampled curve parameter through the triangle strip and interpolates it with barycentric weights. This is **not arc-length interpolation**: equal steps in the curve parameter need not cover equal screen distances.
+
+The WebGL adapter supplies point colors and enables the existing production
+uniforms; the imported GLSL remains unchanged. WebGPU uses a separate gradient
+color pipeline through public luma APIs. Solid-color and ID shader sources
+remain unchanged. The CPU reference independently evaluates the gradient and
+retains its original coverage and byte-composition rules.
+
+Focused checks cover endpoint alpha 0/0.35/1, ignored per-link RGB in gradient
+mode, per-channel and wholly missing point colors, a non-white default with
+alpha zero, global opacity zero in both blend modes, exact gradient/solid ID
+identity and restoring the solid control. Default-channel and endpoint-alpha
+cases also compare CPU and GPU color at the existing budget. The matrix adds
+overlap, reversed order, zoom, DPR 2, fractional widths and hard/blended modes.
+
+### Try and reproduce gradients
+
+Choose **Color source → Endpoint RGB**, **Endpoint alpha ignored** or
+**Default endpoint channels** in Configuration. The live report and full sweep
+use that selection. **Link color · control** restores the original solid
+study. Boundary-replay diagnostics keep their original solid controls.
+Cancellation preserves the selected mode and displayed scene. Export JSON
+retains the live inputs, sweep color preset and reproduction fixtures locally.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/gradients.test.ts
+```
+
+Open the printed session URL in the existing native browser. Local captures
+contain both `solidRows` and gradient `rows`, including rejected results;
+measurements are not committed. The pattern comparison above retains
+these boundary and original padded-picking controls.
+
+## Faint-alpha picking replay · 17 November 2026
+
+**The existing color-face candidate passes all 72 full-frame comparisons. It
+makes zero invisible frame or foreground picks and preserves original color
+bytes exactly.** This does not supersede the rejected rows in the earlier
+64-case geometry study below.
+
+Recorded **17 November 2026**, Apple M3 / ANGLE Metal and Apple WebGPU,
+inline Chromium 157, luma **10.0.0-alpha.15**. This is a focused local replay,
+not a repeat of the older feature matrix or a portability claim. Production
+shaders, candidate shaders, CPU references, colors and acceptance gates are
+unchanged; the replay only supplies new inputs and reads existing outputs.
+
+The population has **72 cases** per link type:
+
+- 48 native-ratio cases: eight alpha inputs × opacity 0/0.35/1 × isolated/overlap.
+- 12 ratio-2 cases around the first byte threshold at opacity 0.35 and 1.
+- Six reversed-order overlap cases around that threshold.
+- Six hard-edge controls using alpha `1/65536`, all three opacities and both scenes.
+
+The alpha inputs include zero, `1/65536`, the float32 value nearest
+`0.5 / 255 / float32(opacity)` and its immediate neighbors, a one-byte interior
+alpha, 0.35 and 1. Compensating the threshold input for opacity keeps the
+positive-opacity replays near the same attachment boundary. The zero-opacity
+control uses the opacity-one sample inputs. These are full-frame comparisons,
+not checks restricted to a favorable interior pixel.
+
+Source ID **1** is the faint link; ID **0** is a wider blue underlying link.
+Isolation sets only the underlying width to zero, preserving IDs. Every
+candidate ID selecting source 1 is checked against that link's own isolated
+stored alpha. At global opacity 1 the underlying link is opaque; at 0.35 both
+links receive the original global-opacity rule. Thus composed background alpha
+cannot conceal an invisible foreground pick. The independent CPU reference
+still supplies masks and colors; isolated readback supplies the separate
+actual-source-visibility check.
+
+At the opacity-one interior probe, both APIs behave identically:
+
+| Input alpha | Predicted byte | Isolated stored RGBA | Candidate overlap ID |
+| --- | --- | --- | --- |
+| 0.0019607841968536377 | 0 | `[0, 0, 0, 0]` | 0: underlying link |
+| 0.0019607844296842813 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+| 0.001960784662514925 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+
+The middle input is the nearest float32 to the mathematical half-byte
+threshold, not an exactly representable half-byte tie. The production padded
+ID control selects source 1 for all three samples. Its broader interaction
+policy remains recorded separately, not relabeled as candidate behavior.
+
+The curve runs from `(80,200)` to `(432,200)`, with a six-pixel foreground and
+fourteen-pixel underlying link. It uses the existing defaults: 19 segments,
+weight 0.8 and control distance 0.5. The interior probe above is `(256,122)` at
+ratio 1. The production padded control passes 20/72 full-frame comparisons
+under the existing visible-image criteria; 44 cases select some foreground
+pixels with zero isolated alpha.
+
+For the color-face candidate, both GPU ID images match the independent CPU
+masks in all 72 cases. CPU color differences are at most 1/255, below the
+unchanged 2/255 gate. No new renderer or stored-alpha resolver was needed for
+these inputs. The previous two-sided candidate is not retested here; its folded
+ribbon failures remain in the earlier study.
+
+This closes the bounded alpha replay on this device. Other curve geometries,
+folds and boundary failures retain their previous verdicts. The endpoint-gradient comparison above extends those controls without clearing their failures.
+
+### Repeat locally
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/faint-alpha.test.ts
+```
+
+Open the printed session URL in the local browser. The test asserts unchanged
+color bytes and zero invisible picks and records every unchanged full-frame
+CPU/GPU gate. Its ignored `captures/local/curved-link-faint-alpha.json` contains
+inputs, settings, devices, both policy comparisons, CPU results and source checks.
+No raw capture is committed. Passing this focused test is not a replacement for
+the broader geometry study's acceptance result.
+
+## Recorded result · 15 November 2026
+
+**The color-face candidate passes 28/64 configurations on Apple M3 in Codex inline Chromium 157.** This is 20/56 nonzero-opacity cases and all 8 opacity-zero cases. Blended and hard modes each pass 14/32. All 64 preserve original color bytes exactly within each backend and have zero invisible frame/source picks or invalid source IDs. The 36 rejected configurations remain rejected under the original criteria.
+
+The previous visible candidate remains available unchanged at **26/64**, including its four invisible-source failures. Every field of its 64 exported result rows, including the production and CPU comparisons, reproduced identically. The padded production control still passes only its eight opacity-zero rows under the visible-image rule. Its deliberate padding is a separate policy, not a WebGPU implementation defect.
+
+| Fixture | Color-face passed / checked | Previous visible passed | Remaining color-face failures |
+| --- | --- | --- | --- |
+| Bows | 4 / 16 | 4 | Default/inverse boundary pixels, sampled caps, chord ties and DPR 2 |
+| Overlap | 10 / 16 | 10 | CPU boundaries in coarse/high-bow/zoomed profiles |
+| Width/default/degenerate limits | 10 / 16 | 8 | Chord ties, high-bow and DPR 2 CPU boundaries |
+| Fractional coordinates | 4 / 16 | 4 | CPU boundaries; two cross-GPU ID pixels at DPR 2 |
+
+The strict counters overlap: **10 rows** have cross-GPU ID differences; **36** have CPU mask failures; **5 hard-mode rows** exceed the cross-GPU color budget. All blended cross-GPU colors stay within 2/255, which does not erase their mask failures. Original colors, the exact-mask rule and the numeric color budget have not changed.
+
+The original **40 straight-link rows reproduced identically at 30/40** when the curve adapter was introduced; the shared adapter and straight diagnostic tests also pass after this investigation. This experiment does not resolve the straight-link blockers.
+
+## Folded-ribbon picking investigation
+
+```result-chart
+{
+  "title": "Matching the drawn faces cleared invisible picks",
+  "context": "Invisible source pixels per backend · Reversed folded ribbon at 0.5× zoom and 0.35 opacity",
+  "unit": "pixels",
+  "bars": [["Two-sided picking",69],["Match drawn faces",0]]
+}
+```
+
+A short 30-unit chord with width 48 can fold the tessellated ribbon back over itself. The production color pipeline culls back-facing triangles; the host ID pipeline accepts both orientations. Its visible-width candidate inherited that difference. Some triangles therefore wrote IDs where their own source contributed no color. Source-byte eligibility cannot fix a triangle that the color pass never draws.
+
+The separate **color-face candidate** changes only the ID pipeline's `cullMode` to `back`, matching color. It retains the same visible-width geometry, source-byte eligibility, draw order, coverage cutoff and original color pass. The original padded control and previous two-sided candidate are still selectable. [luma's pipeline parameters](https://luma.gl/docs/api-reference/core/parameters#assembly-culling) expose this state through the public API; see also [WebGPU primitive state](https://www.w3.org/TR/webgpu/#primitive-state).
+
+The CPU adds an independent front-face ID mask for this separate policy. Its previous padded/two-sided masks and color calculations are untouched. This describes the candidate's intended behavior; it does not substitute GPU readbacks for expectations or relax a threshold.
+
+| Limits profile | Previous invisible source pixels per backend | Color-face invisible pixels | Full acceptance |
+| --- | --- | --- | --- |
+| DPR 2 · blended and hard | 5 | 0 | Both rejected: 4 CPU mask differences per backend remain |
+| Zoom 0.5, constant width, opacity 0.35, reversed · blended and hard | 69 | 0 | Both pass all existing gates |
+
+These cover four matrix rows. A separate isolated-source test verifies the folded ribbon in both APIs, both modes and DPR 1/2, including restoration of the original images after switching policies. In the full matrix, every selected source is rendered in isolation: all 64 color-face cases have zero invisible-source picks, even when opaque links could otherwise hide an invisible foreground ID.
+
+## Default bow boundary investigation
+
+The default blended bow first disagrees at **(352, 85)** on the amber link. Isolating that source relabels it from full-fixture link 1 to link 0. Unmodified color and original visible-ID images are captured before and after diagnostics to check restoration.
+
+Unblended float targets record the actual interpolated ribbon side, smoothing, coverage and source ID. A point-list pass captures every post-vertex clip coordinate. The pixel falls inside triangle 11; captured-geometry double interpolation and the independent CPU mask put it inside the half-coverage boundary. Both native probes use smoothing **0.1111111119389534**.
+
+| Path | Interpolated side | Coverage | ID at cutoff 0.5 |
+| --- | --- | --- | --- |
+| WebGL native | −0.4444517195 | 0.4999017715 | Background |
+| WebGPU native | −0.4444278479 | 0.5002240539 | Link 0 |
+| WebGPU explicit linear interpolation | −0.4444278479 | 0.5002240539 | Link 0 |
+
+To separate curve construction from interpolation, the replay feeds **identical float32 clip coordinates and side/ramp values** to both rasterizers. It uses three geometry sources: the WebGL capture, WebGPU capture and CPU-rounded geometry. Each source runs through WebGL, WebGPU and WebGPU with explicit linear interpolation: **nine rows**.
+
+All nine reproduce their backend's native carrier and cutoff masks exactly across the isolated framebuffer. At the witness, all three geometry sources reproduce the same WebGL-versus-WebGPU split above. There are small native vertex differences, but they are not necessary to produce this rejection. Explicit linear interpolation does not fix it. The evidence isolates an API-path interpolation/raster difference on this M3; it does not identify a particular driver instruction or establish identical behavior on other devices. [WebGPU polygon rasterization](https://www.w3.org/TR/webgpu/#polygon-rasterization) is the specification context, not a waiver of the gate.
+
+Both blended colors at this pixel are **RGBA8 (76, 54, 31, 89)**, with a nonzero source alpha byte. Source-alpha quantization is not the cause. In hard mode WebGL discards the pixel, leaving **(0, 0, 0, 0)**, while WebGPU renders **(217, 153, 89, 255)**. That color rejection remains.
+
+Changing IDs alone cannot make both hard colors agree or select WebGL's invisible pixel. A shared explicit coverage/color algorithm would be a separate rendering candidate, and would still have to preserve original colors under the existing gate. No epsilon, pixel exclusion, tolerance change or production shader edit is introduced here.
+
+**Next:** retain these exact-mask/color blockers while extending the bounded rendering comparison to patterns, arrows and link states; the endpoint-gradient results above retain these failures. A common explicit coverage renderer remains a separate diagnostic direction, not an accepted substitute for the production reference.
+
+## The production curve
+
+Cosmos draws a tessellated rational quadratic ribbon. The defaults are **19 segments**, **weight 0.8** and **control-point distance 0.5**. For endpoints A and B, the control point C is the midpoint displaced along the perpendicular by `length(B − A) × controlDistance`. Reversing endpoints reverses the bow.
+
+```text
+P(t) = ((1−t)² A + 2(1−t)t w C + t² B)
+       / ((1−t)² + 2(1−t)t w + t²)
+```
+
+Samples are not uniform in t. Production uses a signed power scale with exponent 2:
+
+```text
+s = 2i / segments − 1
+t = (1 + sign(s) × s²) / 2
+```
+
+Each sample supplies two ribbon vertices, with sides +0.5 and −0.5. Both GPU paths receive the actual production float32 geometry. The CPU reconstructs these samples independently. See [D3's power-scale definition](https://d3js.org/d3-scale/pow).
+
+Normals use `P(min(t + 1/segments, 1)) − P(max(t − 1/segments, 0))`, then a perpendicular normalization. These are neither analytic derivatives nor differences between adjacent power-spaced samples. One segment therefore draws the endpoint chord, regardless of bow settings.
+
+```flow
+Endpoints and source styles · identical uploaded float32 inputs
+Rational curve samples · production power-spaced geometry
+Finite-difference normals · ribbon extrusion, width and zoom cap
+Triangle strip · original color draw and separate ID pass
+Full-frame comparison · WebGL, WebGPU and independent CPU rasterizer
+Selected-source visibility · isolate every source that contributed a picked ID
+```
+
+## Color and picking
+
+Color retains the production smoothing ramp, subpixel attenuation, alpha, source-over blending and hard-edge behavior. Color culls back faces; host picking draws both orientations. Short, wide or strongly bent ribbons can fold, so a curve is not simply a stroked mathematical line.
+
+The **production control** retains its five-CSS-pixel wider host IDs. The **previous visible-footprint candidate** uses the color ribbon width. The **color-face candidate** also matches the color pass’s back-face culling. In blended mode, its source alpha must round to a nonzero RGBA8 byte as well as pass the original half-coverage cutoff. The color shader and blending remain unchanged. Hard opaque mode preserves the original positive-alpha-to-opaque behavior.
+
+Picking is checked against the final image and against the selected link rendered in isolation. An opaque background must not hide a pick from an invisible foreground source. Unknown IDs fail separately. Folded, back-facing triangles can also expose a color/picking disagreement; the experiment records this rather than silently changing production culling.
+
+## Acceptance and CPU reference
+
+The existing gate is unchanged: exact IDs and scalar masks at every pixel, at most two RGBA8 channel levels of color error, and no picked pixels with zero rendered alpha. Original color preservation is exact within each backend when switching picking rules. Every selected source is checked for visibility.
+
+The independent CPU reference evaluates the sampled rational curve and finite-difference normals, assembles the alternating triangle-strip winding, applies pixel-center/top-left coverage, interpolates the original side varying, and blends each front-facing color primitive into RGBA8. Picking uses its own padded or unpadded mesh: production/previous visible IDs keep both faces, while the color-face mask keeps the color-facing triangles. It does not consume GPU masks, captured GPU vertices or readbacks as expectations. Precision and raster-boundary failures remain failures; no epsilon or excluded pixels are introduced.
+
+GPU edge ownership can differ on exact boundaries; [WebGPU's polygon rasterization rules](https://www.w3.org/TR/webgpu/#polygon-rasterization) explain the portability limit. That is a possible explanation to investigate, not permission to waive the gate.
+
+## Reproduce
+
+Run `pnpm install`, then `pnpm --filter @cosmos.gl/gpu-lab dev`. Open `#/curved-links` on the printed local address in a WebGPU-capable browser.
+
+Inspect all three picking rules and pointer IDs. Run **Run curved-link sweep**: 4 fixtures × 8 profiles × blended/hard modes = **64 configurations**. Profiles include defaults, coarse/fine tessellation, inverse bow, zero bow, DPR 2, zoomed constant width/partial opacity/reversed order, and zero opacity. These are paired profiles rather than a full Cartesian product. All settings remain visible. The offscreen sweep preserves the live graph and supports cancellation between rows.
+
+**Replay default-bow pixel** runs the fixed nine-row investigation without changing the live graph or its settings. It retains native float witnesses and exact vertex values for local export; all nine rows stay visible.
+
+**Export JSON** retains parameters, fixtures, devices, browser, timestamp, every counter and rejected row, plus boundary replay data. The schema is version 2; the old comparison fields remain present. Measurement exports stay local and are not repository artifacts. NaN default sentinels are serialized as the string `NaN`.
+
+Focused native tests can be run with:
+
+```sh
+LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links
+```
+
+Open the printed Vitest session URL in Codex's inline browser. Device selection must be verified there; the environment flag alone does not select hardware for an inline session.
+
+## Scope and limits
+
+This first experiment covers solid curves with positive rational weights and bounded geometry. Coincident endpoints retain the original production normalization ambiguity; an empty observation is not a portable contract. Patterns, arrows, gradient transitions, distance fading, highlights, transitions, pointer scheduling, full Graph/host integration, GPU timing and broader native hardware remain unvalidated.
