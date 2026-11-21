@@ -7,6 +7,10 @@ scanout measurement.
 
 ## Original failure
 
+```example
+selectionTiming
+```
+
 On 18 November 2026, an Apple M3 running visible Chromium 157 showed one 100.4 ms
 running selection in the wider window. The correct member was selected, but the
 feedback exceeded the limit. Of the 100.4 ms, 92.8 ms came after highlight

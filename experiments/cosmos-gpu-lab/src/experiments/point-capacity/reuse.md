@@ -20,6 +20,10 @@ same device, copying surviving records and uploading the new tail. Later counts 
 its position/scratch buffers, topology buffers, compute kernels and render kernels. Capacity follows the largest
 requested count; there is no advance reservation, geometric growth factor or automatic trim.
 
+```example
+retainedCapacity
+```
+
 ```flow
 Validate the new input · Keep tick, cooling, device and registered pins
 Count exceeds capacity · Prepare a larger generation, GPU-copy prefix, upload tail, then retire old resources | Count fits capacity · Keep buffers and kernels; update logical sizes and upload changed input

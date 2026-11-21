@@ -171,7 +171,12 @@ export async function renderEvidenceContent (
   const content = document.createElement('div')
   if (page.kind === 'markdown') {
     const { renderMarkdown } = await import('./markdown')
-    await renderMarkdown(content, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 2, tables: false })
+    await renderMarkdown(content, await page.load(), page.assets, {
+      examples: page.examples,
+      sectionNavigation: false,
+      headingLevelOffset: 2,
+      tables: false,
+    })
     addArticleSections(content, experiment.id, page.id)
     removeReproductionInstructions(content)
     content.querySelector('[data-heading-level="1"]')?.remove()

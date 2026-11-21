@@ -100,7 +100,12 @@ async function renderArticle (
   try {
     if (page.kind === 'markdown') {
       const { renderMarkdown } = await import('./markdown')
-      await renderMarkdown(target, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 2, tables: false })
+      await renderMarkdown(target, await page.load(), page.assets, {
+        examples: page.examples,
+        sectionNavigation: false,
+        headingLevelOffset: 2,
+        tables: false,
+      })
       addArticleSections(wrapper, experiment.id, page.id)
       if (page.title === 'Overview') {
         const title = target.querySelector('[data-heading-level="1"]')
