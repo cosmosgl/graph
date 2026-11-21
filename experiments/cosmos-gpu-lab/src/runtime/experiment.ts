@@ -1,6 +1,7 @@
 import { validationContractMarkdown } from './validation'
 import type { AgentFindings } from './agent-findings'
 import type { StudyRecord } from './study-record'
+import type { ResultChart } from './result-chart'
 export type ExperimentInstance = {
   // Stop playback/sweeps at a safe boundary without discarding the current run.
   pause?: () => void;
@@ -68,6 +69,7 @@ export type ExperimentCase = {
     scope: string;
     limits: string;
     evidence: CaseEvidenceLink[];
+    charts?: ResultChart[];
   } | null;
 }
 
@@ -77,7 +79,7 @@ export function caseEvidenceLinks (item: ExperimentCase): CaseEvidenceLink[] {
 }
 
 export type SinglePageCase = {
-  observations: Array<{ id: string; title: string; date: string; evidence: string; limits: string }>;
+  observations: Array<{ id: string; title: string; date: string; evidence: string; limits: string; charts?: ResultChart[] }>;
   legacyCases: Record<string, string>;
   pageSections: Record<string, string>;
 }

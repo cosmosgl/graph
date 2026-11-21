@@ -22,6 +22,15 @@ maximum are the same. Earlier pilot 33 ms and 50 ms scores remain in the
 
 ## Karate Club · 34 points, 78 edges
 
+```result-chart
+{
+  "title": "WebGPU used more tracked GPU memory on Karate Club",
+  "context": "Peak application GPU buffers and textures · 34 points · Apple M3",
+  "unit": "MiB",
+  "bars": [["WebGL",2.2],["WebGPU",9.9]]
+}
+```
+
 Both paired runs returned every requested ID and background result on each
 backend. The initial images show the same circle and link layout. The moving
 checkpoints show compact graphs with different orientations. Steady time and
@@ -48,6 +57,15 @@ WebGL startup varied beyond the declared limit.
 | Peak tracked memory (MiB) | 2.2 | 9.9 | +7.8 | +356.4 | 0.2 | Over margin |
 
 ## Dense communities · 1,000,000 points, 999,990 edges
+
+```result-chart
+{
+  "title": "Rectangle selection responded much sooner with WebGPU",
+  "context": "95th-percentile rectangle feedback time · Moving million-point dense graph · Apple M3",
+  "unit": "ms",
+  "bars": [["WebGL",1342.3],["WebGPU",56.3]]
+}
+```
 
 [Open the live Dense Communities demo](#/dense-communities).
 
@@ -149,6 +167,15 @@ matched Viewer Comparison renderer. [Earlier YouTube run](#/million-graph?sectio
 | Peak tracked memory (MiB) | 994.8 | 284.9 | -709.9 | -71.4 | — | Not assessed · Missing a complete matched pair |
 
 ## YouTube capacity
+
+```result-chart
+{
+  "title": "WebGPU completed the full workflow at one million points",
+  "context": "Largest tested YouTube graph to finish the workflow including moving selection · Apple M3",
+  "unit": "points",
+  "bars": [["WebGL",262144],["WebGPU",1000000]]
+}
+```
 
 [Open the 262,144-point YouTube demo](#/youtube-network?section=try-friendships-262k).
 

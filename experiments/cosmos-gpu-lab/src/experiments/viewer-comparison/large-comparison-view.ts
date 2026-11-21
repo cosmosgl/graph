@@ -2,6 +2,7 @@ import type { Graph } from '../../../../../dist/index.js'
 import { waitForGpu } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { ExperimentInstance } from '../../runtime/experiment'
+import { renderResultChart, type ResultChart } from '../../runtime/result-chart'
 import { ALPHA_MIN, cool } from '../combined-layout/data'
 import { denseFixtureParameters } from '../million-graph/dense-communities'
 import { createResidentFrameLoop } from '../million-graph/frame-loop'
@@ -16,27 +17,17 @@ type ComparisonDemo = {
   kind: InteractiveFixtureKind | 'youtube';
   title: string;
   pointCount?: number;
-  benchmarkSection?: string;
   youtubeTopology?: 'sparse';
-  frameIntervals?: { webglMs: number; webgpuMs: number };
+  benchmark?: { href: string; chart?: ResultChart };
 }
 
 type Playback = 'both' | 'webgl' | 'webgpu'
 
 export function createLargeComparisonView (
-  host: HTMLElement, { kind, title, pointCount = 1000000, benchmarkSection, frameIntervals, youtubeTopology }: ComparisonDemo
+  host: HTMLElement, { kind, title, pointCount = 1000000, youtubeTopology, benchmark }: ComparisonDemo
 ): ExperimentInstance {
   const youtube = kind === 'youtube'
   const rateUnit = youtube ? 'frames/s' : 'steps/s'
-  const benchmarkSummary = frameIntervals
-    ? `Separate M3 runs · 95th-percentile frame interval during steady motion ·
-      WebGL <strong>${frameIntervals.webglMs.toFixed(1)} ms</strong> · WebGPU <strong>${frameIntervals.webgpuMs.toFixed(1)} ms</strong>.`
-    : ''
-  const benchmarkLink = benchmarkSection
-    ? `<p class="demo-note comparison-benchmark">${benchmarkSummary}
-        <a href="#/viewer-comparison?section=doc-migration-results-${benchmarkSection}">Benchmark results</a>
-      </p>`
-    : ''
   const modes: Playback[] = youtube ? ['webgl', 'webgpu', 'both'] : ['both']
   const labels = { webgl: ' WebGL', webgpu: ' WebGPU', both: youtube ? ' both' : '' }
   const playbackMarkup = modes.map(mode =>
@@ -55,8 +46,17 @@ export function createLargeComparisonView (
         <canvas aria-label="${title} in WebGPU"></canvas></div>
         <p class="comparison-step-rate" data-webgpu-rate>— ${rateUnit}</p></section>
     </div>
-    <p class="demo-note">Drag or scroll either graph to pan or zoom both. ${playbackNote}</p>
-    ${benchmarkLink}`
+    <p class="demo-note">Drag or scroll either graph to pan or zoom both. ${playbackNote}</p>`
+  if (benchmark) {
+    if (benchmark.chart) host.append(renderResultChart(benchmark.chart))
+    const link = document.createElement('a')
+    link.href = benchmark.href
+    link.textContent = 'Benchmark results'
+    const note = document.createElement('p')
+    note.className = 'demo-note comparison-benchmark'
+    note.append(link)
+    host.append(note)
+  }
   const playButtons = modes.map(mode => ({
     mode, button: host.querySelector<HTMLButtonElement>(`[data-comparison-run="${mode}"]`)!,
   }))

@@ -38,6 +38,12 @@ export const cases: ExperimentCase[] = [
       scope: 'The cooled 34-point graph and a subsequent 102-pick replay on the same saved geometry.',
       limits: 'The original timing failure remains unresolved; physical display latency and other devices were not measured.',
       evidence: [{ label: 'Cooled graph assessment', page: 'findings', section: 'cooled-karate-club-readability-and-exploration' }],
+      charts: [{
+        title: 'Fit brought all 34 points back into view',
+        context: 'Visible point centers · Same Karate Club layout at tick 5,000',
+        unit: 'of 34',
+        bars: [['Original camera', 17], ['After Fit', 34]],
+      }],
     },
   },
   {

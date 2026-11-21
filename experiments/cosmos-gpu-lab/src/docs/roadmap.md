@@ -7,9 +7,12 @@
 migrationFocus
 ```
 
-On Apple M3 in Chrome 157, the YouTube sample with 300,000 points and 300,000 links
-ran at **16.3–16.4 FPS in WebGL** and **57.9–59.8 FPS in WebGPU** across two solo runs each.
-Both rates count GPU-completed frames over simulation ticks 13–72 with the same camera.
+```example
+youtubeMotion
+```
+
+The sample has 300,000 points and 300,000 links. The recorded Chrome 157 runs
+used the same camera and measured simulation ticks 13–72.
 [Live demo](#/youtube-network?section=try-friendships-300k)
 
 ## What remains

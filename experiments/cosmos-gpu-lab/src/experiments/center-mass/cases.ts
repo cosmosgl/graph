@@ -41,6 +41,12 @@ export const centerMassPage: SinglePageCase = {
       evidence: 'At 8,192 points, the existing force took 4.802 ms and the linear candidate took 0.012 ms. ' +
         'Frozen force checks passed through 4,194,240 points.',
       limits: 'Medians from seven isolated GPU samples on one Apple M3. Complete interactive frames were outside the measurement.',
+      charts: [{
+        title: 'The linear center force took under 1 ms at one million points',
+        context: 'Median GPU time for the force alone. The separate 8,192-point strict trajectory check failed.',
+        unit: 'ms',
+        bars: [['Existing force', 179.619], ['Linear candidate', 0.624]],
+      }],
     },
     {
       id: 'center-trajectories',

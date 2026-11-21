@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { readResultChart, renderResultChart } from '../runtime/result-chart'
 import { presentDocumentTables } from '../runtime/result-tables'
 import { renderFlow } from './flow'
 import { highlightGlsl, highlightWgsl } from './syntax-highlight'
@@ -51,6 +52,10 @@ export async function renderMarkdown (
     }
     if (language === 'flow' || language === 'flow row') {
       return renderFlow(token.content, language === 'flow row', markdown.utils.escapeHtml)
+    }
+    if (language === 'result-chart') {
+      const chart = readResultChart(token.content)
+      if (chart) return renderResultChart(chart).outerHTML
     }
     if (language === 'wgsl') {
       return `<pre class="code-block code-block-wgsl" data-language="WGSL"><code>${highlightWgsl(token.content)}</code></pre>`

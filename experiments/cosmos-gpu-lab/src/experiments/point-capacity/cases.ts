@@ -16,5 +16,16 @@ export const cases: ExperimentCase[] = [{
     scope: 'Selected grow, shrink and regrow cycles with GPU rebuild and retained-capacity lanes.',
     limits: 'One device and bounded workloads. Faster steady-state frames, the full public API and total GPU memory were not established.',
     evidence: [{ label: 'Resize and capacity evidence', page: 'reuse' }, { label: 'Earlier rebuild comparison', page: 'findings' }],
+    charts: [{
+      title: 'Reusing buffers cut resize time to 0.6 ms',
+      context: 'Median resize completion · Chain shrinking from 8,192 to 2,048 points',
+      unit: 'ms',
+      bars: [['Rebuild buffers', 19.3], ['Keep buffers', 0.6]],
+    }, {
+      title: 'Keeping buffers used more memory after the shrink',
+      context: 'Tracked application buffers for the same chain after shrinking to 2,048 points',
+      unit: 'MiB',
+      bars: [['Rebuild buffers', 3.64], ['Keep buffers', 14.656]],
+    }],
   },
 }]

@@ -36,5 +36,11 @@ export const cases: ExperimentCase[] = [{
     scope: 'Frozen Karate Club geometry and two styles, with point-only, link-only, smoothing and distance-opacity controls.',
     limits: 'Two styles at one camera on one GPU. Results for other adapters, styles and moving layouts are still open.',
     evidence: [{ label: 'Link-color evidence', page: 'link-color-evidence' }],
+    charts: [{
+      title: 'The short-link rule cleared the interior color mismatches',
+      context: 'Mismatched interior pixels across two frozen Karate Club styles',
+      unit: 'pixels',
+      bars: [['Original candidate', 557], ['With opacity rule', 0]],
+    }],
   },
 }]

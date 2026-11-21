@@ -53,6 +53,14 @@ No tolerance, production GLSL or pre-existing CPU operation order was changed to
 
 ## Cooling length changes the quality conclusion
 
+```result-chart
+{
+  "title": "Longer cooling reduced spring mismatch",
+  "context": "Final directional spring mismatch RMS · 512-point communities · Recorded CPU and WebGPU runs",
+  "bars": [["100 ticks",0.652373],["5,000 ticks",0.347935]]
+}
+```
+
 At 512-point communities, extending the cooling schedule from 100 to 5,000 ticks changed CPU/WebGPU stress from **0.753876 → 0.546703** and directional spring mismatch from **0.652373 → 0.347935**. At 128 points, stress changed from **0.486684 → 0.359005**.
 
 The larger dense-community control improved from **0.946225 → 0.927881** stress and **3.737881 → 2.484041** spring mismatch at 100 versus 300 ticks. Its shared sample tape selected 64 slots before tick 1, retained them at tick 31, then changed to 8 before tick 61. Uniform 8,192-point cases selected 8 before tick 1. Sampling decisions are deliberately synchronized to the CPU trajectory, rather than driven by separate wall-clock controllers.

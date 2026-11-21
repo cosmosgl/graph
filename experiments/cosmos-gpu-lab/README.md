@@ -127,6 +127,10 @@ current performance. New JSON exports identify the GPU API implementation.
 
 ## Recording findings
 
+Use a `result-chart` fence for a recorded comparison that fits in two bars. Include a plain-language
+title, the metric and workload in `context`, and two `[label, value]` pairs. Keep the source table and its
+scope nearby. See the rectangle selection example in the [benchmark findings](src/experiments/viewer-comparison/benchmark-findings.md).
+
 Commit the knowledge: what was tested, why, the environment and implementation variant, a small results table,
 limitations, and the exact controls or commands needed to reproduce the comparison. Timings vary across machines;
 they are local observations, not expected values for every GPU.

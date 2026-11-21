@@ -17,6 +17,12 @@ export const precisionCases: ExperimentCase[] = [{
     scope: '1,024 cancellation values; the follow-up compared two arrangements four times each.',
     limits: 'One browser session per study. A tree is not always exact; performance and production readiness were not assessed.',
     evidence: [{ label: 'Addition-order evidence', page: 'addition-evidence' }],
+    charts: [{
+      title: 'Tree addition matched the exact sum',
+      context: 'Same 1,024 cancellation values on CPU and WebGPU · 12 November',
+      bars: [['One at a time', 1], ['Tree', 512]],
+      reference: { value: 512, label: '512 exact' },
+    }],
   },
 }, {
   id: 'gravity-accuracy',

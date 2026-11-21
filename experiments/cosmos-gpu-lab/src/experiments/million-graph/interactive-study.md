@@ -111,6 +111,16 @@ native Apple Metal 3, visible Chrome 157 and luma 10.0.0-alpha.15.
 
 ### Reduced drawing replay
 
+```result-chart
+{
+  "title": "Reduced drawing brought the slowest pick below the target",
+  "context": "Slowest of eight picks per mode · Million-point hub graph on Apple M3",
+  "unit": "ms",
+  "bars": [["Standard drawing",80.5],["Reduced drawing",43.4]],
+  "reference": {"value":50,"label":"50 ms target","upperLimit":true}
+}
+```
+
 The matched one-million-point replay compared Standard and Reduced drawing
 on the full 961 × 541 CSS canvas at DPR 2. Both used Four corners, the
 fixed camera at startup, and the same trusted pan, wheel and click sequence.

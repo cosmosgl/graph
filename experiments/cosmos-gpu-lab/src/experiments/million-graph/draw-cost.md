@@ -65,6 +65,15 @@ It shares the session with the moving-view sweep and ran sequentially.
 
 ### Reduced drawing and cached highlights
 
+```result-chart
+{
+  "title": "A cached highlight took under 1 ms to draw",
+  "context": "Median draw completion for a selection change · Frozen million-point graph · 1,922 × 1,082 backing pixels",
+  "unit": "ms",
+  "bars": [["Standard redraw",25.5],["Cached highlight",0.7]]
+}
+```
+
 On M3, **Reduced drawing** cut wide Fit draw time from **24.5 to 13.7 ms**
 and drew **289,904** instances across both passes of the million-point graph.
 The first pass draws the final eighth of the points into an integer texture.

@@ -11,6 +11,15 @@ arithmetic cost; its paired measurements are reported separately.
 
 ## Preserving precision with less memory
 
+```result-chart
+{
+  "title": "Streaming cut extra buffer memory by about 81%",
+  "context": "Extra storage for the precision correction · 16,384 points",
+  "unit": "MiB",
+  "bars": [["Full buffers",76.33],["Streamed buffers",14.58]]
+}
+```
+
 **Streaming one hierarchy level at a time cuts the correction's extra storage by about 80%, with comparable GPU
 time in the checked cases.** Both corrected variants passed every checked batch in two standalone Chrome sweeps on
 Apple M3. Complete-step medians ranged from about 3% faster to 7% slower for streaming, and sample ranges overlapped.

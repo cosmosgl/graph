@@ -15,6 +15,9 @@ export const cases: ExperimentCase[] = [{
     environment: 'Native Apple / Metal 3 adapter, Chrome 156.',
     scope: 'Paired dense, sparse and small fixed-radius inputs; 72 initial and 18 evolved checks.',
     limits: 'One device and selected target populations; this is local repulsion with its own integrator, not the full graph layout.',
-    evidence: [{ label: 'Local repulsion evidence', page: 'case-evidence' }],
+    evidence: [
+      { label: 'Local repulsion evidence', page: 'case-evidence' },
+      { label: 'Chunked traversal timing', page: 'precision-cost', section: 'measured-result' },
+    ],
   },
 }]

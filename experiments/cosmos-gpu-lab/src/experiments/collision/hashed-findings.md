@@ -57,6 +57,15 @@ with SHA-256 `51b39175cc72b60ca6c9fda076c17194c859b12262fca1159af8b0553efbfccb`.
 
 ## Normal tick at 8,192 points
 
+```result-chart
+{
+  "title": "Two collision passes increased GPU time per tick",
+  "context": "Median GPU time for simulation and drawing · 8,192 points · Apple M3",
+  "unit": "ms",
+  "bars": [["Collision off",7.63],["Collision on",9.71]]
+}
+```
+
 Two hashed collision passes added **2.03 ms per tick** on the M3. The paired
 GPU measurement includes compute and drawing. The median was 7.63 ms with the
 collision passes omitted and 9.71 ms with them enabled. Both lanes used spring
