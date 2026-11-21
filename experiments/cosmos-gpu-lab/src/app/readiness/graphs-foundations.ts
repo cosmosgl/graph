@@ -20,7 +20,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'combined-layout/additional-forces': {
     badge: 'Trajectory checks failed',
     tone: 'fail',
-    finding: 'The 40-tick screen passed; strict trajectory checks failed on one GPU.',
+    finding: 'At the tested zoom, the largest projected position difference was about 0.014 pixels over 40 ticks.',
     area: 'Research',
     status: 'Checks failed',
     evidence: [
@@ -111,7 +111,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'resident-layout/resident-comparison': {
     badge: 'Checkpoints matched',
     tone: 'pass',
-    finding: '40 checkpoints matched; the two paths share the same force code.',
+    finding: 'Calculating bounds on the GPU cut snapshot reads from 25 to 5 over 20 ticks.',
     area: 'Integration',
     status: 'Frame cost open',
     evidence: [
@@ -340,7 +340,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'point-capacity/resize-preservation': {
     badge: 'Resize checks passed',
     tone: 'pass',
-    finding: 'Resize checks passed; capacity reuse reduced update cost on one GPU.',
+    finding: 'Reusing GPU buffers cut the median resize time from 19.3 ms to 0.6 ms when the chain shrank from 8,192 to 2,048 points.',
     area: 'Integration',
     status: 'Production API open',
     evidence: [
