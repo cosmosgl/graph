@@ -202,19 +202,30 @@ short-check sizes. Its area-readback helper caps its GPU fence wait at one
 second. The missing results are consistent with that wait expiring under
 load. The captures did not instrument the fence outcome.
 
-A replay of the first million-point rectangle on M3 Chrome 157 confirmed the
-timeout. The request stayed valid and returned null after 1.02 seconds. A GPU
-fence placed before the selection signaled at 1.63 seconds, after the deadline.
-With a temporary longer deadline, another moving rectangle returned 195,285 IDs
-in 7.07 seconds. After pausing and draining the queue, the same rectangle
-returned 155,591 IDs in 23 ms with the original deadline, exactly matching the
-synchronous selection.
+### Box selection at one million points
 
-This is a WebGL capacity failure for the moving workload. The relative timing
-verdict at one million stays **Not assessed**. The Lab WebGPU run completed all
-eight area queries. Verify selection correctness and feedback under load through
-the production WebGPU Graph API. The replay used `352d1371` and the original
-production bundle and fixture. Raw capture `youtube-million-selection-m3.SYIeFg`.
+In the Lab, WebGPU selected the right points in all eight checks while the
+YouTube graph was moving. On the M3, the count typically appeared about
+**100 ms** after mouse release. All but one of the 24 timed drags showed the
+count within 132 ms. The slowest took 139 ms.
+
+Once the production `Graph` supports WebGPU, repeat the same drags. Check which
+points were inside the box at release, then compare how long the count takes to
+appear. The Lab results give that test a baseline.
+
+WebGL gave up after one second because the GPU was still busy with earlier
+frames. That work took 1.63 seconds to finish. After we paused the graph and let
+the GPU catch up, the same box returned the correct selection in 23 ms. A longer
+wait while the graph was moving returned a result in 7.07 seconds. The benchmark
+lists relative speed at one million points as **Not assessed**.
+
+The WebGL replay used `352d1371` and the original bundle and fixture. Capture
+`youtube-million-selection-m3.SYIeFg`. The 21 November Lab replay used M3 Chrome
+157, luma 10.0.0-alpha.15 and `4829df4d`. It checked the selected points against
+the positions and camera at release on the CPU. Capture
+`youtube-million-box-selection.0wMGmg`.
+
+### Results at 262,144 points
 
 At 262,144 points, both backends returned the planned point and background
 results in each pair and produced 1,000 moving label positions per request.
