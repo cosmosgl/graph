@@ -4,24 +4,32 @@ The Lab records bounded research for people to understand and for agents to
 reproduce. Follow the repository's root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
-Use the shared `reading-document` column for experiments, the migration page,
-and guides at every width. Stack prose and keep section links in the reading
-flow. Use the shared typography and controls across the Lab.
+## Page and demo design
 
-## Experiment page design
-
-- **Lead with the finding.** Show the title, the same badge as the catalogue
-  card, and one short finding when available. Put the controls and live renders
-  next. Keep diagnostics, run data, limits, and evidence visible below the demo.
+- **Use one reading column.** Use `reading-document`, shared typography, and
+  shared controls on experiments, the migration page, and guides at every width.
+  Lead with the title, catalogue badge, and a short finding when available. Put
+  the controls and live render next, then show run data, diagnostics, limits,
+  and evidence.
+- **Open demos paused.** Draw the starting layout with the demo's engine on
+  load, including from section links. Start simulations and measurements from
+  their own controls. Fit the camera once on Run or Fit, then keep it still as
+  the points move.
+- **Link directly to sections.** Use `#/experiment?section=<id>` and keep links
+  near the relevant content. Preserve the live view, settings, and results
+  when readers jump within a case. Honor query parameters on links that switch
+  modes.
+- **Chart results that benefit from a visual.** Give each mini chart one clear
+  takeaway, direct labels, units, and the recorded conditions. Use the recorded
+  values and a shared zero baseline for comparable bars. Show steps or phases
+  when order matters. Use distinct labels for missing results, timeouts, and
+  steps that were never reached.
 - **Keep headings and copy concise.** Let the badge stand on its own. Describe
   what the check found in plain words. Add a heading when it helps readers find
-  a distinct section, and use section links to jump to visible content.
+  a distinct section.
 - **Give each independent question its own experiment.** Use cases for
   variations on the same question. Make each experiment easy to find in the
   catalogue.
-- **Show the real starting layout.** Draw it with the engine the demo uses. For
-  a moving graph with a Run button, show the layout paused. Fit the camera once
-  on Run or Fit, then keep it still as the points move.
 - **Use compact choice buttons.** The shared `choice-controls` style sizes
   buttons around their labels and leaves room to tap. Label each group,
   highlight the selected option, and rerun quick comparisons on click.
