@@ -33,6 +33,15 @@ repeated cleanup. Those checks preceded the study and do not replace it.
 
 ## Force-only GPU cost
 
+```result-chart
+{
+  "title": "The corrected WebGPU attractor force took longer",
+  "context": "Median isolated force time · 8,192 points with individual targets · Apple M3",
+  "unit": "ms",
+  "bars": [["WebGL",0.0331],["WebGPU",0.3891]]
+}
+```
+
 Per-evaluation medians and full observed ranges below come from **seven batches
 of 16 frozen evaluations**, after two warmup batches. Backend order alternated.
 All 126 measured timestamp batches were valid; 36 warmup batches are retained.

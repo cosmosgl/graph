@@ -48,5 +48,11 @@ export const cases: ExperimentCase[] = [{
     scope: '8,192 points, four initial frames per batch, seven recorded samples per row.',
     limits: 'One GPU and a minimal renderer; results exclude presentation and do not establish full-frame responsiveness.',
     evidence: [{ label: 'Resident timing evidence', page: 'timing-updates' }],
+    charts: [{
+      title: 'The star took over twice as long as the chain',
+      context: 'Median GPU time per frame · Refined simulation and drawing · 8,192 points each',
+      unit: 'ms',
+      bars: [['Chain', 5.4], ['Star', 12.8]],
+    }],
   },
 }]

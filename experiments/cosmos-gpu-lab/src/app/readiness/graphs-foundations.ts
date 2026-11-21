@@ -307,8 +307,8 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     tone: 'neutral',
     finding: 'The sample uses 300,000 YouTube accounts and 300,000 friendship links.',
     area: 'Integration',
-    status: 'Live comparison',
-    evidence: [{ tone: 'info', text: 'Every account has at least one sampled link' }],
+    status: 'Solo motion measured',
+    evidence: [{ tone: 'info', text: 'Two recorded solo runs per backend used the same camera' }],
     next: 'Try WebGL and WebGPU solo on the same graph',
   },
   'repulsion-trajectories/trajectory-drift': {

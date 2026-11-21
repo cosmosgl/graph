@@ -15,6 +15,9 @@ export const cases: ExperimentCase[] = [{
     environment: 'Apple M3 inline browser and Linux Chromium 151 SwiftShader.',
     scope: '8,192 and 16,384 clustered points over three CPU-anchored ticks.',
     limits: 'The default inline variant remains unchanged; the recorded correction does not establish long independent trajectories.',
-    evidence: [{ label: 'Dense far-field evidence', page: 'case-evidence' }],
+    evidence: [
+      { label: 'Dense far-field evidence', page: 'case-evidence' },
+      { label: 'Precision and storage evidence', page: 'precision-cost', section: 'preserving-precision-with-less-memory' },
+    ],
   },
 }]

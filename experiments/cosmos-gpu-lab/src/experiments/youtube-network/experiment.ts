@@ -1,4 +1,7 @@
+import { experimentHref, roadmapHref } from '../../app/router'
 import { defineExperiment } from '../../runtime/experiment'
+import type { ResultChart } from '../../runtime/result-chart'
+import { youtubeMotionResult } from './motion-result'
 
 const subsetId = 'friendships-262k'
 const sparseId = 'friendships-300k'
@@ -8,6 +11,12 @@ const reference = 'Production WebGL with the same starting positions, links, sty
 const acceptance = 'Watch both layouts evolve, then pan or zoom to compare the same area.'
 const environment = 'Apple M3, visible Chrome 157, production WebGL and experimental WebGPU.'
 const evidence = [{ label: 'About the layout', page: 'layout' }]
+const subsetUpdateResult: ResultChart = {
+  title: 'A small point update finished sooner with WebGPU',
+  context: 'Time from a sparse position update to a completed frame · 262,144 points · Recorded on Apple M3',
+  unit: 'ms',
+  bars: [['WebGL', 795], ['WebGPU', 31.8]],
+}
 
 export const experiment = defineExperiment({
   id: 'youtube-network',
@@ -56,20 +65,36 @@ export const experiment = defineExperiment({
     description: '300,000 points and 300,000 friendship links sampled from the YouTube network. Every point has a link.',
     reference,
     acceptance,
-    evidence,
-    recorded: null,
+    recorded: {
+      conclusion: 'WebGPU completed more simulation frames per second in both recorded solo runs.',
+      date: '20 November 2026',
+      environment,
+      scope: 'Two solo runs per backend with the same camera, counting GPU-completed frames over ticks 13–72.',
+      limits: 'The result covers motion on this sampled graph. Full interaction and layout acceptance remain unassessed.',
+      evidence,
+    },
   }],
   create: async (host, caseId) => {
     const { createLargeComparisonView } = await import('../viewer-comparison/large-comparison-view')
     if (caseId === sparseId) {
-      return createLargeComparisonView(host, { kind: 'youtube', title, pointCount: 300000, youtubeTopology: 'sparse' })
+      return createLargeComparisonView(host, {
+        kind: 'youtube',
+        title,
+        pointCount: 300000,
+        youtubeTopology: 'sparse',
+        benchmark: { href: roadmapHref('current-focus'), chart: youtubeMotionResult },
+      })
     }
     const subset = caseId === subsetId
+    const section = subset ? 'youtube-capacity' : 'youtube-1-000-000-points-2-852-734-edges'
     return createLargeComparisonView(host, {
       kind: 'youtube',
       title,
       pointCount: subset ? 262144 : 1000000,
-      benchmarkSection: subset ? 'youtube-capacity' : 'youtube-1-000-000-points-2-852-734-edges',
+      benchmark: {
+        href: experimentHref('viewer-comparison', 'migration-results', section),
+        chart: subset ? subsetUpdateResult : undefined,
+      },
     })
   },
   pages: [{

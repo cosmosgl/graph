@@ -62,6 +62,12 @@ export const cases = [
       scope: 'Four image fixtures, nearest and linear filtering, and five frozen display profiles.',
       limits: 'The candidate and production controls answer different questions. Other atlas layouts, image decoding and devices require their own evidence.',
       evidence: [{ label: 'Point-image evidence', page: 'images-evidence' }],
+      charts: [{
+        title: 'The picking rule removed invisible picks in the overlap',
+        context: 'Pixels where picking returned an invisible foreground · Per backend · Nearest-filter fixture',
+        unit: 'pixels',
+        bars: [['Original rule', 4752], ['Source-byte rule', 0]],
+      }],
     },
   },
   {

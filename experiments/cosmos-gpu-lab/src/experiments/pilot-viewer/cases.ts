@@ -34,5 +34,12 @@ export const cases: ExperimentCase[] = [{
     scope: 'The original wider window and three later bounded controls, including DPR 1 and DPR 2.',
     limits: 'The original delay and an earlier 68.2 ms failure remain unexplained. The controls do not establish the cause or larger-graph responsiveness.',
     evidence: [{ label: 'Selection feedback evidence', page: 'latency-evidence' }],
+    charts: [{
+      title: 'The original run missed the 50 ms target',
+      context: 'Slowest click while the graph was moving · Wide canvas at DPR 2',
+      unit: 'ms',
+      bars: [['Original inline run', 100.4], ['Standalone replay', 20.0]],
+      reference: { value: 50, label: '50 ms target', upperLimit: true },
+    }],
   },
 }]

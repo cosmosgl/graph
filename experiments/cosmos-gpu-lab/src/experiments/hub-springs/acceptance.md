@@ -114,6 +114,15 @@ before choosing a production policy.
 
 ### Does the gain survive changed geometry and cooling?
 
+```result-chart
+{
+  "title": "Prefetch shortened the full-strength hub probe",
+  "context": "GPU work for one frame · Same unpinned 8,191-link hub after 100 ticks · Apple M3",
+  "unit": "ms",
+  "bars": [["Baseline",13.214],["Prefetch",11.338]]
+}
+```
+
 Threshold 1,024, degree 8,191. Geometry comes from a passing resident trajectory; the seed tick remains the
 trajectory's final tick. Both variants restore exactly that same state for every measured frame.
 

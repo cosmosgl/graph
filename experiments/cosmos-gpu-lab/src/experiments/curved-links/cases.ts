@@ -15,6 +15,9 @@ export const cases: ExperimentCase[] = [{
     environment: 'Apple M3, Chromium 157, luma.gl 10.0.0-alpha.15.',
     scope: 'Frozen curved-link pattern fixtures and the recorded color and picking gates.',
     limits: 'One device and selected curves; preserving color alone does not establish matching picking.',
-    evidence: [{ label: 'Curved-link evidence', page: 'case-evidence' }],
+    evidence: [
+      { label: 'Curved-link evidence', page: 'case-evidence' },
+      { label: 'Folded-ribbon picking', page: 'method', section: 'folded-ribbon-picking-investigation' },
+    ],
   },
 }]

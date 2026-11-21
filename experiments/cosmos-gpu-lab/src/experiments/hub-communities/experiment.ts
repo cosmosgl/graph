@@ -1,3 +1,4 @@
+import { experimentHref } from '../../app/router'
 import { defineExperiment } from '../../runtime/experiment'
 
 export const experiment = defineExperiment({
@@ -26,8 +27,15 @@ export const experiment = defineExperiment({
   create: async host => (await import('../viewer-comparison/large-comparison-view')).createLargeComparisonView(host, {
     kind: 'hubs',
     title: 'Hub Communities',
-    benchmarkSection: 'hub-communities-1-000-000-points-999-990-edges',
-    frameIntervals: { webglMs: 151.7, webgpuMs: 68.5 },
+    benchmark: {
+      href: experimentHref('viewer-comparison', 'migration-results', 'hub-communities-1-000-000-points-999-990-edges'),
+      chart: {
+        title: 'Slow frames took less than half as long with WebGPU',
+        context: '95th-percentile frame interval · Separate steady-motion confirmation on Apple M3 · One million points',
+        unit: 'ms',
+        bars: [['WebGL', 151.7], ['WebGPU', 68.5]],
+      },
+    },
   }),
   pages: [{
     kind: 'markdown',

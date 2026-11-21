@@ -307,6 +307,15 @@ The original **40 straight-link rows reproduced identically at 30/40** when the 
 
 ## Folded-ribbon picking investigation
 
+```result-chart
+{
+  "title": "Matching the drawn faces cleared invisible picks",
+  "context": "Invisible source pixels per backend · Reversed folded ribbon at 0.5× zoom and 0.35 opacity",
+  "unit": "pixels",
+  "bars": [["Two-sided picking",69],["Match drawn faces",0]]
+}
+```
+
 A short 30-unit chord with width 48 can fold the tessellated ribbon back over itself. The production color pipeline culls back-facing triangles; the host ID pipeline accepts both orientations. Its visible-width candidate inherited that difference. Some triangles therefore wrote IDs where their own source contributed no color. Source-byte eligibility cannot fix a triangle that the color pass never draws.
 
 The separate **color-face candidate** changes only the ID pipeline's `cullMode` to `back`, matching color. It retains the same visible-width geometry, source-byte eligibility, draw order, coverage cutoff and original color pass. The original padded control and previous two-sided candidate are still selectable. [luma's pipeline parameters](https://luma.gl/docs/api-reference/core/parameters#assembly-culling) expose this state through the public API; see also [WebGPU primitive state](https://www.w3.org/TR/webgpu/#primitive-state).

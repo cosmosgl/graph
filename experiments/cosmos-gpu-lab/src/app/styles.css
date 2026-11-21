@@ -462,6 +462,47 @@ input:disabled {
   line-height: 1.55;
 }
 
+.result-chart {
+  width: min(100%, 38rem);
+  margin: 18px 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--control-border);
+  line-height: 1.4;
+}
+.result-chart-title, .result-chart-context { display: block; }
+.result-chart-title { font-size: var(--type-subsection); font-weight: 600; text-wrap: balance; }
+.result-chart-context { margin-top: 3px; color: var(--text-secondary); font-size: var(--type-meta); }
+.result-chart-rows {
+  display: grid;
+  grid-template-columns: min(32%, 9rem) minmax(0, 1fr) max-content;
+  column-gap: 10px;
+  margin-top: 8px;
+}
+.result-chart-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
+.result-chart-label, .result-chart-value { align-self: center; padding-block: 4px; }
+.result-chart-value { text-align: end; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.result-chart-track { position: relative; display: flex; align-items: center; }
+.result-chart-bar { height: 5px; background: var(--accent); }
+.result-chart-first .result-chart-bar { background: color-mix(in srgb, var(--text-secondary) 65%, transparent); }
+.result-chart-axis { grid-column: 2; position: relative; height: 17px; }
+.result-chart-reference {
+  position: absolute;
+  left: var(--reference-position);
+  transform: translateX(-50%);
+  color: var(--highlight);
+  font-size: var(--type-meta);
+  white-space: nowrap;
+}
+.result-chart-with-reference .result-chart-track::after {
+  content: '';
+  position: absolute;
+  left: var(--reference-position);
+  inset-block: 0;
+  border-left: 1px dashed var(--highlight);
+}
+.result-chart .result-chart-over-limit .result-chart-bar { background: var(--danger-text); }
+.result-chart-value.result-chart-over-limit { color: var(--danger-text); }
+
 .scale-toolbar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
@@ -2206,6 +2247,7 @@ button[data-action="play"][aria-pressed="true"] {
 .case-observations > li:last-child { border-bottom: 0; }
 .case-observations h3 { margin: 0; font-size: var(--type-body); }
 .case-observations p { margin: 0; }
+.case-observations > li > .result-chart { grid-column: 1 / -1; margin: 6px 0; }
 .case-observations .case-meta { margin-top: 3px; }
 .case-observation-limits { color: var(--text-secondary); }
 .case-observation-limits p + p { margin-top: 7px; }

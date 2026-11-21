@@ -23,6 +23,15 @@ reproduction steps to collect your own results with the lab’s JSON export. Raw
 
 ## Measured result
 
+```result-chart
+{
+  "title": "Chunking reduced force time on the dense fixture",
+  "context": "Median GPU force time · 65,536 points on a 16 × 16 grid · Apple M3",
+  "unit": "ms",
+  "bars": [["Corrected baseline",306.184],["Chunked traversal",231.866]]
+}
+```
+
 These are GPU milliseconds per operation, measured on one native Apple / Metal 3 adapter with
 Chrome 156 and timestamp queries. Positive savings mean the candidate is faster; negative values
 mean it is slower. The comparison completed without invalid timestamp samples.

@@ -1,4 +1,6 @@
 import source from '../docs/roadmap.md?raw'
+import { youtubeMotionResult } from '../experiments/youtube-network/motion-result'
+import { renderResultChart } from '../runtime/result-chart'
 import { coverage, renderCoverage } from './coverage'
 import { renderMarkdown } from './markdown'
 import { migrationFocus, research } from './research'
@@ -28,7 +30,11 @@ export async function renderMigrationPage (host: HTMLElement): Promise<void> {
   await renderMarkdown(host, source, {}, {
     sectionNavigation: 'permalinks',
     linkTerms: false,
-    examples: { migrationFocus: renderCurrentFocus, featureCoverage: renderCoverage },
+    examples: {
+      migrationFocus: renderCurrentFocus,
+      youtubeMotion: slot => { slot.replaceWith(renderResultChart(youtubeMotionResult)) },
+      featureCoverage: renderCoverage,
+    },
   })
   addMigrationContents(host.querySelector('article')!)
 }

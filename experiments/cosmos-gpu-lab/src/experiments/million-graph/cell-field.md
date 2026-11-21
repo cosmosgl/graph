@@ -10,6 +10,15 @@ so the two sides of a shared edge can still receive different pushes.
 
 ## M3 result
 
+```result-chart
+{
+  "title": "Four corners shortened the median tick on the two-cluster graph",
+  "context": "One million points · Median full tick including the field build, simulation and drawing",
+  "unit": "ms",
+  "bars": [["Per-point pushes",46.3],["Four corners",36.9]]
+}
+```
+
 **Four corners is the better candidate.** Including the cost of building the
 field and drawing the graph, it saved about 9 ms per tick on both inputs. At
 tick 200, 95% of 4,096 tracked points were within 0.78 pixels of the current

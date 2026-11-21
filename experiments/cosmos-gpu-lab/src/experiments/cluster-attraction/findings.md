@@ -36,6 +36,15 @@ the comparison at different data sizes.
 
 ## Force cost
 
+```result-chart
+{
+  "title": "WebGPU was faster with uneven cluster groups",
+  "context": "Median isolated force time · Uneven groups at 8,192 points · Apple M3",
+  "unit": "ms",
+  "bars": [["WebGL",1.711],["WebGPU",0.397]]
+}
+```
+
 Milliseconds per force evaluation: **median (minimum–maximum)** of seven valid
 GPU timestamp batches, each divided by 16 evaluations. Two warmups per input
 and backend were excluded. Backend order alternated. No builds or tests ran

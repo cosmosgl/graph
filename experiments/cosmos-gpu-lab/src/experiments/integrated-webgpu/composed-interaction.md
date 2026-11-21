@@ -290,6 +290,15 @@ LAB_NATIVE_VISIBLE=1 LAB_DEFAULT_GPU_FLAGS=1 VITE_LAB_RESIDENT_FULL_FORCES=1 \
 
 ### Native resident results
 
+```result-chart
+{
+  "title": "Slow frames took about 267 ms with all eight forces",
+  "context": "95th-percentile frame interval · Million-point dense graph · WebGPU on Apple M3",
+  "unit": "ms",
+  "bars": [["Three forces",51.4],["Eight forces",267.3]]
+}
+```
+
 The first full run exposed a cluster reduction limit. A single group with
 131,328 present members contributed only 65,536. The final reduction
 previously read only one partial per workgroup lane. Each lane now sums

@@ -1,4 +1,5 @@
 import type { ExperimentCase, ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
+import { renderResultChart } from '../runtime/result-chart'
 import { disposeDocumentTables, presentDocumentTables } from '../runtime/result-tables'
 import { addArticleSections } from './article-sections'
 import { experimentMiniCard } from './experiment-mini-card'
@@ -74,7 +75,8 @@ function recordedFindings (experiment: ExperimentDefinition): HTMLElement {
     section.append(paragraph(startingCase(experiment).recorded!.conclusion))
     for (const observation of experiment.singlePage.observations) {
       const { row } = findingRow(observation.title, observation.date, observation.id)
-      row.append(paragraph(observation.evidence), paragraph(observation.limits, 'case-observation-limits'))
+      row.append(paragraph(observation.evidence), paragraph(observation.limits, 'case-observation-limits'),
+        ...(observation.charts?.map(renderResultChart) ?? []))
       list.append(row)
     }
   } else {
@@ -88,7 +90,7 @@ function recordedFindings (experiment: ExperimentDefinition): HTMLElement {
         name.append(paragraph(item.recorded.environment, 'case-meta'))
         limits.append(paragraph(item.recorded.scope), paragraph(item.recorded.limits))
       } else limits.append(paragraph(item.acceptance))
-      row.append(result, limits); list.append(row)
+      row.append(result, limits, ...(item.recorded?.charts?.map(renderResultChart) ?? [])); list.append(row)
     }
   }
   section.append(list)
