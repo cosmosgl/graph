@@ -17,16 +17,10 @@ import { cameraFromView } from './resident-navigation'
 const count = 1000000
 const viewport = { width: 961, height: 541, pixelRatio: 2 }
 const size = 5
-const compareSchedules = import.meta.env.VITE_LAB_RESIDENT_LABEL_SCHEDULING === '1'
-const schedules = ['cache-poll', 'after-draw', 'before-draw'] as const
 const kinds = ['dense', 'hubs'] as const
 
-const cases = kinds.flatMap(kind => {
-  const order = kind === 'dense' ? schedules : [...schedules].reverse()
-  return (compareSchedules ? order : [schedules[0]]).map(schedule => ({ kind, schedule }))
-})
-for (const { kind, schedule } of cases) {
-  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_READBACK !== '1')(`measures moving million-point ${kind} readback with ${schedule}`, async () => {
+for (const kind of kinds) {
+  it.skipIf(import.meta.env.VITE_LAB_RESIDENT_READBACK !== '1')(`measures moving million-point ${kind} readback`, async () => {
     const scope = resourceScope()
     const host = document.createElement('div')
     host.dataset.residentStudy = 'true'
@@ -45,7 +39,7 @@ for (const { kind, schedule } of cases) {
     const record: Record<string, unknown> = {
       rows,
       kind,
-      schedule,
+      schedule: 'cache-poll',
       count,
       source: import.meta.env.LAB_SOURCE_REVISION,
       snapshot: import.meta.env.LAB_SOURCE_SNAPSHOT,
@@ -103,22 +97,12 @@ for (const { kind, schedule } of cases) {
         await nextFrame()
         expect(document.visibilityState).toBe('visible')
         const tickStarted = performance.now()
-        graph.frame(tick++, alpha, schedule !== 'before-draw')
+        graph.frame(tick++, alpha)
         alpha = cool(alpha, 200)
         const started = performance.now()
-        let notification: Promise<{ snapshot: TrackedSnapshot | null; coordinatesMs: number }> | undefined
-        const requestLabels = (): NonNullable<typeof notification> => readback.api.readTrackedPositions().then(snapshot => ({
-          snapshot, coordinatesMs: performance.now() - started,
-        }))
-        if (schedule === 'before-draw') {
-          notification = requestLabels()
-          graph.redraw()
-        }
-        const drawComplete = compareSchedules ? waitForGpu(graph.device).then(() => performance.now() - started) : Promise.resolve(null)
         const query = queries[i % queries.length]
         const areaRequest = readback.api.selectArea(query)
-        if (schedule === 'after-draw') notification = requestLabels()
-        if (schedule === 'cache-poll') readback.moved()
+        readback.moved()
         memory()
         const pollLabels = async (): Promise<{ snapshot: TrackedSnapshot | null; coordinatesMs: number }> => {
           const deadline = started + 2000
@@ -130,9 +114,9 @@ for (const { kind, schedule } of cases) {
           return { snapshot, coordinatesMs: performance.now() - started }
         }
         const drawLabels = async (): Promise<{
-          coordinatesMs: number; drawMs: number | null; labelCpuMs: number; labelMs: number; labelFromTickMs: number;
+          coordinatesMs: number; labelCpuMs: number; labelMs: number; labelFromTickMs: number;
         }> => {
-          const [{ snapshot, coordinatesMs }, drawMs] = await Promise.all([notification ?? pollLabels(), drawComplete])
+          const { snapshot, coordinatesMs } = await pollLabels()
           expect(snapshot?.tick).toBe(tick)
           expect(snapshot?.map.size).toBe(tracked.length - 1)
           lastLabel = snapshot
@@ -141,7 +125,7 @@ for (const { kind, schedule } of cases) {
           const labelCpuMs = performance.now() - labelStarted
           await nextFrame()
           const presented = performance.now()
-          return { coordinatesMs, drawMs, labelCpuMs, labelMs: presented - started, labelFromTickMs: presented - tickStarted }
+          return { coordinatesMs, labelCpuMs, labelMs: presented - started, labelFromTickMs: presented - tickStarted }
         }
         const [result, label] = await Promise.all([areaRequest.then(area => {
           expect(area?.tick).toBe(tick)
@@ -218,8 +202,7 @@ for (const { kind, schedule } of cases) {
       throw error
     } finally {
       scope.destroy(); host.remove()
-      const lane = compareSchedules ? `-${schedule}` : ''
-      await writeArtifact(`resident-readback-${kind}${lane}`, record)
+      await writeArtifact(`resident-readback-${kind}`, record)
     }
   }, 120000)
 }

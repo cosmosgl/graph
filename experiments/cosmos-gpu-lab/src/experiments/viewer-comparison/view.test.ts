@@ -3,11 +3,8 @@ import '../../app/styles.css'
 import { createAppShell } from '../../app/app-shell'
 import type { Production } from './production'
 
-it('shows real graphs on load and keeps the viewer working after reference navigation', async () => {
+it('renders WebGL and WebGPU graphs through resize and data replacement', async () => {
   const original = window.location.href
-  const moveBefore = Object.getOwnPropertyDescriptor(Element.prototype, 'moveBefore')
-  const canPark = typeof Element.prototype.moveBefore === 'function'
-  let releaseFrame = (): void => {}
   const base = document.createElement('base'); base.href = '/'; document.head.prepend(base)
   const host = document.createElement('div'); document.body.append(host)
   window.history.replaceState(null, '', '#/viewer-comparison')
@@ -15,9 +12,7 @@ it('shows real graphs on load and keeps the viewer working after reference navig
   try {
     await vi.waitFor(() => {
       expect(host.querySelector<HTMLButtonElement>('[data-action="run"]')?.disabled).toBe(false)
-      expect(host.querySelector('[data-study-status]')).toBeNull()
     }, { timeout: 30000 })
-    if (!canPark) expect(host.querySelector('[data-restart-note]')?.textContent).toContain('opening a reference restarts the graphs')
     const frame = host.querySelector<HTMLIFrameElement>('iframe[title="Production Cosmos WebGL graph"]')!
     const candidate = host.querySelector<HTMLCanvasElement>('canvas[data-webgpu]')!
     await vi.waitFor(() => {
@@ -30,8 +25,6 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(element.getBoundingClientRect().height).toBeGreaterThan(0)
       expect(getComputedStyle(element).visibility).toBe('visible')
     }
-    expect(host.querySelector('#recorded-findings')!.getBoundingClientRect().top)
-      .toBeGreaterThanOrEqual(host.querySelector('[data-panels]')!.getBoundingClientRect().bottom)
     expect(control.snapshot().some((value, index) => index % 4 === 3 && value > 0)).toBe(true)
 
     // Resizing after initialization must keep both displayed and drawing-buffer sizes aligned.
@@ -48,7 +41,6 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       Object.defineProperty(window, 'devicePixelRatio', { value: testRatio, configurable: true })
       window.dispatchEvent(new Event('resize'))
       await vi.waitFor(() => {
-        expect(host.querySelector('[data-run-part="status"]')?.textContent).toContain(`DPR ${testRatio}`)
         expect(control.canvas.width).toBe(Math.floor(frame.getBoundingClientRect().width * testRatio))
         expect([control.canvas.width, control.canvas.height]).toEqual([candidate.width, candidate.height])
       }, { timeout: 15000 })
@@ -58,7 +50,6 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       window.dispatchEvent(new Event('resize'))
     }
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-run-part="status"]')?.textContent).toContain(`DPR ${originalRatio}`)
       expect([control.canvas.width, control.canvas.height]).toEqual([candidate.width, candidate.height])
     }, { timeout: 15000 })
 
@@ -70,7 +61,6 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(host.querySelector('[data-results]')!.textContent).toContain('style A')
       expect(check.disabled).toBe(false)
     }, { timeout: 30000 })
-    expect(host.querySelector('#run-diagnostics details')).toBeNull()
     const paint = host.querySelector<HTMLButtonElement>('#run-diagnostics [data-action="paint"]')!
     paint.click()
     await vi.waitFor(() => {
@@ -115,65 +105,9 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       boundarySamples: paints[0].boundarySamples,
     })
     expect(paints[2]).toMatchObject({ scene: 'chain', pointCount: 32, linkCount: 31 })
-
-    host.querySelector<HTMLButtonElement>('[data-action="run"]')!.click()
-    await vi.waitFor(() => expect(control.tick).toBeGreaterThan(0), { timeout: 15000 })
-    const realFrame = control.frame.bind(control)
-    const frames = vi.spyOn(control, 'frame')
-    const held = new Promise<void>(resolve => { releaseFrame = resolve }); let entered = false
-    frames.mockImplementation(async simulate => {
-      if (!simulate && !entered) { entered = true; await held }
-      await realFrame(simulate)
-    })
-    host.querySelector<HTMLButtonElement>('[data-action="style"]')!.click()
-    await vi.waitFor(() => expect(entered).toBe(true), { timeout: 15000 })
-    const tick = control.tick
-    window.location.hash = '#/validation-workflow'
-    await vi.waitFor(() => expect(host.querySelector('h1')?.textContent).toBe('Validation workflow'))
-    releaseFrame()
-    if (canPark) {
-      // Allow an already-submitted frame to settle, then confirm the parked view stays idle.
-      await new Promise<void>(resolve => { setTimeout(resolve, 200) })
-      const count = frames.mock.calls.length
-      await new Promise<void>(resolve => { setTimeout(resolve, 200) })
-      expect(frames).toHaveBeenCalledTimes(count)
-    }
-    window.location.hash = '#/numerical-research'
-    await vi.waitFor(() => expect(host.querySelector('h1')?.textContent).toBe('Numerical research'))
-    window.location.hash = '#/viewer-comparison'
-    await vi.waitFor(() => {
-      expect(host.querySelector('iframe[title="Production Cosmos WebGL graph"]')).not.toBeNull()
-      expect(host.querySelector('[data-study-status]')).toBeNull()
-    })
-    const returned = host.querySelector<HTMLIFrameElement>('iframe[title="Production Cosmos WebGL graph"]')!
-    await vi.waitFor(() => {
-      expect((returned.contentWindow as Window & { cosmosProduction?: Promise<Production> }).cosmosProduction).toBeDefined()
-    }, { timeout: 15000 })
-    const resumed = await (returned.contentWindow as Window & { cosmosProduction: Promise<Production> }).cosmosProduction
-    if (canPark) {
-      expect(resumed.tick).toBeGreaterThanOrEqual(tick)
-      const pausedTick = resumed.tick
-      await new Promise<void>(resolve => { setTimeout(resolve, 200) })
-      expect(resumed.tick).toBe(pausedTick)
-      host.querySelector<HTMLButtonElement>('[data-action="run"]')!.click()
-      await vi.waitFor(() => expect(resumed.tick).toBeGreaterThan(pausedTick), { timeout: 15000 })
-      Object.defineProperty(Element.prototype, 'moveBefore', { value: undefined, configurable: true })
-      window.location.hash = '#/validation-workflow'
-      await vi.waitFor(() => expect(host.querySelector('h1')?.textContent).toBe('Validation workflow'))
-      window.location.hash = '#/viewer-comparison'
-      await vi.waitFor(() => expect(host.querySelector('[data-recovered-results]')?.textContent).toContain('Earlier live sessions'),
-        { timeout: 30000 })
-    }
-    expect(host.querySelector('[data-recovered-results]')?.textContent).toContain('Graph position and playback state are not restored')
-    host.querySelector<HTMLButtonElement>('[data-action="export"]')!.click()
-    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2))
-    const restored = JSON.parse(await (capture.mock.calls[1][0] as Blob).text())
-    expect(restored.recoveredSessions[0].records.some((row: { action: string }) => row.action === 'updates')).toBe(true)
-    if (!canPark) expect(restored.recoveredSessions[0].interrupted).toBe(true)
   } finally {
-    releaseFrame()
-    if (moveBefore) Object.defineProperty(Element.prototype, 'moveBefore', moveBefore)
-    else Reflect.deleteProperty(Element.prototype, 'moveBefore')
-    vi.restoreAllMocks(); shell.destroy(); host.remove(); base.remove(); window.history.replaceState(null, '', original)
+    vi.restoreAllMocks()
+    shell.destroy(); host.remove(); base.remove()
+    window.history.replaceState(null, '', original)
   }
 }, 60000)

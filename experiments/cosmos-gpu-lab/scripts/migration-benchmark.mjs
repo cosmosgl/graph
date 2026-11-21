@@ -31,8 +31,12 @@ const capture = join(lab, 'captures', `migration-${fixture}-${points}-${stamp}${
 await mkdir(capture, { recursive: true })
 const git = args => execFileSync('git', args, { cwd: repo })
 const archive = join(capture, 'source.tar.gz')
+// Compare the NUL-delimited paths without losing bytes in filenames.
+const deleted = new Set(git(['ls-files', '-z', '--deleted']).toString('latin1').split('\0'))
+const files = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--deduplicate'])
+  .toString('latin1').split('\0').filter(path => !deleted.has(path))
 execFileSync('tar', ['-czf', archive, '--null', '-T', '-'], {
-  cwd: repo, input: git(['ls-files', '-z', '--cached', '--others', '--exclude-standard']),
+  cwd: repo, input: Buffer.from(`${files.join('\0')}\0`, 'latin1'),
 })
 const sha = async path => createHash('sha256').update(await readFile(path)).digest('hex')
 const version = async root => JSON.parse(await readFile(join(root, 'node_modules/@luma.gl/core/package.json'), 'utf8')).version

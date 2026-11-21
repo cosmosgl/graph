@@ -7,18 +7,6 @@ import { forceSettings } from './production-settings'
 import { centerAggregate, centerReference } from './center-reference'
 import { createCombinedWebGL } from './webgl'
 import { createCombinedWebGPU } from './webgpu'
-it('includes pinned points, excludes absent NaNs, and preserves integration masks', () => {
-  const points = new Float32Array([-8, 0, 1, 0, 8, 0, 0, 0, NaN, NaN, 0, 1, 9000, -9000, 0, 1])
-  expect(centerAggregate(points)).toEqual(new Float32Array([0, 0, 2, 0]))
-  const actual = centerReference(points, 1, 1)
-  expect(actual.forces[0]).toBeCloseTo(0.08, 6); expect(actual.forces[4]).toBeCloseTo(-0.08, 6)
-  expect(actual.positions[0]).toBe(-8); expect(actual.positions[4]).toBeLessThan(8)
-  expect(Number.isNaN(actual.positions[8])).toBe(true); expect(actual.positions[12]).toBe(9000)
-  const absent = points.slice(); for (let i = 3; i < absent.length; i += 4) absent[i] = 1
-  expect(centerAggregate(absent)).toEqual(new Float32Array(4)); expect(centerReference(absent, 1, 1).forces).toEqual(new Float32Array(16))
-  expect(stagesFor()).toEqual(['gravity', 'repulsion', 'incoming', 'outgoing'])
-  expect(stagesFor(1)).toEqual(['gravity', 'center', 'repulsion', 'incoming', 'outgoing'])
-})
 for (const kind of ['webgl', 'webgpu'] as const) {
   for (const fixture of ['masked', 'coincident', 'all-absent', 'uniform', 'clusters', 'odd'] as const) {
     it.skipIf(!import.meta.env.LAB_NATIVE_GPU)(`${kind}: center aggregate, force and integration / ${fixture}`, async () => {

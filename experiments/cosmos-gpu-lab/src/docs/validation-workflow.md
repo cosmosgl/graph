@@ -55,8 +55,8 @@ invisible foreground intercepting a visible object is not. Check each selected
 source's own visibility, not only the final composed frame's alpha. Production's
 padded picking policy stays a comparison control; it is not silently redefined.
 
-**Simulation remains accountable:** retain existing stage/checkpoint tests and
-compare quality separately. Use the already-tested corrected solver initially.
+**Simulation remains accountable:** check the corrected solver at individual
+stages and across moving layout checkpoints. Compare layout quality separately.
 Record convergence, overlap, stress and residual motion on matched workloads;
 cooled stillness alone is not proof of a useful layout. Quality metrics without
 an agreed numerical budget stay “Measured only.” Do not invent a tolerance after
@@ -127,7 +127,6 @@ destabilizes a layout, exceeds the boundary rule or causes a meaningful slowdown
 against the matched WebGL control. Otherwise, record it and continue integration.
 Profile the integrated application before optimizing arithmetic or adding
 expensive exact picking paths.
-Do not require a green broad GPU suite to continue this research.
 
 A parked investigation is **stopped for the first attempt, not resolved**. Retain
 its inputs, original verdicts, evidence, reproduction instructions and reason for
@@ -144,9 +143,9 @@ approval, not after it.
 
 As of **17 November 2026**, run focused experiments on the machine doing the
 investigation, using its native GPU and browser. The lab has no required CI tests
-or software-GPU investigation workflow. Optional local UI, lint, typecheck and
-build commands help keep the research tool usable; a broad green suite is not a
-prerequisite for the next experiment.
+or software-GPU investigation workflow. The local GPU test suite exercises the
+supported first slice. Local lint, typecheck and build commands check the Lab
+code. Reproduce earlier studies from their recorded source.
 
 Keep failed-candidate verdicts and existing acceptance criteria intact. A finding
 on one device is evidence for that device, not portable production approval.

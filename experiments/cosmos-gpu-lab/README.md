@@ -286,49 +286,37 @@ without timers or global listeners, so removing the page releases them. Add expl
 before introducing animations, observers or GPU resources. Chapter links support direct opening
 (`#/learn/8`); in-page chapter jumps preserve example state.
 
-Run the documentation interaction checks with:
+## WebGPU migration checks
+
+The suite exercises the [first migration slice](src/docs/validation-workflow.md).
+It checks the candidate's solver and topology, circle and solid-link rendering,
+picking and navigation, data replacement, and GPU resource lifetimes. Run it on
+the local machine and record the actual Chrome version and adapter.
+
+Build the production WebGL control and run the suite from the repository root.
 
 ```sh
-pnpm --filter @cosmos.gl/gpu-lab test:ui src/app/learning-examples.test.ts src/app/flow.test.ts
+pnpm run build
+pnpm --filter @cosmos.gl/gpu-lab test:gpu
+node --test experiments/cosmos-gpu-lab/scripts/migration-results.test.mjs
 ```
 
-## Local investigation checks
+Pass a test path to focus the run, for example
+`src/experiments/integrated-webgpu/runtime.test.ts` for the small integrated graph
+and its picking and rendering checks. Moving-style and large-graph checks use
+the opt-in flags and visible-browser settings in their recipes.
 
-The lab is a research application, not a production package. Test the experiment
-being investigated on the current machine and record its browser and actual GPU.
-There are no automatic lab checks or manual software-GPU jobs in GitHub Actions.
-Root lint, typecheck and build commands cover production code and integrations;
-lab checks are separate local commands. Shared dependency installation and
-repository security checks still apply.
-
-Start with a focused file, for example:
-
-```sh
-pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/overlay-pixels.test.ts
-```
-
-This uses installed Google Chrome without forcing a software adapter. Native
-arithmetic and trajectory checks are enabled by default. `LAB_NATIVE_GPU=1` in
-older reproduction commands is now redundant; setting it to `0` does not select
-software rendering. Large-layout and cost sweeps still require their explicit
-flags (`LAB_SCALE_COUNT`, `LAB_STORED_ALPHA_SWEEP`, `LAB_RIBBON_COST` or
-`LAB_FAR_ARITHMETIC_COST`). Run them only when they answer the current question.
-
-Omitting the file filter runs the broad lab suite, including the real viewer smoke
-test. First run `pnpm run build` from the repository root so its production control
-matches the current source. The broad suite also includes retained rejected
-candidates. It is not a required green gate before committing or moving to the
-next investigation. Assertions and acceptance criteria stay truthful: a failed
-candidate remains failed, and passing on this machine does not establish support
-on other devices. Historical Linux/SwiftShader findings remain historical evidence;
-reproducing or fixing them is not part of the current local research policy.
+Use [the matched benchmark](src/experiments/viewer-comparison/benchmark-method.md)
+to assess responsiveness against production WebGL. It compares the same graph
+workflows and applies the declared workload margins. The Node tests above check
+when the benchmark has enough evidence to issue a timing verdict.
 
 ### Connect an existing browser
 
 To run in the browser already open on your machine:
 
 ```sh
-LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/overlay-pixels.test.ts
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/integrated-webgpu/runtime.test.ts
 ```
 
 Keep the command running and open the printed test-session URL within three
@@ -341,21 +329,17 @@ Record the actual adapter: the browser controls which GPU it uses.
 Use the relevant local checks when changing the shell, documentation or tooling:
 
 ```sh
-pnpm --filter @cosmos.gl/gpu-lab test:ui
 pnpm --filter @cosmos.gl/gpu-lab lint
 pnpm --filter @cosmos.gl/gpu-lab typecheck
 pnpm --filter @cosmos.gl/gpu-lab build
-node --test experiments/cosmos-gpu-lab/scripts/artifacts.test.mjs
 ```
 
-The UI subset guards against GPU API calls so navigation and reporting can be
-checked independently. Experiment UI tests that create devices remain in the
-GPU suite. `LAB_INLINE_BROWSER=1` also connects the UI subset to an existing
-browser. These checks are available locally, not required lab CI jobs.
+### Historical replays
 
-The real viewer comparison smoke test also needs the production control built
-from the repository root: run `pnpm run build` first, then run
-`pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/view.test.ts`.
+To repeat a recorded study, use its source revision or archived source snapshot
+with the dependencies and commands documented for that run. The broader set of
+Lab UI, tooling and experimental tests is available at commit `08e5ff5d`.
+Use the study's own snapshot for exact reproduction when one is available.
 
 Benchmark JSON is written under ignored `captures/<run>/`, with `local` as the
 default. Measurements are observations, never golden snapshots, and require no
@@ -415,9 +399,9 @@ The production-engine suite was also run in that embedded browser: **248 passed 
 ring-color pixel assertions failed**. Its source, luma v9 packages and their runtime dependency
 chain are unchanged. This native-browser result is not a passing engine-suite claim.
 
-To investigate a failed file, rerun its path with `test:gpu` in a fresh browser session.
-Keep `src/experiments/weighted-links/measurement.test.ts` separate when diagnosing other failures:
-its isolated-pass tests also use a 100k star, although their names omit the point count.
+In that historical checkout, rerun a failed file with `test:gpu` in a fresh
+browser session. Run `src/experiments/weighted-links/measurement.test.ts`
+separately because its isolated-pass tests also use a 100k star.
 
 ## Original comparison
 

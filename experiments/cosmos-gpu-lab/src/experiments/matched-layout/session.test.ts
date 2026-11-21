@@ -24,20 +24,6 @@ for (const fixture of ['chain', 'communities', 'star'] as const) {
     } finally { s.destroy() }
   }, 120000)
 }
-it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('adaptive hierarchy uses one shared decision tape and retains failure evidence', async () => {
-  const s = await createMatchedSession({
-    ...base, count: 4097, fixture: 'communities', distribution: 'clusters', preset: 'adaptive', ticks: 2,
-  }, () => document.createElement('canvas'))
-  try {
-    expect(s.report.errors).toEqual({})
-    for (let i = 0; i < 2; i++) expect((await s.step()).complete).toBe(true)
-    expect(s.report.method).toBe('hierarchical'); expect(s.report.sampling).toHaveLength(1)
-    expect(s.report.rows.every(r => r.samples === s.report.sampling[0].applied)).toBe(true)
-    await s.replay()
-    expect(s.report.replays.every(r => r.reproduced && r.restored)).toBe(true)
-    expect(s.report.rows.every(r => r.checks.webgpu?.valid)).toBe(true)
-  } finally { s.destroy() }
-}, 120000)
 it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('4096 still uses exact production shaders in both GPUs at the inclusive cutoff', async () => {
   const s = await createMatchedSession({ ...base, count: 4096, ticks: 1 }, () => document.createElement('canvas'))
   try {

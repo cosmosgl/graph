@@ -9,6 +9,13 @@ import { comparePaint, type PaintComparison } from './evaluate'
 import type { Production } from './production'
 import { LINK_VISIBILITY, styles } from './styles'
 
+declare module 'vitest/browser' {
+  interface BrowserCommands {
+    composedInput(action: 'layout'): Promise<unknown>;
+    composedInput(action: 'pick', from: [number, number]): Promise<void>;
+  }
+}
+
 const size = [480, 320] as const
 const nativeStudy = import.meta.env.VITE_LAB_MOTION_STYLES === '1'
 

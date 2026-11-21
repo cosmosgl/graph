@@ -166,8 +166,9 @@ and the invalidation checks in every lane. The draw fence adds instrumentation
 to all three scheduling lanes. Use the original run to interpret the earlier
 unfenced measurements.
 
-Set `VITE_LAB_RESIDENT_LABEL_SCHEDULING=1` along with the resident readback
-flag for the matched scheduling comparison.
+Use the study’s recorded source snapshot or the archived suite at `08e5ff5d`
+for the matched scheduling comparison. In that checkout, set
+`VITE_LAB_RESIDENT_LABEL_SCHEDULING=1` along with the resident readback flag.
 
 ### Native M3 result
 
