@@ -88,7 +88,7 @@ const catalogTopics = [
     id: 'gpu-foundations',
     title: 'GPU foundations',
     description: 'Reductions, spatial indexing and memory.',
-    ids: ['scalable-reduction', 'spatial-grid', 'point-capacity', 'cell-aggregation'],
+    ids: ['scalable-reduction', 'spatial-grid', 'point-capacity', 'point-buffer-copy', 'cell-aggregation'],
   },
   {
     id: 'precision-performance',

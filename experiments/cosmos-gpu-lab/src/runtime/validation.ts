@@ -267,11 +267,18 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'Bitwise baseline equality tests this optimization; it does not require every future reduction algorithm to retain source order.',
   },
   'point-capacity': {
-    question: 'Can logical count change while preserving resident state and resource ownership?',
-    reference: 'CPU-copy and GPU-rebuild controls, expected prefix/tail records and subsequent CPU compatibility checks.',
+    question: 'Can reusing GPU buffers make point-count changes faster while preserving the current layout?',
+    reference: 'The GPU-rebuild control, expected point records and subsequent CPU compatibility checks.',
     acceptance: 'Exact surviving records, fresh tails, pins, absence, tick/cooling and cleanup; subsequent frame checks remain separate.',
     coverage: 'Selected grow/shrink/regrow cycles on the same lane-owned device, including retained-capacity updates.',
     limits: 'Full public setters, transitions, host ownership, recovery and total VRAM budgets remain separate.',
+  },
+  'point-buffer-copy': {
+    question: 'How do CPU and GPU copies affect point-data transfers and completion time when WebGPU rebuilds its buffers?',
+    reference: 'The CPU-copy control, expected point records and the independent CPU frame check.',
+    acceptance: 'Both paths preserve surviving point data, initialize new points, keep the device and agree on the next frame.',
+    coverage: 'Paired exact-size rebuilds for chain, communities and star through 8,192 points.',
+    limits: 'Completion measures the full rebuild. The paths use different bounds setup, and the CPU copy runs first.',
   },
   'precision-diagnostics': {
     question: 'Are differences caused by the gravity formula, arithmetic evaluation or accumulation order?',

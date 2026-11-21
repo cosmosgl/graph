@@ -401,21 +401,31 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     'point-capacity': entry('point-capacity', {
       conclusion: 'The recorded resize cycles preserve checked state and show lower in-capacity update ' +
         'cost with retained storage; faster steady-state frames are not established.',
-      variant: 'GPU rebuild versus retained-capacity luma WebGPU lanes; historical CPU-copy control; Apple M3 / Chrome 156.',
+      variant: 'GPU rebuild versus retained-capacity luma WebGPU lanes on Apple M3 / Chrome 156.',
       comparison: 'Same resident graph → grow/shrink/regrow → retained records, next-frame checks and tracked buffer cost',
       method: 'validation-contract',
       evidence: 'reuse',
       next: 'Validate public setters, transitions, borrowed-device ownership and recovery; tracked buffers are not total VRAM.',
-      reproduce: 'Compare GPU rebuild with retained capacity, keep CPU checking enabled, apply pin/absence edits, then run the documented resize cycles.',
-      investigations: [
-        { page: 'reuse', state: 'Current evidence', description: 'Paired GPU-bound resize cycles, retained capacity and explicit first-growth/update limits.' },
-        {
-          page: 'findings',
-          state: 'Historical baseline',
-          description: 'Exact-size rebuild versus CPU-copy transfer control; not the same cost comparison.',
-          replacement: 'reuse',
-        },
-      ],
+      reproduce: 'Keep CPU checking enabled, apply pin and visibility edits, then press Add and remove points.',
+      investigations: [{
+        page: 'reuse',
+        state: 'Current evidence',
+        description: 'Paired GPU-bound resize cycles, retained capacity and explicit first-growth/update limits.',
+      }],
+    }),
+    'point-buffer-copy': entry('point-buffer-copy', {
+      conclusion: 'GPU copying avoided position downloads during the update. The full rebuild took longer in the recorded runs.',
+      variant: 'Exact-size WebGPU buffer rebuilds with CPU and GPU copy paths on Apple M3 / Chrome 156.',
+      comparison: 'Same point-count changes followed by a rebuild, position transfer checks and one simulation step.',
+      method: 'validation-contract',
+      evidence: 'findings',
+      next: 'Compare the paths with matched bounds setup and alternate their execution order.',
+      reproduce: 'Choose a graph, keep Check against CPU enabled, then press Add and remove points.',
+      investigations: [{
+        page: 'findings',
+        state: 'Current evidence',
+        description: 'Position transfers, full rebuild times, preservation and cleanup by copy path.',
+      }],
     }),
     'gpu-stage-profile': entry('gpu-stage-profile', {
       conclusion: 'Controlled profiling identifies hub springs and aggregation as major costs in the ' +

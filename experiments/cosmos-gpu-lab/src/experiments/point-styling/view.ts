@@ -85,7 +85,6 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
       <div class="controls" data-image-actions><button data-image-next disabled>Next image update</button>
         <button data-image-reset disabled>Reset image sequence</button></div>
-      <p data-image-stage class="demo-note">Select Atlas · dynamic image updates to step through uploads and atlas replacement.</p>
       <div class="controls"><button data-export disabled
       data-run-action="export">Export JSON</button></div>
     </div><p role="status"
@@ -93,13 +92,14 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
     <button type="button" class="button-primary" data-inspect-center
       ${caseId === 'picking' ? 'data-run-action="primary"' : 'hidden'} disabled>Inspect center pixel</button>
     <section data-run-part="visualization"><p class="demo-note" data-inspect-feedback aria-live="polite"></p>
-    <p class="demo-note" data-legend></p>
     <div class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'}</h2><span class="status" data-state="${name}">Starting…</span></div>
       <div class="styling-viewport"><canvas width="${WIDTH}" height="${HEIGHT}" data-canvas="${name}" aria-label="${name} styled points"></canvas>
         <span class="styling-cursor" data-cursor="${name}" hidden></span></div>
       <p data-pick="${name}" class="styling-pick">Move over a shape to inspect its ID</p><p class="demo-note" data-device="${name}"></p>
-    </article>`).join('')}</div></section>
+    </article>`).join('')}</div>
+    <p data-image-stage class="demo-note"></p>
+    <p class="demo-note" data-legend></p></section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
     <section data-run-part="diagnostics" data-case-diagnostic="picking"><h3>Stored-alpha picking · bounded prototype</h3>
@@ -1232,6 +1232,11 @@ export async function createStylingView (host: HTMLElement, requestedCase?: stri
     experiment: 'point-styling',
     scope: 'The selected scene, renderer and settings in this session. Recorded studies cover their own inputs.',
     devices: () => Object.values(backends).map(b => b.info),
+    secondarySettings: [
+      '[data-overlay-arithmetic]', '[data-polygon-arithmetic]', '[data-image-filter]', '[data-decode-policy]',
+      '[data-atlas-packing]', '[data-atlas-isolation]', '[data-zoom]', '[data-ratio]', '[data-scale]', '[data-opacity]',
+      ...(caseId === 'picking' ? [] : ['[data-order]']),
+    ],
   })
   refreshStylingCase(host, caseId)
   for (const [name, create] of [['webgl', createStylingWebGL], ['webgpu', createStylingWebGPU]] as const) {

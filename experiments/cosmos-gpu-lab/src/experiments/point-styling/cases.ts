@@ -16,7 +16,7 @@ export const cases = [
     kind: 'compare',
     question: 'Do WebGL and WebGPU draw the same point shapes?',
     description: 'Both panels draw the same eight shapes. The top row is filled; the bottom row has an inset stroke.',
-    tryIt: 'Compare the rows, then change zoom or pixel ratio. The selected scene is checked automatically.',
+    tryIt: 'Compare the rows, then try Zoom or Pixel ratio in More settings. The selected scene is checked automatically.',
     reference: 'Production WebGL, the WebGPU port and an independent CPU shape mask.',
     acceptance: 'IDs and shape masks must match exactly; color channels may differ by at most 2/255.',
     recorded: {

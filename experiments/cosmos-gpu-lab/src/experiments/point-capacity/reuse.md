@@ -9,9 +9,9 @@ Growing storage and shrinking a graph are different operations. **Logical count*
 belong to the graph. **Capacity** says how many records its allocation can hold. Keeping those separate lets
 Cosmos change the count without rebuilding its entire GPU workload each time.
 
-The [rebuild baseline](#/point-capacity?section=doc-findings) established preservation and cleanup, but recreated
-count-dependent resources on every update. This follow-up compares **GPU rebuild** with **GPU retained
-capacity**. Both use GPU bounds, the same force sequence, refined arithmetic and minimal renderer.
+The [rebuild baseline](#/point-buffer-copy?section=doc-findings) established preservation and cleanup, but recreated
+count-dependent resources on every update. This follow-up compares **Rebuild GPU buffers** with **Reuse GPU buffers**.
+Both use GPU bounds, the same force sequence, refined arithmetic and minimal renderer.
 
 ## What stays and what changes?
 
@@ -150,13 +150,10 @@ At 8,192 points, six first-frame observations per graph, with lane order balance
 | Communities | 11.239 ms | 15.565 ms | 6.881–18.416 ms | 10.748–18.481 ms |
 | Star | 20.808 ms | 18.547 ms | 12.583–30.736 ms | 12.911–28.377 ms |
 
-The ranges overlap and the layout evolves between rows. This is not a steady-state FPS comparison. A separate
-star follow-up grew to 8,192 after the three cycles, ran two warm-up frames and then eight checked frames with
-balanced order. All ten checks passed. On the final implementation, the eight-frame GPU medians were
-**27.197 ms rebuild versus 15.139 ms retained**, with ranges **18.874–30.736 ms** and **11.993–36.372 ms**.
-The lower candidate median is an observation of this evolved star workload, not a general simulation speedup.
-Both variants keep the baseline's buffer initialization and usage flags; frame measurements still span broad,
-overlapping ranges and remain sensitive to execution order.
+Both variants keep the baseline's buffer initialization and usage flags. The layout evolves between frames,
+and the overlapping timing ranges remain sensitive to execution order.
+
+*An earlier 8,192-point star run had eight-frame medians of 27.197 ms (rebuild) and 15.139 ms (reuse), with overlapping ranges.*
 
 The [controlled stage profiler](#/gpu-stage-profile?section=doc-method) now replays frozen inputs with balanced
 lane/method order and exact instrumentation checks. Its first M3 runs do not reproduce a consistent large
@@ -168,19 +165,12 @@ has not been isolated. No force arithmetic or tolerance changed in this experime
 
 ## Reproduce
 
-1. Open [Point capacity and memory](#/point-capacity). Choose **GPU rebuild vs retained capacity**.
-2. Select chain, communities or star; keep **3 repetitions** and **Check unchanged CPU tolerance** enabled.
-3. Use **Move + pin point 0** and **Hide point 1**, then **Run resize cycles**.
+1. Open [Adding and removing points](#/point-capacity).
+2. Select chain, communities or star. Set **Number of runs** to 3 and leave **Check against CPU** enabled.
+3. Use **Move + pin point 0** and **Hide point 1**, then click **Add and remove points**.
 4. Inspect the capacity, reuse, transfer and memory columns; both devices and tick/cooling should persist.
 5. **Export JSON** for local analysis. Reset or change graphs to verify cleanup; routine exports stay outside Git.
-
-For the warm-star follow-up, after the three cycles select 8,192 and **Resize + preserve**. Use **Step + validate**
-ten times. Discard the first two of those ten timings and inspect the last eight, retaining their order metadata.
-These remain evolved-layout observations, not a fixed-input benchmark.
 
 ```sh
 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout/capacity-reuse.test.ts
 ```
-
-The previous **CPU copy vs GPU rebuild** mode remains available. It tests a different transfer contract and
-should be interpreted with the limits in its [baseline findings](#/point-capacity?section=doc-findings).

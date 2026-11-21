@@ -37,7 +37,7 @@ export function stylingCaseId (requested?: string): StylingCaseId {
 export function refreshStylingCase (host: HTMLElement, id: StylingCaseId): void {
   const presentation = presentations[id]
   const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
-  for (const label of host.querySelectorAll<HTMLLabelElement>('.styling-toolbar label')) {
+  for (const label of host.querySelectorAll<HTMLLabelElement>('.styling-toolbar label, .run-secondary-settings label')) {
     const select = label.querySelector<HTMLSelectElement>('select')
     if (!select) continue
     const key = Object.keys(select.dataset)[0]?.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`) ?? ''
