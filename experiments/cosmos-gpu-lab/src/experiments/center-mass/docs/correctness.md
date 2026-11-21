@@ -8,7 +8,7 @@ double-precision numbers. This is a useful reference, not a claim that the GPU s
 Reference role: **mathematical control** on the uploaded coordinates. This double sum is not an
 exact-sum guarantee for arbitrary inputs. Count is a discrete contract; center accuracy and legacy
 arithmetic agreement are different questions. See the shared [validation workflow](#/validation-workflow)
-and [controlled cancellation study](#/precision-diagnostics/docs/method).
+and [controlled cancellation study](#/precision-diagnostics?section=doc-method).
 
 ## Why the answers differ
 

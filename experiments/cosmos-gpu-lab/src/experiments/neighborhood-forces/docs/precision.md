@@ -7,7 +7,7 @@ scope: Dense 65,536-point local force cases; unchanged tolerance, compensated su
 
 # Fixing dense-case precision
 
-Follow-up: [reducing the cost of this fix](#/neighborhood-forces/docs/precision-cost) compares
+Follow-up: [reducing the cost of this fix](#/neighborhood-forces?section=doc-precision-cost) compares
 the preserved fixed baseline with a chunked traversal optimization.
 
 **The five historical failures came from long float32 force sums.** A deeper check also found a
@@ -149,7 +149,7 @@ already long enough to measure individually; they are not rendering or full-tick
 repetitions on one device do not establish hardware-independent overhead.
 
 The fix trades additional arithmetic/control work for accuracy. The earlier
-[batched findings](#/neighborhood-forces/docs/batched-results) measured the serial kernel and are
+[batched findings](#/neighborhood-forces?section=doc-batched-results) measured the serial kernel and are
 preserved as historical evidence; their timings are not measurements of the fixed kernel.
 
 ## Regression coverage

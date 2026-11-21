@@ -53,7 +53,7 @@ it('gives every experiment a practical case and accessible human-facing evidence
   }
 })
 
-it('opens every experiment with its starting case and all its evidence and limits on the same page', async () => {
+it('opens every experiment at its recorded findings with its starting case and evidence', async () => {
   const initial = window.location.href
   try {
     for (const experiment of experiments) {
@@ -64,12 +64,12 @@ it('opens every experiment with its starting case and all its evidence and limit
         return { destroy: (): void => { disposeRunLayout(host) } }
       })
       const first = startingCase(experiment)
-      window.history.replaceState(null, '', `#/${experiment.id}`)
+      window.history.replaceState(null, '', `#/${experiment.id}?section=recorded-findings`)
       const host = document.createElement('div'); document.body.append(host)
       const shell = createAppShell(host)
       try {
         const label = experiment.id
-        await vi.waitFor(() => expect(host.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+        await vi.waitFor(() => expect(document.activeElement?.id).toBe('recorded-findings'))
         expect(host.querySelectorAll('main h1'), label).toHaveLength(1)
         expect(host.querySelector('h1')?.textContent, label).toBe(experiment.title)
         const summary = host.querySelector('.case-header .case-recorded-summary')

@@ -99,7 +99,7 @@ point above that bound is rejected before allocation.
 
 ## Reproduction and boundaries
 
-In [Measure center-force cost](#/center-mass?case=center-measurements), enter comma-separated counts and run
+In [Measure center-force cost](#/center-mass?section=run-diagnostics), enter comma-separated counts and run
 the study, then export the JSON. For a repeatable timed capture, retain a clean
 source revision or exact source snapshot, rebuild generated controls beforehand,
 and run the opt-in `scale.test.ts` with `LAB_CENTER_SCALE=1`,

@@ -179,18 +179,18 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     let focusRequest = 0
     let launch = 0
     let opening: { id: string; ready: Promise<void> } | undefined
-    const openCase = (item: ExperimentCase, deferComparison = false): Promise<void> => {
+    const openCase = (item: ExperimentCase): Promise<void> => {
       if (opening?.id === item.id) return opening.ready
       if (owner.id === experiment.id && owner.caseId === item.id && frame.slot.firstElementChild) return Promise.resolve()
       const request = ++launch
       active = item; frame.setLiveCase(item)
       frame.stage.setAttribute('aria-busy', 'true')
-      frame.start.hidden = frame.retry.hidden = true
+      frame.retry.hidden = true
       frame.status.textContent = ''
       const isCurrent = (): boolean => request === launch && frame.stage.isConnected
       const ready = (async (): Promise<void> => {
         try {
-          await owner.show(experiment, frame.slot, item.id, deferComparison ? { deferComparison } : undefined)
+          await owner.show(experiment, frame.slot, item.id)
         } catch (error) {
           if (!isCurrent()) return
           frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
@@ -202,9 +202,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       opening = { id: item.id, ready }
       return ready
     }
-    const launchActive = (): void => { focusRequest++; openCase(active).catch(() => {}) }
-    frame.retry.addEventListener('click', launchActive)
-    frame.start.addEventListener('click', launchActive)
+    frame.retry.addEventListener('click', () => { focusRequest++; openCase(active).catch(() => {}) })
     frame.onChooseCase((item, control) => {
       const section = item === startingCase(experiment) ? null : liveCaseSection(item)
       window.history.replaceState(null, '', experimentSectionHref(experiment.id, section))
@@ -220,11 +218,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       async visit (destination: ExperimentDestination): Promise<void> {
         const request = ++focusRequest
         const { section } = destination
-        if (active.kind !== 'recorded') {
-          if (destination.startLive || (owner.id === experiment.id && !frame.slot.firstElementChild)) {
-            await openCase(destination.liveCase ?? active, !!experiment.singlePage && section === 'run-diagnostics')
-          } else if (owner.id !== experiment.id && frame.retry.hidden) frame.start.hidden = false
-        }
+        if (active.kind !== 'recorded') await openCase(destination.liveCase ?? active)
         if (request !== focusRequest || !frame.stage.isConnected) return
         if (!section) { window.scrollTo(0, 0); return }
         const fallback = await frame.openEvidence(section)
@@ -237,10 +231,6 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   const render = async (): Promise<void> => {
     const route = readRoute()
-    if (route.kind === 'roadmap') {
-      const href = roadmapHref(route.section)
-      if (href !== window.location.hash) window.history.replaceState(null, '', href)
-    }
     const brand = root.querySelector('.brand')!
     if (route.kind === 'home') brand.setAttribute('aria-current', 'page'); else brand.removeAttribute('aria-current')
     for (const link of root.querySelectorAll<HTMLAnchorElement>('[data-nav]')) {
@@ -250,7 +240,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       else link.removeAttribute('aria-current')
     }
     const definition = route.kind === 'experiment' ? findExperiment(route.experimentId) : undefined
-    const destination = definition && route.kind === 'experiment' ? experimentDestination(definition, route, currentSection()) : undefined
+    const destination = definition && experimentDestination(definition, currentSection())
     if (destination && destination.href !== window.location.hash) window.history.replaceState(null, '', destination.href)
     if (destination && mountedPage?.id === definition?.id) {
       await mountedPage!.visit(destination)
@@ -394,9 +384,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     }
 
     if (!definition || !destination) {
-      renderMissing(workspace, definition && (route.evidencePage || route.pageId)
-        ? `${definition.id}/docs/${route.evidencePage ?? route.pageId}`
-        : route.caseId ? `${route.experimentId}?case=${route.caseId}` : route.experimentId)
+      renderMissing(workspace, route.experimentId)
       finish()
       return
     }
@@ -413,7 +401,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     if (!mountedPage && previousPath !== roadmapHref()) return
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
-    if (link && link.hash === window.location.hash && link.origin === window.location.origin && link.pathname === window.location.pathname) {
+    if (link?.href === window.location.href) {
       event.preventDefault(); handleRoute()
     }
   }

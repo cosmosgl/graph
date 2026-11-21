@@ -5,8 +5,8 @@ device: Apple M3; standalone Chrome 156
 scope: Ordered aggregation with cached integer membership; composed strict-force reference settings.
 ---
 
-This follows the [controlled GPU profile](#/gpu-stage-profile/docs/method) and
-[ordered hub study](#/hub-springs/docs/acceptance). It targets hierarchy aggregation with the same
+This follows the [controlled GPU profile](#/gpu-stage-profile?section=doc-method) and
+[ordered hub study](#/hub-springs?section=doc-acceptance). It targets hierarchy aggregation with the same
 source-index accumulation order, original CPU budgets and strict reference output bits.
 
 ## Reuse integer membership
@@ -60,7 +60,7 @@ report retains failed status. No tolerance changes.
 Primary: ordinary compute + minimal render GPU time. Four warmup and twelve measured paired rounds alternate
 variant order. Each normal trial queues four GPU-restored frames and validates every captured output after
 the batch. Copies, allocation, readback and CPU work stay outside timestamp endpoints. This reuses the
-[GPU-batched method](#/hub-springs/docs/acceptance), with its instrumentation limits.
+[GPU-batched method](#/hub-springs?section=doc-acceptance), with its instrumentation limits.
 
 Diagnostic profiles run afterward in a separate phase, with one pass per stage and paired order. Bin and
 aggregate durations help locate the effect. The split-pass sum is not a decomposition of a normal frame;
@@ -174,7 +174,7 @@ Cosmos's accumulation contract would need separate validation before adoption.
 
 ## Follow-up: composed acceptance
 
-The [production layout gates](#/layout-acceptance/docs/findings) resolve the
+The [production layout gates](#/layout-acceptance?section=doc-findings) resolve the
 clustered-community whole-tick blocker reported in this study. The first difference was
 in near-field repulsion; all far levels already matched. Refined roots/divisions
 and explicitly rounded products now pass the original budget. Combining cached

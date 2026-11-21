@@ -6,7 +6,7 @@ let host: HTMLElement
 afterEach(() => { disposeRunLayout(host); host.remove(); window.history.replaceState(null, '', original) })
 
 it('keeps essential settings visible, respects authored sections and preserves action listeners', () => {
-  window.history.replaceState(null, '', '#/collision/run')
+  window.history.replaceState(null, '', '#/collision')
   host = document.createElement('div'); document.body.append(host)
   host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Technical note</p><div class="scale-toolbar">
     <label>Points<select data-control="count"><option>128</option></select></label>

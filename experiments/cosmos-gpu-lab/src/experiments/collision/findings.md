@@ -11,7 +11,7 @@ scope: Dense 512-point four-pass combined collision; high/low center correction 
 
 Measured **12 November 2026** on Apple M3 in **Codex’s inline browser, Chromium 157**, with luma `10.0.0-alpha.4`. Native regression checks also run separately in installed Chrome. These are bounded single-device findings, not a support-matrix claim.
 
-**Follow-ups:** [Independent native layouts](#/collision/docs/trajectories) record accumulated drift and a cooled-star collision failure. The [targeted collision correction](#/collision/docs/precision) then passes all 1,700 tick and trajectory gates in the repeated matrix at unchanged tolerance, with zero measured pointwise drift. The shared-input center-correction evidence below remains separate.
+**Follow-ups:** [Independent native layouts](#/collision?section=doc-trajectories) record accumulated drift and a cooled-star collision failure. The [targeted collision correction](#/collision?section=doc-precision) then passes all 1,700 tick and trajectory gates in the repeated matrix at unchanged tolerance, with zero measured pointwise drift. The shared-input center-correction evidence below remains separate.
 
 ## Original float32-tree baseline
 
@@ -94,7 +94,7 @@ After 100 ticks, isolated uniform collision at 128 points has maximum penetratio
 
 Dense cases remain materially overlapped. At 512 clustered points in combined mode, four passes reduce CPU maximum penetration from **4.9433 → 2.9839** units, while the number of overlapping pairs changes **605 → 659**. More passes do not establish a non-overlapping layout or a universal quality improvement. The constraint’s relaxation, per-pass cap and the other forces’ continuous compression all matter.
 
-The masked fixture retains one overlapping pair of pinned discs, which cannot separate. Collision checks still validate zero corrections for absent points, preservation of pin/absence flags and the unchanged present-point force budgets. Unused absent-target spring corrections follow the [documented validation domain](#/collision/docs/method).
+The masked fixture retains one overlapping pair of pinned discs, which cannot separate. Collision checks still validate zero corrections for absent points, preservation of pin/absence flags and the unchanged present-point force budgets. Unused absent-target spring corrections follow the [documented validation domain](#/collision?section=doc-method).
 
 ## Original baseline: added collision GPU cost
 
@@ -125,4 +125,4 @@ Reset to tick 0 and choose **Compare center precision cost** for the correction�
 
 Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/collision src/experiments/combined-layout/center` for collision and center regression checks. `composition.test.ts` retains the original CPU-splice diagnostic, then requires the resident correction to pass without that splice. `center-reduction.test.ts` checks aggregate bits across reduction boundaries; `center-reduction-cost.test.ts` checks accepted/rejected control timing.
 
-The [independent native study](#/collision/docs/trajectories) and [targeted collision correction](#/collision/docs/precision) are recorded separately. The latter closes that bounded composition failure and repeated matrix. The spatial-hash/slot production path above 4,096 points, broader coordinate ranges/data/weights, dynamic updates, native portability and a complete Graph integration remain unvalidated. Earlier long-run center drift and timings used the original float32 tree; later corrections do not retroactively change those measurements.
+The [independent native study](#/collision?section=doc-trajectories) and [targeted collision correction](#/collision?section=doc-precision) are recorded separately. The latter closes that bounded composition failure and repeated matrix. The spatial-hash/slot production path above 4,096 points, broader coordinate ranges/data/weights, dynamic updates, native portability and a complete Graph integration remain unvalidated. Earlier long-run center drift and timings used the original float32 tree; later corrections do not retroactively change those measurements.

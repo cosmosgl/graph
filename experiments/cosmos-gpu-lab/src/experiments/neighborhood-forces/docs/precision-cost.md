@@ -139,4 +139,4 @@ batch normalization, rendering and validation gates; the comparison plan has a r
 
 The candidate and preserved baseline shader files deliberately coexist for A/B experiments. Any
 future change to the force formula or cutoff contract must be applied to both before comparing them.
-See [Precision findings](#/neighborhood-forces/docs/precision) for the original numerical investigation.
+See [Precision findings](#/neighborhood-forces?section=doc-precision) for the original numerical investigation.

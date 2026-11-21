@@ -6,7 +6,7 @@ scope: Paired precision variants on frozen inputs; eight samples per cell and pr
 ---
 
 The timings below describe the historical residual-arithmetic implementation. The subsequent
-[integer midpoint correction](#/many-body-grid/docs/far-field) preserves the buffer layout and traversal but changes
+[integer midpoint correction](#/many-body-grid?section=doc-far-field) preserves the buffer layout and traversal but changes
 arithmetic cost; its paired measurements are reported separately.
 
 ## Preserving precision with less memory
@@ -25,7 +25,7 @@ time in the checked cases.** Both corrected variants passed every checked batch 
 Apple M3. Complete-step medians ranged from about 3% faster to 7% slower for streaming, and sample ranges overlapped.
 There is no consistent speed winner. The memory reduction is the useful result.
 
-This follows the [far-field precision investigation](#/many-body-grid/docs/far-field). The original inline path
+This follows the [far-field precision investigation](#/many-body-grid?section=doc-far-field). The original inline path
 remains the default and a timing control. It fails dense CPU parity, so its lower time does not make it an eligible
 replacement for the corrected variants. Production Cosmos is unchanged.
 
@@ -150,7 +150,7 @@ it under `centroidComparison.streamed`. Use this to inspect arithmetic independe
 
 The precision correction no longer needs six full contribution buffers. That makes it a more useful experimental
 candidate, but the remaining scratch allocation still grows with point count and the lab caps this experiment at
-16,384 points. Both corrected paths cost more than inline in these measurements. The follow-up [independent trajectory experiment](#/repulsion-trajectories/docs/findings) now checks 20 evolving
+16,384 points. Both corrected paths cost more than inline in these measurements. The follow-up [independent trajectory experiment](#/repulsion-trajectories?section=doc-findings) now checks 20 evolving
 ticks, including both dense sizes on M3. Combined-force behavior and replacing diagnostic construction with a scalable
 hierarchy builder remain open.
 Broader device evidence is needed before choosing a production precision policy.

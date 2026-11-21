@@ -81,11 +81,7 @@ export function caseEvidenceLinks (item: ExperimentCase): CaseEvidenceLink[] {
 
 export type SinglePageCase = {
   observations: Array<{ id: string; title: string; date: string; evidence: string; limits: string; charts?: ResultChart[] }>;
-  legacyCases: Record<string, string>;
-  pageSections: Record<string, string>;
 }
-
-export type ExperimentStartOptions = { deferComparison?: boolean }
 
 export type ExperimentDefinition = {
   id: string;
@@ -98,7 +94,7 @@ export type ExperimentDefinition = {
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
-  create: (host: HTMLElement, caseId?: string, options?: ExperimentStartOptions) => Promise<ExperimentInstance>;
+  create: (host: HTMLElement, caseId?: string) => Promise<ExperimentInstance>;
   pages: ExperimentPage[];
 }
 

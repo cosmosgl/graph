@@ -6,8 +6,7 @@ lifecycle.
 
 The **WebGPU migration** page (`#/roadmap`) shows the current decision, next priority, and what remains before a
 production switch. Each **Feature coverage** row shows the WebGL behavior, the WebGPU evidence and the remaining
-checks. The links at the top jump to the coverage, parked investigations or future ideas. Existing
-`#/feature-inventory` links jump to the corresponding section or feature.
+checks. The links at the top jump to the coverage, parked investigations or future ideas.
 
 **Viewer Comparison** links to the matched migration benchmark. Build the
 production bundle with `pnpm run build`, then use
@@ -261,7 +260,6 @@ Case records summarize named historical observations; linked findings
 remain the source. `agent-recipe.md` and `agent-findings/` retain replay and source information
 for research, but agent-facing instructions do not appear in the interface. A completed
 investigation can be inconclusive; record presence does not establish a scientific pass.
-Existing `/run` links and links to live controls, results or diagnostics still work.
 When a browser cannot preserve an embedded viewer while moving it, returning from
 a reference starts a fresh viewer. Completed viewer results are kept separately
 in the current tab and included in Export JSON; graph and playback state restart.
@@ -273,12 +271,10 @@ grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim. The
 unknown pages, missing assessments and unreachable documents. An empty investigation list means
 no recorded matrix is published; local runs do not populate it.
 
-Base routes (`#/experiment`) open the default case when cases exist, otherwise the full experiment
-document. `?case=<id>` links to a focused case and `?case=<id>&evidence=<page>` opens its evidence.
-Old human-facing `/docs/page?section=heading` and `?section=doc-page-heading` links resolve to the
-corresponding article and heading. Agent-recipe links lead to recorded findings. Section changes within
-a case preserve the run. Static-document table observers have their own lifetime and are excluded from
-per-tick live table refreshes.
+Open an experiment at `#/experiment` or link directly to a section with `?section=<id>`.
+Use `?section=try-<case>` to select a live case. The demo loads paused, and section changes within
+a case preserve the run. Agent-recipe links lead to recorded findings. Static-document tables update
+independently of live tables.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

@@ -357,8 +357,8 @@ round differently. Here, that changed the exact neighbor count even though the f
 The fix preserves the reference rounding near the boundary; it does **not** increase the radius or relax
 the acceptance tolerance. This is a captured example, not a claim that CPU and GPU results always differ.
 
-See [Fixing dense-case precision](#/neighborhood-forces/docs/precision) for the diagnosis and implementation,
-and [Precision cost](#/neighborhood-forces/docs/precision-cost) for the performance tradeoffs.
+See [Fixing dense-case precision](#/neighborhood-forces?section=doc-precision) for the diagnosis and implementation,
+and [Precision cost](#/neighborhood-forces?section=doc-precision-cost) for the performance tradeoffs.
 
 ## Parallel primitives used by Cosmos
 

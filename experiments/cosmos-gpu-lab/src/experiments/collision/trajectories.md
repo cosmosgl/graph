@@ -7,11 +7,11 @@ scope: Historical native collision matrix with corrected center; accumulated tra
 
 # Independent collision layouts
 
-**Original native-arithmetic baseline.** The follow-up [targeted correction](#/collision/docs/precision) now passes all 1,700 tick and trajectory gates in the repeated matrix, with zero measured pointwise drift. The native results below remain historical controls, including their recorded failures.
+**Original native-arithmetic baseline.** The follow-up [targeted correction](#/collision?section=doc-precision) now passes all 1,700 tick and trajectory gates in the repeated matrix, with zero measured pointwise drift. The native results below remain historical controls, including their recorded failures.
 
 **Accurate individual ticks do not establish matching long trajectories.** With the corrected high/low center sum, WebGPU passes **1,699 / 1,700** tick gates in this study; production WebGL passes **1,589 / 1,700**. Independent coordinates exceed the original tolerance in every larger combined fixture. The cooled dense star also exposes one replayable WebGPU whole-tick failure. The numerical budgets remain unchanged throughout.
 
-Measured **12 November 2026**, Apple M3, Codex inline browser **Chromium 157**, pinned luma `10.0.0-alpha.4`. Native regression checks run separately in installed Chrome. The earlier [center-correction findings](#/collision/docs/findings) use shared CPU starting states; this study carries each backend’s own output into its next tick.
+Measured **12 November 2026**, Apple M3, Codex inline browser **Chromium 157**, pinned luma `10.0.0-alpha.4`. Native regression checks run separately in installed Chrome. The earlier [center-correction findings](#/collision?section=doc-findings) use shared CPU starting states; this study carries each backend’s own output into its next tick.
 
 ## What evolves independently
 
@@ -36,7 +36,7 @@ Initial positions are around `(2048, 2048)`. Uniform cases use 128 points and on
 | Whole-tick gate | That GPU tick’s own starting positions | Does the composed GPU tick agree with the complete scalar chain from the same input? |
 | Accumulated trajectory gate | CPU’s independently evolved positions | Do the three histories still agree in raw coordinates at the original position budget? |
 
-The first two form the **tick gate**. They retain `2e-5 + 3e-5 × |reference|`, with the existing tighter spring budget `2e-6 + 2e-5 × |reference|`. The trajectory comparison uses the original position budget too. Flags remain exact; only explicitly absent NaN coordinates retain their sentinel. The [existing absent-target spring contract](#/collision/docs/method) is unchanged.
+The first two form the **tick gate**. They retain `2e-5 + 3e-5 × |reference|`, with the existing tighter spring budget `2e-6 + 2e-5 × |reference|`. The trajectory comparison uses the original position budget too. Flags remain exact; only explicitly absent NaN coordinates retain their sentinel. The [existing absent-target spring contract](#/collision?section=doc-method) is unchanged.
 
 No drift percentage, aligned metric or quality score turns a failed numerical check into a pass. Trajectory gates can occasionally pass again after a first difference; counts below cover every tick, rather than assuming permanent failure after the first exit.
 
@@ -120,4 +120,4 @@ Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/
 
 JSON captures stay local; this page preserves the findings, environment, settings and reproduction steps. Existing GPU-cost buttons still measure frozen CPU geometry separately, using the current alpha. No GPU speed claim is inferred from validation elapsed time.
 
-The [targeted collision correction](#/collision/docs/precision) now closes the captured tick and repeated matrix at the same gates, with paired GPU cost. Larger collision hashing/slots, wider inputs, full Graph scheduling and native portability remain open. Similar aggregate layout scores alone are insufficient to declare trajectory parity or visual-quality acceptance.
+The [targeted collision correction](#/collision?section=doc-precision) now closes the captured tick and repeated matrix at the same gates, with paired GPU cost. Larger collision hashing/slots, wider inputs, full Graph scheduling and native portability remain open. Similar aggregate layout scores alone are insufficient to declare trajectory parity or visual-quality acceptance.

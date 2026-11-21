@@ -30,7 +30,7 @@ CPU reference was checked.
 
 The bounded benchmark measures CPU wall time through queue completion for repeated reductions.
 It excludes position generation, movement, drawing and readback. It is not GPU timestamp timing,
-and cannot be compared directly with the visible readback tick. See [Performance](#/scalable-reduction/docs/performance).
+and cannot be compared directly with the visible readback tick. See [Performance](#/scalable-reduction?section=doc-performance).
 
 ## Reproduce the check
 

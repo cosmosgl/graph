@@ -1,8 +1,8 @@
 ## What this comparison establishes
 
 This experiment isolates force composition and independent evolution. Each lane starts from the
-same graph and retains its own positions between ticks. The [current evidence](#/combined-layout/docs/gravity-trig)
-records the refined-gravity candidate; [Evidence](#/combined-layout/evidence) distinguishes it
+same graph and retains its own positions between ticks. The [current evidence](#/combined-layout?section=doc-gravity-trig)
+records the refined-gravity candidate; [Evidence](#/combined-layout?section=recorded-findings) distinguishes it
 from earlier native and partially corrected controls.
 
 Selected 8,192-point chain, communities and star checks pass the original compatibility budgets.
@@ -44,10 +44,10 @@ The reference, acceptance rules, population and limits are listed below. The
 
 ## Reproduction
 
-Open [Run](#/combined-layout/run). **Recorded control** selects the 8,192-point communities graph, 100 cooling
+Open [Run](#/combined-layout). **Recorded control** selects the 8,192-point communities graph, 100 cooling
 ticks and refined gravity from the recorded matrix. Step once, inspect the live checks, then
 run the schedule and probe at alpha 1. For the recorded 8,192-point result, use the exact
-fixture/variant and checkpoint settings in [current evidence](#/combined-layout/docs/gravity-trig).
+fixture/variant and checkpoint settings in [current evidence](#/combined-layout?section=doc-gravity-trig).
 
 **Simple case** uses 128 points. **Known boundary** selects the earlier aligned communities
 control whose larger whole-tick failure motivated refined gravity. These are comparison inputs,

@@ -13,7 +13,7 @@ Measured **12 November 2026**, Apple M3, Codex inline browser **Chromium 157**, 
 
 ## The counterexample and intervention
 
-The [original independent study](#/collision/docs/trajectories) found a cooled dense star failure at tick 5, alpha `0.9120108393559097`: two whole-tick coordinates failed, maximum error `0.1319580078125`. Gravity, corrected center, exact repulsion and both spring stages matched locally exactly. The first collision pass introduced a small force difference and a [one-ULP](#/vocabulary/ulp) position change; subsequent passes amplified it.
+The [original independent study](#/collision?section=doc-trajectories) found a cooled dense star failure at tick 5, alpha `0.9120108393559097`: two whole-tick coordinates failed, maximum error `0.1319580078125`. Gravity, corrected center, exact repulsion and both spring stages matched locally exactly. The first collision pass introduced a small force difference and a [one-ULP](#/vocabulary/ulp) position change; subsequent passes amplified it.
 
 Reconstructing that native trajectory's input and replaying alternative kernels from the **same positions and alpha** gives:
 
@@ -80,7 +80,7 @@ Across these 11 runs, the targeted path passes **1,700/1,700** of each gate, ver
 
 The current numerical budgets remain `2e-5 + 3e-5 × |reference|`, with springs at their existing tighter `2e-6 + 2e-5 × |reference|` budget. Flags stay exact. The existing absence contract remains intact, including NaN sentinels and the separately recorded unused spring outputs.
 
-Layout geometry now follows the independently evolved CPU in this matrix. That does not establish universal layout quality or remove residual physical overlap: cooled CPU star penetration, for example, remains about 2.451 world units. The [original geometric observations and definitions](#/collision/docs/trajectories) still apply.
+Layout geometry now follows the independently evolved CPU in this matrix. That does not establish universal layout quality or remove residual physical overlap: cooled CPU star penetration, for example, remains about 2.451 world units. The [original geometric observations and definitions](#/collision?section=doc-trajectories) still apply.
 
 ## Added normal-frame GPU cost
 
@@ -99,11 +99,11 @@ Both scalar preflights, all **512 captured frames**, exact anchor replays, origi
 
 Columns are independent medians; the added cost is the median paired difference. GPU frequency and measurement variability remain visible in the ranges. Uploads, restoration/capture copies, CPU reference work and readback are outside the timestamp intervals. This is complete experimental GPU frame work with minimal rendering, not production Graph FPS or a cross-device performance policy.
 
-Both controls must pass numerical acceptance. The known failing native input at tick 5 rejects a precision-cost comparison even when the targeted output passes; it cannot supply an accepted speed estimate. The initial and cooled timing inputs above pass both controls. Raw trials remain available through local JSON export. The older strict-kernel cost is documented separately in the [baseline findings](#/collision/docs/findings); this study does not infer a new strict/native speed ratio.
+Both controls must pass numerical acceptance. The known failing native input at tick 5 rejects a precision-cost comparison even when the targeted output passes; it cannot supply an accepted speed estimate. The initial and cooled timing inputs above pass both controls. Raw trials remain available through local JSON export. The older strict-kernel cost is documented separately in the [baseline findings](#/collision?section=doc-findings); this study does not infer a new strict/native speed ratio.
 
 ## Reproduce and remaining scope
 
-Open [Collision constraints](#/collision), choose **Combined forces → Independent layouts → Targeted distance + contributions**, and retain **High/low sum · corrected**. Use uniform / 128 / one pass or clusters / 512 / four passes, select a topology, then run 100 fixed-alpha ticks or the 300-tick cooling schedule. Collision cooling exponent stays zero. The [original study](#/collision/docs/trajectories) lists every fixture and schedule.
+Open [Collision constraints](#/collision), choose **Combined forces → Independent layouts → Targeted distance + contributions**, and retain **High/low sum · corrected**. Use uniform / 128 / one pass or clusters / 512 / four passes, select a topology, then run 100 fixed-alpha ticks or the 300-tick cooling schedule. Collision cooling exponent stays zero. The [original study](#/collision?section=doc-trajectories) lists every fixture and schedule.
 
 For timing, choose clusters / 512 / star / four passes. Measure at reset, then run the 300-tick schedule and measure again. Both comparisons use the same frozen CPU geometry for their two controls. Export JSON locally; the source-controlled report contains the knowledge and reproduction instructions.
 

@@ -112,7 +112,7 @@ complete tick for full-workload conclusions.
 
 ## The 100k-star failure
 
-**Follow-up:** [render isolation and the spring-loop investigation](#/weighted-links/docs/context-loss)
+**Follow-up:** [render isolation and the spring-loop investigation](#/weighted-links?section=doc-context-loss)
 show that the initial 100k-star geometry renders successfully without simulation. The render timing
 path also prepares a spring tick before its query, so the original failure phase does not establish
 that drawing caused the reset. An early-exit spring variant also failed in a native paired retry after a browser restart,
@@ -151,7 +151,7 @@ no longer a selectable benchmark mode.
 The full-range sweep has 16 cases. Backend order alternates during sampling. Timing is gated by validation,
 then calibrated to a shared batch size targeting 6 ms, capped at 64 operations, with two warmups and seven
 measured samples per stage. Slow cases naturally use one operation; their work already exceeds the target.
-See the [timing contract](#/weighted-links/docs/results) for frozen-input and query semantics.
+See the [timing contract](#/weighted-links?section=doc-results) for frozen-input and query semantics.
 
 The next migration decision requires new measurements of the corrected baseline, separating spring
 compute from renderer cost. Keep the old context-loss traces as historical evidence only.

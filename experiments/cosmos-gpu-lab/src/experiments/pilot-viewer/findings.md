@@ -6,10 +6,10 @@ Both measured frame windows, exact-identity checks and sampled CPU pixel audits 
 The earlier production interior-color failures remain rejected separately.
 
 The wider controls passed all four blocks at
-[DPR 1](#/pilot-viewer?case=explore-graph&evidence=latency-evidence&section=doc-latency-evidence-wider-control-at-dpr-1) and
-[DPR 2](#/pilot-viewer?case=explore-graph&evidence=latency-evidence&section=doc-latency-evidence-wider-control-at-dpr-2), with maximum
+[DPR 1](#/pilot-viewer?section=doc-latency-evidence-wider-control-at-dpr-1) and
+[DPR 2](#/pilot-viewer?section=doc-latency-evidence-wider-control-at-dpr-2), with maximum
 running picks of 32.3 and 20.0 ms respectively. The
-[earlier narrow control](#/pilot-viewer?case=explore-graph&evidence=latency-evidence&section=doc-latency-evidence-narrow-window-control)
+[earlier narrow control](#/pilot-viewer?section=doc-latency-evidence-narrow-window-control)
 also passed. The historical latency failures remain unresolved.
 
 Recorded **18 November 2026** on the user's Apple M3, in the visible inline browser.

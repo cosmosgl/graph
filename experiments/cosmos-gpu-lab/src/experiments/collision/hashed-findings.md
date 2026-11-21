@@ -83,4 +83,4 @@ and exact tested source archive are in
 `captures/collision-hashed-tick-m3-20261119.zgXgWH/`, with source SHA-256
 `f75165c9d277db19c33130eef30427c166d36ba58c1b5b75255e286b50bbfd29`.
 Performance on larger graphs and sustained dense layouts remains open.
-[Declared fixtures and gates](#/collision/docs/hashed-method)
+[Declared fixtures and gates](#/collision?section=doc-hashed-method)

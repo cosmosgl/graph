@@ -23,7 +23,7 @@ pnpm run build
 pnpm --filter @cosmos.gl/gpu-lab dev
 ```
 
-Open `#/viewer-comparison?section=run-run` at the local URL in a visible browser
+Open `#/viewer-comparison?section=case-live` at the local URL in a visible browser
 with native WebGL 2 and WebGPU. Wait for both viewers to initialize. Confirm both
 canvas panels are nonempty and record the actual reported devices, browser,
 viewport and device pixel ratio. If either backend is unavailable, report the

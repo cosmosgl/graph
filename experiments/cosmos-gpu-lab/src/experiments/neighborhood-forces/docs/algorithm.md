@@ -84,5 +84,5 @@ readback buffers, which are released after mapping.
 The current grid kernel groups force contributions into blocks of 64 and groups of 16 blocks before
 summing the totals. The all-pairs kernel sums its tiles in blocks of 64. A rare boundary path uses
 explicit rounded addition for squared distance so fused arithmetic does not change exact cutoff counts.
-See [Precision findings](#/neighborhood-forces/docs/precision) for the captured failures, unchanged
+See [Precision findings](#/neighborhood-forces?section=doc-precision) for the captured failures, unchanged
 tolerances, regression tests and measured cost.

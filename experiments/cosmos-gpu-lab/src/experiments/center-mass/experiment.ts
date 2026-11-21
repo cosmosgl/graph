@@ -1,4 +1,3 @@
-import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
 import { centerMassCase, centerMassPage } from './cases'
 
@@ -9,10 +8,7 @@ export const experiment = defineExperiment({
   tags: ['compute', 'reduction', 'WebGL', 'WebGPU'],
   cases: [centerMassCase],
   singlePage: centerMassPage,
-  create: async (host, _caseId, options): Promise<ExperimentInstance> => {
-    const module = await import('./view')
-    return await module.createCenterMassExperiment(host, options)
-  },
+  create: async host => (await import('./view')).createCenterMassExperiment(host),
   pages: [
     {
       kind: 'markdown',

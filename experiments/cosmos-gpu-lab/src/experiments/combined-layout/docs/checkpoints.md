@@ -129,6 +129,6 @@ these fixed-seed cases cannot establish universal layout quality or cross-device
 5. Use **Every tick · diagnostic** for shorter investigations of unchecked intervals; stop after a complete tick.
 
 Run `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout` for automated regression coverage.
-The software-browser limitations in [Method and findings](#/combined-layout/docs/findings) still apply. The follow-up [spring precision study](#/combined-layout/docs/spring-precision) tests explicit rounding without
+The software-browser limitations in [Method and findings](#/combined-layout?section=doc-findings) still apply. The follow-up [spring precision study](#/combined-layout?section=doc-spring-precision) tests explicit rounding without
 changing this baseline or its tolerance. Larger sizes, production-length cooling and the actual exact-to-grid
 transition remain next coverage gaps. This sweep is not a GPU timing result.

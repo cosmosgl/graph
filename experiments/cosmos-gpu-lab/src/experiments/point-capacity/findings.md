@@ -6,7 +6,7 @@ scope: Exact-size rebuild baseline with retained IDs, data preservation and trac
 ---
 
 This page records the **exact-size rebuild baseline**. Select **CPU copy vs GPU rebuild** in the demo to
-reproduce it. The [retained-capacity follow-up](#/point-capacity/docs/reuse) compares two GPU-bound lanes and
+reproduce it. The [retained-capacity follow-up](#/point-capacity?section=doc-reuse) compares two GPU-bound lanes and
 reuses storage and kernels within a high-water allocation.
 
 Point-count changes affect more than the position buffer. Cosmos must also update random samples, hierarchy
@@ -99,7 +99,7 @@ before preparation, before retiring the old generation and after retirement. Tho
 devices in the page, so they are useful cleanup cross-checks, not per-lane memory measurements.
 
 **First-frame GPU work** sums begin/end timestamp pairs within the compute and render passes, following the
-[resident timing method](#/resident-layout/docs/timing-updates). CPU validation is outside the interval. These
+[resident timing method](#/resident-layout?section=doc-timing-updates). CPU validation is outside the interval. These
 are evolving frames immediately after updates, including first-use effects; do not treat them as steady-state
 FPS or directly compare their medians with the fixed-initial-state frame benchmark.
 

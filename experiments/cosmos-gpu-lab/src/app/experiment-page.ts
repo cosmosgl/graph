@@ -1,7 +1,7 @@
 import type { ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
 import { createResultTables } from '../runtime/result-tables'
 import { validationContracts } from '../runtime/validation'
-import { addArticleSections, rewriteArticleLinks } from './article-sections'
+import { addArticleSections } from './article-sections'
 import { articleSectionId, experimentHref } from './router'
 import { researchMethodPages, type ResearchSummary } from './research'
 import { renderInvestigationContext } from './research-ui'
@@ -188,7 +188,6 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
     const pageOf = (element: Element): number => order.indexOf((element as HTMLElement).dataset.documentId!)
     return pageOf(a) - pageOf(b)
   }))
-  rewriteArticleLinks(host, experiment, record)
   unlinkOtherExperiments(host, experiment)
 }
 

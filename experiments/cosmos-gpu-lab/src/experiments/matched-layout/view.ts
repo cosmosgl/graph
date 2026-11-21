@@ -71,8 +71,8 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       data-run-part="results"></div>
     <div data-output="center-cost" class="many-body-results"
       data-run-part="diagnostics"></div>
-    <p class="demo-note">Read <a href="#/matched-layout/docs/method">the method and metric definitions</a> and
-      <a href="#/matched-layout/docs/findings">measured findings</a>. This diagnostic includes CPU work and readbacks;
+    <p class="demo-note">Read <a href="#/matched-layout?section=doc-method">the method and metric definitions</a> and
+      <a href="#/matched-layout?section=doc-findings">measured findings</a>. This diagnostic includes CPU work and readbacks;
       it is not a runtime performance benchmark.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)

@@ -9,8 +9,8 @@ scope: Initial fixed-radius local-repulsion implementation; superseded by the pr
 
 The first local browser check matched the CPU reference for both tiled all-pairs and spatial-grid
 forces. At 1,024 uniform points, the grid reduced candidate checks from 1,023 to about 22.6 per point.
-This records the initial implementation; the later [precision findings](#/neighborhood-forces/docs/precision)
-and [precision cost comparison](#/neighborhood-forces/docs/precision-cost) cover the corrected dense-case kernels.
+This records the initial implementation; the later [precision findings](#/neighborhood-forces?section=doc-precision)
+and [precision cost comparison](#/neighborhood-forces?section=doc-precision-cost) cover the corrected dense-case kernels.
 
 Recorded on **9 November 2026**, using the initial neighborhood-force implementation in Chrome 156 on macOS. The session exposed eight logical processors and used
 480×480 canvases at device pixel ratio 2. GPU identity and power state were not captured.
@@ -32,7 +32,7 @@ position error **4.09e-8**. That larger check was sampled, not exhaustive. The i
 Chromium regression run passed eight tests, including six GPU cases; subsequent work expanded the suite.
 
 These are correctness observations. Sub-millisecond wall timings were timer-limited and did not
-establish a general speedup. See [Batched findings](#/neighborhood-forces/docs/batched-results) for
+establish a general speedup. See [Batched findings](#/neighborhood-forces?section=doc-batched-results) for
 historical timing results and their limitations.
 
 ## Reproduce the checks

@@ -5,7 +5,7 @@ device: Apple M3; standalone Chrome 156
 scope: 8,192-point degree/threshold controls, evolving trajectories and normal-frame timing.
 ---
 
-The [first hub study](#/hub-springs/docs/findings) found a frozen full-star gain but mixed low-degree results.
+The [first hub study](#/hub-springs?section=doc-findings) found a frozen full-star gain but mixed low-degree results.
 This follow-up tests whether the candidate preserves evolving Cosmos layouts, then repeats normal-frame timing
 with a configurable hub threshold. Existing reference functions and tolerance constants are unchanged.
 
