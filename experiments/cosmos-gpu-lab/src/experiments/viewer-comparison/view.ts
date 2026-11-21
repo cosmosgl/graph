@@ -1,5 +1,4 @@
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphRgba } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createIntegrated, nextFrame, type Integrated } from '../integrated-webgpu/runtime'
@@ -29,11 +28,11 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       <section><h3>Production WebGL · luma v9</h3><div data-webgl style="height:320px;position:relative"></div><p data-gl-status></p></section>
       <section><h3>Candidate WebGPU · luma v10</h3><canvas data-webgpu aria-label="Candidate WebGPU graph"
       style="display:block;height:320px;touch-action:none"></canvas><p data-gpu-status></p></section>
-    </div><p data-run-part="configuration">Click a point to highlight it; drag a point while running. Pan empty space and scroll to zoom.
+    </div><p class="demo-note" data-run-part="visualization">Click a point to highlight it; drag a point while running. Pan empty space and scroll to zoom.
     Production drag starts from its hover result; move over a point before dragging. Fit is deliberate, not automatic.</p>
     ${typeof Element.prototype.moveBefore === 'function'
     ? ''
-    : `<p data-run-part="configuration" data-restart-note>On this browser, opening a reference restarts the graphs.
+    : `<p class="demo-note" data-run-part="visualization" data-restart-note>On this browser, opening a reference restarts the graphs.
     Completed results stay in this tab; export JSON to keep them after closing it.</p>`}
     <section data-run-part="results"><div data-results>No assessment yet.</div><div data-recovered-results></div></section>
     <section data-run-part="diagnostics"><div class="controls">
@@ -71,9 +70,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: failure || `${records.filter(r => report(r).verdict === 'Fail').length} failed checks`,
     unchecked: 'Full compatibility and migration readiness',
   }),
-  { experiment: 'viewer-comparison', fixedOrder: true, devices: () => [gl?.info, gpu?.info].filter(Boolean) })
-  compactRunControls(host, { diagnostics: true })
-  host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
+  { experiment: 'viewer-comparison', devices: () => [gl?.info, gpu?.info].filter(Boolean) })
   const panel = glHost.parentElement!
   let width = Math.max(1, Math.floor(panel.getBoundingClientRect().width))
   glHost.style.width = `${width}px`; canvas.style.width = `${width}px`

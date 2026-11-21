@@ -1,7 +1,6 @@
 import { setStatus, drawPoint } from '../../runtime/presentation'
 import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
@@ -460,8 +459,11 @@ export async function createGridExperiment (host: HTMLElement, options: {
     'Approximation quality is separate from port compatibility; unrun inputs.',
     Object.keys(errors),
     runError,
-    'complete tick comparisons'), { experiment: experimentId, devices: () => lanes.map(l => l.backend.info) })
-  compactRunControls(host, { diagnostics: true, settings: ['[data-control="slots"]', '[data-control="quality"]'] })
+    'complete tick comparisons'), {
+    experiment: experimentId,
+    devices: () => lanes.map(l => l.backend.info),
+    secondarySettings: ['[data-control="slots"]', '[data-control="quality"]'],
+  })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

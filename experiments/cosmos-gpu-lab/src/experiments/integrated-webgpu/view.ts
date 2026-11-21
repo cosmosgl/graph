@@ -1,6 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { changedMembership } from '../cluster-attraction/study'
 import { changedTargets } from '../point-attractors/data'
 import { gpuTimingProtocol, hubComparisonProtocol, gpuLargeMatrix, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
@@ -74,7 +73,6 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: failure || runtime.error || evidenceFailure || 'None recorded',
     unchecked: 'Strict pixel compatibility, physical display latency and full migration readiness.',
   }), { experiment: 'integrated-webgpu', devices: () => [runtime.deviceLabel] })
-  compactRunControls(host, { diagnostics: true })
   const pilotDiagnostics = host.querySelector<HTMLElement>('#run-diagnostics')!
   const update = (): void => {
     compositionControls.hidden = !runtime.composition

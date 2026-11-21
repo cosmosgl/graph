@@ -35,10 +35,9 @@ export function createLargeComparisonView (
   const playbackNote = youtube
     ? 'Each pane keeps its last rate of GPU-completed simulation frames.'
     : 'Live rates count submitted simulation steps while both graphs share the GPU.'
-  host.innerHTML = `<div class="controls">
+  host.innerHTML = `<div class="controls run-primary-actions">
     ${playbackMarkup}
     <button type="button" data-comparison-fit disabled>Fit</button></div>
-    <p role="status" data-comparison-status>${kind === 'youtube' ? 'Loading the YouTube dataset…' : 'Loading the graphs…'}</p>
     <div class="viewer-comparison-panels large-comparison-panels">
       <section><h2>Production WebGL</h2><div class="large-comparison-surface" data-comparison-webgl></div>
         <p class="comparison-step-rate" data-webgl-rate>— ${rateUnit}</p></section>
@@ -46,6 +45,7 @@ export function createLargeComparisonView (
         <canvas aria-label="${title} in WebGPU"></canvas></div>
         <p class="comparison-step-rate" data-webgpu-rate>— ${rateUnit}</p></section>
     </div>
+    <p role="status" data-comparison-status>${kind === 'youtube' ? 'Loading the YouTube dataset…' : 'Loading the graphs…'}</p>
     <p class="demo-note">Drag or scroll either graph to pan or zoom both. ${playbackNote}</p>`
   if (benchmark) {
     if (benchmark.chart) host.append(renderResultChart(benchmark.chart))

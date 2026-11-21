@@ -1,6 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import { fitView } from '../many-body/backend'
 import { median } from '../many-body/timing'
@@ -157,8 +156,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     failed: error || (failed ? `${failed} failed checks` : 'None recorded'),
     unchecked: 'Unsampled ticks; combined forces; complete frame cost; production integration',
   }),
-  { experiment: 'cluster-attraction', fixedOrder: true, devices: () => Object.values(backends).map(b => b.info) })
-  compactRunControls(host, { diagnostics: true })
+  { experiment: 'cluster-attraction', devices: () => Object.values(backends).map(b => b.info) })
   await initialize()
   return {
     pause: stop,

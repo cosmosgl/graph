@@ -1,6 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import { graphRgba } from '../../runtime/palette'
 import { createIntegrated } from '../integrated-webgpu/runtime'
 import { evaluate } from '../integrated-webgpu/evaluate'
@@ -23,7 +22,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <section data-run-part="configuration"><div class="controls">
       <label>Member ID <input data-member type="number" min="0" max="33" step="1" value="0" style="width:5rem"></label>
       <button data-action="locate">Locate member</button>
-      <label><input type="checkbox" data-degree> Size circles by degree</label></div>
+      <label><input type="checkbox" data-degree> Size circles by degree</label></div></section>
+    <section data-run-part="visualization">
       <p>IDs 0–33 come from the dataset. Degree is the number of neighbors; edge weights are shown as total connection weight.</p>
       <p data-member-message></p><section aria-label="Selected member neighbors"><h3>Neighbors</h3>
       <div data-neighbors style="display:flex;flex-wrap:wrap;gap:8px"></div>
@@ -50,9 +50,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     passed: `${rows.filter(row => row.pass).length} named checks`,
     failed: failure || r.error || `${rows.filter(row => !row.pass).length} failed checks`,
     unchecked: 'Larger graphs and feedback outside the named checks.',
-  }), { experiment: 'pilot-viewer', fixedOrder: true, devices: () => [r.info] })
-  compactRunControls(host, { diagnostics: true })
-  host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
+  }), { experiment: 'pilot-viewer', devices: () => [r.info] })
   const record = (checks: Check[], capture: unknown): void => {
     rows.push(...checks); captures.push(capture)
     const table = document.createElement('table'); table.innerHTML = '<thead><tr><th>Check</th><th>Result</th><th>Scope</th></tr></thead>'

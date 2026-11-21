@@ -16,6 +16,53 @@ it('keeps the styled experiment cards within the page at the current browser wid
   expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })
 
+it('keeps the migration page and guides in the experiment reading column at both widths', async () => {
+  const originalWidth = window.innerWidth; const originalHeight = window.innerHeight
+  const pages = [
+    ['roadmap', 'Cosmos → WebGPU'], ['learn', 'How WebGPU works'],
+    ['validation-workflow', 'Validation workflow'], ['numerical-research', 'Numerical research'],
+    ['architecture', 'Lab architecture'], ['vocabulary', 'Vocabulary'], ['concepts/reduction', 'Parallel reduction'],
+  ]
+  const expectStack = (nodes: NodeListOf<Element>, label: string): void => {
+    expect(nodes.length, label).toBeGreaterThan(1)
+    const first = nodes[0].getBoundingClientRect()
+    let bottom = first.top
+    for (const node of nodes) {
+      const bounds = node.getBoundingClientRect()
+      expect(bounds.left, label).toBeCloseTo(first.left)
+      expect(bounds.top, label).toBeGreaterThanOrEqual(bottom - 1)
+      bottom = bounds.bottom
+    }
+  }
+  try {
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    for (const width of [1440, 320]) {
+      await page.viewport(width, 850)
+      for (const [path, title] of pages) {
+        window.location.hash = `#/${path}`
+        await vi.waitFor(() => {
+          expect(host!.querySelector('.reading-document > header h1')?.textContent, path).toBe(title)
+          expect(host!.querySelector('.reading-document article.prose'), path).not.toBeNull()
+        })
+        const documentView = host.querySelector('.reading-document')!
+        const bounds = documentView.getBoundingClientRect()
+        expect(documentView.querySelectorAll('h1'), path).toHaveLength(1)
+        expect(bounds.width, path).toBeLessThanOrEqual(560)
+        expect(bounds.left, path).toBeCloseTo(document.documentElement.clientWidth - bounds.right)
+        expect(document.documentElement.scrollWidth, path).toBeLessThanOrEqual(document.documentElement.clientWidth)
+        const contents = documentView.querySelectorAll('.document-layout > *')
+        if (contents.length) expectStack(contents, path)
+        if (path === 'learn') expectStack(documentView.querySelectorAll('.learning-contents nav a'), 'Chapters')
+        if (path === 'roadmap') {
+          expectStack(documentView.querySelectorAll('#what-remains + ul > li'), 'What remains')
+          expectStack(documentView.querySelectorAll('#parked-investigations + p + ul > li'), 'Parked investigations')
+          expectStack(documentView.querySelector('.coverage-feature')!.querySelectorAll(':scope > *'), 'Coverage details')
+        }
+      }
+    }
+  } finally { await page.viewport(originalWidth, originalHeight) }
+})
+
 it('keeps Quick jump editable on a phone and shows experiment mini cards among the top matches', async () => {
   const originalWidth = window.innerWidth; const originalHeight = window.innerHeight
   try {
@@ -85,7 +132,7 @@ it('keeps the open center measurement preview inside a narrow page', async () =>
   host = document.createElement('div'); host.style.width = '320px'; document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('center-force-cost'))
   window.location.hash = '#/center-mass?section=run-diagnostics'
-  await vi.waitFor(() => expect(host!.querySelector('#run-diagnostics details[open]')).not.toBeNull())
+  await vi.waitFor(() => expect(host!.querySelector('#run-diagnostics [data-scale-preview]')).not.toBeNull())
   const preview = host.querySelector('[data-scale-preview]')!.getBoundingClientRect()
   const diagnostics = host.querySelector('#run-diagnostics')!.getBoundingClientRect()
   expect(preview.width).toBeGreaterThan(0)
@@ -132,8 +179,13 @@ it('keeps related experiment buttons in a single scrollable row below the live c
         previousRight = bounds.right
       }
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
+      const settings = content.querySelector('#run-configuration')!.getBoundingClientRect()
+      const run = content.querySelector('#run-live-viewer')!.getBoundingClientRect()
+      expect(settings.left).toBeCloseTo(run.left)
+      expect(settings.width).toBeCloseTo(run.width)
+      expect(settings.bottom).toBeLessThan(run.top)
+      expect(stageBounds.width).toBeLessThanOrEqual(560)
     }
-    expect(getComputedStyle(content.querySelector('.run-workbench')!).gridTemplateColumns.split(' ')).toHaveLength(2)
     checkRow()
     field.value = '8192'
 
@@ -165,7 +217,7 @@ it('keeps the same button dimensions across the experiment pages', () => {
   expect(sizes.every(size => size.width === sizes[0].width && size.height === sizes[0].height)).toBe(true)
 })
 
-it('reveals detailed evidence below the graph and focuses its heading without rebuilding the run', async () => {
+it('shows evidence below the graph and focuses its heading without rebuilding the run', async () => {
   const create = vi.spyOn(findExperiment('curved-links')!, 'create').mockImplementation(async stage => {
     stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>
       <button data-run-action="primary">Compare</button><section data-run-part="visualization" class="backend-panels styling-panels">
@@ -181,9 +233,9 @@ it('reveals detailed evidence below the graph and focuses its heading without re
   const finding = host.querySelector('#recorded-findings')!
   expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
-  host.querySelector<HTMLDetailsElement>('.case-evidence-detail')!.open = true
   const id = 'doc-case-evidence-what-was-compared'
   await vi.waitFor(() => expect(host!.querySelector(`#${id}`)).not.toBeNull())
+  expect(host.querySelector(`#${id}`)?.closest('details')).toBeNull()
   host.querySelector<HTMLAnchorElement>(`#${id} .section-permalink`)!.click()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe(id))
   const header = host.querySelector('.lab-header')!.getBoundingClientRect()

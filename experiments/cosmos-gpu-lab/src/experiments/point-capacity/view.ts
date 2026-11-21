@@ -1,6 +1,5 @@
 import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createCapacitySession, type CapacitySession, type CapacityComparison } from '../combined-layout/capacity-session'
 import { CAPACITY_CYCLE } from '../combined-layout/capacity'
@@ -223,11 +222,13 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     'Unrun resize histories, total VRAM and device recovery.',
     [],
     runError ?? error,
-    'frame and resize checks'), { experiment: 'point-capacity', devices: () => session?.lanes.map(l => l.info) ?? [] })
-  compactRunControls(host, {
-    settings: ['[data-control="comparison"]', '[data-control="fixture"]', '[data-control="repeats"]',
-      '[data-control="cpu"]'],
-    diagnostics: true,
+    'frame and resize checks'), {
+    experiment: 'point-capacity',
+    devices: () => session?.lanes.map(l => l.info) ?? [],
+    secondarySettings: [
+      '[data-control="comparison"]', '[data-control="fixture"]', '[data-control="repeats"]',
+      '[data-control="cpu"]',
+    ],
   })
   await reset()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }

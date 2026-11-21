@@ -6,7 +6,7 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('runs both local measurements on the 
   document.body.append(host)
   const experiment = await createCenterMassExperiment(host)
   try {
-    host.querySelector<HTMLDetailsElement>('#run-diagnostics details')!.open = true
+    expect(host.querySelector('#run-diagnostics details')).toBeNull()
     const input = host.querySelector<HTMLInputElement>('[data-scale-counts]')!
     input.value = '257'
     host.querySelector<HTMLButtonElement>('[data-scale-run]')!.click()

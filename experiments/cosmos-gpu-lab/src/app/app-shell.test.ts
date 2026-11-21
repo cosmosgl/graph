@@ -98,14 +98,15 @@ it('opens a suggested experiment from an empty search field with the keyboard', 
 })
 
 it('opens the workgroup repulsion experiment from the catalog', async () => {
-  const { create } = mockRun('workgroup-repulsion')
+  const experiment = findExperiment('workgroup-repulsion')!
+  const { create } = mockRun(experiment.id)
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull())
   host.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe(findExperiment('workgroup-repulsion')!.title))
-  expect(host.querySelector('.case-question')!.textContent).toContain('workgroup buffer')
-  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
+  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe(experiment.title))
+  expect(host.querySelector('.case-recorded-summary p')!.textContent).toBe(readinessFor(experiment.id, startingCase(experiment)).finding)
+  expect(host.querySelector('.case-evidence > h2')).not.toBeNull()
   expect(create).toHaveBeenCalledOnce()
 })
 
@@ -153,7 +154,7 @@ it('opens a legacy center method link on the same page without starting a device
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('case-comparison'))
   expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
-  expect(host.querySelector('#recorded-findings, .case-intro')).not.toBeNull()
+  expect(host.querySelector('#recorded-findings')).not.toBeNull()
   expect(host.querySelector('.case-evidence-page, #doc-agent-recipe')).toBeNull()
   expect(create).not.toHaveBeenCalled()
 })
@@ -171,7 +172,7 @@ it('preserves old base-route Run bookmarks and focuses the requested result', as
   window.history.replaceState(null, '', '#/point-rendering?section=run-results')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-results'))
-  expect(host.querySelector('.case-question')!.textContent).toContain('same circles')
+  expect(host.querySelector('.case-header h1')!.textContent).toBe(findExperiment('point-rendering')!.title)
   expect(create).toHaveBeenCalledTimes(1)
 })
 
@@ -207,7 +208,7 @@ it('keeps the recorded result readable and offers retry when live setup fails', 
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.cases![0].recorded!.conclusion)
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
-  const retry = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
+  const retry = host.querySelector<HTMLButtonElement>('#case-live > [data-retry-comparison]:not([hidden])')!
   expect(retry.hidden).toBe(false); retry.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create).toHaveBeenCalledTimes(2)
@@ -224,7 +225,7 @@ it('keeps the selected case finding and retry available when live setup fails', 
   expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
   expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.singlePage!.observations[1].limits)
   expect(host.textContent).not.toContain('Instructions for agents')
-  const retry = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
+  const retry = host.querySelector<HTMLButtonElement>('#case-live > [data-retry-comparison]:not([hidden])')!
   expect(retry.hidden).toBe(false); retry.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create).toHaveBeenCalledTimes(2)
@@ -240,7 +241,7 @@ it('keeps the trajectory finding visible with an opt-in live comparison from the
   expect(host.querySelector('#center-trajectories')!.textContent).toContain('failed the strict position comparison from tick 10')
   expect(host.querySelector('canvas')).toBeNull()
   expect(create).not.toHaveBeenCalled()
-  const start = host.querySelector<HTMLButtonElement>('.case-stage > button:not([hidden])')!
+  const start = host.querySelector<HTMLButtonElement>('#case-live > [data-start-comparison]:not([hidden])')!
   expect(start.textContent).toBe('Start the live comparison'); start.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create.mock.calls[0][1]).toBe('center-comparison')
@@ -256,8 +257,8 @@ it('opens the old center measurement URL on the page with both local controls', 
   expect(host.querySelector('[data-once-status]')!.textContent).toContain('Not run')
   expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
   expect(document.activeElement?.id).toBe('run-diagnostics')
-  expect(host.querySelector('#run-diagnostics details summary')!.textContent).toBe('Run local measurements')
-  expect(host.querySelector<HTMLDetailsElement>('#run-diagnostics details')!.open).toBe(true)
+  expect(host.querySelector('#run-diagnostics > h2')!.textContent).toBe('Diagnostics')
+  expect(host.querySelector('#run-diagnostics details')).toBeNull()
   expect(host.querySelector<HTMLButtonElement>('[data-action="initialize"]')!.hidden).toBe(false)
   expect(create).toHaveBeenCalledTimes(1)
   expect(create.mock.calls[0][1]).toBe('center-comparison')
@@ -276,7 +277,7 @@ for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
     expect(finding.textContent).toContain(item.recorded!.conclusion)
     expect(finding.textContent).toContain(item.recorded!.scope)
     expect(finding.textContent).toContain(item.recorded!.limits)
-    expect(finding.querySelector('.case-evidence-detail summary')).not.toBeNull()
+    expect(finding.querySelector('.case-evidence > h2')).not.toBeNull()
     expect(host.textContent).not.toContain('Instructions for agents')
     expect(host.querySelector('#doc-agent-recipe')).toBeNull()
   })
@@ -303,7 +304,7 @@ it('opens the recorded pilot latency investigation without creating a GPU device
   const archived = experiment.cases!.find(item => item.id === 'selection-feedback')!
   const doc = articleSectionId(caseEvidenceLinks(archived)[0].page)
   await route(`#/pilot-viewer?section=${doc}`, () => expect(document.activeElement?.id).toBe(doc))
-  expect(host.querySelector(`#${doc}`)?.closest('details')?.open).toBe(true)
+  expect(host.querySelector(`#${doc}`)?.closest('details')).toBeNull()
   expect(host.textContent).not.toContain('Instructions for agents')
   expect(create).not.toHaveBeenCalled()
 })
@@ -322,11 +323,11 @@ it('keeps the finding and evidence available while delayed live setup fails', as
   const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
   expect(new Set(ids).size).toBe(ids.length)
   expect(host.querySelector('.case-recorded')!.textContent).toContain(findExperiment('viewer-comparison')!.cases![0].recorded!.conclusion)
-  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
+  expect(host.querySelector('.case-evidence > h2')).not.toBeNull()
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
   rejectSetup(new Error('Delayed setup failure'))
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Delayed setup failure'))
-  expect(host.querySelector('.case-evidence-detail summary')).not.toBeNull()
+  expect(host.querySelector('.case-evidence > h2')).not.toBeNull()
   expect(host.querySelector('#doc-agent-recipe')).toBeNull()
 })
 
@@ -378,11 +379,10 @@ it.each([
   const summary = host.querySelector('.case-recorded-summary')!
   expect(summary.querySelector('.readiness-badge')?.textContent).toContain(badge)
   expect(summary.textContent).not.toContain('Recorded finding')
-  const target = summary.querySelector<HTMLAnchorElement>('a')!
-  expect(target.hash).toBe(`#/${id}?section=${section}`)
-  target.click()
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe(section))
-  expect(host.querySelector(`#${section}`)?.closest('details')?.open).toBe(true)
+  expect(summary.querySelector('a')).toBeNull()
+  await vi.waitFor(() => expect(host!.querySelector(`#${section}`)?.getClientRects().length).toBeGreaterThan(0))
+  await route(`#/${id}?section=${section}`, () => expect(document.activeElement?.id).toBe(section))
+  expect(host.querySelector(`#${section}`)?.closest('details')).toBeNull()
   expect(create).toHaveBeenCalledTimes(1)
 })
 
@@ -449,8 +449,8 @@ for (const [id, caseId] of [
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
     expect(host.querySelector('h1')!.textContent).toBe(experiment.title)
-    expect(host.querySelector('.case-question')!.textContent).toBe(item.question)
-    expect(host.querySelector('.case-intro')!.textContent).toContain(item.tryIt)
+    expect(host.querySelector('.case-comparison .case-description')!.textContent).toBe(item.description)
+    expect(host.querySelector('.case-comparison .case-instruction')!.textContent).toBe(item.tryIt)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.reference)
     expect(host.querySelector('.case-comparison')!.textContent).toContain(item.acceptance)
     const summary = host.querySelector('.case-header .case-recorded-summary')!
@@ -460,8 +460,8 @@ for (const [id, caseId] of [
     expect(lookup.querySelectorAll('.case-observations > li')).toHaveLength(experiment.cases!.length)
     if (item.recorded) expect(lookup.querySelector(`#finding-${caseId}`)!.textContent).toContain(item.recorded.limits)
     expect(host.querySelector('#run-results')!.compareDocumentPosition(lookup) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    const details = lookup.querySelector('details')!
-    details.open = true
+    const evidence = lookup.querySelector('[data-evidence-content]')!
+    expect(evidence.closest('details')).toBeNull()
     const chooser = host.querySelector<HTMLSelectElement>('.case-chooser select')!
     expect(chooser.value).toBe(caseId)
     expect(create).toHaveBeenCalledOnce()
@@ -471,11 +471,11 @@ for (const [id, caseId] of [
     await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
     expect(create.mock.calls[1][1]).toBe(first.id)
     expect(destroy).toHaveBeenCalledTimes(1)
-    expect(host.querySelector('.case-question')!.textContent).toBe(first.question)
+    expect(host.querySelector('.case-comparison .case-description')!.textContent).toBe(first.description)
     expect(summary.querySelector('.readiness-badge')?.textContent).toContain(readinessFor(id, first).badge)
     expect(summary.querySelector('p')?.textContent).toBe(readinessFor(id, first).finding)
     expect(host.querySelector('.case-recorded')).toBe(lookup)
-    expect(details.open).toBe(true)
+    expect(lookup.querySelector('[data-evidence-content]')).toBe(evidence)
     expect(host.querySelector(`.case-group-navigation a[href^="#/${id}"]`)).toBeNull()
   })
 }
@@ -624,7 +624,8 @@ it('opens a bookmarked YouTube size and switches sizes on the same page', async 
   window.history.replaceState(null, '', subset)
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  const sizes = host.querySelector('[role="group"][aria-label="Graph size"]')!
+  const sizes = host.querySelector('[role="group"].case-chooser')!
+  expect(sizes.querySelector('#case-chooser-label')?.textContent).toBe('Graph size')
   const [fullSize, smallerSize, sparseSize] = sizes.querySelectorAll('button')
   const findings = host.querySelector('#recorded-findings')!
   expect(smallerSize.textContent).toBe('262,144 points')

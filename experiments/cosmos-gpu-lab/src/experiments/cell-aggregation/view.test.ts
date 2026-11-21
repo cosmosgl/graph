@@ -8,8 +8,9 @@ it('offers a small starting comparison while preserving the grid acceptance case
     try {
       expect(host.querySelector<HTMLSelectElement>('[data-control="count"]')!.value).toBe(points)
       expect(host.querySelector('[data-action="compare"]')?.closest('.run-primary-actions')).not.toBeNull()
-      expect(host.querySelector('[data-control="candidate"]')?.closest('details')?.querySelector('summary')?.textContent).toBe('More settings')
-      expect(host.querySelector('#run-diagnostics details > summary')?.textContent).toBe('Additional checks')
+      expect(host.querySelector('#run-more-settings [data-control="candidate"]')).not.toBeNull()
+      expect(host.querySelector('#run-diagnostics > h2')?.textContent).toBe('Diagnostics')
+      expect(host.querySelector('details')).toBeNull()
     } finally { view.destroy(); host.remove() }
   }
 })

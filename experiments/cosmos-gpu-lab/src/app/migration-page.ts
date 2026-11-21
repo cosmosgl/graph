@@ -36,5 +36,7 @@ export async function renderMigrationPage (host: HTMLElement): Promise<void> {
       featureCoverage: renderCoverage,
     },
   })
-  addMigrationContents(host.querySelector('article')!)
+  const article = host.querySelector('article')!
+  for (const list of article.querySelectorAll('#what-remains + ul, #parked-investigations + p + ul')) list.setAttribute('role', 'list')
+  addMigrationContents(article)
 }

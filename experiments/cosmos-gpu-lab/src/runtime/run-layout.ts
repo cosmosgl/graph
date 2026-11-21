@@ -12,7 +12,21 @@ export type RunSummary = {
 type Dispose = () => void
 const presentations = new WeakMap<HTMLElement, Dispose>()
 type RunContext = {
-  experiment: string; devices?: () => string[]; fixedOrder?: boolean; scope?: string; showChecks?: boolean; resultsFirst?: boolean;
+  experiment: string; devices?: () => string[]; scope?: string; showChecks?: boolean; resultsFirst?: boolean;
+  secondarySettings?: readonly string[];
+}
+
+function placeSecondarySettings (frame: HTMLElement, selectors: readonly string[]): void {
+  const configuration = frame.querySelector('#run-configuration')!
+  const fields = new Set<Element>()
+  for (const selector of selectors) {
+    for (const element of configuration.querySelectorAll(selector)) fields.add(element.closest('label') ?? element)
+  }
+  if (!fields.size) return
+  const section = document.createElement('section'); section.className = 'run-secondary-settings'; section.id = 'run-more-settings'
+  section.innerHTML = '<h2>More settings</h2><div class="scale-toolbar"></div>'
+  section.lastElementChild!.append(...fields)
+  frame.querySelector('#run-run')!.after(section)
 }
 
 // Regions and action roles are authored by each view. Never classify prose by
@@ -23,25 +37,23 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   const showChecks = context?.showChecks !== false
   const keys: Array<keyof RunSummary> = showChecks ? ['state', 'passed', 'failed', 'unchecked'] : ['state']
   const frame = document.createElement('div'); frame.className = 'run-layout integrated-run'
-  frame.innerHTML = `<section class="run-overview" aria-label="Current local run"
-      data-run-summary>
-    ${showChecks ? `<p class="run-source">Live results · session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>` : ''}
-    <dl>${keys.map((key, i) =>
+  frame.innerHTML = `<div class="run-workbench">
+      <section class="run-settings" id="run-configuration" aria-label="Configuration"></section>
+      <section id="run-run" aria-label="Live comparison"><div class="controls run-primary-actions"></div>
+        <div class="run-visualization"></div><div data-run-slot="status"></div></section>
+      <section id="run-results" aria-label="Live results"><h2>Live results</h2>
+        <section class="run-overview" aria-label="Current local run" data-run-summary>
+          ${showChecks ? `<p class="run-source">Session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>` : ''}
+          <dl>${keys.map((key, i) =>
     `<div><dt>${['Run state', 'Passed', 'Failed / unavailable', 'Unchecked'][i]}</dt><dd
-      data-run-summary-value="${key}"></dd></div>`).join('')}</dl>
-    <div
-      data-run-slot="status"></div></section>
-    <div class="run-workbench"><section class="run-settings" id="run-configuration" aria-label="Configuration"><h2>Configuration</h2></section>
-      <div class="run-display"><section id="run-run" aria-label="Live comparison"><div class="controls run-primary-actions"></div>
-        <div class="run-visualization"></div></section><section id="run-results" aria-label="Live results"><h2>Live results</h2>
-        <div class="result-context"
-      data-run-owned><dl><div><dt>Device</dt><dd
-      data-run-devices>Not reported</dd></div>
+            data-run-summary-value="${key}"></dd></div>`).join('')}</dl>
+        </section>
+        <div class="result-context" data-run-owned><dl><div><dt>Device</dt><dd data-run-devices>Not reported</dd></div>
           <div><dt>Scope</dt><dd
       data-run-scope></dd></div></dl>
           ${showChecks ? '<p>Pass / Fail refer to the named check. Unchecked means no check ran; Unavailable means a result could not be obtained.</p>' : ''}
         </div>
-        <div class="controls run-export-actions"></div></section></div></div>
+        <div class="controls run-export-actions"></div></section></div>
     <section class="run-explanation" id="run-explanation"><h2>Explanation</h2></section>
     <section class="run-diagnostics" id="run-diagnostics" aria-label="Diagnostics"><h2>Diagnostics</h2>
       <div class="controls run-diagnostic-actions"></div></section>`
@@ -82,33 +94,20 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   if (diagnostics.children.length === 1) diagnostics.remove()
   const explanation = slot('#run-explanation')
   if (explanation.children.length === 1) explanation.remove()
-  const selectedValues = Array.from(frame.querySelectorAll<HTMLSelectElement>('.run-settings select')).map(select => {
+  if (context?.secondarySettings) placeSecondarySettings(frame, context.secondarySettings)
+  const selectedValues = Array.from(frame.querySelectorAll<HTMLSelectElement>('.run-settings select, .run-secondary-settings select')).map(select => {
     const hint = document.createElement('span'); hint.className = 'run-selected-value'; hint.setAttribute('aria-hidden', 'true')
     select.after(hint)
     return { select, hint }
   })
-  slot('#run-results > h2').after(slot('.run-overview'))
   if (context?.resultsFirst) {
     const results = Array.from(slot('#run-results').children).filter(element =>
       element instanceof HTMLElement && (element.dataset.runPart === 'results' || element.dataset.runSection === 'results'))
     slot('#run-results > h2').after(...results)
   }
-  slot('.run-visualization').before(slot('[data-run-slot="status"]'))
-  const workbench = slot('.run-workbench'); const display = slot('.run-display')
-  const settings = slot('.run-settings'); const visualization = slot('#run-run'); const results = slot('#run-results')
-  const wide = window.matchMedia('(min-width: 1200px)')
-  // Move the original nodes so visual, keyboard and reading order agree at
-  // both sizes. Settings never push the narrow-screen canvas out of reach.
-  const reflow = (): void => {
-    if (wide.matches && !context?.fixedOrder) {
-      display.append(visualization, results); workbench.replaceChildren(display, settings)
-    } else workbench.replaceChildren(visualization, settings, results)
-  }
-  // Viewer iframes reload if reparented after setup.
-  reflow(); if (!context?.fixedOrder) wide.addEventListener('change', reflow)
   // Study pages own the navigation targets while their live view is loading.
   if (host.hasAttribute('data-study-run')) {
-    visualization.id = 'run-live-viewer'; explanation.id = 'run-live-explanation'
+    slot('#run-run').id = 'run-live-viewer'; explanation.id = 'run-live-explanation'
   }
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
@@ -149,7 +148,7 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   observer.observe(host, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'hidden'] })
   host.addEventListener('change', refresh)
   presentations.set(host, () => {
-    observer.disconnect(); tables.destroy(); wide.removeEventListener('change', reflow); host.removeEventListener('change', refresh)
+    observer.disconnect(); tables.destroy(); host.removeEventListener('change', refresh)
   })
   refresh()
 }

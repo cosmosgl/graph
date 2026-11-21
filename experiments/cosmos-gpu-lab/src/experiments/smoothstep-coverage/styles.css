@@ -1,36 +1,10 @@
-.case-document.case-finding-first {
-  max-width: 560px;
-  min-width: 0;
-}
-
-.case-finding-first .case-header > h1 {
-  font-size: clamp(25px, 4vw, 36px);
-  font-weight: 500;
-  letter-spacing: -.025em;
-}
-
-.case-finding-first .case-recorded-summary {
-  margin-top: 8px;
-  padding: 0;
-  border: 0;
-}
-
-.case-finding-first .case-recorded-summary p { margin-bottom: 0; }
-.case-finding-first .case-stage { margin-top: 26px; }
-.case-finding-first .case-evidence { margin-top: 0; }
-.case-finding-first :is(#recorded-findings, #finding-line-edge, #run-run, #run-configuration, #run-results, #run-diagnostics, [id^="doc-"]) {
-  scroll-margin-top: calc(var(--lab-header-height, 88px) + 16px);
-}
-
-.line-edge-run > section + section,
-.case-finding-first .case-inline-evidence,
-.case-finding-first .case-evidence > h2:not(:first-child) {
+.line-edge-run > section + section {
   margin-top: 24px;
   padding-top: 18px;
   border-top: 1px solid var(--control-border);
 }
 
-.line-edge-run h2, .case-finding-first .case-evidence > h2 {
+.line-edge-run h2 {
   margin: 0 0 10px;
   font-size: var(--type-subsection);
   font-weight: 500;

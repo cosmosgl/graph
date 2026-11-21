@@ -140,7 +140,8 @@ it('routes native arithmetic selections to the matching experimental kernels', a
 it('shows a useful precision trace and keeps the original verdict', async () => {
   const page = await mount()
   const trace = page.querySelector<HTMLButtonElement>('[data-action="trace"]')!
-  trace.closest('details')!.open = true
+  expect(trace.closest('#run-diagnostics')).not.toBeNull()
+  expect(trace.closest('details')).toBeNull()
   trace.click(); await ready(page)
   expect(page.querySelector('[data-output="status"]')!.textContent).toMatch(/^Passed/)
   expect(page.querySelector('[data-output="trace"] details')).toBeNull()

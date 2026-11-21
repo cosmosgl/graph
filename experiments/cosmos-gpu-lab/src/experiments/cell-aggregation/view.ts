@@ -1,6 +1,5 @@
 import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
-import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createGridStudy, type GridStudy, type GridCase } from '../combined-layout/grid-study'
 import { FROZEN_POLICY, frozenSummary, frozenPairedWins } from '../combined-layout/frozen-timing'
@@ -220,11 +219,13 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
     'Pending trials and non-checkpoint ticks; broader graph acceptance.',
     [],
     runError,
-    'paired cases'), { experiment: acceptance ? 'layout-acceptance' : 'cell-aggregation', devices: () => study?.report.info ? [study.report.info] : [] })
-  compactRunControls(host, {
-    settings: ['[data-control="distribution"]', '[data-control="history"]', '[data-control="pinned"]',
-      '[data-control="checkpoint"]', '[data-control="candidate"]'],
-    diagnostics: true,
+    'paired cases'), {
+    experiment: acceptance ? 'layout-acceptance' : 'cell-aggregation',
+    devices: () => study?.report.info ? [study.report.info] : [],
+    secondarySettings: [
+      '[data-control="distribution"]', '[data-control="history"]', '[data-control="pinned"]',
+      '[data-control="checkpoint"]', '[data-control="candidate"]',
+    ],
   })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }
