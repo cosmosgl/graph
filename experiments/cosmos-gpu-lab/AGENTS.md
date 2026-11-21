@@ -25,6 +25,10 @@ bookkeeping, and parked experiments out of the migration suite.
   Lead with the title, catalogue badge, and a short finding when available. Put
   the controls and live render next, then show run data, diagnostics, limits,
   and evidence.
+- **Keep content visible in the page.** Put settings, explanations, results,
+  and run details in ordinary sections that readers can scroll to directly.
+  Show reports and tables inline when a run produces them. Organize long pages
+  with section headings and direct links.
 - **Open demos paused.** Draw the starting layout with the demo's engine on
   load, including from section links. Start simulations and measurements from
   their own controls. Fit the camera once on Run or Fit, then keep it still as
