@@ -50,7 +50,7 @@ jobs:
           set -o pipefail
           pnpm run build 2>&1 | tee build.log
           ! grep -q "error TS" build.log
-      - run: pnpm run build:storybook
+      - run: pnpm run build:pages
       # Advisories reachable from the published package only; dev-tooling
       # advisories are tracked but must not block unrelated work.
       - name: Runtime dependency audit
