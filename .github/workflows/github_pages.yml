@@ -41,12 +41,12 @@ jobs:
           node-version: ${{ steps.node.outputs.floor }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # No `--` separator: npm consumed it, pnpm forwards it literally and
-      # storybook then treats `-o _site` as positional text and builds to the
-      # default directory instead.
-      - run: pnpm run build:storybook -o _site
+      - name: Build website and Storybook
+        run: pnpm run build:pages
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: website/dist
 
   # Deployment job
   deploy:
