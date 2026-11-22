@@ -1,3 +1,4 @@
+import { waitForGpu } from '../../gpu/luma'
 import { fitView } from '../many-body/backend'
 import { compareArray, type Snapshot } from '../many-body/reference'
 import type { Measurement } from '../many-body/timing'
@@ -7,24 +8,25 @@ import { createOracle } from './reference'
 import { differingBits } from './resident'
 import { createCapacityLane, type CapacityLane, type ResizeReport } from './capacity'
 export type CapacityComparison = 'transfer' | 'reuse'
-export type ResizeCheck = {
-  tick: number; alpha: number; reports: ResizeReport[]; differing: number[]; valid: boolean; order: number[];
+export type ResizeRecord = {
+  tick: number; alpha: number; reports: ResizeReport[]; order: number[]; differing?: number[]; valid?: boolean;
 }
 export type CapacityCheckpoint = {
   tick: number; count: number; positions: number; forces: number; cpu?: ReturnType<typeof compareArray>;
   timing: Measurement; controlTiming?: Measurement; valid: boolean; order: number[];
 }
 export async function createCapacitySession (
-  settings: Settings, canvas: (lane: number) => HTMLCanvasElement, comparison: CapacityComparison = 'transfer'
+  settings: Settings, canvas: (lane: number) => HTMLCanvasElement, comparison: CapacityComparison = 'transfer',
+  { checkResizes = true }: { checkResizes?: boolean } = {}
 ): Promise<{
   comparison: CapacityComparison;
-  lanes: CapacityLane[]; resizes: ResizeCheck[]; rows: CapacityCheckpoint[];
+  lanes: CapacityLane[]; resizes: ResizeRecord[]; rows: CapacityCheckpoint[];
   edits: Array<{ tick: number; index: number; point?: number[]; absent?: boolean }>;
-  tick(): number; alpha(): number; resize(count: number, preserve?: boolean): Promise<ResizeCheck>;
+  tick(): number; alpha(): number; resize(count: number, preserve?: boolean): Promise<ResizeRecord>; advancePreview(): void;
   step(checkCpu?: boolean): Promise<CapacityCheckpoint>; patch(index: number, point: Float32Array): void;
   absent(index: number, value: boolean): void; render(): void; destroy(): void;
 }> {
-  const lanes: CapacityLane[] = []; const resizes: ResizeCheck[] = []; const rows: CapacityCheckpoint[] = []
+  const lanes: CapacityLane[] = []; const resizes: ResizeRecord[] = []; const rows: CapacityCheckpoint[] = []
   const edits: Array<{ tick: number; index: number; point?: number[]; absent?: boolean }> = []
   const resizeVisits = new Map<string, number>(); const frameVisits = new Map<number, number>()
   let tick = 0; let alpha = 1; let busy = false; let destroyed = false; let failed = false
@@ -42,29 +44,51 @@ export async function createCapacitySession (
       edits,
       tick: () => tick,
       alpha: () => alpha,
-      async resize (count, preserve = true): Promise<ResizeCheck> {
+      async resize (count, preserve = true): Promise<ResizeRecord> {
         healthy()
         if (!Number.isInteger(count) || count < 4 || count > 16384) throw new Error('Capacity experiment supports 4–16384 points')
         busy = true
         try {
           // Validation snapshots are outside the measured update. The resident
           // lane's resize implementation itself never reads positions to the CPU.
-          const previous = await Promise.all(lanes.map(l => l.backend.read()))
+          const previous = checkResizes ? await Promise.all(lanes.map(l => l.backend.read())) : undefined
+          if (!previous) {
+            // Let the preview finish before starting the resize timers.
+            await Promise.all(lanes.map(async lane => {
+              await waitForGpu(lane.backend.positionSource!().device)
+            }))
+          }
           const reports: ResizeReport[] = []
           const key = `${lanes[0].count}:${count}:${preserve}`; const visit = resizeVisits.get(key) ?? 0
           resizeVisits.set(key, visit + 1)
           const order = comparison === 'reuse' && visit % 2 ? [1, 0] : [0, 1]
           for (const i of order) reports[i] = await lanes[i].resize(count, preserve)
-          const actual = await Promise.all(lanes.map(l => l.backend.read()))
-          const differing = actual.map((s, i) => {
-            const expected = lanes[i].data.input.points.slice()
-            if (preserve) expected.set(previous[i].positions.subarray(0, Math.min(count, reports[i].from) * 4))
-            return differingBits(s.positions, expected)
-          })
-          const valid = reports.every(r => r.deviceRetained) && differing.every(n => n === 0) &&
-            differingBits(actual[0].positions, actual[1].positions) === 0
-          const row = { tick, alpha, reports, differing, valid, order }; resizes.push(row); failed = !valid; return row
+          const row: ResizeRecord = { tick, alpha, reports, order }
+          if (previous) {
+            const actual = await Promise.all(lanes.map(l => l.backend.read()))
+            row.differing = actual.map((s, i) => {
+              const expected = lanes[i].data.input.points.slice()
+              if (preserve) expected.set(previous[i].positions.subarray(0, Math.min(count, reports[i].from) * 4))
+              return differingBits(s.positions, expected)
+            })
+            row.valid = reports.every(r => r.deviceRetained) && row.differing.every(n => n === 0) &&
+              differingBits(actual[0].positions, actual[1].positions) === 0
+            failed = !row.valid
+          }
+          resizes.push(row)
+          return row
         } catch (error) { failed = true; throw error } finally { busy = false }
+      },
+      advancePreview (): void {
+        healthy()
+        try {
+          for (const lane of lanes) {
+            const backend = lane.backend
+            backend.stepTick!(alpha, tick)
+            backend.render(view)
+          }
+          tick++; alpha = cool(alpha, settings.decay)
+        } catch (error) { failed = true; throw error }
       },
       async step (checkCpu = false): Promise<CapacityCheckpoint> {
         healthy(); busy = true

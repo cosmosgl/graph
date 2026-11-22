@@ -31,9 +31,8 @@ function placeSecondarySettings (frame: HTMLElement, selectors: readonly string[
 
 // Regions and action roles are authored by each view. Never classify prose by
 // its DOM position, or infer numerical acceptance from a status message.
-export function mountRunLayout (host: HTMLElement, read: () => RunSummary, context?: RunContext): void {
+export function mountRunLayout (host: HTMLElement, read?: () => RunSummary, context?: RunContext): void {
   presentations.get(host)?.()
-  const opened = new Date().toISOString()
   const showChecks = context?.showChecks !== false
   const keys: Array<keyof RunSummary> = showChecks ? ['state', 'passed', 'failed', 'unchecked'] : ['state']
   const frame = document.createElement('div'); frame.className = 'run-layout integrated-run'
@@ -41,9 +40,10 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
       <section class="run-settings" id="run-configuration" aria-label="Configuration"></section>
       <section id="run-run" aria-label="Live comparison"><div class="controls run-primary-actions"></div>
         <div class="run-visualization"></div><div data-run-slot="status"></div></section>
-      <section id="run-results" aria-label="Live results"><h2>Live results</h2>
+      ${read
+    ? `<section id="run-results" aria-label="Live results"><h2>Live results</h2>
         <section class="run-overview" aria-label="Current local run" data-run-summary>
-          ${showChecks ? `<p class="run-source">Session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>` : ''}
+          ${showChecks ? `<p class="run-source">Session started ${new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>` : ''}
           <dl>${keys.map((key, i) =>
     `<div><dt>${['Run state', 'Passed', 'Failed / unavailable', 'Unchecked'][i]}</dt><dd
             data-run-summary-value="${key}"></dd></div>`).join('')}</dl>
@@ -53,16 +53,18 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
       data-run-scope></dd></div></dl>
           ${showChecks ? '<p>Pass / Fail refer to the named check. Unchecked means no check ran; Unavailable means a result could not be obtained.</p>' : ''}
         </div>
-        <div class="controls run-export-actions"></div></section></div>
+        <div class="controls run-export-actions"></div></section>`
+    : ''}</div>
     <section class="run-explanation" id="run-explanation"><h2>Explanation</h2></section>
     <section class="run-diagnostics" id="run-diagnostics" aria-label="Diagnostics"><h2>Diagnostics</h2>
       <div class="controls run-diagnostic-actions"></div></section>`
   const slot = (selector: string): HTMLElement => frame.querySelector<HTMLElement>(selector)!
-  const destinations: Record<string, HTMLElement> = {
+  const results = frame.querySelector<HTMLElement>('#run-results')
+  const destinations: Record<string, HTMLElement | null> = {
     configuration: slot('.run-settings'),
     visualization: slot('.run-visualization'),
     metrics: slot('.run-visualization'),
-    results: slot('#run-results'),
+    results,
     diagnostics: slot('#run-diagnostics'),
     explanation: slot('#run-explanation'),
     status: slot('[data-run-slot="status"]'),
@@ -103,40 +105,42 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     select.after(hint)
     return { select, hint }
   })
-  if (context?.resultsFirst) {
-    const results = Array.from(slot('#run-results').children).filter(element =>
+  if (results && context?.resultsFirst) {
+    const sections = Array.from(results.children).filter(element =>
       element instanceof HTMLElement && (element.dataset.runPart === 'results' || element.dataset.runSection === 'results'))
-    slot('#run-results > h2').after(...results)
+    results.querySelector('h2')!.after(...sections)
   }
-  // Study pages own the navigation targets while their live view is loading.
-  if (host.hasAttribute('data-study-run')) {
-    slot('#run-run').id = 'run-live-viewer'; explanation.id = 'run-live-explanation'
-  }
+  if (host.hasAttribute('data-study-run')) slot('#run-run').id = 'run-live-viewer'
+  if (host.hasAttribute('data-page-explanation')) explanation.id = 'run-live-explanation'
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
-  slot('[data-run-scope]').textContent = context?.scope ?? (context
-    ? validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'
-    : 'Only the inputs and checks explicitly named below.')
+  if (results) {
+    slot('[data-run-scope]').textContent = context?.scope ?? (context
+      ? validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'
+      : 'Only the inputs and checks explicitly named below.')
+  }
   const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references, .study-overview' })
   const refresh = (): void => {
-    const values = read()
-    for (const key of keys) {
-      const output = slot(`[data-run-summary-value="${key}"]`)
-      if (output.textContent !== values[key]) output.textContent = values[key]
-    }
     for (const { select, hint } of selectedValues) {
       const label = select.selectedOptions[0]?.textContent?.trim() ?? ''
       const hidden = label.length < 30
       if (hint.hidden !== hidden) hint.hidden = hidden
       if (hint.textContent !== label) hint.textContent = label
     }
-    const devices = [...new Set(context?.devices?.().filter(Boolean) ?? [])].join(' · ')
-    const deviceOutput = slot('[data-run-devices]')
-    const deviceRow = deviceOutput.parentElement!
-    const hideDevice = !showChecks && !devices
-    if (deviceRow.hidden !== hideDevice) deviceRow.hidden = hideDevice
-    const deviceText = devices || 'Not reported by this experiment yet'
-    if (deviceOutput.textContent !== deviceText) deviceOutput.textContent = deviceText
+    if (read) {
+      const values = read()
+      for (const key of keys) {
+        const output = slot(`[data-run-summary-value="${key}"]`)
+        if (output.textContent !== values[key]) output.textContent = values[key]
+      }
+      const devices = [...new Set(context?.devices?.().filter(Boolean) ?? [])].join(' · ')
+      const deviceOutput = slot('[data-run-devices]')
+      const deviceRow = deviceOutput.parentElement!
+      const hideDevice = !showChecks && !devices
+      if (deviceRow.hidden !== hideDevice) deviceRow.hidden = hideDevice
+      const deviceText = devices || 'Not reported by this experiment yet'
+      if (deviceOutput.textContent !== deviceText) deviceOutput.textContent = deviceText
+    }
     tables.refresh()
   }
   // Read typed experiment state after batched UI updates. The observer is only a

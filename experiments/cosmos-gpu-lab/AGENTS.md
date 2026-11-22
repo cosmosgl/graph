@@ -22,9 +22,11 @@ bookkeeping, and parked experiments out of the migration suite.
 
 - **Use one reading column.** Use `reading-document`, shared typography, and
   shared controls on experiments, the migration page, and guides at every width.
-  Lead with the title, catalogue badge, and a short finding when available. Put
-  the controls and live render next, then show run data, diagnostics, limits,
-  and evidence.
+  Keep the controls and preview together, followed by results and supporting detail.
+- **Lead with the active question.** Under the title and catalogue badge, state
+  what the case tests and why it matters. Answer the question in a short finding.
+  For a device-dependent result, distinguish what is known from what this run
+  measures. Keep click instructions in button labels or `tryIt`.
 - **Keep content visible in the page.** Put settings, explanations, results,
   and run details in ordinary sections that readers can scroll to directly.
   Show reports and tables inline when a run produces them. Organize long pages
@@ -42,12 +44,18 @@ bookkeeping, and parked experiments out of the migration suite.
   values and a shared zero baseline for comparable bars. Show steps or phases
   when order matters. Use distinct labels for missing results, timeouts, and
   steps that were never reached.
+- **Show what differs between previews.** When both pictures look the same,
+  show each value once, either together in one readout or beside its own preview.
+  For example, show each preview’s bounds downloads beside it and use the status
+  line to say whether the layouts matched.
 - **Keep headings and copy concise.** Let the badge stand on its own. Describe
   what the check found in plain words. Add a heading when it helps readers find
   a distinct section.
-- **Give each independent question its own experiment.** Use cases for
-  variations on the same question. Make each experiment easy to find in the
-  catalogue.
+- **Name each experiment for what it tests.** Give independent questions
+  their own pages and use cases for variations. After a split, narrow the
+  page title, method heading and catalogue copy to the remaining question.
+  Check that every control or measurement mentioned in the explanation exists
+  in that page’s demo.
 - **Use compact choice buttons.** The shared `choice-controls` style sizes
   buttons around their labels and leaves room to tap. Label each group,
   highlight the selected option, and rerun quick comparisons on click.

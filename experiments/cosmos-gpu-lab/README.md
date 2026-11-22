@@ -96,13 +96,29 @@ finding changes a production decision or the next priority. The feature inventor
 search entries.
 
 Add `ExperimentCase` entries and accept the selected case ID in `create` when cases use different live
-views. Each case defines a question, description, reference, acceptance rule and links to its own method
+views. Use these fields to introduce the case.
+
+- `question` asks what the active case tests. It appears below the catalogue badge and above the controls.
+- `finding` in `src/app/readiness/` gives the short answer used in the page lead and catalogue.
+  Scope measured results to the workload. When the reader supplies the measurement, state what is
+  already known and what the run will measure. Reserve click instructions for button labels or `tryIt`.
+- `tryIt` is an optional action hint in the default **What this compares** section below the demo.
+  A custom `renderExplanation` replaces that section. The `finding-first` layout omits it.
+
+Each case also defines a description, reference, acceptance rule and links to its own method
 or evidence. Set `recorded` to `null` when there is no historical result; otherwise include its observation,
 date, environment, scope and limits. Include the context needed to understand each case on its own,
 even when it also appears in another case. The shared group navigator makes related cases discoverable
 without imposing a reading order.
 A `recorded` case does not create a GPU instance. Provide an honest
 `scope` to `mountRunLayout` for the current case and keep historical measurements distinct from live output.
+
+When splitting an experiment, check each resulting page, including the original.
+
+1. Match the title, summary, catalogue finding and displayed method heading to the question that page answers.
+2. Open the demo and locate every control, chart and measurement mentioned in its summary, explanation and method.
+3. Update this README’s **Experiments** list and follow incoming links to confirm that each experiment ID
+   and section link still leads to the intended content.
 
 An experiment should contain:
 
@@ -168,9 +184,13 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
   independent trajectories, live target updates, disabled-stage checks and force-only GPU cost.
 - `repulsion-trajectories`: independent hierarchical-repulsion trajectories, local correctness and accumulated drift.
 - `combined-layout`: gravity, hierarchical repulsion, directional springs and cooling, with checkpoint validation and failure replay.
-- `resident-layout`: GPU bounds and composed compute-to-render ticks compared with the staged precision reference.
-- `point-capacity`: same-device point-count changes, GPU prefix preservation, retained-capacity/kernel reuse,
-  update costs and buffer cleanup.
+- `resident-layout`: position downloads and checkpoint agreement for CPU and GPU bounds.
+- `resident-layout-edits`: position patches and link replacement in the current layout.
+- `resident-frame-timing`: GPU work and CPU timing for early simulation frames with optional drawing.
+- `point-capacity`: compares rebuilding GPU buffers with reusing them as points are added and removed.
+  Measures update time and the buffer memory held after removal.
+- `point-buffer-copy`: both previews rebuild their buffers. Compares copying the remaining point positions
+  through the CPU with copying them directly on the GPU. Measures position downloads and full rebuild time.
 - `ribbon-generation`: stopped compute-cache investigation; retained native findings and reproduction harness, with no live benchmark controls.
 - `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 - `hub-springs`: pinned/unpinned degree controls and ordered cooperative neighbor prefetch, checked against the
@@ -196,10 +216,14 @@ scroll container, with all rows visible. These rules apply to the whole lab, inc
 
 ### Live experiment frame
 
-Follow the [experiment page design guide](AGENTS.md#experiment-page-design).
+Follow the [page and demo design guide](AGENTS.md#page-and-demo-design).
 The shared `src/runtime/run-layout.ts` frame stacks settings, the preview, results and diagnostics
 at every width. Use `secondarySettings` to place less frequently used settings in a visible section
 below the preview.
+
+Use the preview labels to explain what differs between the two approaches. When the pictures look alike,
+show each metric value once. Put both values in a shared readout or put one beside each preview.
+Reserve the status line for a separate outcome such as checkpoint agreement or failure.
 
 The run summary names the run state, checks, failures/unavailable backends and unchecked scope for
 the current browser session. For a measurement without a pass budget, `showChecks: false` avoids

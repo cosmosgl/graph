@@ -14,6 +14,7 @@ for (const count of [128, 8192]) {
           else expect(s.readbacks[1].snapshots).toBe(before)
         }
         expect(s.rows.map(r => r.tick)).toEqual([1, 5, 10, 15, 20])
+        expect(s.readbacks.map(r => r.bounds)).toEqual([20, 0])
         expect(s.readbacks.map(r => r.snapshots)).toEqual([25, 5])
         expect(s.readbacks.map(r => r.bytes)).toEqual([25 * count * 32, 5 * count * 32])
         await expect(s.step()).rejects.toThrow('unavailable')

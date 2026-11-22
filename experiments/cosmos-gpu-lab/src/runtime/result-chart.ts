@@ -3,7 +3,7 @@ type Bar = readonly [label: string, value: Value]
 
 export type ResultChart = {
   title: string;
-  context: string;
+  context?: string;
   unit?: string;
   bars: readonly [Bar, Bar];
   reference?: { value: number; label: string; upperLimit?: boolean };
@@ -46,11 +46,14 @@ function span (className: string, text?: string): HTMLSpanElement {
   return element
 }
 
-export function renderResultChart ({ title, context, bars, unit, reference }: ResultChart): HTMLElement {
+export function renderResultChart ({
+  title, context, bars, unit, reference, formatValue = numbers.format,
+}: ResultChart & { formatValue?: (value: number) => string }): HTMLElement {
   const chart = document.createElement('figure')
   chart.className = 'result-chart'
   const caption = document.createElement('figcaption')
-  caption.append(span('result-chart-title', title), span('result-chart-context', context))
+  caption.append(span('result-chart-title', title))
+  if (context) caption.append(span('result-chart-context', context))
   const rows = document.createElement('div')
   rows.className = 'result-chart-rows'
   chart.append(caption, rows)
@@ -77,7 +80,7 @@ export function renderResultChart ({ title, context, bars, unit, reference }: Re
     track.classList.toggle('result-chart-first', index === 0)
     bar.style.width = percentage(lengths[index])
     track.append(bar)
-    const display = typeof value === 'number' ? numbers.format(value) : value.map(part => numbers.format(part)).join('–')
+    const display = typeof value === 'number' ? formatValue(value) : value.map(part => formatValue(part)).join('–')
     const readout = span('result-chart-value', unit ? `${display} ${unit}` : display)
     const overLimit = reference?.upperLimit === true && lengths[index] > reference.value
     track.classList.toggle('result-chart-over-limit', overLimit)

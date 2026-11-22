@@ -1,58 +1,46 @@
 import type { ExperimentCase } from '../../runtime/experiment'
 
-export const cases: ExperimentCase[] = [{
+export const boundsCase: ExperimentCase = {
   id: 'resident-comparison',
-  title: 'Compare GPU-resident execution',
+  title: 'CPU bounds and GPU bounds',
   kind: 'compare',
-  question: 'Can the GPU calculate graph bounds without downloading positions every tick?',
-  description: 'Two WebGPU lanes run the same 128-point graph; one calculates bounds on the CPU and the other keeps them on the GPU.',
-  tryIt: 'Press Step + check to compare the two lanes at their first checkpoint.',
-  reference: 'The staged WebGPU lane calculates bounds on the CPU; both lanes otherwise use the same force code.',
-  acceptance: 'The displayed checkpoint buffers must match bit for bit. Unchecked ticks have no position readback.',
-  recorded: {
-    conclusion: 'All 40 recorded checkpoints matched across four graph types at 128 and 8,192 points.',
-    date: '2026-11-11',
-    environment: 'Apple M3, headless Chrome 157, luma 10.0.0-alpha.4.',
-    scope: 'Five checkpoints in each 20-tick run, including bounds, positions, forces and hierarchy data.',
-    limits: 'The lanes share force code, so matching results do not independently prove force accuracy or complete-frame performance.',
-    evidence: [{ label: 'Resident dataflow evidence', page: 'dataflow' }],
-  },
-}, {
+  question: 'Can WebGPU find the bounds for the repulsion grid on the GPU, as Cosmos WebGL does?',
+  description: 'Both previews use WebGPU. One downloads positions to calculate the bounds on the CPU. The other calculates them on the GPU.',
+  tryIt: 'Run the same 128-point chain for 20 steps in each preview.',
+  reference: 'The CPU-bounds preview uses the same layout code as the GPU-bounds preview.',
+  acceptance: 'Count the position readbacks for bounds and compare bounds, positions, forces, and grid data at five checkpoints.',
+  evidence: [
+    { label: 'Why it matters for WebGPU', page: 'method' },
+    { label: 'Migration checklist', page: 'checklist' },
+  ],
+  recorded: null,
+}
+
+export const editCase: ExperimentCase = {
   id: 'resident-edits',
-  title: 'Edit a GPU-resident graph',
-  kind: 'recorded',
-  question: 'Can points and links change without resetting the current layout?',
-  description: 'This recorded check moves a point and replaces links while the two execution paths retain their current state.',
-  reference: 'The staged and GPU-resident execution paths from the same checked input.',
-  acceptance: 'Compared buffers must match bit for bit after each edit; the existing devices and position buffers remain in use.',
-  recorded: {
-    conclusion: 'All compared bits matched after each of four edited ticks, with both lanes retaining their devices and position buffers.',
-    date: '2026-11-11',
-    environment: 'Apple M3, standalone Chrome 156, luma 10.0.0-alpha.4.',
-    scope: 'An 8,192-point graph, one move and pin, and three link replacements.',
-    limits: 'The check does not establish broad update performance, longer trajectories or behavior on other devices.',
-    evidence: [{ label: 'Graph update evidence', page: 'timing-updates', section: 'findings' }],
-  },
-}, {
+  title: 'Edit the current layout',
+  kind: 'demonstrate',
+  question: 'Can points and links change without restarting the layout?',
+  description: 'Move and pin a point or replace the links, then advance from the layout already on screen.',
+  tryIt: 'Advance one step, make an edit, then advance again.',
+  reference: 'Both previews start each step with the same edits applied.',
+  acceptance: 'Edits keep the current step and reuse the position buffers. The next checked layouts must match.',
+  evidence: [{ label: 'Updating a running layout', page: 'method' }],
+  recorded: null,
+}
+
+export const timingCase: ExperimentCase = {
   id: 'resident-frame-cost',
-  title: 'Measure resident frame cost',
-  kind: 'recorded',
-  question: 'How much GPU work does the resident simulation and basic drawing require?',
-  description: 'This recorded study times the first few frames of chain, community and star graphs on one device.',
-  reference: 'Same-fixture GPU execution with and without basic point and link drawing; replay checks are outside the timed interval.',
-  acceptance: 'GPU work, CPU submission and completion are reported separately; they are not an FPS or display-latency measurement.',
-  recorded: {
-    conclusion: 'Refined simulation plus basic drawing took a median 5.4–12.8 ms per frame across the three recorded graphs.',
-    date: '2026-11-11',
-    environment: 'Apple M3, standalone Chrome 156, luma 10.0.0-alpha.4.',
-    scope: '8,192 points, four initial frames per batch, seven recorded samples per row.',
-    limits: 'One GPU and a minimal renderer; results exclude presentation and do not establish full-frame responsiveness.',
-    evidence: [{ label: 'Resident timing evidence', page: 'timing-updates' }],
-    charts: [{
-      title: 'The star took over twice as long as the chain',
-      context: 'Median GPU time per frame · Refined simulation and drawing · 8,192 points each',
-      unit: 'ms',
-      bars: [['Chain', 5.4], ['Star', 12.8]],
-    }],
-  },
-}]
+  title: 'GPU time with and without drawing',
+  kind: 'measure',
+  question: 'How much GPU work do simulation and basic drawing take?',
+  description: 'Measure the first few steps of a graph with and without drawing its points and links.',
+  tryIt: 'Choose a graph and point count, then measure the same starting layout in all four workloads.',
+  reference: 'The same starting graph and number of evolving frames for each workload.',
+  acceptance: 'Report GPU work, CPU submission time, and completion time separately for completed batches.',
+  evidence: [
+    { label: 'Recorded frame timings', page: 'recorded' },
+    { label: 'Measuring a GPU layout frame', page: 'method' },
+  ],
+  recorded: null,
+}

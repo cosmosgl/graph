@@ -184,7 +184,7 @@ export async function renderEvidenceContent (
     renderReport(content, await page.load(), experiment.id)
   }
   if (connected && !target.isConnected) { disposeDocumentTables(content); return }
-  unlinkOtherExperiments(content, experiment)
+  unlinkOtherExperiments(content, experiment, page.kind === 'markdown' ? page.relatedExperiments : undefined)
   target.replaceChildren(...Array.from(content.childNodes))
   disposeDocumentTables(content)
   presentDocumentTables(target)
@@ -285,29 +285,39 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
       label.append(document.createTextNode(labelText), select); live.prepend(label)
     }
   }
-  const recorded = article ? document.createElement('div') : recordedFindings(experiment)
-  if (article) summary.id = 'recorded-findings'
-  const comparison = document.createElement('section'); comparison.className = 'case-comparison'; comparison.id = 'case-comparison'
-  comparison.innerHTML = '<h2>What this compares</h2><p class="case-description"></p><p class="case-instruction"></p>' +
-    '<dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
-  const description = comparison.querySelector<HTMLElement>('.case-description')!
-  const instruction = comparison.querySelector<HTMLElement>('.case-instruction')!
+  const showRecordedSummary = !article && experiment.showRecordedSummary !== false
+  const recorded = showRecordedSummary ? recordedFindings(experiment) : document.createElement('div')
+  if (!showRecordedSummary) summary.id = 'recorded-findings'
+  const explanation = experiment.renderExplanation?.()
+  const comparison = document.createElement('section'); comparison.className = 'case-comparison'
+  comparison.id = explanation ? 'run-explanation' : 'case-comparison'
+  comparison.innerHTML = explanation
+    ? `<h2>How it works</h2>${explanation}`
+    : '<h2>What this compares</h2><p class="case-description"></p><p class="case-instruction"></p>' +
+      '<dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
+  const description = comparison.querySelector<HTMLElement>('.case-description')
+  const instruction = comparison.querySelector<HTMLElement>('.case-instruction')
   const [reference, acceptance] = comparison.querySelectorAll('dd')
   const setLiveCase = (active: ExperimentCase): void => {
     const assessment = readinessFor(experiment.id, active)
     const finding = paragraph(assessment.finding)
-    if (article) finding.id = findingSection(active)
-    summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), finding)
-    description.textContent = active.description
-    description.hidden = active.description === assessment.finding
-    instruction.textContent = active.tryIt?.trim() ?? ''
-    instruction.hidden = !instruction.textContent
+    if (!showRecordedSummary) finding.id = findingSection(active)
+    summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), paragraph(active.question, 'case-question'), finding)
+    if (description && instruction) {
+      description.textContent = active.description
+      description.hidden = active.description === assessment.finding
+      instruction.textContent = active.tryIt?.trim() ?? ''
+      instruction.hidden = !instruction.textContent
+      reference.textContent = active.reference; acceptance.textContent = active.acceptance
+    }
     if (chooser) chooser.value = active.id
     for (const [candidate, button] of caseButtons) button.setAttribute('aria-pressed', String(candidate.id === active.id))
-    reference.textContent = active.reference; acceptance.textContent = active.acceptance
   }
   setLiveCase(item)
-  if (!article) stage.append(comparison)
+  if (!article) {
+    stage.append(comparison)
+    if (explanation) slot.dataset.pageExplanation = ''
+  }
   stage.append(recorded)
   const openEvidence = mountCaseEvidence(recorded, experiment)
   return {

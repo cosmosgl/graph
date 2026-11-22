@@ -7,7 +7,7 @@ import type { CombinedBackend } from './backend'
 export type ResidentCheck = {
   tick: number; bounds: number; positions: number; forces: number; aggregates: number; slots: number; centroids: number; finite: boolean; valid: boolean;
 }
-export type Readbacks = { snapshots: number; bytes: number }
+export type Readbacks = { snapshots: number; bounds: number; bytes: number }
 export type ResidentUpdate = {
   tick: number; alpha: number; kind: 'point' | 'links'; description: string;
   lanes: Array<{ submitMs: number; bytes: number; deviceRetained: boolean; positionsRetained: boolean; version?: number; edgeCount?: number }>;
@@ -33,7 +33,7 @@ export async function createResidentComparison (
 }> {
   const { graph, input } = createGraph(settings)
   const backends: CombinedBackend[] = []; const rows: ResidentCheck[] = []
-  const readbacks: Readbacks[] = [{ snapshots: 0, bytes: 0 }, { snapshots: 0, bytes: 0 }]
+  const readbacks: Readbacks[] = [{ snapshots: 0, bounds: 0, bytes: 0 }, { snapshots: 0, bounds: 0, bytes: 0 }]
   const updates: ResidentUpdate[] = []
   let tick = 0; let alpha = 1; let destroyed = false; let busy = false; let failed = false
   const view = fitView([input.points]); view[2] /= 2; view[3] /= 2
@@ -95,6 +95,7 @@ export async function createResidentComparison (
           for (const stage of STAGES) {
             if (stage === 'repulsion') {
               const gravity = await read(0)
+              readbacks[0].bounds++
               backends[0].setFrame(frameFor(gravity.positions, tick))
             }
             backends[0].stepStage(stage, alpha)

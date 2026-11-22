@@ -109,22 +109,22 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Validate production callers and label latency',
   },
   'resident-layout/resident-comparison': {
-    badge: 'Checkpoints matched',
+    badge: 'Bounds parity verified',
     tone: 'pass',
-    finding: 'Calculating bounds on the GPU cut snapshot reads from 25 to 5 over 20 ticks.',
+    finding: 'WebGPU kept positions on the GPU between checks and matched the CPU-bounds layout bit for bit at every checkpoint.',
     area: 'Integration',
-    status: 'Frame cost open',
+    status: 'Bounds requirement met',
     evidence: [
-      { tone: 'pass', text: '40 checkpoints matched' },
-      { tone: 'unknown', text: 'Force accuracy not independently proved' },
-      { tone: 'unknown', text: 'Complete-frame cost untested' },
+      { tone: 'pass', text: 'Zero routine position downloads' },
+      { tone: 'pass', text: '40 checkpoints matched bit for bit' },
+      { tone: 'unknown', text: 'Frame cost and integrated rendering assessed separately' },
     ],
-    next: 'Check the resident path in representative frames',
+    next: 'Check frame speed and interaction in the integrated viewer',
   },
-  'resident-layout/resident-edits': {
-    badge: 'Edits matched',
+  'resident-layout-edits/resident-edits': {
+    badge: 'Edits keep the current layout',
     tone: 'pass',
-    finding: 'Four edited ticks matched; broader update performance remains untested.',
+    finding: 'Both previews kept their position buffers and matched after pinning a point and changing links on an 8,192-point graph.',
     area: 'Integration',
     status: 'Broader updates untested',
     evidence: [
@@ -134,10 +134,10 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Check varied updates and longer trajectories',
   },
-  'resident-layout/resident-frame-cost': {
+  'resident-frame-timing/resident-frame-cost': {
     badge: 'GPU cost measured',
     tone: 'neutral',
-    finding: 'Simulation and basic drawing took 5.4–12.8 ms median GPU time on one device.',
+    finding: 'With refined forces and drawing, an 8,192-point star took over twice as long per frame as the chain in the recorded run.',
     area: 'Integration',
     status: 'Frame cost open',
     evidence: [
@@ -338,15 +338,12 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Check production routing and varied workloads',
   },
   'point-capacity/resize-preservation': {
-    badge: 'Remaining points stayed in place',
+    badge: 'Reuse keeps spare capacity',
     tone: 'pass',
-    finding: 'When the test graph went from 8,192 to 2,048 points, reusing GPU buffers cut the median update time from 19.3 ms to 0.6 ms. ' +
-      'Rebuilding used less buffer memory afterward, holding 3.640 MiB compared with 14.656 MiB for reuse.',
+    finding: 'Reusing buffers can make point removal faster. Rebuilding frees memory when the graph shrinks.',
     area: 'Integration',
     status: 'Production API open',
     evidence: [
-      { tone: 'pass', text: 'Both previews passed 36 point-count checks' },
-      { tone: 'info', text: 'Reuse lowered update cost' },
       { tone: 'unknown', text: 'Full production API untested' },
     ],
     next: 'Validate production setters and recovery',

@@ -5,7 +5,7 @@ device: Apple M3; standalone Chrome 156
 scope: Exact-size rebuild baseline with retained IDs, data preservation and tracked buffer cleanup.
 ---
 
-Both copy paths rebuild their GPU buffers to fit the new point count. The [buffer reuse follow-up](#/point-capacity?section=doc-reuse)
+Both copy paths rebuild their GPU buffers to fit the new point count. The [buffer reuse follow-up](#/point-capacity?section=doc-method)
 compares two GPU-bound lanes and reuses storage and kernels when the new count fits the existing buffers.
 
 Point-count changes affect more than the position buffer. Cosmos must also update random samples, hierarchy
@@ -98,7 +98,7 @@ before preparation, before retiring the old generation and after retirement. Tho
 devices in the page, so they are useful cleanup cross-checks, not per-lane memory measurements.
 
 **First-frame GPU work** sums begin/end timestamp pairs within the compute and render passes, following the
-[resident timing method](#/resident-layout?section=doc-timing-updates). CPU validation is outside the interval. These
+[resident timing method](#/resident-frame-timing?section=doc-method). CPU validation is outside the interval. These
 are evolving frames immediately after updates, including first-use effects; do not treat them as steady-state
 FPS or directly compare their medians with the fixed-initial-state frame benchmark.
 

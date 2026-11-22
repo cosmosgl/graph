@@ -89,8 +89,6 @@ const guidance: Record<string, Guidance> = {
     ticks: 'Independent evolution length; only checkpoint ticks are validated.',
     distribution: 'Initial positions shared by all three backends.',
   },
-  'resident-layout': { precision: 'Arithmetic used by both streamed and resident execution paths.' },
-  'point-capacity': pointCountGuidance,
   'point-buffer-copy': pointCountGuidance,
   'gpu-stage-profile': { history: 'Include a grow/shrink history before profiling; timing instrumentation is a separate control.' },
   'hub-springs': {

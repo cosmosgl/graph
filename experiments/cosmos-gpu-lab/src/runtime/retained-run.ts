@@ -53,6 +53,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
       if (!current) {
         const host = document.createElement('div'); host.className = 'experiment-run'
         if (definition.study) host.dataset.studyRun = ''
+        if (definition.study || parent.hasAttribute('data-page-explanation')) host.dataset.pageExplanation = ''
         host.innerHTML = '<div class="loading">Creating GPU devices…</div>'
         const run: Run = { id: definition.id, caseId, host, ready: undefined!, visible: true, retired: false }
         current = run; parent.append(host)

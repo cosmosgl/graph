@@ -2,12 +2,52 @@
 source: Recorded findings
 recorded: 2026-11-11
 device: Apple M3; standalone Chrome 156
-scope: Resident frame timings and immediate edits; instrumentation controls and readbacks are identified separately.
+scope: GPU time per frame for simulation with and without offscreen drawing.
 ---
 
-This experiment now measures the **resident engine slice** and checks edits to a running layout.
-Both features use the public luma APIs and the same force kernels as the staged reference.
-Production Cosmos still needs its remaining forces, full renderer, interaction and embedding contracts.
+Each graph had **8,192 points**. The chart shows the median GPU time for refined simulation and
+drawing to a **480 × 340** target. Using luma **10.0.0-alpha.4**, each batch ran the first four frames
+of a 100-tick cooling schedule. Each workload had two warmups and seven measured batches.
+
+```result-chart
+{
+  "title": "The star took over twice as long as the chain",
+  "context": "Recorded median GPU work per frame · Refined simulation and drawing · 8,192 points each",
+  "unit": "ms",
+  "bars": [["Chain", 5.423], ["Star", 12.845]]
+}
+```
+
+## Findings
+
+All 120 replay checks passed across the twelve workloads. The timed intervals excluded position
+readbacks and CPU force checks.
+
+Median GPU work per frame (ms)
+
+| Graph | Native simulation | Native + drawing | Refined simulation | Refined + drawing |
+| --- | --- | --- | --- | --- |
+| Chain | 4.375 | 4.473 | 4.817 | **5.423** |
+| Communities | 3.260 | 3.391 | 4.719 | **5.407** |
+| Star | 5.800 | 5.980 | 12.206 | **12.845** |
+
+| Refined compute + drawing | GPU range | CPU submit median | Completion median |
+| --- | --- | --- | --- |
+| Chain | 5.210–5.636 ms | 1.400 ms | 5.900 ms |
+| Communities | 5.194–5.816 ms | 0.425 ms | 5.250 ms |
+| Star | 12.780–13.222 ms | 1.125 ms | 13.200 ms |
+
+The strict arithmetic cost is especially visible on the serial star hub: its refined frame GPU work is about
+**2.1×** the native-f32 control. The native control still has known CPU-reference failures, so its lower cost
+is not a validated production alternative. Chain and community costs are similar in the refined path despite
+different topology. These observations support an engine-slice feasibility result, not full-renderer readiness.
+
+A preliminary one-frame-per-batch run had much wider ranges, including a chain native-frame median of 14.35 ms
+with a 5.70–17.11 ms range. It is excluded from the table above. The retained policy uses at least four frames;
+timing conditions and batching materially affect the observation. The remaining ranges, sequential mode order
+and single tested GPU still limit small-difference claims. Subtracting medians is not an isolated render-cost test.
+
+The same session also checked [edits to a running layout](#/resident-layout-edits?section=doc-method-recorded-check).
 
 ## What counts as a frame here?
 
@@ -45,7 +85,7 @@ drop invalid samples. Small intervals may be quantized, so results include a ran
 
 ### Repeatable batches
 
-**Time resident frames** runs native f32 and the passing refined arithmetic candidate, each with and without
+The timing run measures native f32 and the passing refined arithmetic candidate, each with and without
 drawing. All four rows use the initial fixture, selected cooling schedule and a common batch length of
 4–16 evolving frames. Each batch resets positions and alpha **before** its timed interval. Seeds advance
 deterministically within the batch; cooling advances after each frame. This measures the beginning of that
@@ -72,80 +112,14 @@ The retained method uses both timestamps inside each pass and sums their duratio
 timing path, and its measurements include all simulation dispatches plus optional drawing. This observation
 does not establish a universal WebGPU limitation or prove the driver's root cause.
 
-## Editing a running layout
-
-Use **Step + check**, apply an edit, then step again. Edits preserve the current tick and alpha.
-
-- **Move + pin point 0** patches one `vec4` record in both position buffers. It uploads 32 bytes per lane,
-  changes no other records and preserves the ping-pong buffer selection. Pinning keeps that position fixed
-  through subsequent integration.
-- **Replace links** builds stable directional CSR for the selected topology, uploads a new buffer bundle,
-  then switches both springs and drawing to it. The device, kernels and position buffers stay alive. Empty
-  links, capacity growth and shrinkage are supported within the existing point index space.
-
-Topology validation/allocation happens before replacing a lane's old bundle. Old buffers are destroyed after
-the swap; [WebGPU buffer destruction](https://www.w3.org/TR/webgpu/#dom-gpubuffer-destroy) allows already
-submitted work to complete. The update table reports CPU build/allocation/upload submission time and buffer
-bytes, not GPU completion latency or peak memory. JSON includes versions and retained-resource checks.
-
-The [capacity experiment](#/point-capacity?section=doc-reuse) separately validates point-count changes, growth and
-retained storage. Shared host devices, device recovery and atomic updates across independently owned devices
-remain future work. An execution error requires resetting the comparison.
-Timing uses fresh fixtures on a separate device and preserves the displayed comparison and edit history.
-
 ## Reproduce
 
-Open [GPU-resident layout](#/resident-layout), choose graph/point count/cooling, and select **Time resident frames**.
-Keep the browser visible. **Stop** retains partial rows; **Export JSON** saves local timings and update history.
-Reports belong outside Git; retain concise Markdown findings and these instructions.
+Open [Timing a GPU layout frame](#/resident-frame-timing), choose the graph, point count and cooling
+schedule, then select **Measure frame time**. Keep the browser visible. **Stop** retains partial samples.
+**Export samples** saves the samples and validation checks.
 
 ```sh
-LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout/frame-benchmark.test.ts src/experiments/combined-layout/frame-timing.test.ts src/experiments/combined-layout/resident-updates.test.ts src/experiments/combined-layout/resident.test.ts
+LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout/frame-benchmark.test.ts src/experiments/combined-layout/frame-timing.test.ts
 ```
 
-The update regression checks untouched positions, retained resource identities, growth/empty/shrunk links,
-pinning, invalid-update rejection and subsequent whole-tick agreement with the unchanged CPU tolerance.
-The batch test also verifies that every dispatch runs in every measured frame.
-
-## Findings
-
-Measured **11 November 2026**, **Apple M3**, standalone **Chrome 156**, pinned **luma 10.0.0-alpha.4**.
-Each fixture has **8,192 points**, a **100-tick cooling schedule**, and four initial evolving frames per batch.
-After two warmups, each row records seven samples. All **120/120 replay checks** pass across the twelve rows.
-There are no position readbacks or CPU force checks inside the measured intervals.
-
-GPU work in milliseconds per frame, median:
-
-| Graph | Native simulation | Native + drawing | Refined simulation | Refined + drawing |
-| --- | --- | --- | --- | --- |
-| Chain | 4.375 | 4.473 | 4.817 | **5.423** |
-| Communities | 3.260 | 3.391 | 4.719 | **5.407** |
-| Star | 5.800 | 5.980 | 12.206 | **12.845** |
-
-| Refined compute + drawing | GPU range | CPU submit median | Completion median |
-| --- | --- | --- | --- |
-| Chain | 5.210–5.636 ms | 1.400 ms | 5.900 ms |
-| Communities | 5.194–5.816 ms | 0.425 ms | 5.250 ms |
-| Star | 12.780–13.222 ms | 1.125 ms | 13.200 ms |
-
-The strict arithmetic cost is especially visible on the serial star hub: its refined frame GPU work is about
-**2.1×** the native-f32 control. The native control still has known CPU-reference failures, so its lower cost
-is not a validated production alternative. Chain and community costs are similar in the refined path despite
-different topology. These observations support an engine-slice feasibility result, not full-renderer readiness.
-
-A preliminary one-frame-per-batch run had much wider ranges, including a chain native-frame median of 14.35 ms
-with a 5.70–17.11 ms range. It is excluded from the table above. The retained policy uses at least four frames;
-timing conditions and batching materially affect the observation. The remaining ranges, sequential mode order
-and single tested GPU still limit small-difference claims. Subtracting medians is not an isolated render-cost test.
-
-The same browser session checked four edited 8,192-point ticks: move/pin a point, replace star links with
-communities, remove all links, then restore star links. All compared bits match at each tick; both lanes retain
-their devices and position buffers. The one-point patch uploads **32 bytes per lane**. The community bundle
-contains 712,672 buffer bytes, empty links 98,360 bytes including sizes/offsets, and star links 425,952 bytes.
-Those are allocation sizes, not peak memory. CPU submission times were single observations, so the lab keeps
-them in local exports rather than presenting them as portable update-performance results.
-
-The focused native suite passes **13 tests**, including the 40-checkpoint resident matrix, frame replay and
-an independent CPU whole-tick check after topology updates. Tolerances remain unchanged. Wider trajectories,
-default-length cooling and other GPUs remain open. Bounded count changes and memory/lifetime checks now have
-separate [capacity evidence](#/point-capacity?section=doc-reuse); full-engine memory and recovery still need validation.
+The batch test checks that every dispatch runs in every measured frame.

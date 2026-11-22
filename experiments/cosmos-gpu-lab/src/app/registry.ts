@@ -81,7 +81,7 @@ const catalogTopics = [
     id: 'whole-graphs',
     title: 'Whole graphs and layouts',
     description: 'Complete layouts and interactive graphs.',
-    ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'million-graph', 'integrated-webgpu',
+    ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'resident-layout-edits', 'million-graph', 'integrated-webgpu',
       'viewer-comparison', 'dense-communities', 'hub-communities', 'youtube-network', 'pilot-viewer', 'matched-layout'],
   },
   {
@@ -94,7 +94,7 @@ const catalogTopics = [
     id: 'precision-performance',
     title: 'Precision and performance',
     description: 'Numerical accuracy, production checks and GPU cost.',
-    ids: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'gpu-stage-profile'],
+    ids: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'resident-frame-timing', 'gpu-stage-profile'],
   },
 ]
 

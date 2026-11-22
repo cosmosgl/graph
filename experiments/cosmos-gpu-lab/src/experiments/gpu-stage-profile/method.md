@@ -7,7 +7,7 @@ scope: Controlled normal-frame versus instrumented stage timing on bounded resid
 
 This experiment asks which parts of the composed Cosmos workload consume GPU time when **the inputs stop
 changing between trials**. It compares the same rebuilt/retained resource paths as the
-[capacity experiment](#/point-capacity?section=doc-reuse), using public luma APIs only.
+[capacity experiment](#/point-capacity?section=doc-method), using public luma APIs only.
 
 ## Controlled input
 

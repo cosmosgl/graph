@@ -26,11 +26,12 @@ export const experiment = defineExperiment({
       evidence: [{ label: 'Copy and rebuild results', page: 'findings' }],
     },
   }],
-  create: async host => (await import('../point-capacity/view')).createCapacityView(host, 'transfer'),
+  create: async host => (await import('./view')).createBufferCopyView(host),
   pages: [{
     kind: 'markdown',
     id: 'findings',
     title: 'Copy and rebuild results',
+    relatedExperiments: ['point-capacity', 'resident-frame-timing'],
     load: async (): Promise<string> => (await import('./findings.md?raw')).default,
   }],
 })

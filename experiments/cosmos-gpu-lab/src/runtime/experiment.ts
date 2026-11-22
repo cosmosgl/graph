@@ -20,6 +20,7 @@ export type MarkdownPage = {
   load: () => Promise<string>;
   assets?: Record<string, string>;
   examples?: Record<string, (host: HTMLElement) => void>;
+  relatedExperiments?: readonly string[];
 }
 
 export type ExperimentReportResult = {
@@ -91,6 +92,8 @@ export type ExperimentDefinition = {
   cases?: ExperimentCase[];
   caseChooserLabel?: string;
   presentation?: 'demo' | 'finding-first';
+  renderExplanation?: () => string;
+  showRecordedSummary?: boolean;
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
