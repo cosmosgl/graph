@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>cosmos.gl Storybook preview</title>
+    <script>
+      const storybook = '%DEV%' === 'true' ? 'https://cosmos.gl/' : './storybook/'
+      location.replace(storybook + 'iframe.html' + location.search + location.hash)
+    </script>
+  </head>
+  <body>
+    <a href="./storybook/iframe.html">Open the cosmos.gl Storybook preview</a>
+  </body>
+</html>

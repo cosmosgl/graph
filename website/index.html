@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111318" />
+    <meta name="cosmos-root" content="./" />
+    <title>cosmos.gl — GPU-powered graph visualization</title>
+    <meta name="description" content="Explore large networks and point clouds with cosmos.gl, an open-source WebGL engine for GPU rendering and force simulation." />
+    <link rel="canonical" href="https://cosmos.gl/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="cosmos.gl" />
+    <meta property="og:url" content="https://cosmos.gl/" />
+    <meta property="og:title" content="cosmos.gl — GPU-powered graph visualization" />
+    <meta property="og:description" content="Explore large networks and point clouds with cosmos.gl, an open-source WebGL engine for GPU rendering and force simulation." />
+    <meta property="og:image" content="https://cosmos.gl/cosmos-galaxy-preview.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A blue and violet spiral galaxy with a golden core beside the cosmos.gl logo and the text GPU-powered graph visualization." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="cosmos.gl — GPU-powered graph visualization" />
+    <meta name="twitter:description" content="Explore large networks and point clouds with cosmos.gl, an open-source WebGL engine for GPU rendering and force simulation." />
+    <meta name="twitter:image" content="https://cosmos.gl/cosmos-galaxy-preview.png" />
+    <meta name="twitter:image:alt" content="A blue and violet spiral galaxy with a golden core beside the cosmos.gl logo and the text GPU-powered graph visualization." />
+
+    <script>
+      if (new URLSearchParams(location.search).has('path')) {
+        const storybook = '%DEV%' === 'true' ? 'https://cosmos.gl/' : './storybook/'
+        location.replace(storybook + location.search + location.hash)
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
