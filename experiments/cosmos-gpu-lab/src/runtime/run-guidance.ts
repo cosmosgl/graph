@@ -8,11 +8,6 @@ const shared: Guidance = {
   repeats: 'Independent repetitions; compare their range as well as the median.',
   history: 'Retain the prior capacity growth before measuring the selected input.',
 }
-const pointCountGuidance: Guidance = {
-  repeats: 'Run the same sequence of point counts this many times.',
-  cpu: 'Check the next simulation step against a separate CPU calculation.',
-  target: 'The number of points after applying the change.',
-}
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match authored routes and control attributes. */
 const guidance: Record<string, Guidance> = {
   'center-mass': {},
@@ -89,7 +84,6 @@ const guidance: Record<string, Guidance> = {
     ticks: 'Independent evolution length; only checkpoint ticks are validated.',
     distribution: 'Initial positions shared by all three backends.',
   },
-  'point-buffer-copy': pointCountGuidance,
   'gpu-stage-profile': { history: 'Include a grow/shrink history before profiling; timing instrumentation is a separate control.' },
   'hub-springs': {
     degree: 'Neighbors attached to the hub; high degree concentrates serial spring work.',

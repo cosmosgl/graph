@@ -289,9 +289,9 @@ export const validationContracts: Record<string, ValidationContract> = {
   },
   'point-buffer-copy': {
     question: 'How do CPU and GPU copies affect point-data transfers and completion time when WebGPU rebuilds its buffers?',
-    reference: 'The CPU-copy control, expected point records and the independent CPU frame check.',
-    acceptance: 'Both paths preserve surviving point data, initialize new points, keep the device and agree on the next frame.',
-    coverage: 'Paired exact-size rebuilds for chain, communities and star through 8,192 points.',
+    reference: 'A rebuild that downloads existing positions to the CPU before uploading the expanded array.',
+    acceptance: 'Measure bytes downloaded for existing positions. The GPU copy should preserve those records with zero position bytes downloaded.',
+    coverage: 'One chain grows from 2,048 to 8,192 points. The recorded study also checked point data and subsequent frames on three graph types.',
     limits: 'Completion measures the full rebuild. The paths use different bounds setup, and the CPU copy runs first.',
   },
   'precision-diagnostics': {

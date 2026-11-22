@@ -351,8 +351,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'point-buffer-copy/copy-during-rebuild': {
     badge: 'GPU copy avoided position downloads',
     tone: 'review',
-    finding: 'Both previews rebuild their WebGPU buffers. When the recorded chain grew from 2,048 to 8,192 points, ' +
-      'copying on GPU avoided a 32 KiB position download. The median full rebuild took 23.4 ms with GPU copy and 14.9 ms with CPU copy.',
+    finding: 'Both previews grow the chain from 2,048 to 8,192 points. Only the CPU copy needs to download the original positions.',
     area: 'Integration',
     status: 'Rebuild cost needs isolation',
     evidence: [

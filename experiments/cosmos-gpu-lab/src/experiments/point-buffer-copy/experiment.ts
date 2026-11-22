@@ -5,17 +5,21 @@ export const experiment = defineExperiment({
   title: 'CPU copy vs GPU copy',
   summary: 'Compare copying point positions through the CPU and directly on the GPU when WebGPU rebuilds its buffers.',
   tags: ['simulation', 'resources', 'WebGPU'],
+  showRecordedSummary: false,
+  howItWorks: {
+    summary: 'Both previews rebuild their buffers to fit 8,192 points. The CPU path downloads the existing positions and uploads them again ' +
+      'with the new points. The GPU path copies the existing positions between buffers and uploads only the new points. ' +
+      'Total rebuild time includes allocation, setup and transfers through GPU completion. The previews also set up layout bounds differently.',
+  },
   cases: [{
     id: 'copy-during-rebuild',
     title: 'Copy existing point positions into new buffers',
     kind: 'compare',
-    question: 'What changes when WebGPU copies point positions on the GPU during a rebuild?',
+    question: 'Can WebGPU keep existing point positions on the GPU when the graph grows?',
     description: 'Both previews allocate new buffers at each point count. One copies the positions that stay through the CPU. ' +
       'The other copies them directly between GPU buffers.',
-    tryIt: 'Press Add and remove points to compare how much position data each preview downloads and how long each full rebuild takes.',
-    reference: 'The CPU copy path, the expected point data after the rebuild, and an optional CPU check for the following frame.',
-    acceptance: 'Both previews keep their devices and preserve the positions, pinning and visibility of the points that stay. ' +
-      'New points get their expected starting data and the next frame must agree across both previews.',
+    reference: 'The CPU copy path downloads the existing position records before it uploads the expanded array.',
+    acceptance: 'Compare the bytes downloaded for existing positions during the same chain growth in both previews.',
     recorded: {
       conclusion: 'Both paths kept the positions of the points that stayed. GPU copying avoided position downloads during the update. ' +
         'Its full buffer rebuild took longer in the recorded runs.',

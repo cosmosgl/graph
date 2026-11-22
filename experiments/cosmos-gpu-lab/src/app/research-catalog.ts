@@ -428,11 +428,11 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     'point-buffer-copy': entry('point-buffer-copy', {
       conclusion: 'GPU copying avoided position downloads during the update. The full rebuild took longer in the recorded runs.',
       variant: 'Exact-size WebGPU buffer rebuilds with CPU and GPU copy paths on Apple M3 / Chrome 156.',
-      comparison: 'Same point-count changes followed by a rebuild, position transfer checks and one simulation step.',
+      comparison: 'Both previews rebuild their buffers as the same chain grows from 2,048 to 8,192 points.',
       method: 'validation-contract',
       evidence: 'findings',
       next: 'Compare the paths with matched bounds setup and alternate their execution order.',
-      reproduce: 'Choose a graph, keep Check against CPU enabled, then press Add and remove points.',
+      reproduce: 'Select Add points to grow the chain from 2,048 to 8,192 points and compare position downloads.',
       investigations: [{
         page: 'findings',
         state: 'Current evidence',

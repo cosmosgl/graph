@@ -196,8 +196,8 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `resident-frame-timing`: GPU work and CPU timing for early simulation frames with optional drawing.
 - `point-capacity`: compares rebuilding GPU buffers with reusing them as points are added and removed.
   Measures update time and the buffer memory held after removal.
-- `point-buffer-copy`: both previews rebuild their buffers. Compares copying the remaining point positions
-  through the CPU with copying them directly on the GPU. Measures position downloads and full rebuild time.
+- `point-buffer-copy`: one manual step grows a chain from 2,048 to 8,192 points. Each preview reports the position data
+  downloaded to the CPU and the total time to rebuild its buffers.
 - `ribbon-generation`: stopped compute-cache investigation; retained native findings and reproduction harness, with no live benchmark controls.
 - `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 - `hub-springs`: pinned/unpinned degree controls and ordered cooperative neighbor prefetch, checked against the
