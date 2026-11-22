@@ -1,0 +1,32 @@
+# cosmos.gl
+
+> cosmos.gl is an open-source, MIT-licensed TypeScript library for interactive network graphs and point clouds in the browser. It runs force-directed layout and rendering on the GPU using WebGL 2 and luma.gl.
+
+Install the library with `npm install @cosmos.gl/graph`. Create a `Graph` in a DOM container and await `graph.ready` for initialization. Pass point coordinates to `setPointPositions` as a `Float32Array` of interleaved x and y values. Add optional links with `setLinks`, using pairs of zero-based point indices in a `Float32Array`, then call `render()`.
+
+Use the force simulation for layouts driven by links, repulsion, clustering, or collision. Disable the simulation with `enableSimulation: false` to render a fixed layout or a point cloud. Point and link styling can be supplied through typed arrays.
+
+cosmos.gl was created by Nikita Rokotyan, Olya Stukova, and Denis Ovsyannikov. [Creator credits](https://cosmos.gl/#creators)
+
+## Documentation
+
+- [GitHub README and installation guide](https://github.com/cosmosgl/graph/blob/main/README.md)
+- [Interactive quick start](https://cosmos.gl/storybook/?path=/story/examples-get-started--quick-start)
+- [Graph configuration](https://cosmos.gl/storybook/?path=/docs/configuration--docs)
+- [API reference](https://cosmos.gl/storybook/?path=/docs/api-reference--docs)
+- [Migration guide](https://github.com/cosmosgl/graph/blob/main/migration-notes.md)
+- [deck.gl integration](https://github.com/cosmosgl/graph/blob/main/integrations/deck-layers/README.md)
+
+## Examples
+
+- [Showcase](https://cosmos.gl/#examples)
+- [Knowledge Network](https://cosmos.gl/examples/research-network/)
+- [California–Nevada Road Network](https://cosmos.gl/examples/western-roads/)
+- [10 Million Points rendering benchmark](https://cosmos.gl/examples/ten-million/)
+- [Point Collisions](https://cosmos.gl/examples/collision-stress-test/)
+
+## Optional
+
+- [Source repository and issues](https://github.com/cosmosgl/graph)
+- [npm package](https://www.npmjs.com/package/@cosmos.gl/graph)
+- [Project charter](https://github.com/cosmosgl/graph/blob/main/CHARTER.md)
