@@ -100,7 +100,7 @@ async function renderArticle (
   try {
     if (page.kind === 'markdown') {
       const { renderMarkdown } = await import('./markdown')
-      await renderMarkdown(target, await page.load(), page.assets, {
+      renderMarkdown(target, await page.load(), page.assets, {
         examples: page.examples,
         sectionNavigation: false,
         headingLevelOffset: 2,

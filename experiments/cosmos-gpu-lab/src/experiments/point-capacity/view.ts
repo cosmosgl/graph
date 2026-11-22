@@ -10,7 +10,7 @@ const pointCounts = [startCount, ...CAPACITY_CYCLE].map(formatCount).join(' → 
 const labels = ['Rebuild GPU buffers', 'Reuse GPU buffers']
 const mib = (bytes: number): string => (bytes / 1048576).toFixed(3)
 
-function renderCapacityCharts (host: HTMLElement, reports: readonly ResizeReport[]): void {
+function renderCapacityCharts (host: HTMLElement, announcement: HTMLElement, reports: readonly ResizeReport[]): void {
   const [rebuild, reuse] = reports
   const context = document.createElement('p')
   context.className = 'result-chart-context'
@@ -26,6 +26,9 @@ function renderCapacityCharts (host: HTMLElement, reports: readonly ResizeReport
     bars: [['Rebuild', Number(mib(rebuild.after.bytes))], ['Reuse', Number(mib(reuse.after.bytes))]],
   }))
   host.hidden = false
+  announcement.textContent = `Run finished. Removal from ${formatCount(rebuild.from)} to ${formatCount(rebuild.count)} points. ` +
+    `Rebuild took ${milliseconds(rebuild.completionMs)} milliseconds and held ${mib(rebuild.after.bytes)} MiB. ` +
+    `Reuse took ${milliseconds(reuse.completionMs)} milliseconds and held ${mib(reuse.after.bytes)} MiB.`
 }
 
 export async function createCapacityView (host: HTMLElement): Promise<ExperimentInstance> {
@@ -34,6 +37,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     <button data-action="reset" data-run-action="primary">Reset / retry</button>
   </div>
   <p data-output="status" role="status" data-run-part="status">Preparing both previews…</p>
+  <span class="visually-hidden" role="status" aria-live="polite" data-output="completion" data-run-part="status"></span>
   <section class="point-shrink-results" id="run-shrink-results" aria-label="Point-count results" hidden></section>
   <section data-run-part="visualization" class="backend-panels">${labels.map((name, lane) => `<article class="backend-panel">
     <div class="panel-heading panel-heading-stacked"><h2>${name}</h2>
@@ -45,6 +49,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
   const runButton = el<HTMLButtonElement>('[data-action="cycle"]')
   const resetButton = el<HTMLButtonElement>('[data-action="reset"]')
   const status = el('[data-output="status"]')
+  const completion = el('[data-output="completion"]')
   const charts = el('#run-shrink-results')
   mountRunLayout(host, undefined, { experiment: 'point-capacity' })
   el('#run-run').after(charts)
@@ -85,6 +90,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     session = undefined
     previous?.destroy()
     failed = false
+    completion.textContent = ''
     charts.hidden = true
     charts.replaceChildren()
     status.textContent = 'Preparing both previews…'
@@ -102,6 +108,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
   runButton.addEventListener('click', () => perform(async () => {
     const current = session
     if (!current) return
+    completion.textContent = ''
     for (const count of CAPACITY_CYCLE) {
       if (destroyed) return
       await current.resize(count)
@@ -112,7 +119,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     }
     if (destroyed) return
     const lastResize = current.resizes.at(-1)
-    if (lastResize) renderCapacityCharts(charts, lastResize.reports)
+    if (lastResize) renderCapacityCharts(charts, completion, lastResize.reports)
   }))
   resetButton.addEventListener('click', () => perform(reset))
 

@@ -52,6 +52,9 @@ a range of existing buffer storage without copying it.
 **Cosmos connection:** WebGL uses data textures for much of the simulation. WebGPU storage buffers let us express those
 numbers directly as arrays. Textures remain useful for rendering and image data.
 
+A buffer’s size is fixed when it is created. [Adding and removing points](#/point-capacity) compares rebuilding a
+buffer with keeping spare capacity. [CPU copy vs GPU copy](#/point-buffer-copy) shows how positions reach the new buffer during a rebuild.
+
 ## 3. Run one shader many times
 
 A **compute shader** is a GPU program for general calculations. **WGSL** means WebGPU Shading Language.
@@ -284,8 +287,12 @@ Repeat · Continue with the next tick on the GPU
 A tiny center result transfers less data than a million positions, but even a small readback can require waiting.
 Unified physical memory does not eliminate synchronization and access rules.
 
+[GPU layout bounds](#/resident-layout) counts the position downloads needed to place the repulsion grid.
+[Editing a running layout](#/resident-layout-edits) shows how the next step uses an edited point or a new set of links.
+
 For performance comparisons, CPU submission time, GPU execution time and end-to-end frame time answer different questions.
-Use [Performance lab](#/performance-lab) for measured experiments; none of the teaching models on this page measures GPU speed.
+[Timing a GPU layout frame](#/resident-frame-timing) measures simulation with and without drawing.
+The [Performance lab](#/performance-lab) measures drawing and reduction separately.
 
 ## Read next
 

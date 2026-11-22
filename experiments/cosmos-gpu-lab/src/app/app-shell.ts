@@ -10,7 +10,7 @@ import {
 } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 import { scrollToSection } from './sections'
-import { renderCaseFrame } from './case-page'
+import type { renderCaseFrame } from './case-page'
 import { experimentDestination, liveCaseSection, startingCase } from './experiment-route'
 import type { ExperimentDestination } from './experiment-route'
 import { mountGlobalSearch } from './global-search'
@@ -172,8 +172,9 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   const scrollPositions = new Map<string, number>()
   let previousPath: string | undefined
 
-  function mountCasePage (experiment: ExperimentDefinition, owner: ReturnType<typeof createRetainedRun>): MountedCasePage {
-    const frame = renderCaseFrame(workspace, experiment)
+  function mountCasePage (
+    experiment: ExperimentDefinition, owner: ReturnType<typeof createRetainedRun>, frame: ReturnType<typeof renderCaseFrame>
+  ): MountedCasePage {
     let active = experiment.cases!.find(item => owner.id === experiment.id && item.id === owner.caseId) ?? startingCase(experiment)
     frame.setLiveCase(active)
     let focusRequest = 0
@@ -287,7 +288,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples, sectionNavigation: false })
+        renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples, sectionNavigation: false })
         examples.addLearningContents(stage, route.sectionId)
       } catch (error) {
         if (version !== renderVersion) return
@@ -305,8 +306,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           import('./markdown'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default)
-        if (version === renderVersion) scrollToSection(stage, currentSection())
+        renderer.renderMarkdown(stage, source.default)
+        scrollToSection(stage, currentSection())
       } catch (error) { if (version === renderVersion) renderFailure(stage, error) }
       finish(); return
     }
@@ -316,8 +317,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       try {
         const renderer = await import('./migration-page')
         if (version !== renderVersion) return
-        await renderer.renderMigrationPage(stage)
-        if (version === renderVersion) scrollToSection(workspace, route.section ?? null)
+        renderer.renderMigrationPage(stage)
+        scrollToSection(workspace, route.section ?? null)
       } catch (error) {
         if (version === renderVersion) renderFailure(stage, error)
       }
@@ -331,8 +332,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           import('../docs/architecture.md?raw'), import('./markdown'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default)
-        if (version === renderVersion) scrollToSection(stage, currentSection())
+        renderer.renderMarkdown(stage, source.default)
+        scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
@@ -345,7 +346,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, vocabularySource, {}, { omitTitle: true, linkTerms: false, sectionNavigation: false })
+        renderer.renderMarkdown(stage, vocabularySource, {}, { omitTitle: true, linkTerms: false, sectionNavigation: false })
         indexVocabularyTerms(stage)
         if (route.termId) {
           const target = document.getElementById(route.termId)
@@ -371,11 +372,11 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
         const assets = Object.fromEntries([['diagrams/reduction-tree.svg', reductionTreeUrl]])
-        await renderer.renderMarkdown(stage, reductionSource, assets, {
+        renderer.renderMarkdown(stage, reductionSource, assets, {
           omitTitle: true,
           excludedTermIds: ['reduction'],
         })
-        if (version === renderVersion) scrollToSection(stage, currentSection())
+        scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
@@ -388,9 +389,16 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       finish()
       return
     }
-    const page = mountCasePage(definition, run)
-    mountedPage = page
-    await page.visit(destination)
+    renderReferenceFrame(workspace, definition.title, definition.summary)
+    try {
+      const { renderCaseFrame } = await import('./case-page')
+      if (version !== renderVersion) return
+      const page = mountCasePage(definition, run, renderCaseFrame(workspace, definition))
+      mountedPage = page
+      await page.visit(destination)
+    } catch (error) {
+      if (version === renderVersion) renderFailure(workspace, error)
+    }
   }
 
   const handleRoute = (): void => {

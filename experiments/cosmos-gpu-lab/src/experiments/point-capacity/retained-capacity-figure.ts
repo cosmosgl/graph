@@ -9,7 +9,7 @@ const steps = [
   { action: 'Remove', points: 2048, slots: 8192 },
 ]
 
-export function renderRetainedCapacity (): string {
+export function renderRetainedCapacity (host: HTMLElement): void {
   const active = steps.map(step => step.points)
   const capacity = steps.map(step => step.slots)
   const maximum = Math.max(...capacity)
@@ -32,7 +32,7 @@ export function renderRetainedCapacity (): string {
     const total = `${action === 'Start' ? '' : 'to '}${count(points)}`
     return `<span>${action}<strong>${total}</strong></span>`
   }).join('')
-  return `<figure class="result-chart">
+  host.innerHTML = `<figure class="result-chart">
     <figcaption>
       <span class="result-chart-title">The buffer kept ${count(finalCapacity)} slots as the graph shrank</span>
       <span class="result-chart-context">Chain example · Reuse GPU buffers</span>

@@ -17,12 +17,12 @@ type MarkdownOptions = {
   tables?: boolean;
 }
 
-export async function renderMarkdown (
+export function renderMarkdown (
   host: HTMLElement,
   source: string,
   assets: Record<string, string> = {},
   options: MarkdownOptions = {}
-): Promise<void> {
+): void {
   const markdown = new MarkdownIt({
     html: false,
     linkify: true,

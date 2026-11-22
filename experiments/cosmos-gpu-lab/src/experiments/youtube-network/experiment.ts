@@ -24,6 +24,7 @@ export const experiment = defineExperiment({
   summary: 'Compare WebGL and WebGPU on three YouTube friendship graphs, including a sample with 300,000 points and 300,000 links.',
   tags: ['integration', 'rendering', 'interaction'],
   presentation: 'demo',
+  showPeerLinks: false,
   caseChooserLabel: 'Graph size',
   cases: [{
     id: 'friendships',

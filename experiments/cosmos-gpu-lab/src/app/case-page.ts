@@ -2,6 +2,7 @@ import type { ExperimentCase, ExperimentDefinition, ExperimentPage } from '../ru
 import { renderResultChart } from '../runtime/result-chart'
 import { disposeDocumentTables, presentDocumentTables } from '../runtime/result-tables'
 import { addArticleSections } from './article-sections'
+import { renderMarkdown } from './markdown'
 import { experimentMiniCard } from './experiment-mini-card'
 import { caseEvidencePages, evidencePageAt, findingSection, isReaderPage, startingCase } from './experiment-route'
 import { unlinkOtherExperiments } from './independent-experiment'
@@ -169,8 +170,7 @@ export async function renderEvidenceContent (
   // Load into a detached container so a cancelled navigation cannot leave table observers behind.
   const content = document.createElement('div')
   if (page.kind === 'markdown') {
-    const { renderMarkdown } = await import('./markdown')
-    await renderMarkdown(content, await page.load(), page.assets, {
+    renderMarkdown(content, await page.load(), page.assets, {
       examples: page.examples,
       sectionNavigation: false,
       headingLevelOffset: 2,
@@ -217,7 +217,7 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
     documents.set(page.id, load)
     return load
   }
-  const primaryEvidence = experiment.presentation === 'finding-first' ? startingCase(experiment).recorded?.evidence[0]?.page : undefined
+  const primaryEvidence = experiment.initialEvidence === 'first-recorded' ? startingCase(experiment).recorded?.evidence[0]?.page : undefined
   for (const page of caseEvidencePages(experiment)) {
     if (primaryEvidence && page.id !== primaryEvidence) continue
     add(page)().catch(() => {})
@@ -230,10 +230,46 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
   }
 }
 
+function mountComparison (
+  stage: HTMLElement, slot: HTMLElement, experiment: ExperimentDefinition
+): ((active: ExperimentCase, finding: string) => void) | undefined {
+  const { howItWorks } = experiment
+  if (howItWorks === false) return undefined
+  const section = document.createElement('section'); section.className = 'case-comparison'
+  stage.append(section)
+  if (howItWorks) {
+    section.id = 'run-explanation'
+    slot.dataset.pageExplanation = ''
+    const heading = document.createElement('h2'); heading.textContent = 'How it works'
+    const content = document.createElement('div')
+    renderMarkdown(content, howItWorks.summary, {}, { sectionNavigation: false, tables: false })
+    unlinkOtherExperiments(content, experiment)
+    section.append(heading, content)
+    if (howItWorks.figure) {
+      const figure = document.createElement('div')
+      section.append(figure)
+      howItWorks.figure(figure)
+    }
+    return undefined
+  }
+  section.id = 'case-comparison'
+  section.innerHTML = '<h2>What this compares</h2><p class="case-description"></p><p class="case-instruction"></p>' +
+    '<dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
+  const description = section.querySelector<HTMLElement>('.case-description')!
+  const instruction = section.querySelector<HTMLElement>('.case-instruction')!
+  const [reference, acceptance] = section.querySelectorAll('dd')
+  return (active, finding) => {
+    description.textContent = active.description
+    description.hidden = active.description === finding
+    instruction.textContent = active.tryIt?.trim() ?? ''
+    instruction.hidden = !instruction.textContent
+    reference.textContent = active.reference; acceptance.textContent = active.acceptance
+  }
+}
+
 export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefinition): CaseFrame {
   const item = startingCase(experiment)
   const demo = experiment.presentation === 'demo'
-  const article = experiment.presentation === 'finding-first'
   host.innerHTML = `<div class="reading-document case-document">
     <header class="case-header"><h1></h1><div class="case-recorded-summary"></div></header>
     <div class="case-stage" aria-busy="false">
@@ -256,7 +292,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const status = live.querySelector<HTMLElement>('.case-load-status')!
   const retry = live.querySelector<HTMLButtonElement>('[data-retry-comparison]')!
   if (item.kind === 'recorded') live.remove()
-  const navigation = demo || article ? undefined : groupNavigation(experiment, topic)
+  const navigation = experiment.showPeerLinks === false ? undefined : groupNavigation(experiment, topic)
   if (navigation) stage.after(navigation)
   const liveCases = experiment.cases!.filter(candidate => candidate.kind !== 'recorded')
   const caseButtons = new Map<ExperimentCase, HTMLButtonElement>()
@@ -285,39 +321,20 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
       label.append(document.createTextNode(labelText), select); live.prepend(label)
     }
   }
-  const showRecordedSummary = !article && experiment.showRecordedSummary !== false
+  const showRecordedSummary = experiment.showRecordedSummary !== false
   const recorded = showRecordedSummary ? recordedFindings(experiment) : document.createElement('div')
   if (!showRecordedSummary) summary.id = 'recorded-findings'
-  const explanation = experiment.renderExplanation?.()
-  const comparison = document.createElement('section'); comparison.className = 'case-comparison'
-  comparison.id = explanation ? 'run-explanation' : 'case-comparison'
-  comparison.innerHTML = explanation
-    ? `<h2>How it works</h2>${explanation}`
-    : '<h2>What this compares</h2><p class="case-description"></p><p class="case-instruction"></p>' +
-      '<dl><dt>Reference</dt><dd></dd><dt>How to read the result</dt><dd></dd></dl>'
-  const description = comparison.querySelector<HTMLElement>('.case-description')
-  const instruction = comparison.querySelector<HTMLElement>('.case-instruction')
-  const [reference, acceptance] = comparison.querySelectorAll('dd')
+  const updateComparison = mountComparison(stage, slot, experiment)
   const setLiveCase = (active: ExperimentCase): void => {
     const assessment = readinessFor(experiment.id, active)
     const finding = paragraph(assessment.finding)
     if (!showRecordedSummary) finding.id = findingSection(active)
     summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), paragraph(active.question, 'case-question'), finding)
-    if (description && instruction) {
-      description.textContent = active.description
-      description.hidden = active.description === assessment.finding
-      instruction.textContent = active.tryIt?.trim() ?? ''
-      instruction.hidden = !instruction.textContent
-      reference.textContent = active.reference; acceptance.textContent = active.acceptance
-    }
+    updateComparison?.(active, assessment.finding)
     if (chooser) chooser.value = active.id
     for (const [candidate, button] of caseButtons) button.setAttribute('aria-pressed', String(candidate.id === active.id))
   }
   setLiveCase(item)
-  if (!article) {
-    stage.append(comparison)
-    if (explanation) slot.dataset.pageExplanation = ''
-  }
   stage.append(recorded)
   const openEvidence = mountCaseEvidence(recorded, experiment)
   return {

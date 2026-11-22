@@ -25,17 +25,3 @@ from 8,192 to 2,048 points in your run.
 
 **Reset / retry** starts both previews again with room for 2,048 points. On a rerun without a reset, the reuse
 preview starts with the capacity it held at the end of the previous run.
-
-## Recorded M3 check
-
-On 11 November 2026, chain, communities and star graphs each ran three cycles on an Apple M3
-with Chrome 156 and luma 10.0.0-alpha.4. All 36 paired resize checks and all 36 checks of the
-following simulation step passed.
-
-For the chain’s final change from **8,192 to 2,048 points**, reuse finished sooner and kept more
-buffer memory. Each timing is the median of three removals.
-
-| Approach | Time through GPU completion | Tracked buffer memory after removal |
-| --- | ---: | ---: |
-| Rebuild | 19.30 ms | 3.640 MiB |
-| Reuse | 0.60 ms | 14.656 MiB |

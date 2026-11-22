@@ -7,6 +7,7 @@ export const experiment = defineExperiment({
   summary: 'Compare the motion of a highly connected hub in a million-point graph.',
   tags: ['integration', 'rendering', 'interaction'],
   presentation: 'demo',
+  showPeerLinks: false,
   cases: [{
     id: 'moving-hub',
     title: 'Watch a hub with 8,192 links',

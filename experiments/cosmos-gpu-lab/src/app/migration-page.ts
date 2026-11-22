@@ -26,8 +26,8 @@ function addMigrationContents (article: HTMLElement): void {
   article.firstElementChild!.after(contents)
 }
 
-export async function renderMigrationPage (host: HTMLElement): Promise<void> {
-  await renderMarkdown(host, source, {}, {
+export function renderMigrationPage (host: HTMLElement): void {
+  renderMarkdown(host, source, {}, {
     sectionNavigation: 'permalinks',
     linkTerms: false,
     examples: {

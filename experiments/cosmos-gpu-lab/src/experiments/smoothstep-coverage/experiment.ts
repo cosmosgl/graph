@@ -8,7 +8,10 @@ export const experiment = defineExperiment({
   summary: 'Compare two ways of calculating the same line edge in WebGL and WebGPU.',
   tags: ['rendering', 'links', 'precision', 'WebGL', 'WebGPU'],
   cases,
-  presentation: 'finding-first',
+  howItWorks: false,
+  showRecordedSummary: false,
+  showPeerLinks: false,
+  initialEvidence: 'first-recorded',
   create: async host => (await import('./view')).createSmoothstepView(host),
   pages: [
     {

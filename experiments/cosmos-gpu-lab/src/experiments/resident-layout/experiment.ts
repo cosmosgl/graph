@@ -8,7 +8,9 @@ export const experiments = [
     summary: 'Check that WebGPU can build the repulsion grid without downloading point positions every step.',
     tags: ['simulation', 'integration', 'WebGPU'],
     cases: [boundsCase],
-    presentation: 'finding-first',
+    howItWorks: false,
+    showRecordedSummary: false,
+    showPeerLinks: false,
     create: async host => (await import('./view')).createResidentView(host, 'compare'),
     pages: [{
       kind: 'markdown',
@@ -30,9 +32,10 @@ export const experiments = [
     tags: ['simulation', 'updates', 'WebGPU'],
     cases: [editCase],
     showRecordedSummary: false,
-    renderExplanation: (): string => `<p>Moving and pinning a point writes its new position into the buffers
-      the simulation already uses. Replacing links updates the connections while keeping the current positions.
-      The next step starts from that edited layout.</p>`,
+    howItWorks: {
+      summary: 'Moving and pinning a point writes its new position into the buffers the simulation already uses. ' +
+        'Replacing links updates the connections while keeping the current positions. The next step starts from that edited layout.',
+    },
     create: async host => (await import('./view')).createResidentView(host, 'edit'),
     pages: [{
       kind: 'markdown',
@@ -49,9 +52,10 @@ export const experiments = [
     tags: ['simulation', 'performance', 'WebGPU'],
     cases: [timingCase],
     showRecordedSummary: false,
-    renderExplanation: (): string => `<p>Each run measures the first few steps of the same starting layout.
-      The simulation-only runs apply the forces. The drawing runs also render the points and links
-      into a fixed 480 × 340 target.</p>`,
+    howItWorks: {
+      summary: 'Each run measures the first few steps of the same starting layout. The simulation-only runs apply the forces. ' +
+        'The drawing runs also render the points and links into a fixed 480 × 340 target.',
+    },
     create: async host => (await import('./timing-view')).createTimingView(host),
     pages: [{
       kind: 'markdown',

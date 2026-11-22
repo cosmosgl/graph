@@ -103,7 +103,13 @@ views. Use these fields to introduce the case.
   Scope measured results to the workload. When the reader supplies the measurement, state what is
   already known and what the run will measure. Reserve click instructions for button labels or `tryIt`.
 - `tryIt` is an optional action hint in the default **What this compares** section below the demo.
-  A custom `renderExplanation` replaces that section. The `finding-first` layout omits it.
+  To replace that section, supply `howItWorks.summary` as Markdown and optionally mount a figure
+  with `howItWorks.figure(host)`. Set `howItWorks: false` to omit it.
+
+Peer cards, recorded summaries and evidence links are independent of the explanation. Use
+`showPeerLinks: false` or `showRecordedSummary: false` to omit the corresponding section.
+All linked case evidence opens inline by default. Use `initialEvidence: 'first-recorded'` to show
+only the first recorded evidence page initially when the starting case has one.
 
 Each case also defines a description, reference, acceptance rule and links to its own method
 or evidence. Set `recorded` to `null` when there is no historical result; otherwise include its observation,
@@ -119,6 +125,7 @@ When splitting an experiment, check each resulting page, including the original.
 2. Open the demo and locate every control, chart and measurement mentioned in its summary, explanation and method.
 3. Update this README’s **Experiments** list and follow incoming links to confirm that each experiment ID
    and section link still leads to the intended content.
+4. Link the new page from the relevant concept in **Learn** or the corresponding migration requirement in **Feature coverage**.
 
 An experiment should contain:
 

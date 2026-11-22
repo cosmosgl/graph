@@ -91,8 +91,10 @@ export type ExperimentDefinition = {
   tags: string[];
   cases?: ExperimentCase[];
   caseChooserLabel?: string;
-  presentation?: 'demo' | 'finding-first';
-  renderExplanation?: () => string;
+  presentation?: 'demo';
+  howItWorks?: false | { summary: string; figure?: (host: HTMLElement) => void };
+  showPeerLinks?: boolean;
+  initialEvidence?: 'first-recorded';
   showRecordedSummary?: boolean;
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.

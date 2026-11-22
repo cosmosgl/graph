@@ -7,6 +7,7 @@ export const experiment = defineExperiment({
   summary: 'See the same million-point graph move in WebGL and WebGPU.',
   tags: ['integration', 'rendering', 'interaction'],
   presentation: 'demo',
+  showPeerLinks: false,
   cases: [{
     id: 'dense-communities',
     title: 'Watch eight communities move',
