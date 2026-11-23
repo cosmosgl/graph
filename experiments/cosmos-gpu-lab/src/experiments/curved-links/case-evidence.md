@@ -1,31 +1,20 @@
----
-source: Recorded findings
-recorded: 2026-11-17
-device: Apple M3, Chromium 157, ANGLE Metal WebGL and Apple WebGPU; luma.gl 10.0.0-alpha.15
-scope: Twenty-four frozen dashed and dotted curved-link comparisons
----
+# Recorded curve checks
 
-# Curved-link evidence
+With **Drawn faces** on Apple M3, **28 of 64 solid curve cases passed**. A pass required the two renderers and the CPU calculation to agree on the picked link at every pixel, with colors within 2/255. Drawn-face picking preserved the original colors and never picked an invisible source in all 64 cases. Of the 56 cases with nonzero opacity, 20 passed every check. All eight fully transparent cases passed. The wider Cosmos target passed only those eight under the old check, which counted picks outside the painted curve as failures. The pilot allows that extra click area. The automated tests on this page check that rule on separate frozen fixtures.
 
-The color-face picking candidate passed **4 of 24** full-frame checks. All four
-passing cases had zero opacity; none of the 20 visible-curve cases passed all
-gates. Every case preserved its backend's original production color bytes.
+## Folded ribbon
 
-| Stroke | Cases passing every gate |
-| --- | ---: |
-| Dashed | 2 / 12 |
-| Dotted | 2 / 12 |
+On the zoomed-out wide bend, picking both faces selected the curve at 69 pixels where it painted nothing in each renderer. Picking only the drawn faces removed all 69 invisible picks.
 
-## What was compared
+## Default bow
 
-Both renderers drew the same frozen curves. Candidate IDs were compared with
-independent triangle-strip masks and the unchanged production picking control.
-The original ID, color, visibility and mask gates remained in force.
+At pixel (352, 85) with **Drawn faces**, WebGL picked background and WebGPU picked link 1 in both edge modes. The edge setting changed what each renderer painted there.
 
-The 24 cases combined two scenes, two stroke patterns and six profiles, including
-blended and hard edges, different pixel ratios and zero opacity. The candidate
-had no invisible frame or source picks in these checks, but some CPU masks and
-paired GPU color boundaries still differed.
+| Edges | WebGL color (RGBA8) | WebGPU color (RGBA8) |
+| --- | --- | --- |
+| Antialiased | (76, 54, 31, 89) | (76, 54, 31, 89) |
+| Hard | (0, 0, 0, 0), transparent | (217, 153, 89, 255), opaque |
 
-These observations cover selected frozen curves on one device. They do not
-establish behavior for all curve settings, animated graphs or other GPUs.
+## Archived styles
+
+Endpoint gradients passed 28 of 64 strict cases. A separate check of faint foreground links passed all 72 cases. Dashed and dotted curves passed 4 of 24 cases, all at zero opacity. These results cover frozen curves on one GPU.

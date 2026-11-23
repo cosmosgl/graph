@@ -14,6 +14,7 @@ small-graph checks and recorded large-star and intermittent latency failures.
 ### Supported first slice
 
 - Circle points and solid straight links, with colors, sizes and opacity.
+- Solid curves added to pilot scope for integration. Preserve the production click target and verify it against the practical boundary rule below.
 - Repulsion, weighted springs, gravity, center and cooling, reusing the tested
   corrected arithmetic rather than reopening precision optimization now.
 - Resident GPU positions shared by simulation and drawing, through public
@@ -22,7 +23,7 @@ small-graph checks and recorded large-star and intermittent latency failures.
 - Current native machine first; production Cosmos remains on its existing
   WebGL/luma version until a separate adoption decision.
 
-Curved/patterned links, arrows, images, decorative rings, advanced transitions,
+Patterned links, arrows, images, decorative rings, advanced transitions,
 clusters, per-point attractors, mouse repulsion and host/deck integration are
 outside this first slice. Point dragging does not imply mouse-repulsion support.
 Collision remains a separate bounded option until composed behavior and cost are
@@ -52,8 +53,11 @@ Inspect motion, fractional zoom and pixel ratios 1 and 2, not only still images.
 **Picking remains a behavior check:** exact object identity and ordering matter.
 A small difference in the two backends' selectable silhouettes is allowed; an
 invisible foreground intercepting a visible object is not. Check each selected
-source's own visibility, not only the final composed frame's alpha. Production's
-padded picking policy stays a comparison control; it is not silently redefined.
+source's own visibility, not only the final composed frame's alpha. For solid curves, use the production target: five CSS pixels wider than the painted stroke.
+Measure pick-edge displacement against that padded target, and paint-edge displacement
+against the drawn stroke. The one-device-pixel allowance applies to each boundary.
+A click in the padding is intentional. Away from the boundary, link IDs and overlap order
+must match production WebGL. Straight links retain their existing visible-footprint policy.
 
 **Simulation remains accountable:** check the corrected solver at individual
 stages and across moving layout checkpoints. Compare layout quality separately.

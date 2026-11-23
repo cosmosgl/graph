@@ -189,44 +189,19 @@ export const research: Record<string, ResearchSummary> = {
   },
   'curved-links': {
     method: 'validation-contract',
-    evidence: 'method',
-    reviewed: '2026-11-17',
-    comparison: 'Compare production curved ribbons across WebGL and WebGPU against independent triangle-strip masks and source checks.',
-    question: 'Do production solid curves render and pick consistently through public luma APIs?',
-    conclusion: 'M3 dash/dot curves preserve original colors and source visibility, but only the 4/24 zero-opacity rows pass all gates.',
-    scope: 'Earlier M3 / Chromium 157 geometry matrix: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and source visibility. ' +
-      'The alpha.15 gradient matrix preserves colors and source visibility in all 64 cases; the separate faint-alpha replay passes 72/72.',
-    variant: 'Unmodified GLSL/color control; color-face/source-byte IDs; previous two-sided IDs retained. ' +
-      'Luma alpha.15 patterns/gradients and matched solid controls; older geometry uses alpha.4.',
-    next: 'Further curve/pattern investigation is parked for the first migration. Reopen when these features enter scope or practical defects appear.',
-    reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
-    methods: [
-      {
-        title: 'Rational ribbon · color-face picking',
-        verdict: 'Method under test',
-        page: 'method',
-        detail: 'Matches ID culling to color; native mask/color boundary failures still prevent complete acceptance.',
-      },
-      {
-        title: 'Previous visible-width, two-sided IDs',
-        verdict: 'Reference control',
-        page: 'method',
-        section: 'folded-ribbon-picking-investigation',
-        detail: 'Retained unchanged; folded back faces can select invisible sources.',
-      },
-      {
-        title: 'Explicit linear interpolation',
-        verdict: 'Rejected under current gates',
-        page: 'method',
-        section: 'default-bow-boundary-investigation',
-        detail: 'Identical-geometry replay retains the native bow cutoff disagreement.',
-      },
-    ],
+    evidence: 'case-evidence',
+    reviewed: '2026-11-23',
+    comparison: 'Compare the selected curve picking rule in WebGL and WebGPU with independent CPU triangle-strip masks.',
+    question: 'Do WebGL and WebGPU draw and pick the same solid curves?',
+    conclusion: 'With drawn-face picking on M3, 28 of 64 solid curve cases passed all strict checks. The default bow still has a picking disagreement.',
+    scope: 'Frozen solid curves on one adapter. All 64 cases preserved the original colors and picked visible sources with drawn-face picking.',
+    variant: 'Production Cosmos WebGL and the WebGPU ribbon renderer, with drawn-face, two-sided and padded picking.',
+    next: 'Test motion and integrated cost after the three passing frozen padded-picking checks on M3.',
+    reproduce: 'Choose Folded ribbon and switch between Both faces and Drawn faces. Choose Default bow to inspect the remaining edge difference.',
     investigations: [{
-      page: 'method',
-      state: 'Parked',
-      description: 'Further curve/pattern investigation is stopped for the first slice, not resolved. ' +
-        'Retain all gates and revisit before full feature approval.',
+      page: 'case-evidence',
+      state: 'Supporting investigation',
+      description: 'Strict color and picking results for solid curves, gradients and patterns on Apple M3.',
     }],
   },
   'straight-links': {

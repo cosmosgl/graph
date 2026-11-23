@@ -1,9 +1,12 @@
-Further curve/pattern investigation is **parked for the first migration**,
-not resolved. These features are outside the initial integrated slice. Reopen
-when they enter scope or a practical issue requires it; review retained failures
-before full readiness. Historical verdicts and reproduction steps below
-remain unchanged. See [first-migration rules](#/validation-workflow?section=first-migration-rules)
-and the [parked register](#/roadmap?section=parked-investigations).
+# Replaying the archived curved-link studies
+
+Solid curves are in pilot scope with production padded picking. The studies below used the historical strict checks. The current preview compares solid bows, a folded ribbon and overlapping curves using the selected picking rule. Use the revisions below for the historical tools and fixtures.
+
+- **Retired Vitest studies:** check out `466da466b3d83b36f6d4295939822e724dd87d35` in a separate worktree. Install its dependencies with `pnpm install --frozen-lockfile` and run `pnpm run build` at the repository root. The test commands below refer to files at that revision.
+- **Interactive sweep, pixel replay and JSON export:** use `5d3739267ab696b96fce2f01d52cc5725fd17d3a` for the last page before simplification. Use the same install/build steps, then `pnpm --filter @cosmos.gl/gpu-lab dev` and open `#/curved-links`. The solid sweep at this revision reproduced 28/64 on Chrome 157 (WebGL reported ANGLE Metal on Apple M3, WebGPU reported Apple).
+- The original runs used the environments recorded below. Keep the independent CPU expectations, original color controls and rejected cases when replaying them.
+
+Run the current frozen pilot checks with `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/pilot.test.ts`. They use the production padded target at DPR 1. The edge check compares occupied pixels and IDs in both directions on the sampled grid, allowing one horizontal or vertical pixel step, with the CPU and renderer pair checked separately. Moving curves and performance are untested. Dashed and dotted curves remain parked. Historical verdicts and replay instructions follow. See the [first-migration rules](#/validation-workflow?section=first-migration-rules).
 
 # Curved solid links: method and findings
 

@@ -41,6 +41,15 @@ export function experimentDestination (experiment: ExperimentDefinition, request
     if (section === 'case-comparison' || /^doc-algorithm(?:-|$)/.test(section ?? '')) section = 'run-explanation'
     if (section === 'run-diagnostics') section = 'reduction-benchmark'
   }
+  if (experiment.id === 'curved-links') {
+    if (section === 'run-more-settings') section = 'run-configuration'
+    if (section === 'case-comparison') section = 'run-explanation'
+    if (section?.startsWith('doc-method-folded-ribbon')) section = 'doc-case-evidence-folded-ribbon'
+    else if (section?.startsWith('doc-method-default-bow')) section = 'doc-case-evidence-default-bow'
+    else if (/^doc-method-(?:pattern|dash|endpoint|faint)/.test(section ?? '')) section = 'doc-case-evidence-archived-styles'
+    else if (/^doc-method(?:-|$)/.test(section ?? '') || section === 'doc-case-evidence-what-was-compared' ||
+      section === 'recorded-findings' || section === 'run-diagnostics') section = 'doc-case-evidence'
+  }
   if (experiment.id === 'straight-links') {
     if (section === 'run-more-settings') section = 'run-configuration'
     if (section === 'run-diagnostics' || /^doc-case-evidence(?:-|$)/.test(section ?? '')) section = 'doc-automated-cases'

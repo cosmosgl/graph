@@ -30,16 +30,16 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     next: 'Keep the existing vertex renderer.',
   },
   'curved-links/curve-comparison': {
-    badge: 'Pattern checks fail',
-    tone: 'fail',
-    finding: '20 of 24 dashed and dotted curve cases failed on one GPU.',
+    badge: 'Solid curves in pilot',
+    tone: 'review',
+    finding: 'All three frozen-curve checks passed with Cosmos padded picking on M3. Motion and performance remain untested by this suite.',
     area: 'Integration',
-    status: 'Checks failed',
+    status: 'Frozen padded-picking checks passed',
     evidence: [
-      { tone: 'pass', text: 'Original color bytes preserved' },
-      { tone: 'fail', text: '20 of 24 pattern cases failed' },
+      { tone: 'pass', text: 'Drawn-face picking preserved original colors and picked visible sources in all 64 cases' },
+      { tone: 'fail', text: '36 solid curve cases differed on strict color or picking checks' },
     ],
-    next: 'Investigate the mask and color-boundary differences.',
+    next: 'Check curves during motion and measure integrated performance.',
   },
   'point-shapes/shapes': {
     badge: '1 px boundary passes',

@@ -123,10 +123,10 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Do production curved solid ribbons and luma WebGPU match the rendered and pickable footprint?',
     reference: 'Unmodified production curved-link GLSL and power-spaced geometry; separate visible-footprint/source-byte IDs; ' +
       'independent scalar triangle-strip masks, blending and RGBA8 colors.',
-    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
-    coverage: 'Rational quadratic curves, tessellation, weight/bow direction, widths/defaults, blend/hard modes, opacity, zoom, DPR, ' +
-      'ordering, overlap, fractional boundaries, selected patterns and endpoint RGB; original colors and selected sources checked separately.',
-    limits: 'Production padded host IDs remain unchanged. Candidate picking changes policy only. Coincident endpoints have undefined production normals. ' +
+    acceptance: 'The preview checks exact IDs and CPU masks, colors within 2/255 and source visibility for unpadded picks. The frozen pilot suite checks thin strokes, overlap order and a one-device-pixel edge allowance with production padded picking.',
+    coverage: 'Live solid bows, a folded ribbon and crossing curves with hard or antialiased edges and three picking rules. ' +
+      'Recorded sweeps also varied geometry, zoom, pixel ratio, opacity, ordering, patterns and endpoint colors.',
+    limits: 'Solid curves enter the pilot with production padded picking. Drawn-face results cover a different click target. Coincident endpoints have undefined production normals. ' +
       'Other pattern parameters, arrows, fading, highlights, transitions, Graph integration, GPU cost and broader devices remain open.',
   },
   'straight-links': {

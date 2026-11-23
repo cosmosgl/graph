@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createLiveChecks } from '../../runtime/live-checks'
+import { linkLanes as lanes, linkNames as names, linkPanels } from '../../runtime/link-preview'
 import { mountPixelInspector } from '../../runtime/pixel-inspector'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
 import type { Backend, Snapshot } from './backend'
@@ -11,9 +12,7 @@ import { compare, compareColors, type Comparison } from './reference'
 import { createLinksWebGL } from './webgl'
 import { createLinksWebGPU } from './webgpu'
 
-const lanes = ['webgl', 'webgpu'] as const
 type Lane = typeof lanes[number]
-const names = { webgl: 'WebGL', webgpu: 'WebGPU' }
 type Preview = { image: Snapshot; changedColors: number; invisiblePicks: number }
 
 function previewResult (result: Comparison, gl: Preview, gpu: Preview, variant: Variant): string {
@@ -51,20 +50,7 @@ function previewResult (result: Comparison, gl: Preview, gpu: Preview, variant: 
 }
 
 export function createLinksView (host: HTMLElement): ExperimentInstance {
-  host.innerHTML = `${linkControls()}
-  <div data-run-part="visualization" class="shape-preview">
-    <div class="backend-panels styling-panels">${lanes.map(lane => `<div class="backend-panel">
-      <strong>${names[lane]}</strong>
-      <div class="styling-viewport"><canvas data-canvas="${lane}" width="${WIDTH}" height="${HEIGHT}" tabindex="0"
-        role="button" aria-pressed="false" aria-label="Pin pixel in ${names[lane]} preview" aria-describedby="link-pixel-help"></canvas>
-        <span class="styling-cursor" data-cursor="${lane}" hidden></span></div>
-      <p class="styling-pick" data-pick="${lane}"></p><p class="canvas-error" data-error="${lane}" hidden></p>
-    </div>`).join('')}</div>
-    <p role="status" id="run-results" data-preview-status>Preparing previews…</p>
-    <button type="button" data-retry hidden>Retry comparison</button>
-    <p class="visually-hidden" data-inspect-feedback aria-live="polite"></p>
-    <p class="case-meta" id="link-pixel-help">Arrow keys move one pixel. Enter or Space pins or releases it.</p>
-  </div>`
+  host.innerHTML = linkControls() + linkPanels(WIDTH, HEIGHT)
   mountRunLayout(host)
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const choice = (key: string): string => el<HTMLButtonElement>(`[data-choice="${key}"] [aria-pressed="true"]`).value
@@ -127,7 +113,7 @@ export function createLinksView (host: HTMLElement): ExperimentInstance {
         previews[lane] = {
           image,
           changedColors: variant === 'production' ? 0 : compareColors(original.color, image.color).changedPixels,
-          invisiblePicks: await invisibleSourcePicks(backend, image, scene, settings, variant),
+          invisiblePicks: await invisibleSourcePicks(image, scene, settings.indexOffset, isolated => backend.render(isolated, settings, variant, false)),
         }
         viewport.hidden = false
         errorBox.hidden = true

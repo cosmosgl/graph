@@ -15,16 +15,10 @@ export async function createCurvesWebGL (canvas: HTMLCanvasElement): Promise<Bac
   })
   return {
     info: backend.info,
-    async render (scene, settings, variant, display, diagnose): Promise<Snapshot> {
+    async render (scene, settings, variant, display): Promise<Snapshot> {
       const input = { ...settings, frontPicking: variant === 'front' }
-      const image = await backend.render(scene, input, variant === 'production' ? 'production' : 'visible', display, diagnose)
-      return {
-        ...image,
-        variant,
-        probe: image.probe?.vertices
-          ? { varying: image.probe.varying, vertices: image.probe.vertices }
-          : undefined,
-      }
+      const image = await backend.render(scene, input, variant === 'production' ? 'production' : 'visible', display)
+      return { ...image, variant }
     },
     destroy: (): void => { backend.destroy() },
   }

@@ -7,6 +7,8 @@
 migrationFocus
 ```
 
+**Solid curves are in the WebGPU pilot for integration.** Keep the Cosmos click target five CSS pixels wider than the painted curve. Allow up to one device pixel of shift at the painted edge or the edge of that click target. The three [automated checks](#/curved-links?section=doc-automated-cases) passed on frozen M3 fixtures. Moving curves and performance under this pilot rule remain untested. The frozen M3 study used stricter checks and a different picking rule for its headline result. [Curve evidence](#/curved-links?section=doc-case-evidence)
+
 ```example
 youtubeMotion
 ```
@@ -38,7 +40,7 @@ Revisit these studies when the pilot exposes the issue or the feature enters sco
 
 - [Ordered prefetch for hubs](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate). The 8,192-point star misses timing. The newer three-hub runs quantify the spring cost at 16,384 and 32,768 points.
 - [Straight-link caps and edges](#/straight-links?section=doc-automated-cases). Reopen exact-edge comparisons if thin links disappear, invisible links intercept picks or an outline shifts by more than one device pixel.
-- [Curved links and dash/dot boundaries](#/curved-links?section=doc-method). Pattern mask failures remain. Resume when curves or patterns enter scope and check motion, color and source visibility.
+- [Dashed and dotted curves](#/curved-links?section=doc-case-evidence-archived-styles). Visible patterned curves still fail strict checks. Revisit gap picking, color and motion when patterns enter scope.
 - [Fractional and polygon point edges](#/point-shapes?section=doc-method). Some masks and color-preserving alternatives fail. Resume if the circle pilot shows a defect or more shapes enter scope.
 - [Faint-alpha picking](#/point-picking?section=doc-picking-evidence). The candidate fixes selected visibility cases at a cost under dense overlap. Resume if picking is wrong or slow, or images or translucent overlap enter scope.
 - [Compute-generated ribbons](#/ribbon-generation?section=doc-findings). Keep the vertex path after the cost and color checks. Revisit if profiling shows curve generation is a substantial bottleneck.
