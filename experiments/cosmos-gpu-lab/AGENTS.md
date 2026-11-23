@@ -1,126 +1,89 @@
 # GPU Lab research guide
 
-The Lab helps readers evaluate Cosmos's readiness for WebGPU.
-Follow the root contributor guide and the Lab's
-`README.md` and `src/docs/validation-workflow.md`.
+The Lab helps readers evaluate Cosmos's readiness for WebGPU. Follow the root contributor guide,
+use the [Lab README](README.md) for implementation details and the [validation workflow](src/docs/validation-workflow.md) for acceptance criteria.
+
+## Commands and registration
+
+- From the repository root, use `pnpm --filter @cosmos.gl/gpu-lab` followed by `lint`, `typecheck`,
+  `build` or `test:gpu [test-file]`. Build the production WebGL control with `pnpm run build`
+  before running the full migration suite. See [WebGPU migration checks](README.md#webgpu-migration-checks).
+- Use public luma.gl APIs for GPU work, including diagnostics and tests. Lab `typecheck` runs
+  `scripts/check-luma-api.mjs` on TypeScript in `src/experiments/` and `src/gpu/` to catch native GPU access.
+- Register each experiment's comparison contract in `src/runtime/validation.ts`. Add its assessment
+  to the research catalog maintained in [research.ts](src/app/research.ts) and [research-catalog.ts](src/app/research-catalog.ts).
+  Registration rejects missing contracts, missing assessments and unknown method or evidence page IDs.
+  Update `src/app/readiness/` when evidence changes a verdict. A case without an entry displays “Not assessed.”
 
 ## WebGPU migration tests
 
-Every Lab test must directly help answer whether Cosmos is ready to migrate to
-WebGPU. Add or extend a test only when it checks a requirement in the current
-[migration scope](src/docs/validation-workflow.md) and can catch a specific
-failure in the candidate or the code it uses. Assert the observable result
-against the expected behavior or an independent reference. For example, render
-overlapping circles and verify that picking returns the visible point's ID.
+Every Lab test must check a requirement in the current migration scope and be able to catch a specific
+failure in the candidate or the code it uses. Assert an observable result against expected behavior
+or an independent reference. For example, click where two circles overlap and assert the visible point's ID.
 
-Add a separate test only for a distinct failure mode or acceptance condition.
-Extend an existing test when a new fixture exercises a meaningful boundary of
-the same requirement. Keep Lab navigation, report formatting, mock-only
-bookkeeping, and parked experiments out of the migration suite.
+Extend an existing test for a new boundary of the same requirement. Add a test for a distinct failure
+mode or acceptance condition. A browser test may drive the Lab UI to exercise real GPU behavior,
+such as rendering after resize or data replacement. Exclude tests solely about Lab navigation,
+report formatting or mock bookkeeping. Parked experiments stay outside the migration suite.
 
 ## Page and demo design
 
-- **Use one reading column.** Use `reading-document`, shared typography, and
-  shared controls on experiments, the migration page, and guides at every width.
-  Keep the controls and preview together, followed by results and supporting detail.
-- **Lead with the active question.** An interactive comparison can use
-  `headerContent: 'question-only'` and go straight to the live preview and its
-  status readout. A recorded study opens with its badge, question and a short
-  finding scoped to the measured conditions. Keep instructions in button labels or `tryIt`.
-- **Prefer interactive previews for visual and pointer behavior.** For selection,
-  picking or rendering parity, show the same input on WebGL and WebGPU. Keep
-  the automated GPU test as the pass/fail check.
-- **Offer in-page checks only for fast, deterministic parity suites.** When an
-  experiment has a small correctness suite (under ~1 s), you may share its
-  cases between the Vitest file and the page using `src/runtime/live-checks.ts`
-  so visitors can verify them on their own GPU. Show two columns — the recorded
-  baseline and `This GPU` (filled on click) — with one **run on this GPU**
-  button that reads **stop** during a run. Omit per-row buttons and JSON export.
-  Keep the table readable when WebGPU is unavailable, do not retrofit stress tests or timing
-  benchmarks, and treat in-page runs as a live sanity check rather than formal
-  evidence; committed Vitest runs remain the official record.
-- **Write Lab pages for readers.** For committed correctness tests, list the cases
-  and outcomes. Omit the run date from these summaries. A short hardware note
-  or link to the test source is optional. Name exact units (drawing-buffer, CSS
-  or device pixels) matching the canvas setup, and note when a demo shader or
-  fixture simplifies production Cosmos.
-  Put replay instructions in `agent-recipe.md`. Keep CLI flags, local `captures/`
-  paths, snapshot hashes and dependency inventories in the runbook or run record.
-- **Keep inline explanations timeless.** Write inline technical explanations
-  (such as how the backends work and why they differ) without dates, luma
-  version recaps, or tables already covered by `Automated test results`. Keep
-  dated run logs and provenance in archived docs or `agent-recipe.md`.
-- **Collapsible sections are forbidden on every Lab page.** Put settings, explanations, results,
-  and run details in ordinary sections that readers can scroll to directly.
-  Show reports and tables inline when a run produces them. Organize long pages
-  with section headings and direct links.
-- **Open demos paused.** Draw the starting layout with the demo's engine on
-  load, including from section links. Start simulations and measurements from
-  their own controls. Fit the camera once on Run or Fit, then keep it still as
-  the points move.
-- **Link directly to sections.** Use `#/experiment?section=<id>` and keep links
-  near the relevant content. Preserve the live view, settings, and results
-  when readers jump within a case. Honor query parameters on links that switch
-  modes. When removing or renaming a doc page, redirect its old `doc-<id>`
-  section in `src/app/experiment-route.ts`.
-- **Chart results that benefit from a visual.** Give each mini chart one clear
-  takeaway, direct labels, units, and the recorded conditions. Use the recorded
-  values and a shared zero baseline for comparable bars. Show steps or phases
-  when order matters. Use distinct labels for missing results, timeouts, and
-  steps that were never reached.
-- **Show what differs between previews.** When both pictures look the same,
-  show each value once, either together in one readout or beside its own preview.
-  For example, show each preview’s bounds downloads beside it and use the status
-  line to say whether the layouts matched.
-- **Keep headings and copy concise.** Let the badge stand on its own. Describe
-  what the check found in plain words. Add a heading when it helps readers find
-  a distinct section.
-- **Name each experiment for what it tests.** Give independent questions
-  their own pages and use cases for variations. After a split, narrow the
-  page title, method heading and catalogue copy to the remaining question.
-  Check that every control or measurement mentioned in the explanation exists
-  in that page’s demo.
-- **Use compact choice buttons.** Use `choice-control` for each labeled group
-  and `choice-controls` to lay out multiple groups. Leave room to tap,
-  highlight the selected option, and rerun quick comparisons on click.
-- **Mount only this page's controls and keep them quiet.** After splitting an
-  experiment, do not leave hidden controls or diagnostic sections from sibling
-  experiments in the DOM. Use one consistent label layout per panel, muted
-  labels with bordered segmented option groups, and self-explanatory option
-  labels instead of inline helper sentences. Disable controls that have no
-  effect in the current state (with a short `title` explaining why) rather
-  than adding explanatory prose.
-- **Keep reruns steady.** Give temporary progress messages a fixed place so
-  the controls and renders stay in position. Check the live page at narrow and
-  wide widths.
-- **Isolate preview failures.** Catch device creation, upload, and render errors
-  per backend, release the failed backend before clearing it, and report
-  unavailability in that panel without blocking the other backend.
-- **Serialize shared GPU work and teardown.** When a live preview and
-  `live-checks.ts` share GPU devices, queue renders and checks sequentially
-  and wait for in-flight work to finish before calling `destroy()`.
+### Layout, controls and navigation
+
+- **Collapsible sections are forbidden on every Lab page.** Use one reading column at every width.
+  Keep controls with the preview. Show settings, explanations, results and reports inline, with
+  headings and direct links for long pages. Reserve space for progress and check narrow and wide layouts.
+- Give independent questions their own pages and use cases for variations. After a split, match
+  the title, method and catalog copy to the question. Mount only controls and diagnostics used by
+  that page. Check every control and measurement mentioned in the copy against the live demo.
+- Use compact shared choices with clear labels, a visible selected state and room to tap. Rerun
+  quick comparisons on click. Add a visible description when a setting or its disabled state needs
+  explanation. Essential guidance must be available to touch and keyboard users. See the
+  [control guidance](README.md#guidance-results-and-their-source).
+- Draw the initial layout with the demo engine, paused even on direct section links. Start motion and measurement
+  from their own controls. Fit the camera once on Run or Fit, then keep it still as the points move.
+  Preserve the live case on section jumps, honor mode parameters and redirect renamed or removed
+  `doc-<id>` links in `src/app/experiment-route.ts`.
+
+### Copy, charts and live checks
+
+- Lead with the active question. For visual or pointer behavior, compare the same input on WebGL
+  and WebGPU and go straight to the preview and status. Show each metric once. A recorded study
+  opens with its badge, question and a short finding scoped to the measured conditions.
+- Keep inline explanations timeless. Name the pixel units and any simplifications of production
+  Cosmos. List committed correctness cases and outcomes without run dates or repeated tables.
+  Keep commands, capture paths, snapshot hashes and dependency versions in `agent-recipe.md` or
+  the run record. A short hardware note or link to the test source is optional.
+- Use a chart when it clarifies a result. Label the measured values, units and conditions. Give
+  comparable bars a shared zero baseline and distinguish missing, timed-out and unreached steps.
+- Offer in-page checks only for fast (roughly one second or less), deterministic parity suites.
+  Share the Vitest cases through `src/runtime/live-checks.ts`. Show the test case and two result
+  columns, the recorded baseline and `This GPU`, with a single run/stop action for the suite.
+  Keep the baseline readable when WebGPU is unavailable. Omit per-row actions and JSON export.
+  Stress tests and timed benchmarks stay separate. Committed Vitest runs supply the formal evidence.
+
+## GPU runtime and lifecycle
+
+- Isolate device creation, upload and render failures per preview. Release the failed backend
+  and report the error in its panel so the other preview can continue.
+- When previews and live checks share GPU devices, serialize their work. Wait for in-flight
+  operations before destroying their resources.
 
 ## Running studies
 
-- **Define the check before running it.** Read the existing `agent-recipe.md`
-  when available. For a new study, state the question, workload, reference,
-  scope, environment, acceptance rules and output location. Replay retired tests
-  from the study's recorded revision or snapshot. See the Lab README for the earlier suite.
-- **Record provenance for timed benchmarks and failure investigations.** A clean
-  committed revision needs only its commit SHA to identify the source. For
-  uncommitted work, save the exact inputs to the build, including staged,
-  unstaged and new files, and record the snapshot location and SHA-256.
-  Record the browser, the GPU adapter reported by the runtime, workload inputs
-  and dependencies. If the adapter is unidentified, record it as unknown. Never
-  infer it from the host hardware or browser. Mark runs with unidentified source as provisional.
-- **Isolate timing and captures.** Rebuild generated controls from the recorded
-  source before timing. Follow the study's browser visibility requirements and
-  keep builds and tests outside the timed window. Give test-produced captures a
-  unique `LAB_ARTIFACT_RUN`. Keep raw JSON in ignored `captures/` and small
-  reproducible fixtures in the repository.
-- **Report what the evidence supports.** Apply the declared acceptance rules,
-  preserve failures and controls, identify hypotheses, and name missing,
-  skipped, interrupted or unavailable checks. Limit conclusions to the measured
-  scope. For `viewer-comparison`, `precision-diagnostics` and `pilot-viewer`,
-  the prototype views and `recorded-summary.json` summarize historical runs.
-  Use their source documents and captures for evidence and their recipes for replay scope.
+- **Define the check first.** Read the study's `agent-recipe.md` when available. Declare the
+  question, workload, reference, scope, environment, acceptance rules and output location.
+  Replay retired tests from their recorded revision or snapshot.
+- **Record provenance for timed benchmarks and failure investigations.** A clean commit SHA identifies
+  the source. For uncommitted work, retain all build inputs, including staged, unstaged and new files,
+  and record the snapshot location and SHA-256. Record browser, runtime-reported GPU adapter, inputs
+  and dependencies. If the adapter is unidentified, record “unknown.” Never infer it from the host or
+  browser. Mark results with unidentified source as provisional.
+- **Isolate timing and captures.** Rebuild generated controls from the recorded source before timing.
+  Follow browser visibility requirements and keep builds and tests outside the timed window. Give each
+  test capture a unique `LAB_ARTIFACT_RUN`. Keep raw JSON in ignored `captures/` and small reproducible
+  fixtures in the repository.
+- **Scope conclusions to the evidence.** Apply the declared rules, retain failures and controls,
+  identify hypotheses, and name skipped, interrupted, missing or unavailable checks. Treat
+  `recorded-summary.json` and prototype views of prior runs as summaries. Use the source documents
+  and captures for evidence and the study recipe for its replay scope.

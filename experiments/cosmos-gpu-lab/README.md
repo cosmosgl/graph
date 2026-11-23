@@ -26,8 +26,9 @@ raw captures and temporary live-run values are not indexed. Search loads its loc
 Coverage counts describe bounded evidence, not migration completion. Reviewed findings remain separate
 from this browser's live run.
 
-Each experiment opens with its title, catalogue badge and short finding, followed by its controls and
-live example. Diagnostics, measurements, methods and limits continue below in the same column.
+An interactive comparison can open with its title and question followed by the live preview.
+A recorded study opens with its catalogue badge, question and short finding.
+Diagnostics, measurements, methods and limits continue below in the same column.
 When several live examples are available, the case selector changes the run and the short finding.
 The topic link returns to the matching catalogue group, and the row below the content lists the other experiments in that group.
 Recorded-only studies and direct evidence links can be read before a live device starts.
@@ -99,7 +100,8 @@ search entries.
 Add `ExperimentCase` entries and accept the selected case ID in `create` when cases use different live
 views. Use these fields to introduce the case.
 
-- `question` asks what the active case tests. It appears below the catalogue badge and above the controls.
+- `question` asks what the active case tests. Use `headerContent: 'question-only'` to lead
+  directly into an interactive comparison.
 - `finding` in `src/app/readiness/` gives the short answer used in the page lead and catalogue.
   Scope measured results to the workload. When the reader supplies the measurement, state what is
   already known and what the run will measure. Reserve click instructions for button labels or `tryIt`.
@@ -152,7 +154,8 @@ current performance. New JSON exports identify the GPU API implementation.
 
 Use a `result-chart` fence for a recorded comparison that fits in two bars. Include a plain-language
 title, the metric and workload in `context`, and two `[label, value]` pairs. Keep the source table and its
-scope nearby. See the rectangle selection example in the [benchmark findings](src/experiments/viewer-comparison/benchmark-findings.md).
+scope nearby. Show phases in execution order when the sequence matters. See the rectangle
+selection example in the [benchmark findings](src/experiments/viewer-comparison/benchmark-findings.md).
 
 Commit the knowledge: what was tested, why, the environment and implementation variant, a small results table,
 limitations, and the exact controls or commands needed to reproduce the comparison. Timings vary across machines;
@@ -213,10 +216,8 @@ These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
 
 ## Interactive documentation
 
-Use the shared `reading-document` column for experiments, migration, and guides.
-Keep settings, explanations, validation tables and chapter navigation visible in ordinary sections.
-Use headings and section links to organize long content instead of accordions, including reports
-created after running an experiment. Use the shared body typography for these section headings.
+Use the shared `reading-document` column and body typography to implement the
+[page layout rules](AGENTS.md#layout-controls-and-navigation).
 Apply the same three text roles to every experiment and document: page title, 14px reading text
 (including section headings, controls and result values), and 12px secondary metadata. Distinguish
 sections with spacing and medium weight rather than extra sizes, uppercase labels or heavy bold.
@@ -225,7 +226,6 @@ scroll container, with all rows visible. These rules apply to the whole lab, inc
 
 ### Live experiment frame
 
-Follow the [page and demo design guide](AGENTS.md#page-and-demo-design).
 The shared `src/runtime/run-layout.ts` frame stacks settings, the preview, results and diagnostics
 at every width. Use `secondarySettings` to place less frequently used settings in a visible section
 below the preview.
@@ -252,10 +252,17 @@ listeners and canvas objects are moved intact, preserving GPU ownership and reta
 
 ### Guidance, results and their source
 
-Keep one short description next to a setting, using the authored control keys in
-`src/runtime/run-guidance.ts`. Longer explanation belongs in an explicit `explanation` region
-below the visualization, or beside its diagnostic tool. Neither grouping depends on paragraph order.
-The descriptions remain visible and are connected to the controls with `aria-describedby`.
+Use `choice-control` for a labeled choice and `choice-controls` for a panel of groups.
+Use the shared segmented buttons and consistent, muted group labels. A label such as
+**Pixel ratio** with **1×** and **2×** is enough on its own.
+
+For inputs and selects in the shared run layout, `src/runtime/run-guidance.ts` attaches
+visible descriptions to controls with authored guidance keys using `aria-describedby`.
+Use that helper when units, effects or prerequisites need explaining. Disable choices that
+have no effect. For example, if a choice requires another setting, name that setting beside
+the disabled choice so the reason is visible without hovering. For custom button groups,
+associate the hint with the group using `aria-describedby` so screen readers can announce it.
+Put longer explanations below the preview or beside the relevant diagnostic.
 
 Use `src/runtime/result-format.ts` for live display values: **Pass**, **Fail**, **Unchecked** and
 **Unavailable** have different meanings. A missing check is Unchecked; a missing measurement or
@@ -285,9 +292,9 @@ scope: The exact fixture, variant and checked population
 
 Only these four plain-text fields are supported. Use `Not recorded` when a measurement date or
 device was not retained; never infer it from a review date, seed, source revision or today's date.
-The article keeps the detailed conditions and reproduction instructions. General method pages
-need no measurement label. Reviewed research summaries and historical/superseded warnings retain
-their separate meanings.
+The article keeps the measured conditions and scope. Put replay instructions in the study's
+`agent-recipe.md`. General method pages need no measurement label. Reviewed research summaries
+and historical/superseded warnings retain their separate meanings.
 
 ### Experiment navigation
 
@@ -386,9 +393,10 @@ integration with its existing browser configuration.
 
 ### Recording reproducible source
 
-For a result another agent should reproduce, use a clean commit or retain an
-exact snapshot of the source used. Record the revision and working-tree state
-before and after the run. If they change during the run, report it as provisional.
+For timed benchmarks and failure investigations, a clean commit SHA identifies the source.
+For an uncommitted run, retain an exact snapshot and record its location and SHA-256.
+Record the revision and working-tree state before and after the run. If they change during
+the run, report it as provisional.
 For a modified tree, the following commands save the tracked changes and list
 new files in the existing unique capture directory. Set `lab_run_id` to that
 directory's name before running them:
