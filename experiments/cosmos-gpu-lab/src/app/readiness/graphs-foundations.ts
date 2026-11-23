@@ -82,15 +82,14 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Test unplanned loss and complete host state',
   },
-  'integrated-webgpu/shape-selection': {
-    badge: 'Selection IDs matched',
+  'selection/shape-selection': {
+    badge: 'Automated checks passed',
     tone: 'pass',
-    finding: '19 isolated queries and 10 live GPU area requests matched their references.',
+    finding: 'In 19 automated cases, WebGL and WebGPU selected the exact points predicted by an independent calculation on the CPU.',
     area: 'Integration',
     status: 'Production lasso untested',
     evidence: [
       { tone: 'pass', text: '19 isolated queries matched' },
-      { tone: 'pass', text: '10 live area requests matched' },
       { tone: 'unknown', text: 'Production lasso wiring open' },
     ],
     next: 'Connect production selection and check larger queries',

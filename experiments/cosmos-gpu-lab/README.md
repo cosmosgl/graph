@@ -175,6 +175,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
   references, plus controlled serial/blocked/tree sums on exact bounded-integer fixtures.
 - `point-shapes`, `point-picking`, `point-images` and `point-rings-greyout`: separate WebGL and WebGPU
   comparisons with pixel-level evidence, including the fractional-size and zero-opacity failure cases.
+- `selection` compares which points WebGL and WebGPU select when you draw a rectangle or lasso.
 - `center-mass`: tick-by-tick WebGL/WebGPU correctness comparison.
 - `scalable-reduction`: GPU-resident hierarchical reduction at larger point counts.
 - `point-rendering`: WebGL point sprites and WebGPU instanced circle quads.
@@ -269,7 +270,9 @@ region with a visible hint when columns overflow; it never rewrites measurements
 
 Live Run pages name the session start, actual reported devices and validation scope. Passes apply
 only to their named checks; sweeps retain their row-specific settings. The session date is not a
-measurement date for a historical article. Add explicit provenance to recorded Markdown findings:
+measurement date for a historical article. Reader-facing tables of committed correctness tests
+show the cases and outcomes without a run date. For historical measurements, include the
+measurement date in the Markdown provenance block:
 
 ```text
 ---

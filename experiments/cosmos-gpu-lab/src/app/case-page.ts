@@ -327,9 +327,15 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   const updateComparison = mountComparison(stage, slot, experiment)
   const setLiveCase = (active: ExperimentCase): void => {
     const assessment = readinessFor(experiment.id, active)
-    const finding = paragraph(assessment.finding)
-    if (!showRecordedSummary) finding.id = findingSection(active)
-    summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), paragraph(active.question, 'case-question'), finding)
+    const question = paragraph(active.question, 'case-question')
+    if (experiment.headerContent === 'question-only') {
+      if (!showRecordedSummary) question.id = findingSection(active)
+      summary.replaceChildren(question)
+    } else {
+      const finding = paragraph(assessment.finding)
+      if (!showRecordedSummary) finding.id = findingSection(active)
+      summary.replaceChildren(readinessBadge(assessment.badge, assessment.tone), question, finding)
+    }
     updateComparison?.(active, assessment.finding)
     if (chooser) chooser.value = active.id
     for (const [candidate, button] of caseButtons) button.setAttribute('aria-pressed', String(candidate.id === active.id))

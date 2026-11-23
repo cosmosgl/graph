@@ -1,7 +1,7 @@
 # GPU Lab research guide
 
-The Lab records bounded research for people to understand and for agents to
-reproduce. Follow the repository's root contributor guide and the Lab's
+The Lab helps readers evaluate Cosmos's readiness for WebGPU.
+Follow the root contributor guide and the Lab's
 `README.md` and `src/docs/validation-workflow.md`.
 
 ## WebGPU migration tests
@@ -23,11 +23,19 @@ bookkeeping, and parked experiments out of the migration suite.
 - **Use one reading column.** Use `reading-document`, shared typography, and
   shared controls on experiments, the migration page, and guides at every width.
   Keep the controls and preview together, followed by results and supporting detail.
-- **Lead with the active question.** Under the title and catalogue badge, state
-  what the case tests and why it matters. Answer the question in a short finding.
-  For a device-dependent result, distinguish what is known from what this run
-  measures. Keep click instructions in button labels or `tryIt`.
-- **Keep content visible in the page.** Put settings, explanations, results,
+- **Lead with the active question.** An interactive comparison can use
+  `headerContent: 'question-only'` and go straight to the live preview and its
+  status readout. A recorded study opens with its badge, question and a short
+  finding scoped to the measured conditions. Keep instructions in button labels or `tryIt`.
+- **Prefer interactive previews for visual and pointer behavior.** For selection,
+  picking or rendering parity, show the same input on WebGL and WebGPU. Keep
+  the automated GPU test as the pass/fail check.
+- **Write Lab pages for readers.** For committed correctness tests, list the cases
+  and outcomes. Omit the run date from these summaries. A short hardware note
+  or link to the test source is optional.
+  Put replay instructions in `agent-recipe.md`. Keep CLI flags, local `captures/`
+  paths, snapshot hashes and dependency inventories in the runbook or run record.
+- **Collapsible sections are forbidden on every Lab page.** Put settings, explanations, results,
   and run details in ordinary sections that readers can scroll to directly.
   Show reports and tables inline when a run produces them. Organize long pages
   with section headings and direct links.
@@ -56,8 +64,8 @@ bookkeeping, and parked experiments out of the migration suite.
   page title, method heading and catalogue copy to the remaining question.
   Check that every control or measurement mentioned in the explanation exists
   in that page’s demo.
-- **Use compact choice buttons.** The shared `choice-controls` style sizes
-  buttons around their labels and leaves room to tap. Label each group,
+- **Use compact choice buttons.** Use `choice-control` for each labeled group
+  and `choice-controls` to lay out multiple groups. Leave room to tap,
   highlight the selected option, and rerun quick comparisons on click.
 - **Keep reruns steady.** Give temporary progress messages a fixed place so
   the controls and renders stay in position. Check the live page at narrow and
@@ -65,38 +73,25 @@ bookkeeping, and parked experiments out of the migration suite.
 
 ## Running studies
 
-For an existing study, read its `agent-recipe.md` when one is present. Check the
-declared workload, reference, acceptance rules, environment and output location
-before running it. A test completing, a finite result and an accepted candidate
-are different statements. Report missing, skipped, interrupted and unavailable
-checks explicitly. Record the actual adapter; do not infer it from the browser or
-from an earlier run. Keep visible-browser and timing requirements for the chosen
-study, and do not run builds or tests alongside a timed measurement.
-
-For a historical recipe that names a retired test, use the source snapshot or
-revision recorded for that study. The Lab README identifies the earlier suite.
-
-Use a unique `LAB_ARTIFACT_RUN` directory for test-produced captures. Raw
-measurement JSON stays in ignored `captures/`; retain concise findings and small
-reproducible fixtures in the repository. Do not silently replace earlier results
-or infer an unrecorded source revision.
-
-For a result that another agent should reproduce, use a clean committed revision
-or retain an exact source snapshot including the needed staged, unstaged and new
-files. Record the snapshot location and the actual browser, adapter, inputs and
-dependencies. A revision plus a list of modified filenames is not a snapshot.
-Treat a run without identifiable source as provisional. Rebuild generated controls
-from that source before measuring, and do not build during a timed window.
-
-For a new investigation, state the question, reference, inputs, boundaries and
-applicable acceptance rules before interpreting the result. Retain meaningful
-failures and controls, distinguish observations from hypotheses, and report what
-was not tested. New local evidence does not erase a historical failure or approve
-the full migration. The validation workflow describes the existing numerical and
-performance policies.
-
-The live views and `recorded-summary.json` files for `viewer-comparison`,
-`precision-diagnostics` and `pilot-viewer` are a prototype. Their small records summarize named
-historical findings; they do not substitute for their source documents or raw
-captures. Their recipes describe focused replays and explicitly name what remains
-outside those replays.
+- **Define the check before running it.** Read the existing `agent-recipe.md`
+  when available. For a new study, state the question, workload, reference,
+  scope, environment, acceptance rules and output location. Replay retired tests
+  from the study's recorded revision or snapshot. See the Lab README for the earlier suite.
+- **Record provenance for timed benchmarks and failure investigations.** A clean
+  committed revision needs only its commit SHA to identify the source. For
+  uncommitted work, save the exact inputs to the build, including staged,
+  unstaged and new files, and record the snapshot location and SHA-256.
+  Record the browser, the GPU adapter reported by the runtime, workload inputs
+  and dependencies. If the adapter is unidentified, record it as unknown. Never
+  infer it from the host hardware or browser. Mark runs with unidentified source as provisional.
+- **Isolate timing and captures.** Rebuild generated controls from the recorded
+  source before timing. Follow the study's browser visibility requirements and
+  keep builds and tests outside the timed window. Give test-produced captures a
+  unique `LAB_ARTIFACT_RUN`. Keep raw JSON in ignored `captures/` and small
+  reproducible fixtures in the repository.
+- **Report what the evidence supports.** Apply the declared acceptance rules,
+  preserve failures and controls, identify hypotheses, and name missing,
+  skipped, interrupted or unavailable checks. Limit conclusions to the measured
+  scope. For `viewer-comparison`, `precision-diagnostics` and `pilot-viewer`,
+  the prototype views and `recorded-summary.json` summarize historical runs.
+  Use their source documents and captures for evidence and their recipes for replay scope.

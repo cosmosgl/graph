@@ -1,3 +1,4 @@
+import { selectionCase } from '../experiments/selection/case'
 import { cases as pointStylingCases, pointStylingExperimentIds } from '../experiments/point-styling/cases'
 
 export type ValidationContract = {
@@ -94,6 +95,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     acceptance: 'Inspect each moving layout from the same camera.',
     coverage: 'SNAP YouTube presets with 1,000,000 points and 2,852,734 links, 262,144 points and 1,369,771 links, or 300,000 points and 300,000 links.',
     limits: 'Use solo playback for individual rates. At one million points, recorded WebGL playback stopped at moving rectangle selection.',
+  },
+  selection: {
+    question: selectionCase.question,
+    reference: selectionCase.reference,
+    acceptance: 'The recorded checks require exact ordered ID agreement across WebGL, WebGPU and the CPU reference.',
+    coverage: 'Fixed edge cases and a 257-point fixture with pan, zoom and irregular polygon boundaries.',
+    limits: 'The demo uses stationary points. Production pointer wiring, arbitrary near-edge rounding and large-query cost remain open.',
   },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',

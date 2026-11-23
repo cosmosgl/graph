@@ -68,7 +68,7 @@ const catalogTopics: CatalogTopic[] = [
     id: 'rendering',
     title: 'Rendering and picking',
     cards: ['point-rendering', 'point-shapes', 'point-picking', 'straight-links'],
-    links: ['point-images', 'point-rings-greyout', 'curved-links', 'smoothstep-coverage'],
+    links: ['selection', 'point-images', 'point-rings-greyout', 'curved-links', 'smoothstep-coverage'],
   },
   {
     id: 'gpu-foundations',

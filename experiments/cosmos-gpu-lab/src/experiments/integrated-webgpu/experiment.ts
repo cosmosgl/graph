@@ -24,12 +24,6 @@ export const experiment = defineExperiment({
     },
     {
       kind: 'markdown',
-      id: 'selection',
-      title: 'Rectangle and polygon selection',
-      load: async (): Promise<string> => (await import('../selection/findings.md?raw')).default,
-    },
-    {
-      kind: 'markdown',
       id: 'tracked-points',
       title: 'Tracked point readback',
       load: async (): Promise<string> => (await import('./tracked-points.md?raw')).default,

@@ -64,26 +64,6 @@ export const cases: ExperimentCase[] = [
     },
   },
   {
-    id: 'shape-selection',
-    title: 'Select points with shapes',
-    kind: 'recorded',
-    question: 'Do rectangle and polygon queries select the same points on WebGL and WebGPU?',
-    description: 'A fixed set of rectangle and polygon queries is compared across both GPUs and a CPU reference.',
-    reference: 'Production WebGL selection shaders and an independent CPU calculation of the selected point IDs.',
-    acceptance: 'The ordered IDs must agree exactly for each query.',
-    recorded: {
-      conclusion: 'All 19 recorded queries returned the same ordered IDs, including two empty results handled before GPU dispatch.',
-      date: '2026-11-19',
-      environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
-      scope: 'Fixed edge cases and a 257-point fixture with pan, zoom and irregular polygon boundaries.',
-      limits: 'Production pointer wiring, arbitrary near-edge rounding and large-query cost remain open; WebGPU readback is asynchronous.',
-      evidence: [
-        { label: 'Rectangle and polygon selection evidence', page: 'selection' },
-        { label: 'Live graph readback', page: 'readback' },
-      ],
-    },
-  },
-  {
     id: 'tracked-positions',
     title: 'Read selected moving positions',
     kind: 'recorded',

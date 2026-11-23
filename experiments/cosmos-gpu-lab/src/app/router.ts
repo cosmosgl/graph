@@ -40,7 +40,12 @@ export function readRoute (): AppRoute {
     return { kind: 'concept', conceptId: decodeURIComponent(segments[1]) }
   }
 
-  return { kind: 'experiment', experimentId: decodeURIComponent(segments.join('/')) }
+  const experimentId = decodeURIComponent(segments.join('/'))
+  // Preserve bookmarks to the selection case and its evidence from before the split.
+  if (experimentId === 'integrated-webgpu' && /^(?:(?:try|finding)-shape-selection$|doc-selection(?:-|$))/.test(currentSection() ?? '')) {
+    return { kind: 'experiment', experimentId: 'selection' }
+  }
+  return { kind: 'experiment', experimentId }
 }
 
 export function vocabularyHref (): string {

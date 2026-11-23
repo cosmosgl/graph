@@ -220,6 +220,14 @@ h1 {
   flex-wrap: wrap;  justify-content: space-between;
 }
 
+.selection-preview canvas {
+  border: 0;
+  outline: 1px solid #414751;
+  cursor: crosshair;
+  touch-action: none;
+  image-rendering: auto;
+}
+
 .demo-toolbar {
   flex-wrap: wrap;
   gap: 24px;
@@ -301,6 +309,10 @@ input:disabled {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.35;
+}
+
+.choice-control.selection-tools {
+  grid-template-columns: 1fr;
 }
 
 .choice-label small {
@@ -2243,7 +2255,8 @@ button[data-action="play"][aria-pressed="true"] {
 .case-header, .case-recorded-summary { display: grid; gap: var(--space-2); }
 .reading-document > .case-header h1 { margin: 0; }
 .case-topic-link { justify-self: start; padding-block: var(--space-1); color: var(--accent); text-underline-offset: 3px; }
-.case-meta { color: var(--text-secondary); font-size: var(--type-meta); }
+.case-meta,
+#doc-automated-cases .prose > p:first-child { color: var(--text-secondary); font-size: var(--type-meta); }
 .case-recorded-summary p { margin: 0; }
 .case-question { font-weight: 500; }
 .case-recorded-summary > .readiness-badge { justify-self: start; }

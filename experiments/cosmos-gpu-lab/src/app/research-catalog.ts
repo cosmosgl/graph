@@ -1,3 +1,4 @@
+import { selectionCase } from '../experiments/selection/case'
 import { validationContracts } from '../runtime/validation'
 import type { ResearchSummary } from './research'
 
@@ -321,6 +322,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       reproduce: 'Choose a graph size, then use Run WebGL or Run WebGPU for solo playback. Drag or scroll either graph to move both cameras.',
       investigations: [],
     }),
+    selection: entry('selection', {
+      conclusion: 'All 19 queries returned the same ordered IDs, including two empty results handled before GPU dispatch.',
+      reviewed: '2026-11-19',
+      variant: 'Production WebGL selection shaders, WebGPU selection compute kernel, and independent CPU reference',
+      comparison: selectionCase.reference,
+      method: 'validation-contract',
+      reproduce: 'Choose Rectangle or Lasso and drag on either preview.',
+      next: 'After PR #296 merges, check footprint overlap for both tools.',
+      investigations: [],
+    }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',
@@ -335,11 +346,6 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [
         { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
         { page: 'host-ownership', state: 'Supporting investigation', description: 'Borrowed luma device, shared draw pass and explicit checkpoint restart.' },
-        {
-          page: 'selection',
-          state: 'Supporting investigation',
-          description: 'Native rectangle and polygon selection parity and the remaining asynchronous readback contract.',
-        },
         {
           page: 'tracked-points',
           state: 'Supporting investigation',

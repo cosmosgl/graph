@@ -37,6 +37,7 @@ export type ExperimentDestination = { href: string; section: string | null; live
 
 export function experimentDestination (experiment: ExperimentDefinition, requested: string | null): ExperimentDestination {
   let section = requested
+  if (experiment.id === 'selection' && /^doc-selection(?:-|$)/.test(section ?? '')) section = null
   const page = evidencePageAt(experiment, section ?? '')
   if (section?.startsWith('doc-agent-recipe') || (page && !isReaderPage(experiment, page))) {
     section = 'recorded-findings'

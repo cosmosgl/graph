@@ -96,6 +96,7 @@ export type ExperimentDefinition = {
   showPeerLinks?: boolean;
   initialEvidence?: 'first-recorded';
   showRecordedSummary?: boolean;
+  headerContent?: 'question-only';
   singlePage?: SinglePageCase;
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
