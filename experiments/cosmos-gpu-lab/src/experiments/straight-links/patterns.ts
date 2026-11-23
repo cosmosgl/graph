@@ -24,14 +24,17 @@ export function patternShader (source: string, curved: boolean): string {
   const start = source.indexOf('@fragment fn fragmentMain')
   if (start < 0) throw new Error('Missing link fragment entry')
   // Only acceptance fragmentMain, never the independent solid diagnostic probes.
-  const head = source.slice(0, start); let body = source.slice(start)
-  body = body.replace('let coverage = smoothstep', 'var coverage = smoothstep')
-    .replace('  let alpha = input.color.a * coverage;', `  let motif = patternMask(input);
+  const end = source.indexOf('\n}', start) + 2
+  if (end <= start) throw new Error('Missing link fragment body')
+  const head = source.slice(0, start); const tail = source.slice(end)
+  source = source.slice(start, end)
+  replace('let coverage = ', 'var coverage = ')
+  replace('  let alpha = input.color.a * coverage;', `  let motif = patternMask(input);
   if (params.options.z < 0.5 || params.options.w > 0.5) { coverage *= motif; }
   let alpha = input.color.a * coverage;`)
-    .replace('  if (params.options.z > 0.0) {', `  if (params.options.z > 0.0) {
+  replace('  if (params.options.z > 0.0) {', `  if (params.options.z > 0.0) {
     if (params.options.w > 0.5 && input.stroke > 0u && coverage < 0.5) { discard; }`)
-  return `${head + body}
+  return `${head + source + tail}
 // Evaluate every derivative before any style branch or discard.
 fn patternMask(input: Vertex) -> f32 {
   let phase = clamp(input.coord.x,0.0,1.0) * input.pattern.x;

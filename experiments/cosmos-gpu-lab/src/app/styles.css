@@ -1918,7 +1918,7 @@ button[data-action="play"][aria-pressed="true"] {
 .shape-preview .styling-viewport { margin-top: 8px; }
 .shape-preview canvas, .shape-preview .styling-pick { margin: 0; }
 .shape-preview [data-preview-status] { min-height: 2lh; }
-.shape-preview:not(:has(canvas:focus-visible)) #shape-pixel-help { display: none; }
+.shape-preview:not(:has(canvas:focus-visible)) :is(#shape-pixel-help, #link-pixel-help) { display: none; }
 .styling-pick { min-height: 1.5em; color: var(--accent); font-variant-numeric: tabular-nums; }
 .backend-panel:has(canvas[aria-pressed]) .styling-pick { min-height: 2lh; }
 
@@ -2090,7 +2090,7 @@ button[data-action="play"][aria-pressed="true"] {
 .run-visualization .backend-panel > .demo-note:empty { display: none; }
 .run-layout .run-visualization canvas { max-width: 100%; height: auto; }
 .run-layout .run-visualization .benchmark-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
-.run-layout #run-results, .run-secondary-settings, .run-explanation, .run-diagnostics {
+.run-layout #run-results:not([data-preview-status]), .run-secondary-settings, .run-explanation, .run-diagnostics {
   padding-top: var(--space-4); border-top: 1px solid var(--control-border);
 }
 .run-layout #run-results:has(> h2:only-child)::after { content: 'No live results yet. Configure and run the selected workload.'; color: var(--text-secondary); }

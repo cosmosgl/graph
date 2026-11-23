@@ -1,28 +1,18 @@
 import { Buffer, type Device, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
-import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
+import { ALPHA_BLEND, bindingLayout, createDevice, describeDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { pixels, target, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_WGSL } from '../../gpu/source-alpha'
-import { patternProbeGPU } from './pattern-probe'
 import { patternCode, hasPatterns, patternShader } from './patterns'
 import { endpointColorShader, resolvedEndpointColor } from './endpoint-colors'
 import source from './links.wgsl?raw'
-import { HEIGHT, WIDTH, resolveLink, type CoverageFormula, type HardCoverage } from './data'
+import { HEIGHT, WIDTH, resolveLink, type CoverageFormula } from './data'
 import type { Backend, Snapshot } from './backend'
-function coverageSource (method: HardCoverage, formula: CoverageFormula): string {
-  let result = source
-  if (method === 'linear') result = result.replace('@location(0) coord: vec2f', '@location(0) @interpolate(linear, center) coord: vec2f')
-  if (method === 'pixel') {
-    result = result.replace(
-      'let coverage = smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y));',
-      `let distancePx = abs(dot(input.position.xy - input.ribbon.xy,input.ribbon.zw));
-     let coverage = smoothstep(input.halfWidth + 0.5,input.halfWidth - 0.5,distancePx);`)
-  }
+function coverageSource (formula: CoverageFormula): string {
   return formula === 'ascending'
-    ? result.replaceAll('smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y))',
-      '(1.0 - smoothstep(0.5 - input.smoothing,0.5,abs(input.coord.y)))')
-    : result
+    ? source.replaceAll('smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y))', '(1.0 - smoothstep(0.5 - input.smoothing,0.5,abs(input.coord.y)))')
+    : source
 }
 function captureSource (program: string): string {
   const signature = '@vertex fn vertexMain(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32)'
@@ -58,20 +48,18 @@ export async function createLinksWebGPU (
     const gradientArray = scope.own(device.createVertexArray({ shaderLayout: gradientLayout, bufferLayout: [] }))
     const kernels = new Map<string, RenderKernel>()
     const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean,
-      probe: number, method: HardCoverage, gradient = false, patterned = false, formula: CoverageFormula = 'descending'): RenderKernel => {
-      const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}:${gradient}:${patterned}:${formula}`
+      probe: number, gradient = false, patterned = false, formula: CoverageFormula = 'descending'): RenderKernel => {
+      const key = `${format}:${blend}:${display}:${picking}:${probe}:${gradient}:${patterned}:${formula}`
       const cached = kernels.get(key); if (cached) return cached
-      const base = probe === 3 ? captureSource(coverageSource(method, formula)) : coverageSource(method, formula)
-      const decorated = probe >= 4 ? patternProbeGPU(base, false, probe) : patterned ? patternShader(base, false) : base
+      const base = probe === 2 ? captureSource(coverageSource(formula)) : coverageSource(formula)
+      const decorated = patterned ? patternShader(base, false) : base
       const code = gradient ? endpointColorShader(decorated, 3) : decorated
       const result = scope.own(new RenderKernel(device, {
         vertexSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
         fragmentSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
-        vertexEntryPoint: probe === 3 ? 'captureVertex' : 'vertexMain',
-        fragmentEntryPoint: probe >= 4
-          ? 'patternProbe'
-          : probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : probe === 2 ? 'pixelProbe' : 'fragmentMain',
-        topology: probe === 3 ? 'point-list' : 'triangle-strip',
+        vertexEntryPoint: probe === 2 ? 'captureVertex' : 'vertexMain',
+        fragmentEntryPoint: probe === 2 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : 'fragmentMain',
+        topology: probe === 2 ? 'point-list' : 'triangle-strip',
         shaderLayout: gradient ? gradientLayout : shaderLayout,
         colorAttachmentFormats: [format],
         depthStencilAttachmentFormat: display
@@ -85,43 +73,13 @@ export async function createLinksWebGPU (
       }))
       kernels.set(key, result); return result
     }
-    const carrierLayout = { attributes: [], bindings: bindingLayout([['capturePositions', 'read-only-storage']]) }
-    const carrierArray = scope.own(device.createVertexArray({ shaderLayout: carrierLayout, bufferLayout: [] }))
-    let carrierKernel: RenderKernel | undefined
     return {
-      info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      info: describeDevice(device),
       adapter: device.info,
-      async rasterize (clip, width, height): Promise<Uint8Array> {
-        const frame = resourceScope()
-        try {
-          const output = frame.own(target(device, width, height)); const buffer = frame.own(upload(device, new Float32Array(clip)))
-          const code = `@group(0) @binding(0) var<storage,read> capturePositions: array<vec2f>;
-            @vertex fn vertexMain(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
-              return vec4f(capturePositions[index],0,1);
-            }
-            @fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(1); }`
-          carrierKernel ??= scope.own(new RenderKernel(device, {
-            vertexSource: code,
-            fragmentSource: code,
-            vertexEntryPoint: 'vertexMain',
-            fragmentEntryPoint: 'fragmentMain',
-            topology: 'triangle-strip',
-            shaderLayout: carrierLayout,
-            colorAttachmentFormats: ['rgba8unorm'],
-            parameters: { blend: false, cullMode: 'none' },
-          }))
-          const pass = device.beginRenderPass({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false })
-          try { carrierKernel.draw(pass, { vertexArray: carrierArray, vertexCount: 4, bindings: { capturePositions: buffer } }) } finally { pass.end() }
-          device.submit(); return await pixels(device, output.texture, output.framebuffer)
-        } finally { frame.destroy() }
-      },
       async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio
-          // Experiments never alter the retained production port, even when
-          // a caller carries a different method in its settings.
-          const method = variant === 'visible' && !settings.blend ? settings.hardCoverage ?? 'native' : 'native'
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
           const positions = new Float32Array(Math.max(4, scene.points.length * 4))
@@ -152,7 +110,7 @@ export async function createLinksWebGPU (
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
               kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0,
-                probe, method, gradient, patterned && probe === 0, settings.coverageFormula ?? 'descending').draw(pass, {
+                probe, gradient, patterned && probe === 0, settings.coverageFormula ?? 'descending').draw(pass, {
                 vertexArray: gradient ? gradientArray : vertexArray,
                 vertexCount: 4,
                 instanceCount: scene.links.length,
@@ -164,7 +122,6 @@ export async function createLinksWebGPU (
           device.submit()
           const result: Snapshot = {
             variant,
-            hardCoverage: method,
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
@@ -172,21 +129,11 @@ export async function createLinksWebGPU (
           }
           if (diagnose) {
             const varying = frame.own(target(device, width, height, 'rgba32float'))
-            const pixel = frame.own(target(device, width, height, 'rgba32float'))
             const vertices = frame.own(target(device, 4, Math.max(1, scene.links.length), 'rgba32float'))
-            draw(0, varying.framebuffer, 1); draw(0, pixel.framebuffer, 2); draw(0, vertices.framebuffer, 3); device.submit()
+            draw(0, varying.framebuffer, 1); draw(0, vertices.framebuffer, 2); device.submit()
             result.probe = {
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
-              pixel: await floatPixels(device, pixel.texture, pixel.framebuffer),
               vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
-            }
-            if (patterned) {
-              result.probe.pattern = []
-              for (const probe of [4, 5, 6, 7, 8]) {
-                const output = frame.own(target(device, width, height, 'rgba32float'))
-                draw(0, output.framebuffer, probe); device.submit()
-                result.probe.pattern.push(await floatPixels(device, output.texture, output.framebuffer))
-              }
             }
           }
           if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost')

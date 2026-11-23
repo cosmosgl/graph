@@ -3,10 +3,9 @@ export const WIDTH = 512; export const HEIGHT = 320
 export type Point = { x: number; y: number; absent?: boolean; color?: [number, number, number, number] }
 export type Link = { pattern?: Pattern; source: number; target: number; width: number; color: [number, number, number, number] }
 export type Scene = { points: Point[]; links: Link[] }
-export type HardCoverage = 'native' | 'linear' | 'pixel'
 export type CoverageFormula = 'descending' | 'ascending'
 export type Settings = { pattern?: Pattern; dashLength?: number; dashGap?: number;
-  endpointColors?: boolean; pointDefaultColor?: Link['color']; hardCoverage?: HardCoverage;
+  endpointColors?: boolean; pointDefaultColor?: Link['color'];
   coverageFormula?: CoverageFormula;
   zoom: number; ratio: number; opacity: number; blend: boolean; scaleOnZoom: boolean;
   widthScale: number; maxWidth: number; defaultWidth: number; defaultColor: Link['color']; reverse: boolean; indexOffset: number; }
@@ -61,9 +60,3 @@ export function fixture (name: Fixture): Scene {
   }
   return { points, links }
 }
-export const PROFILES: Array<{ name: string; settings: Partial<Settings> }> = [
-  { name: 'Native', settings: {} }, { name: 'Retina', settings: { ratio: 2 } },
-  { name: 'Zoom out · translucent · reversed', settings: { zoom: 0.5, opacity: 0.35, reverse: true } },
-  { name: 'Constant width · zoom 2', settings: { zoom: 2, scaleOnZoom: false } },
-  { name: 'Opacity zero', settings: { opacity: 0 } },
-]

@@ -231,37 +231,19 @@ export const research: Record<string, ResearchSummary> = {
   },
   'straight-links': {
     method: 'validation-contract',
-    evidence: 'method',
-    reviewed: '2026-11-17',
+    evidence: 'automated-cases',
+    reviewed: '2026-11-23',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
-    conclusion: 'M3 dash/dot links pass 14/24 cases with original colors intact; mask and color boundary failures keep the candidate rejected.',
-    scope: 'Earlier M3 / Chromium 157 geometry matrix: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
-      'The separate 72-case alpha replay retains four blended threshold-edge and four hard-edge failures; neither matrix is production approval.',
-    variant: 'Production GLSL control and visible-footprint/source-byte IDs; original color. ' +
-      'Luma alpha.15 patterns/gradients and matched solid controls; Apple M3.',
+    conclusion: 'Seven practical solid-link checks passed on M3, including thin strokes and picking at a crossing.',
+    scope: 'Fixed solid links with hard and antialiased edges on one GPU. Exact-edge and pattern investigations remain parked.',
+    variant: 'Cosmos WebGL and the WebGPU ribbon renderer, with visible-stroke and padded picking.',
     next: 'Reuse solid straight links in the first slice; further exact-edge research is parked unless practical rendering or picking fails.',
-    reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
-    methods: [
-      {
-        title: 'Straight ribbon · source-byte picking',
-        verdict: 'Method under test',
-        page: 'method',
-        detail: 'Preserves original color and source visibility; hard-edge and raster boundaries remain rejected.',
-      },
-      {
-        title: 'Hard-only pixel-distance coverage',
-        verdict: 'Rejected under current gates',
-        page: 'method',
-        section: 'hard-edge-coverage-investigation',
-        detail: 'Removes selected WebGPU/CPU mask failures but changes original color pixels; retained as a diagnostic.',
-      },
-    ],
+    reproduce: 'Choose “run on this GPU” under Automated test results to repeat the seven checks.',
     investigations: [{
-      page: 'method',
-      state: 'Parked',
-      description: 'Exact-boundary research is stopped for the first slice. Solid links remain an integration input; ' +
-        'practical defects reopen the investigation.',
+      page: 'automated-cases',
+      state: 'Current evidence',
+      description: 'Practical solid-link checks on frozen scenes cover ribbon edges, visibility, width limits and picking.',
     }],
   },
 }

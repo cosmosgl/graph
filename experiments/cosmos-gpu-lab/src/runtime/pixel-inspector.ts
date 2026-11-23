@@ -1,15 +1,17 @@
-import { pick, type Snapshot } from './backend'
+import { pick, type RgbaSnapshot } from '../gpu/rgba-readback'
 
 type Lane = 'webgl' | 'webgpu'
 type Position = { u: number; v: number }
 
 export function mountPixelInspector (
-  host: HTMLElement, pinnable: boolean, snapshotFor: (lane: Lane) => Snapshot | undefined, ready: () => boolean
+  host: HTMLElement, pinnable: boolean, snapshotFor: (lane: Lane) => RgbaSnapshot | undefined, ready: () => boolean,
+  objectName: 'point' | 'link' = 'point'
 ): { reset(): void; restore(): void } {
   const panels = (['webgl', 'webgpu'] as const).map(lane => ({
     lane,
     name: lane === 'webgl' ? 'WebGL' : 'WebGPU',
-    canvas: host.querySelector<HTMLCanvasElement>(`[data-canvas="${lane}"]`)!,
+    viewport: host.querySelector<HTMLCanvasElement>(`[data-canvas="${lane}"]`)!.parentElement!,
+    get canvas (): HTMLCanvasElement { return this.viewport.querySelector('canvas')! },
     cursor: host.querySelector<HTMLElement>(`[data-cursor="${lane}"]`)!,
     readout: host.querySelector<HTMLElement>(`[data-pick="${lane}"]`)!,
   }))
@@ -32,7 +34,7 @@ export function mountPixelInspector (
       cursor.style.left = `${(x + 0.5) / snapshot.width * 100}%`
       cursor.style.top = `${(y + 0.5) / snapshot.height * 100}%`
       const pixel = `${pinned ? 'Pinned pixel' : 'Pixel'} (${x}, ${y})`
-      const sample = `${id === null ? 'background' : `point ${id}`} · rendered alpha ${alpha}/255`
+      const sample = `${id === null ? 'background' : `${objectName} ${id}`} · rendered alpha ${alpha}/255`
       readout.textContent = `${pixel} · ${sample}`
       if (announce) {
         if (!descriptions.length) descriptions.push(pixel)
@@ -48,27 +50,28 @@ export function mountPixelInspector (
     inspect(at, true)
   }
 
-  for (const { lane, canvas } of panels) {
+  for (const panel of panels) {
+    const { lane, viewport } = panel
     const pointerPosition = (event: MouseEvent): Position | undefined => {
-      const box = canvas.getBoundingClientRect()
+      const box = panel.canvas.getBoundingClientRect()
       if (!box.width || !box.height) return undefined
       return { u: (event.clientX - box.left) / box.width, v: (event.clientY - box.top) / box.height }
     }
-    canvas.addEventListener('pointermove', event => {
+    viewport.addEventListener('pointermove', event => {
       if (pinned || !ready() || !snapshotFor(lane)) return
       const at = pointerPosition(event)
       if (at) inspect(at)
     })
     if (!pinnable) continue
-    canvas.addEventListener('click', event => {
+    viewport.addEventListener('click', event => {
       if (!ready() || !snapshotFor(lane)) return
       const at = event.detail ? pointerPosition(event) : position ?? center
       if (at) togglePin(at)
     })
-    canvas.addEventListener('focus', () => {
-      if (canvas.matches(':focus-visible') && ready() && snapshotFor(lane)) inspect(position ?? center, true)
+    viewport.addEventListener('focusin', () => {
+      if (panel.canvas.matches(':focus-visible') && ready() && snapshotFor(lane)) inspect(position ?? center, true)
     })
-    canvas.addEventListener('keydown', event => {
+    viewport.addEventListener('keydown', event => {
       const snapshot = snapshotFor(lane)
       if (!ready() || !snapshot) return
       const at = position ?? center
@@ -109,10 +112,11 @@ export function mountPixelInspector (
       }
     },
     restore (): void {
-      for (const { lane, canvas, readout } of panels) {
+      for (const { lane, canvas, viewport, readout } of panels) {
         const available = Boolean(snapshotFor(lane))
+        readout.hidden = viewport.hidden
         if (pinnable) canvas.setAttribute('aria-disabled', String(!available))
-        if (!available) readout.textContent = 'Pixel readout unavailable'
+        if (!available) readout.textContent = viewport.hidden ? '' : 'Pixel readout unavailable'
       }
       if (pinned && position) inspect(position)
     },

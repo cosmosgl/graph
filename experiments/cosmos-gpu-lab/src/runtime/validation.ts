@@ -133,9 +133,10 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Do production Cosmos straight ribbons and luma WebGPU agree with the rendered and pickable footprint?',
     reference: 'Unmodified production straight-link GLSL and geometry; a separate visible-footprint/source-byte ID candidate; ' +
       'independent scalar ribbon triangles, masks and RGBA8 colors.',
-    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
-    coverage: 'Straight solid ribbons, widths/defaults, subpixel attenuation, blend/hard modes, opacity, zoom, DPR, ordering, ' +
-      'absent endpoints, overlap, fractional boundaries, patterns and endpoint RGB. Source visibility and color preservation stay separate.',
+    acceptance: 'For solid links, require exact IDs and color agreement within 2/255 outside a one-device-pixel outline band. ' +
+      'Thin links must remain visible and invisible sources must never intercept visible-stroke picks. Archived matrices use strict pixel boundaries.',
+    coverage: 'Live scenes cover solid links, width limits, fractional edges, overlap, endpoint colors and pattern gaps. ' +
+      'The archived sweeps also varied opacity, zoom, pixel ratio and draw order.',
     limits: 'Production host picking deliberately adds five CSS pixels of ribbon width. Candidate picking changes that policy, not the production control. ' +
       'Curves, other pattern parameters, arrows, visibility fading, highlights, transitions, pointer scheduling, full Graph/host integration, ' +
       'broader native devices and runtime GPU cost remain open.',

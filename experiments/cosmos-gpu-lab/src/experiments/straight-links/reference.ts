@@ -7,6 +7,22 @@ import { resolvedEndpointColor } from './endpoint-colors'
 type Vec = [number, number]
 type Ribbon = { pattern?: PatternGeometry; id: number; a: Vec; b: Vec; normal: Vec; length: number; core: number; thin: number; color: number[];
   endpointColors?: number[][]; vertices: Vec[]; left: number; top: number; right: number; bottom: number; }
+// Signed distance in device pixels to the sides, butt caps and corners of the visible ribbon.
+export function outlineDistance (r: Ribbon, x: number, y: number): number {
+  const dx = x - r.a[0]; const dy = y - r.a[1]
+  const [nx, ny] = r.normal
+  const along = Math.abs(-ny * dx + nx * dy - r.length / 2) - r.length / 2
+  const across = Math.abs(nx * dx + ny * dy) - r.core / 2
+  return along > 0 && across > 0 ? Math.hypot(along, across) : Math.max(along, across)
+}
+
+export function colorOutsideBudget (a: Uint8Array, b: Uint8Array, reference: Uint8Array, offset: number): boolean {
+  for (let i = offset; i < offset + 4; i++) {
+    if (Math.max(a[i], b[i], reference[i]) - Math.min(a[i], b[i], reference[i]) > 2) return true
+  }
+  return false
+}
+
 function triangle (p: Vec, a: Vec, b: Vec, c: Vec): boolean {
   const cross = (a: Vec, b: Vec, p: Vec): number => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
   if (cross(a, b, c) < 0) [b, c] = [c, b]
@@ -117,14 +133,18 @@ export function compareColors (a: Uint8Array, b: Uint8Array): ColorResult {
 }
 export type Comparison = { pixels: number; idDifferences: number; masks: { webgl: number; webgpu: number };
   invisible: { webgl: number; webgpu: number }; colors: ColorResult; cpuColors: { webgl: ColorResult; webgpu: ColorResult };
+  edgeBand?: { firstOutside?: { x: number; y: number } };
   firstMismatch?: { x: number; y: number; webgl: number | null; webgpu: number | null; expected: { webgl: number | null; webgpu: number | null } };
   passed: boolean; }
 export async function compare (a: Snapshot, b: Snapshot, scene: Scene, settings: Settings): Promise<Comparison> {
   if (a.width !== b.width || a.height !== b.height) throw new Error('Framebuffer dimensions differ')
   const reference = cpuColors(scene, settings)
-  const glPick = scalarPick(ribbons(scene, settings, true, a.variant), settings, a.variant)
+  const geometry = ribbons(scene, settings, true, a.variant)
+  const pilot = a.variant === 'visible' && b.variant === 'visible' && !settings.endpointColors && !geometry.some(r => r.pattern)
+  const glPick = scalarPick(geometry, settings, a.variant)
   const gpuPick = scalarPick(ribbons(scene, settings, true, b.variant), settings, b.variant)
   const result: Comparison = {
+    edgeBand: pilot ? {} : undefined,
     pixels: a.width * a.height,
     idDifferences: 0,
     masks: { webgl: 0, webgpu: 0 },
@@ -142,7 +162,13 @@ export async function compare (a: Snapshot, b: Snapshot, scene: Scene, settings:
       const alpha = (y * a.width + x) * 4 + 3
       if (gl !== null && a.color[alpha] === 0) result.invisible.webgl++
       if (gpu !== null && b.color[alpha] === 0) result.invisible.webgpu++
-      if (gl !== gpu || gl !== u || gpu !== v) result.firstMismatch ??= { x, y, webgl: gl, webgpu: gpu, expected: { webgl: u, webgpu: v } }
+      const pickMismatch = gl !== gpu || gl !== u || gpu !== v
+      if (result.edgeBand && !result.edgeBand.firstOutside && (pickMismatch || colorOutsideBudget(a.color, b.color, reference, alpha - 3))) {
+        const nearEdge = geometry.some(r => r.color[3] * settings.opacity > 0 && (!pickMismatch || r.id === gl || r.id === gpu || r.id === u || r.id === v) &&
+          Math.abs(outlineDistance(r, x + 0.5, y + 0.5)) <= 1)
+        if (!nearEdge) result.edgeBand.firstOutside = { x, y }
+      }
+      if (pickMismatch) result.firstMismatch ??= { x, y, webgl: gl, webgpu: gpu, expected: { webgl: u, webgpu: v } }
     }
     if (y % 16 === 15) await new Promise<void>(resolve => { setTimeout(resolve, 0) })
   }

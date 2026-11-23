@@ -22,7 +22,7 @@ export async function createCurvesWebGL (canvas: HTMLCanvasElement): Promise<Bac
         ...image,
         variant,
         probe: image.probe?.vertices
-          ? { varying: image.probe.varying, vertices: image.probe.vertices, pattern: image.probe.pattern }
+          ? { varying: image.probe.varying, vertices: image.probe.vertices }
           : undefined,
       }
     },

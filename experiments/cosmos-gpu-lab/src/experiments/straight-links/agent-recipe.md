@@ -1,3 +1,24 @@
+# Replaying the archived straight-link studies
+
+The active solid-link suite shares its seven cases with the page. Run it from the repository root with
+`pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links/links.test.ts`.
+The diagonal checks compare WebGL, WebGPU and the CPU color reference, and compare IDs against the
+geometric ribbon. Count differences within one device pixel of its sides, ends and corners separately.
+
+The commands and run records below describe retired diagnostics. Run them in a separate
+checkout of `466da466b3d83b36f6d4295939822e724dd87d35`, the last revision before
+the tests were removed. Install that revision's dependencies with `pnpm install --frozen-lockfile`
+and build the WebGL control with `pnpm run build` from its root. This revision provides the
+replay harness. The original environments and measured results for each study are recorded below.
+
+On the current tree, the Straight-link page compares six presets. The sweep, exports and
+cap/coverage replay controls described below belong to the archived revision.
+The source-visibility check now inspects every picked link, and mixed strokes use the straight analytic picking
+rule. A run with these changes is a new result. For first-slice acceptance use the integrated
+viewer checks described in the [Lab README](../../../README.md#webgpu-migration-checks).
+
+## Archived investigation
+
 Further exact-edge and pattern investigation is **parked for the first migration**,
 not resolved. Solid straight links remain part of the integrated first slice.
 Reopen if its rendering or picking violates the practical rules; review retained

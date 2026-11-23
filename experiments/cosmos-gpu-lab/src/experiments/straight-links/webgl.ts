@@ -4,12 +4,11 @@ import vertex from '../../../../../src/modules/Lines/draw-curve-line.vert?raw'
 import fragment from '../../../../../src/modules/Lines/draw-curve-line.frag?raw'
 import conic from '../../../../../src/modules/Lines/conic-curve-module.ts?raw'
 import picking from '../../../../../src/modules/Shared/picking-color-module.ts?raw'
-import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
+import { ALPHA_BLEND, createDevice, describeDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
 import { patternCode, hasPatterns } from './patterns'
-import { patternProbeGL } from './pattern-probe'
 import { WIDTH, HEIGHT, type CoverageFormula, type Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 const vertexTypes = {
@@ -84,10 +83,6 @@ const visibleFragment = fragment.replace('void main()',
 const opacityLine = 'float opacity = rgbaColor.a * coverage;'
 const varyingProbe = fragment.replace(opacityLine,
   `fragColor = vec4(pos.y, smoothing, coverage, linkIndex + 1.0); return;\n${opacityLine}`)
-const pixelProbe = visibleFragment.replace(opacityLine,
-  `float distancePx = abs(dot(gl_FragCoord.xy - diagnosticRibbon.xy, diagnosticRibbon.zw));
-   float pixelCoverage = smoothstep(diagnosticHalf + 0.5, diagnosticHalf - 0.5, distancePx);
-   fragColor = vec4(distancePx, diagnosticHalf, pixelCoverage, linkIndex + 1.0); return;\n${opacityLine}`)
 const finalPosition = 'gl_Position = vec4(final.rg, 0, 1);'
 if (!vertex.includes(finalPosition)) throw new Error('Production vertex capture location changed')
 const captureVertex = vertex.replace('void main()',
@@ -123,29 +118,21 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
       const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}:${patterned}:${formula}`
       const cached = models.get(key); if (cached) return cached
       const candidateFragment = curve ? curvedVisibleFragment : visibleFragment
-      const patternedCandidate = curvedVisibleFragment
+      const patternedCandidate = candidateFragment
         .replace('renderMode < 0.5 &&', '(renderMode < 0.5 || renderMode > 2.5) &&')
         .replace('float opacity = rgbaColor.a * coverage;',
           `if (renderMode > 2.5 && (vLinkStyle == 1.0 || vLinkStyle == 2.0) && coverage < 0.5) discard;
            float opacity = rgbaColor.a * coverage;`)
-      const fragmentSource = probe >= 4
-        ? patternProbeGL(probe)
-        : probe === 3
-          ? captureFragment
-          : probe === 1
-            ? varyingProbe
-            : probe === 2
-              ? pixelProbe
-              : candidate ? patterned ? patternedCandidate : candidateFragment : fragment
+      const pickFragment = patterned ? patternedCandidate : candidateFragment
+      const probes = [candidate ? pickFragment : fragment, varyingProbe, captureFragment]
+      const fragmentSource = probes[probe]
       const model = scope.own(new Model(device, {
-        vs: probe === 3
+        vs: probe === 2
           ? captureVertex
-          : candidate && patterned
-            ? vertex
-            : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
+          : candidate ? curve ? curvedVisibleVertex : visibleVertex : vertex,
         fs: formula === 'ascending' ? fragmentSource.replace(originalCoverage, ascendingCoverage) : fragmentSource,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
-        topology: probe === 3 ? 'point-list' : 'triangle-strip',
+        topology: probe === 2 ? 'point-list' : 'triangle-strip',
         vertexCount: 4,
         defines: { USE_UNIFORM_BUFFERS: true, ...({ EXIT_DEFAULT_COLOR_CHANNEL: '0.0', EDGE_RAMP_PX: '1.0' } as unknown as Record<string, boolean>) },
         bufferLayout: [{ name: 'position', format: 'float32x2' },
@@ -154,7 +141,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
         bindings: {
           drawLineUniforms: uniforms.getManagedUniformBuffer('drawLineUniforms'),
           drawLineFragmentUniforms: uniforms.getManagedUniformBuffer('drawLineFragmentUniforms'),
-          ...(probe === 3 ? { captureUniforms: uniforms.getManagedUniformBuffer('captureUniforms') } : {}),
+          ...(probe === 2 ? { captureUniforms: uniforms.getManagedUniformBuffer('captureUniforms') } : {}),
         },
         parameters: {
           ...(blend ? ALPHA_BLEND : { blend: false }),
@@ -165,28 +152,8 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
       }))
       models.set(key, model); return model
     }
-    let carrierModel: Model | undefined
     return {
-      info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async rasterize (clip, width, height): Promise<Uint8Array> {
-        const frame = resourceScope()
-        try {
-          const output = frame.own(target(device, width, height))
-          const buffer = frame.own(device.createBuffer({ data: new Float32Array(clip) }))
-          carrierModel ??= scope.own(new Model(device, {
-            vs: '#version 300 es\nin vec2 capturePosition; void main() { gl_Position = vec4(capturePosition,0,1); }',
-            fs: '#version 300 es\nprecision highp float; out vec4 color; void main() { color = vec4(1); }',
-            topology: 'triangle-strip',
-            vertexCount: 4,
-            bufferLayout: [{ name: 'capturePosition', format: 'float32x2' }],
-            parameters: { blend: false, depthWriteEnabled: false, depthCompare: 'always', cullMode: 'none' },
-          }))
-          carrierModel.setAttributes({ capturePosition: buffer })
-          const pass = device.beginRenderPass({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false })
-          try { carrierModel.draw(pass) } finally { pass.end() }
-          device.submit(); return await pixels(device, output.texture, output.framebuffer)
-        } finally { frame.destroy() }
-      },
+      info: describeDevice(device),
       async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {
@@ -259,7 +226,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
                 curvedLinkSegments: curved?.segments ?? 1,
                 scaleLinksOnZoom: Number(settings.scaleOnZoom),
                 maxPointSize: settings.maxWidth,
-                renderMode: mode > 0 && variant === 'visible' && hasPatterns(scene.links, settings) && probe === 0 ? 0 : mode,
+                renderMode: mode,
                 hoveredLinkIndex: -1,
                 hoveredLinkWidthIncrease: 0,
                 isLinkHighlightingActive: 0,
@@ -303,21 +270,11 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           }
           if (diagnose) {
             const varying = frame.own(target(device, width, height, 'rgba32float'))
-            const pixel = curved ? undefined : frame.own(target(device, width, height, 'rgba32float'))
             const vertices = frame.own(target(device, curved ? curved.positions.length / 2 : 4, Math.max(1, links.length), 'rgba32float'))
-            draw(0, varying.framebuffer, 1); if (pixel) draw(0, pixel.framebuffer, 2); draw(0, vertices.framebuffer, 3); device.submit()
+            draw(0, varying.framebuffer, 1); draw(0, vertices.framebuffer, 2); device.submit()
             snapshot.probe = {
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
-              pixel: pixel ? await floatPixels(device, pixel.texture, pixel.framebuffer) : new Float32Array(),
               vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
-            }
-            if (hasPatterns(scene.links, settings)) {
-              snapshot.probe.pattern = []
-              for (const probe of [4, 5, 6]) {
-                const output = frame.own(target(device, width, height, 'rgba32float'))
-                draw(0, output.framebuffer, probe); device.submit()
-                snapshot.probe.pattern.push(await floatPixels(device, output.texture, output.framebuffer))
-              }
             }
           }
           return snapshot

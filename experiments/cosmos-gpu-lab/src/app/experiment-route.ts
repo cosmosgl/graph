@@ -41,6 +41,12 @@ export function experimentDestination (experiment: ExperimentDefinition, request
     if (section === 'case-comparison' || /^doc-algorithm(?:-|$)/.test(section ?? '')) section = 'run-explanation'
     if (section === 'run-diagnostics') section = 'reduction-benchmark'
   }
+  if (experiment.id === 'straight-links') {
+    if (section === 'run-more-settings') section = 'run-configuration'
+    if (section === 'run-diagnostics' || /^doc-case-evidence(?:-|$)/.test(section ?? '')) section = 'doc-automated-cases'
+    else if (section?.startsWith('doc-method-endpoint-gradients')) section = 'run-configuration'
+    else if (section === 'case-comparison' || /^doc-method(?:-|$)/.test(section ?? '')) section = 'run-explanation'
+  }
   if (experiment.id === 'spatial-grid') {
     if (section === 'case-comparison') section = 'run-explanation'
     if (section === 'run-more-settings') section = 'run-configuration'
