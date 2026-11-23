@@ -71,6 +71,10 @@ Open **ForceCollision in the Cosmos packages** (`#/production-force-collision`) 
 
 Run `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-force-collision/packages.test.ts` from the repository root to replay the first eight steps in both cases.
 
+Open **Points in the Cosmos packages** (`#/production-points`) to compare all eight shapes across integer and fractional centers and diameters at pixel ratios 1 and 2. The table counts differing RGBA pixels per shape and condition, and the overlay shows their locations.
+
+Replay the Points fixtures with `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-points/packages.test.ts`. Every preset must match across the entire frame, including antialiased edges. A difference of one level in any RGBA channel fails the test. The tests also check the integer control and expected shape silhouettes and write per-shape counts for every preset.
+
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.
 

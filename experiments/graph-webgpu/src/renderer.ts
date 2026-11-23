@@ -61,7 +61,6 @@ const layout: ShaderLayout = {
 
 const pointShader = [records, common, shapes, points].join('\n')
 const linkShader = [records, common, links].join('\n')
-const shader = { point: pointShader, link: linkShader }
 const noColor: Rgba = [0, 0, 0, -1]
 const transparent: Rgba = [0, 0, 0, 0]
 
@@ -71,6 +70,7 @@ export class GraphRenderer {
   private pickTexture!: Texture
   private pickFramebuffer!: Framebuffer
   private readonly points: Points
+  private readonly pointSource: string
   private pointBuffer?: Buffer
   private linkBuffer?: Buffer
   private orderBuffer?: Buffer
@@ -96,6 +96,13 @@ export class GraphRenderer {
     private positionSource: () => PositionSource | undefined
   ) {
     this.points = new Points(device)
+    // Native WebGL point sprites use different subpixel rules on these adapters.
+    // Specialize the WGSL once for this device, including host draws and picking.
+    this.pointSource = [
+      `const applePointRaster = ${device.info.gpu === 'apple'};`,
+      `const swiftShaderPointRaster = ${device.info.gpuArchitecture === 'swiftshader'};`,
+      pointShader,
+    ].join('\n')
     this.interpolation = new StyleTransition(device)
     try {
       this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 14 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
@@ -260,10 +267,11 @@ export class GraphRenderer {
     const key = [kind, color, depth, samples, picking].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
+      const source = kind === 'link' ? linkShader : this.pointSource
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
-        vertexSource: shader[kind],
-        fragmentSource: shader[kind],
+        vertexSource: source,
+        fragmentSource: source,
         vertexEntryPoint: `${kind}Vertex`,
         fragmentEntryPoint: `${kind}Fragment`,
         topology: 'triangle-strip',

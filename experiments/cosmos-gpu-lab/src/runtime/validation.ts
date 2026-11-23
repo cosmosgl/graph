@@ -72,6 +72,14 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'One fixed three-slot, one-link graph with gravity, manual stepping, asynchronous readback, clicks and teardown.',
     limits: 'This fixture covers a single layout and configuration. Use the matched performance benchmark for timing.',
   },
+  'production-points': {
+    question: 'Do all eight point shapes produce identical pixels in the WebGL and WebGPU Graph packages at pixel ratios 1 and 2?',
+    reference: 'The built WebGL Graph, drawing the same point indices, sizes, positions, camera, fill and background as the built WebGPU Graph.',
+    acceptance: 'Exact parity requires zero differing RGBA pixels over the complete canvas. Each sample must have the expected opaque center.',
+    coverage: 'All eight shapes at diameters 22, 22.125, 22.3, 22.625 and 22.75 CSS pixels and two center placements at each pixel ratio. ' +
+      'The camera and 264 × 152 CSS pixel viewport stay fixed.',
+    limits: 'The fixture covers static opaque fills and the sampled sizes and centers. It does not exercise strokes, images, rings or picking.',
+  },
   'production-force-collision': {
     question: 'Do the two Cosmos Graph packages move and draw colliding points identically at the same tick?',
     reference: 'The built workspace WebGL Graph, with the same public calls, point order, seed, camera and tick as the built WebGPU Graph.',

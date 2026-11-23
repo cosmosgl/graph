@@ -1,4 +1,5 @@
 import type { Graph } from '../../../../../dist/index.js'
+import { parseDiameter } from '../production-points/fixture'
 import { applyComparisonInput, seed, type ComparisonInput } from './comparison-input'
 import { createProduction } from './production'
 import { loadProductionBundle } from './production-bundle'
@@ -45,17 +46,22 @@ const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, {
 }
 
 const params = new URLSearchParams(window.location.search)
+const engine = params.get('engine') === 'webgpu' ? 'webgpu' : 'webgl'
 if (params.get('view') === 'public-graph') {
-  const engine = params.get('engine') === 'webgpu' ? 'webgpu' : 'webgl'
   const session = import('../production-graph-api/frame').then(module => module.mountGraph(host, engine))
   Object.assign(window, { publicGraph: session })
   // The parent subscribes after the frame loads, including when initialization failed early.
   session.catch(() => {})
 } else if (params.get('view') === 'force-collision') {
-  const engine = params.get('engine') === 'webgpu' ? 'webgpu' : 'webgl'
   const fixture = params.get('fixture') === 'hashed' ? 'hashed' : 'contacts'
   const session = import('../production-force-collision/frame').then(module => module.mountCollision(host, engine, fixture))
   Object.assign(window, { forceCollision: session })
+  session.catch(() => {})
+} else if (params.get('view') === 'points') {
+  const ratio = params.get('ratio') === '2' ? 2 : 1
+  const diameter = parseDiameter(params.get('diameter'))
+  const session = import('../production-points/frame').then(module => module.mountPoints(host, engine, ratio, diameter))
+  Object.assign(window, { pointsComparison: session })
   session.catch(() => {})
 } else if (params.get('view') === 'large-comparison') {
   Object.assign(window, { createComparisonWebGL })

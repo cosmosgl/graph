@@ -10,13 +10,28 @@ const packageCollision: CaseReadiness = {
     { tone: 'pass', text: 'All measured point slots agreed across packages.' },
     { tone: 'pass', text: 'All 49,152 RGBA pixels agreed at each of the nine checkpoints.' },
   ],
-  next: 'Check fractional diameters and other point shapes against the same packages.',
+  next: 'See the packaged Points comparison for fractional diameters and both pixel ratios.',
+}
+
+const packagePoints: CaseReadiness = {
+  badge: 'Fixture pixels match',
+  tone: 'pass',
+  finding: 'Every pixel matched for all eight shapes at both Lab center placements and all four fractional diameters on M3.',
+  area: 'Integration',
+  status: 'Exact pixel parity on the packaged Points fixture',
+  evidence: [
+    { tone: 'pass', text: 'The opaque shape interiors and background passed the independent geometry check.' },
+    { tone: 'pass', text: 'All 802,560 native-resolution pixels agreed across the eight frames.' },
+  ],
+  next: 'Compare additional center placements and adapters.',
 }
 
 // Each summary refers to the named case and its recorded evidence. These are
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
 export const renderingAndForces: Record<string, CaseReadiness> = {
+  'production-points/dpr-1': packagePoints,
+  'production-points/dpr-2': packagePoints,
   'production-force-collision/contacts': packageCollision,
   'production-force-collision/hashed': packageCollision,
   'point-rendering/circle-comparison': {

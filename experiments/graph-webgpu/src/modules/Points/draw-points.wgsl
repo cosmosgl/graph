@@ -6,6 +6,13 @@ struct Sprite {
   @location(3) @interpolate(flat) stroke: vec4f,
   @location(4) @interpolate(flat) ring: vec4f,
   @location(5) @interpolate(flat) spriteRadius: f32,
+  @location(6) @interpolate(flat) center: vec2f,
+}
+
+// Subpixel ties round upward in WebGL's lower-left window coordinates.
+fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
+  let scaled = edge * subdivisions;
+  return (floor(scaled) + step(vec2f(0.5), fract(scaled))) / subdivisions;
 }
 
 @vertex fn pointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
@@ -32,17 +39,30 @@ struct Sprite {
   let outlined = p.ring.a != -1.0 || out.ring.a > 0.0;
   out.spriteRadius = min(select(coreRadius, coreRadius * 1.3 + 1.0, outlined), params.transition.w * params.camera.w * 0.5);
   let corners = array<vec2f,4>(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,1));
-  // The reference rasterizer places point centers on a 1/256 device-pixel grid.
-  // At a half-subpixel tie it rounds toward positive x and y in WebGL window coordinates.
-  let subpixels = screen(position.xy) * vec2f(256.0, -256.0);
-  let nearest = floor(subpixels) + step(vec2f(0.5), fract(subpixels));
-  let center = nearest / vec2f(256.0, -256.0);
-  let edge = center + corners[vertex] * out.spriteRadius;
-  // Whole-pixel quad edges cover exactly the samples inside the WebGL sprite:
-  // left/bottom included, right/top excluded in top-down canvas coordinates.
-  let pixel = vec2f(ceil(edge.x - 0.5), floor(edge.y + 0.5));
-  out.position = clip(pixel);
-  out.spriteUV = vec2f(1,-1) * (pixel - center) / (2.0 * out.spriteRadius) + 0.5;
+  let windowAxes = vec2f(1, -1);
+  let center = screen(position.xy) * windowAxes;
+  let corner = corners[vertex] * windowAxes;
+  var edge: vec2f;
+  if (applePointRaster) {
+    // On Apple the point-coordinate origin and span use two different subpixel grids.
+    // Snap each axis separately: a fractional center can produce a nonsquare span.
+    let lower = center - out.spriteRadius;
+    let upper = center + out.spriteRadius;
+    let origin = snapSpriteEdge(lower, 256.0);
+    let span = snapSpriteEdge(upper, 16.0) - snapSpriteEdge(lower, 16.0);
+    let bound = select(origin, origin + span, corner > vec2f(0));
+    // WebGL includes the bottom sample on a tie. Place the horizontal quad edge one
+    // raster subpixel above the preceding sample to preserve that rule on both triangles.
+    let precedingSample = ceil(bound.y - 0.5) - 0.5;
+    edge = vec2f(bound.x, precedingSample + 1.0 / 256.0);
+    out.spriteUV = (edge - origin) / span;
+  } else {
+    let snappedCenter = select(snapSpriteEdge(center, 256.0), round(center * 16.0) / 16.0, swiftShaderPointRaster);
+    edge = ceil(snappedCenter + corner * out.spriteRadius - 0.5);
+    out.center = snappedCenter * windowAxes;
+    out.spriteUV = (edge - snappedCenter) / (2.0 * out.spriteRadius) + 0.5;
+  }
+  out.position = clip(edge * windowAxes);
   return out;
 }
 
@@ -50,8 +70,15 @@ struct Sprite {
   let p = currentPoint(input.index);
   let shape = u32(p.metrics.y);
   let radius = max(input.sizes.x, 1.0) * 0.5;
-  // Interpolate from the lower-left sprite corner, then convert to gl_PointCoord.
-  let pointCoord = vec2f(input.spriteUV.x, 1.0 - input.spriteUV.y) * 2.0 - 1.0;
+  var uv = input.spriteUV;
+  if (swiftShaderPointRaster) {
+    // SwiftShader samples the nominal diameter at the fragment's device-pixel
+    // center. A pick pass has a 1×1 target with its own origin in the full canvas.
+    let pixel = input.position.xy + params.region.xy;
+    let inverseDiameter = 1.0 / (2.0 * input.spriteRadius);
+    uv = (pixel - input.center) * inverseDiameter * vec2f(1, -1) + 0.5;
+  }
+  let pointCoord = vec2f(uv.x, 1.0 - uv.y) * 2.0 - 1.0;
   let offset = pointCoord * input.spriteRadius;
   let coreCoord = pointCoord * (input.spriteRadius / radius);
   var distance: f32;
