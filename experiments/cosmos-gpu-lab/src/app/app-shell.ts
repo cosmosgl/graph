@@ -35,36 +35,55 @@ function renderHome (host: HTMLElement): void {
     <nav class="home-references" aria-label="Lab references"><a href="#/validation-workflow">Validation workflow</a>
       <a href="${architectureHref()}">Lab architecture</a><a href="${vocabularyHref()}">Vocabulary</a>
       <a href="${conceptHref('reduction')}">Parallel reduction</a></nav>
-    <section class="experiment-catalog" id="experiment-catalog" aria-label="Available experiments">
-      <header class="catalog-header"><h2 class="catalog-title">Experiments</h2></header>
-      <div class="catalog-groups"></div></section>`
-  const catalog = requiredElement<HTMLElement>(host, '.catalog-groups')
+    <section class="experiment-catalog" id="experiment-catalog" aria-labelledby="concepts-title">
+      <header class="catalog-header"><h2 class="catalog-title" id="concepts-title">Core interactive concepts</h2>
+        <a href="#/?section=migration-studies">Jump to benchmarks and migration studies</a></header>
+      <div class="catalog-groups"></div></section>
+    <section class="experiment-catalog" id="migration-studies" aria-labelledby="studies-title">
+      <header class="catalog-header"><h2 class="catalog-title" id="studies-title">Benchmarks and migration studies</h2>
+        <a href="${roadmapHref('feature-coverage')}">Feature coverage</a></header>
+      <div class="catalog-study-groups"></div></section>`
+  const concepts = requiredElement<HTMLElement>(host, '.catalog-groups')
+  const studies = requiredElement<HTMLElement>(host, '.catalog-study-groups')
   for (const group of experimentGroups) {
-    const section = document.createElement('section'); section.className = 'home-experiment-group'
-    section.setAttribute('aria-labelledby', `catalog-${group.id}`)
-    const heading = document.createElement('header'); heading.className = 'catalog-group-heading'
-    const title = document.createElement('h3'); title.id = `catalog-${group.id}`; title.textContent = group.title
-    const description = document.createElement('p'); description.textContent = group.description
-    heading.append(title, description)
-    const grid = document.createElement('ul'); grid.className = 'experiment-grid'
-    for (const experiment of group.experiments) {
-      const item = startingCase(experiment)
-      const assessment = readinessFor(experiment.id, item)
-      const card = document.createElement('li'); card.className = 'experiment-item'
-      const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
-      link.dataset.experimentId = experiment.id
-      const heading = document.createElement('div'); heading.className = 'experiment-card-heading'
-      const title = document.createElement('h4'); title.textContent = experiment.title
-      heading.append(title, readinessBadge(assessment.badge, assessment.tone))
-      const finding = document.createElement('p'); finding.className = 'experiment-card-finding'
-      if (item.kind === 'recorded') {
-        const note = document.createElement('span'); note.className = 'catalog-recorded'; note.textContent = 'Recorded study · '
-        finding.append(note)
+    const section = document.createElement('section')
+    const heading = document.createElement('h3')
+    heading.id = `catalog-${group.id}`; heading.textContent = group.title
+    section.setAttribute('aria-labelledby', heading.id)
+    section.append(heading)
+    if (group.cards.length) {
+      const grid = document.createElement('ul'); grid.className = 'experiment-grid'
+      for (const experiment of group.cards) {
+        const item = startingCase(experiment)
+        const assessment = readinessFor(experiment.id, item)
+        const card = document.createElement('li'); card.className = 'experiment-item'
+        const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
+        link.dataset.experimentId = experiment.id
+        const cardHeading = document.createElement('div'); cardHeading.className = 'experiment-card-heading'
+        const title = document.createElement('h4'); title.textContent = experiment.title
+        cardHeading.append(title, readinessBadge(assessment.badge, assessment.tone))
+        const finding = document.createElement('p'); finding.className = 'experiment-card-finding'
+        if (item.kind === 'recorded') {
+          const note = document.createElement('span'); note.className = 'catalog-recorded'; note.textContent = 'Recorded study · '
+          finding.append(note)
+        }
+        finding.append(document.createTextNode(assessment.finding)); link.append(cardHeading, finding)
+        card.append(link); grid.append(card)
       }
-      finding.append(document.createTextNode(assessment.finding)); link.append(heading, finding)
-      card.append(link); grid.append(card)
+      section.append(grid)
     }
-    section.append(heading, grid); catalog.append(section)
+    if (group.links.length) {
+      const list = document.createElement('ul'); list.className = 'catalog-links'
+      if (group.cards.length) list.setAttribute('aria-label', `More in ${group.title}`)
+      for (const experiment of group.links) {
+        const item = document.createElement('li')
+        const link = document.createElement('a'); link.href = experimentHref(experiment.id); link.textContent = experiment.title
+        item.append(link); list.append(item)
+      }
+      section.append(list)
+    }
+    const catalog = group.cards.length ? concepts : studies
+    catalog.append(section)
   }
 }
 
@@ -407,9 +426,11 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   const handleSameSection = (event: MouseEvent): void => {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-    if (!mountedPage && previousPath !== roadmapHref()) return
     const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
-    if (link?.href === window.location.href) {
+    if (link?.href !== window.location.href) return
+    if (previousPath === '#/') {
+      if (scrollToSection(workspace, currentSection())) event.preventDefault()
+    } else if (mountedPage || previousPath === roadmapHref()) {
       event.preventDefault(); handleRoute()
     }
   }

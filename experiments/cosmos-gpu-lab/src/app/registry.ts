@@ -1,4 +1,3 @@
-import { pointStylingExperimentIds } from '../experiments/point-styling/cases'
 import type { ExperimentDefinition, ExperimentModule } from '../runtime/experiment'
 import { caseEvidenceLinks } from '../runtime/experiment'
 import { research, researchMethodPages } from './research'
@@ -57,60 +56,74 @@ export function findExperiment (id: string): ExperimentDefinition | undefined {
   return experiments.find(experiment => experiment.id === id)
 }
 
-const catalogTopics = [
+type CatalogTopic = {
+  id: string;
+  title: string;
+  cards?: string[];
+  links?: string[];
+}
+
+const catalogTopics: CatalogTopic[] = [
   {
     id: 'rendering',
-    title: 'Rendering and interaction',
-    description: 'How points and links are drawn and selected.',
-    ids: ['point-rendering', 'straight-links', 'smoothstep-coverage', 'curved-links', 'ribbon-generation'],
-  },
-  {
-    id: 'point-styling',
-    title: 'Point styling and picking',
-    description: 'WebGL and WebGPU comparisons for points.',
-    ids: Object.values(pointStylingExperimentIds),
-  },
-  {
-    id: 'forces-motion',
-    title: 'Forces and motion',
-    description: 'The forces that shape and move graphs.',
-    ids: ['center-mass', 'neighborhood-forces', 'many-body', 'many-body-grid', 'workgroup-repulsion', 'weighted-links',
-      'collision', 'cluster-attraction', 'point-attractors', 'mouse-repulsion', 'hub-springs'],
-  },
-  {
-    id: 'whole-graphs',
-    title: 'Whole graphs and layouts',
-    description: 'Complete layouts and interactive graphs.',
-    ids: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'resident-layout-edits', 'million-graph', 'integrated-webgpu',
-      'viewer-comparison', 'dense-communities', 'hub-communities', 'youtube-network', 'pilot-viewer', 'matched-layout'],
+    title: 'Rendering and picking',
+    cards: ['point-rendering', 'point-shapes', 'point-picking', 'straight-links'],
+    links: ['point-images', 'point-rings-greyout', 'curved-links', 'smoothstep-coverage'],
   },
   {
     id: 'gpu-foundations',
     title: 'GPU foundations',
-    description: 'Reductions, spatial indexing and memory.',
-    ids: ['scalable-reduction', 'spatial-grid', 'point-capacity', 'point-buffer-copy', 'cell-aggregation'],
+    cards: ['scalable-reduction', 'spatial-grid', 'point-capacity', 'point-buffer-copy'],
+  },
+  {
+    id: 'forces-motion',
+    title: 'Forces and layout',
+    cards: ['many-body', 'weighted-links', 'collision', 'resident-layout'],
+    links: ['resident-layout-edits'],
+  },
+  {
+    id: 'whole-graphs',
+    title: 'Whole-graph demos',
+    cards: ['dense-communities', 'hub-communities', 'youtube-network'],
+  },
+  {
+    id: 'force-studies',
+    title: 'Force implementations',
+    links: ['center-mass', 'neighborhood-forces', 'many-body-grid', 'workgroup-repulsion', 'hub-springs',
+      'cell-aggregation', 'cluster-attraction', 'point-attractors', 'mouse-repulsion'],
+  },
+  {
+    id: 'viewer-studies',
+    title: 'Layout and viewer integration',
+    links: ['combined-layout', 'integrated-webgpu', 'viewer-comparison', 'million-graph', 'layout-acceptance'],
   },
   {
     id: 'precision-performance',
     title: 'Precision and performance',
-    description: 'Numerical accuracy, production checks and GPU cost.',
-    ids: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'resident-frame-timing', 'gpu-stage-profile'],
+    links: ['precision-diagnostics', 'performance-lab', 'resident-frame-timing', 'gpu-stage-profile'],
+  },
+  {
+    id: 'milestones',
+    title: 'Earlier milestones',
+    links: ['pilot-viewer', 'matched-layout', 'ribbon-generation', 'repulsion-trajectories'],
   },
 ]
 
 const assigned = new Set<string>()
-export const experimentGroups = catalogTopics.map(({ ids, ...topic }) => ({
-  ...topic,
-  experiments: ids.map(id => {
-    const experiment = findExperiment(id)
-    if (!experiment || assigned.has(id)) throw new Error(`Unknown or duplicate catalog experiment: ${id}`)
-    assigned.add(id)
-    return experiment
-  }).sort((a, b) => a.title.localeCompare(b.title)),
-}))
+function catalogEntry (id: string): ExperimentDefinition {
+  const experiment = findExperiment(id)
+  if (!experiment || assigned.has(id)) throw new Error(`Unknown or duplicate catalog experiment: ${id}`)
+  assigned.add(id)
+  return experiment
+}
 
-// Newly discovered studies remain visible until they are assigned a topic.
+export const experimentGroups = catalogTopics.map(({ id, title, cards = [], links = [] }) => {
+  const featured = cards.map(catalogEntry)
+  const linked = links.map(catalogEntry)
+  return { id, title, cards: featured, links: linked, experiments: [...featured, ...linked] }
+})
+
 const unassigned = experiments.filter(experiment => !assigned.has(experiment.id))
 if (unassigned.length) {
-  experimentGroups.push({ id: 'other', title: 'More experiments', description: 'Other studies in the lab.', experiments: unassigned })
+  experimentGroups.push({ id: 'other', title: 'Other studies', cards: [], links: unassigned, experiments: unassigned })
 }

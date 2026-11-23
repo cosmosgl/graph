@@ -1887,7 +1887,7 @@ button[data-action="play"][aria-pressed="true"] {
 .research-meta {
   color: var(--text-secondary); font-size: var(--type-meta); font-weight: 400; line-height: 1.7;
 }
-.catalog-title { margin: 0 0 8px; font-size: var(--type-body); font-weight: 500; }
+.catalog-title { margin: 0 0 var(--space-2); font-size: var(--type-body); font-weight: 500; }
 .advance-scope { color: var(--text-secondary); }
 .investigation-context a {
   color: var(--accent); text-underline-offset: 3px;
@@ -2324,16 +2324,20 @@ label.case-chooser { display: flex; flex-wrap: wrap; align-items: center; gap: 6
   .viewer-comparison-panels.large-comparison-panels { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* One card per experiment, grouped by topic. */
+/* Featured concepts use cards; related concepts and migration studies use links. */
 .lab-navigation { flex: 0 1 auto; padding: 14px 18px; }
 .experiment-catalog { display: block; margin: 28px 0 40px; scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
-.catalog-header h2 { margin: 0 0 18px; }
 .experiment-catalog:focus-visible { outline: none; }
 .experiment-catalog:focus-visible .catalog-title { width: fit-content; outline: 2px solid var(--accent); outline-offset: 3px; }
 .catalog-groups { display: grid; gap: 44px; margin-top: 28px; }
-.catalog-group-heading { margin-bottom: 16px; }
-.catalog-group-heading h3 { margin: 0 0 4px; font-size: var(--type-subsection); scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
-.catalog-group-heading p { margin: 0; color: var(--text-secondary); }
+.experiment-catalog h3 { margin: 0 0 var(--space-3); font-size: var(--type-subsection);
+  scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
+.catalog-header a, .catalog-links a { color: var(--accent); text-underline-offset: 3px; }
+#migration-studies { border-top: 1px solid var(--control-border); padding-top: var(--space-6); }
+.catalog-study-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+  gap: var(--space-6); margin-top: var(--space-4); }
+.catalog-links { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.catalog-groups .catalog-links { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-3); }
 .experiment-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px;
   list-style: none; margin: 0; padding: 0; }
 .experiment-item { display: flex; min-width: 0; }

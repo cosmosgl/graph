@@ -26,6 +26,8 @@ used the same camera and measured simulation ticks 13–72.
 
 ## Feature coverage
 
+[Browse benchmarks and migration studies](#/?section=migration-studies)
+
 ```example
 featureCoverage
 ```

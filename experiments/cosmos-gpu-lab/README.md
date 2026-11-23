@@ -14,8 +14,8 @@ production bundle with `pnpm run build`, then use
 to replay it on the M3. The benchmark page lists large fixtures and the
 declared method, and its results link to each workload.
 
-Home groups experiment cards by topic. Each card opens the experiment and shows a recorded outcome or open question
-with a concise finding. The header links to the catalog, migration page and learning guide;
+Home features core interactive concepts by topic, with related demos linked beneath the cards.
+Benchmarks, migration checks and earlier milestones appear in a separate study directory. The header links to the catalog, migration page and learning guide;
 other references appear above the catalog.
 Focus the search field on the right of the header to see three suggested experiments. Type to find
 experiments, recorded evidence, guides and references. Quick jump shows the top four matches.
@@ -90,8 +90,9 @@ spatial-grid encodings independent of the presentation palette.
 
 Create `src/experiments/<id>/experiment.ts` and export an `ExperimentDefinition`. Vite discovers experiment manifests
 through `import.meta.glob`; the demo and documentation remain lazy-loaded.
-The registry validates each manifest and adds the experiment to the catalog. Assign it to a topic in
-`src/app/registry.ts`; unassigned experiments appear under More experiments. Update the migration page when a
+The registry validates each manifest and makes it available by route and in search. In `src/app/registry.ts`,
+use a topic’s `cards` for introductory concepts and `links` for related demos or migration studies.
+Unassigned experiments appear under Other studies. Update the migration page when a
 finding changes a production decision or the next priority. The feature inventory supplies the checklist and its
 search entries.
 

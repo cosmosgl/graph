@@ -122,7 +122,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'overview',
       methodPages: ['implementation', 'limitations'],
       next: 'Use the production styling/picking experiment for image-based checks; validate the remaining rendering features.',
-      reproduce: 'Change count and circle diameter above. For rendered-pixel and ID checks, continue to Point styling and picking.',
+      reproduce: 'Change count and circle diameter above. For rendered-pixel and ID checks, see Rendering and picking in the catalog.',
       investigations: [],
     }),
     'neighborhood-forces': entry('neighborhood-forces', {
