@@ -1,5 +1,7 @@
 The two panes run the same code inside separate frames. The real WebGL and WebGPU packages each create their own Graph, GPU device, canvas and input handlers. The fixed input, colors, gravity settings and pinned IDs are shared with **Examples → Get Started → Manual step** in Storybook.
 
+For a tick-by-tick check of the collision force, compare both position arrays and rendered canvases in [ForceCollision in the Cosmos packages](#/production-force-collision).
+
 Build both standalone packages before starting the Lab. These commands run from the repository root.
 
 ```sh

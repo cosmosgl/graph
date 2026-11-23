@@ -51,6 +51,12 @@ if (params.get('view') === 'public-graph') {
   Object.assign(window, { publicGraph: session })
   // The parent subscribes after the frame loads, including when initialization failed early.
   session.catch(() => {})
+} else if (params.get('view') === 'force-collision') {
+  const engine = params.get('engine') === 'webgpu' ? 'webgpu' : 'webgl'
+  const fixture = params.get('fixture') === 'hashed' ? 'hashed' : 'contacts'
+  const session = import('../production-force-collision/frame').then(module => module.mountCollision(host, engine, fixture))
+  Object.assign(window, { forceCollision: session })
+  session.catch(() => {})
 } else if (params.get('view') === 'large-comparison') {
   Object.assign(window, { createComparisonWebGL })
 } else {

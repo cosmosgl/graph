@@ -57,14 +57,19 @@ Recorded scope and limits apply to the historical observation, not automatically
 From the repository root:
 
 ```sh
-# Build the workspace control before the first lab start
+# Build both Graph packages for the side-by-side comparisons
 pnpm run build
+pnpm --filter @cosmos.gl/graph-webgpu build
 pnpm --filter @cosmos.gl/gpu-lab dev
 ```
 
 The **Graph interaction in WebGL and WebGPU** experiment loads the unchanged standalone production
 bundle from `dist/index.min.js`; rebuild it after changing the production checkout.
 The lab build includes that bundle as an asset.
+
+Open **ForceCollision in the Cosmos packages** (`#/production-force-collision`) to step the same application against the built WebGL and WebGPU packages. The Lab compares all point positions and the RGBA pixels from both graph canvases. Choose the seven-slot case for all-pairs collision or the 4,097-slot case for hashed collision. Rebuild the corresponding package after engine changes.
+
+Run `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-force-collision/packages.test.ts` from the repository root to replay the first eight steps in both cases.
 
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.
@@ -338,10 +343,11 @@ It checks the candidate's solver and topology, circle and solid-link rendering,
 picking and navigation, data replacement, and GPU resource lifetimes. Run it on
 the local machine and record the actual Chrome version and adapter.
 
-Build the production WebGL control and run the suite from the repository root.
+Build the WebGL control and WebGPU candidate before running the suite from the repository root. The Lab's **Run the same Graph application** page loads these two standalone packages in separate frames.
 
 ```sh
 pnpm run build
+pnpm --filter @cosmos.gl/graph-webgpu build
 pnpm --filter @cosmos.gl/gpu-lab test:gpu
 node --test experiments/cosmos-gpu-lab/scripts/migration-results.test.mjs
 ```

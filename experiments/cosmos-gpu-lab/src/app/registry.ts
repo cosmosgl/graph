@@ -79,7 +79,7 @@ const catalogTopics: CatalogTopic[] = [
     id: 'forces-motion',
     title: 'Forces and layout',
     cards: ['many-body', 'weighted-links', 'collision', 'resident-layout'],
-    links: ['resident-layout-edits'],
+    links: ['production-force-collision', 'resident-layout-edits'],
   },
   {
     id: 'whole-graphs',

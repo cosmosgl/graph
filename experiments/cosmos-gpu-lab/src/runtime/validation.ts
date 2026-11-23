@@ -72,6 +72,15 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'One fixed three-slot, one-link graph with gravity, manual stepping, asynchronous readback, clicks and teardown.',
     limits: 'This fixture covers a single layout and configuration. Use the matched performance benchmark for timing.',
   },
+  'production-force-collision': {
+    question: 'Do the two Cosmos Graph packages move and draw colliding points identically at the same tick?',
+    reference: 'The built workspace WebGL Graph, with the same public calls, point order, seed, camera and tick as the built WebGPU Graph.',
+    acceptance: 'An exact position match requires equal x and y for every slot, including matching absent slots. ' +
+      'An exact rendering match requires identical RGBA bytes at every pixel of the two populated canvases.',
+    coverage: 'Seven slots exercise all-pairs collision. Adding 4,090 offscreen points exercises hashed collision at 4,097 slots. ' +
+      'Both cases use unequal sizes, a pinned contact, a free isolated point, and an absent slot at a fixed 256 × 192 viewport and pixel ratio 1.',
+    limits: 'The full position array includes the offscreen points. Rendering covers the visible cluster. Other forces, dense hash buckets and frame timing are outside these checks.',
+  },
   'viewer-comparison': {
     question: 'Can the small candidate viewer support the production appearance, update and running-interaction workflow?',
     reference: 'Unchanged workspace production Graph with luma v9, corrected integrated luma v10 runtime, ' +

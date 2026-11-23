@@ -1,9 +1,24 @@
 import type { CaseReadiness } from './types'
 
+const packageCollision: CaseReadiness = {
+  badge: 'Positions and pixels match',
+  tone: 'pass',
+  finding: 'Every point coordinate and every canvas pixel matched WebGL on M3 at ticks 0 through 8.',
+  area: 'Integration',
+  status: 'Exact match on the collision fixture',
+  evidence: [
+    { tone: 'pass', text: 'All measured point slots agreed across packages.' },
+    { tone: 'pass', text: 'All 49,152 RGBA pixels agreed at each of the nine checkpoints.' },
+  ],
+  next: 'Check fractional diameters and other point shapes against the same packages.',
+}
+
 // Each summary refers to the named case and its recorded evidence. These are
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
 export const renderingAndForces: Record<string, CaseReadiness> = {
+  'production-force-collision/contacts': packageCollision,
+  'production-force-collision/hashed': packageCollision,
   'point-rendering/circle-comparison': {
     badge: 'Demo only',
     tone: 'neutral',
