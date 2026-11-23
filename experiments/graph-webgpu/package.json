@@ -1,0 +1,25 @@
+{
+  "name": "@cosmos.gl/graph-webgpu",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": { "types": "./src/index.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "vite build --mode es && vite build --mode standalone",
+    "lint": "eslint --cache ./src ./test --ext .ts --ignore-path ../../.gitignore",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@luma.gl/core": "10.0.0-alpha.15",
+    "@luma.gl/graph": "10.0.0-alpha.15",
+    "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
+    "d3-zoom": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "catalog:",
+    "vite": "catalog:"
+  }
+}

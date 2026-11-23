@@ -1,0 +1,98 @@
+import { describe, expect, it, vi } from 'vitest'
+import { Graph, GraphSimulation } from '../src'
+
+describe('WebGPU graph lifecycle', () => {
+  it('replays mixed pre-ready simulation operations in order', async () => {
+    const simulation = new GraphSimulation({
+      simulationGravity: 1,
+      simulationFriction: 1,
+      simulationCenter: 0,
+      simulationRepulsion: 0,
+      rescalePositions: false,
+      spaceSize: 100,
+    })
+    try {
+      simulation.setPointPositions(new Float32Array([0, 0]))
+      simulation.applyData(1)
+      simulation.step()
+      simulation.setPointPositions(new Float32Array([20, 20]))
+      simulation.applyData(1)
+      simulation.setPointPosition(0, 30, 30)
+      simulation.setConfig({ spaceSize: 200 })
+      simulation.step()
+      await simulation.ready
+      expect(await simulation.getPointPositionsAsync()).toEqual(new Float32Array([37, 37]))
+    } finally { simulation.destroy() }
+  })
+
+  it('rebuilds pending inputs on live space changes and simulation re-enable', async () => {
+    const starts = vi.fn()
+    const ends = vi.fn()
+    const graph = new Graph(null, {
+      rescalePositions: false,
+      spaceSize: 100,
+      simulationGravity: 0,
+      simulationCenter: 0,
+      simulationRepulsion: 0,
+      simulationFriction: 0,
+      simulationCollision: 1,
+      pointDefaultSize: 4,
+      randomSeed: 4,
+      onSimulationStart: starts,
+      onSimulationEnd: ends,
+    })
+    try {
+      await graph.ready
+      graph.setPointPositions(new Float32Array([0, 0, 2, 0]))
+      graph.setPinnedPoints([0])
+      graph.render(1, 0)
+      graph.setConfigPartial({ pointDefaultSize: 10 })
+      graph.step()
+      expect(await graph.getPointPositionsAsync()).toEqual(new Float32Array([0, 0, 6, 0]))
+      graph.setPointPositions(new Float32Array([Infinity, 0]))
+      graph.setConfigPartial({ backgroundColor: 'red' })
+      expect(graph.getPointPositionBuffer()?.count).toBe(2)
+      expect(graph.graph.pointsNumber).toBe(2)
+      graph.setConfigPartial({ spaceSize: 200 })
+      expect(graph.simulation.store.worldOrigin).toEqual([100, 100])
+      expect(await graph.getPointPositionsAsync()).toEqual(new Float32Array([200, 0]))
+      graph.setConfigPartial({ enableSimulation: false })
+      expect(ends).toHaveBeenCalledOnce()
+      graph.setPointPositions(new Float32Array([20, 30]))
+      graph.setConfigPartial({ enableSimulation: true })
+      expect(starts).toHaveBeenCalledOnce()
+      expect(graph.isSimulationRunning).toBe(true)
+      expect(await graph.getPointPositionsAsync()).toEqual(new Float32Array([20, 30]))
+      graph.setConfig({ enableSimulation: false, randomSeed: 99 })
+      expect(graph.config.spaceSize).toBe(4096)
+      expect(graph.config.randomSeed).toBe(4)
+    } finally { graph.destroy() }
+  })
+
+  it('tears down after device loss and renders again on a fresh device', async () => {
+    const host = document.createElement('div')
+    host.style.cssText = 'width:120px;height:80px'
+    document.body.append(host)
+    const create = (): Graph => new Graph(host, { enableRenderLoop: false, rescalePositions: false, fitViewOnInit: false })
+    const old = create()
+    let next: Graph | undefined
+    try {
+      await old.ready
+      old.setPointPositions(new Float32Array([20, 20]))
+      old.render()
+      const device = old.simulation.device!
+      device.destroy()
+      await device.lost
+      expect(old.isReady).toBe(false)
+      expect(old.getPointPositionBuffer()).toBeUndefined()
+      expect(host.querySelector('canvas')).toBeNull()
+      next = create()
+      next.setPointPositions(new Float32Array([40, 25]))
+      next.render()
+      await next.ready
+      expect(host.querySelector('canvas')).not.toBeNull()
+      expect(await next.getPointPositionsAsync()).toEqual(new Float32Array([40, 25]))
+      expect(next.simulation.device).not.toBe(device)
+    } finally { next?.destroy(); old.destroy(); host.remove() }
+  })
+})

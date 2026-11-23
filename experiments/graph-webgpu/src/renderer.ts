@@ -1,0 +1,333 @@
+import {
+  Buffer, Texture, type CommandEncoder, type Device, type Framebuffer, type RenderPass, type ShaderLayout,
+  type TextureFormatColor, type TextureFormatDepthStencil, type VertexArray,
+} from '@luma.gl/core'
+import { RenderKernel } from '@luma.gl/graph'
+import type { GraphConfigInterface } from '../../../src/config'
+import { getRgbaColor } from '../../../src/helper'
+import type { GraphData } from '../../../src/modules/GraphData'
+import { packLinks, linkStride } from './modules/Lines'
+import { Points, pointStride, shadeDirection } from './modules/Points'
+import { StyleTransition } from './style-transition'
+import records from './style-records.wgsl?raw'
+import common from './draw-common.wgsl?raw'
+import shapes from './modules/Points/point-shapes.wgsl?raw'
+import points from './modules/Points/draw-points.wgsl?raw'
+import links from './modules/Lines/draw-links.wgsl?raw'
+
+export interface GraphView {
+  width: number;
+  height: number;
+  pixelRatio: number;
+  scale: number;
+  /** Translation in CSS pixels. Screen coordinates are (x + worldX * scale, y - worldY * scale). */
+  x: number;
+  y: number;
+  hoveredPoint?: number;
+  hoveredLink?: number;
+  /** Eased interpolation factor supplied by the Graph animation clock. */
+  styleProgress?: number;
+  /** Point and link width cap in CSS pixels, shared with screen-space queries. */
+  maxPointSize?: number;
+}
+
+export interface GraphDrawOptions {
+  points?: boolean;
+  links?: boolean;
+  picking?: { alpha: number; linkIndexOffset?: number };
+}
+
+export interface GraphPick {
+  kind: 'point' | 'link';
+  index: number;
+}
+
+type Rgba = [number, number, number, number]
+type PositionSource = { buffer: Buffer; pointCount: number }
+const layout: ShaderLayout = {
+  attributes: [],
+  bindings: [
+    { name: 'params', type: 'uniform', group: 0, location: 0 },
+    { name: 'positions', type: 'read-only-storage', group: 0, location: 1 },
+    { name: 'points', type: 'read-only-storage', group: 0, location: 2 },
+    { name: 'links', type: 'read-only-storage', group: 0, location: 3 },
+    { name: 'pointOrder', type: 'read-only-storage', group: 0, location: 4 },
+    { name: 'atlas', type: 'texture', sampleType: 'float', viewDimension: '2d', group: 0, location: 5 },
+    { name: 'atlasSampler', type: 'sampler', samplerType: 'filtering', group: 0, location: 6 },
+    { name: 'previousPoints', type: 'read-only-storage', group: 0, location: 7 },
+    { name: 'previousLinks', type: 'read-only-storage', group: 0, location: 8 },
+  ],
+}
+
+const pointShader = [records, common, shapes, points].join('\n')
+const linkShader = [records, common, links].join('\n')
+const shader = { point: pointShader, link: linkShader }
+const noColor: Rgba = [0, 0, 0, -1]
+const transparent: Rgba = [0, 0, 0, 0]
+
+export class GraphRenderer {
+  private uniforms!: Buffer
+  private vertices!: VertexArray
+  private pickTexture!: Texture
+  private pickFramebuffer!: Framebuffer
+  private readonly points: Points
+  private pointBuffer?: Buffer
+  private linkBuffer?: Buffer
+  private orderBuffer?: Buffer
+  private previous?: { points: Buffer; links: Buffer; pointCount: number; linkCount: number }
+  private interpolation: StyleTransition
+  private pointCount = 0
+  private linkCount = 0
+  private revision = 0
+  private isDisposed = false
+  private transparentBackground: Rgba = transparent
+  private hoverColor: Rgba = noColor
+  private hoverRing: Rgba = transparent
+  private focusRing: Rgba = transparent
+  private kernels = new Map<string, RenderKernel>()
+  private hostEncoder?: CommandEncoder
+  private hostUniforms: Buffer[] = []
+  private nextHostUniform = 0
+
+  public constructor (
+    private device: Device,
+    private data: GraphData,
+    private config: GraphConfigInterface,
+    private positionSource: () => PositionSource | undefined
+  ) {
+    this.points = new Points(device)
+    this.interpolation = new StyleTransition(device)
+    try {
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 14 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
+      this.pickTexture = device.createTexture({ id: 'cosmos-pick', width: 1, height: 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
+      this.pickFramebuffer = device.createFramebuffer({ colorAttachments: [this.pickTexture] })
+    } catch (e) {
+      this.destroy()
+      throw e
+    }
+  }
+
+  /** Upload changed channels after the data model has resolved the pending setters. */
+  public update (options: { animate?: boolean; previousProgress?: number } = {}): void {
+    const data = this.data
+    const config = this.config
+    this.revision++
+    this.points.updateAtlas(data.inputImageData)
+    const pointCount = data.pointsNumber ?? 0
+    const linkCount = data.linksNumber ?? 0
+    const background = getRgbaColor(config.backgroundColor)
+    const clearColor = background[3] > 0 ? background : transparent
+    const [r, g, b, a] = clearColor
+    this.transparentBackground = [r * a, g * a, b * a, a]
+    this.hoverColor = config.hoveredLinkColor ? getRgbaColor(config.hoveredLinkColor) : noColor
+    this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
+    this.focusRing = getRgbaColor(config.focusedPointRingColor)
+
+    const { attributes, order } = this.points.pack(data, config, clearColor)
+    const edges = packLinks(data, config)
+    const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
+    const animate = options.animate && this.pointCount > 0
+    if (animate && this.pointBuffer && this.linkBuffer) {
+      // Keep the last target on the GPU. When interrupted, bake the actual displayed styles so
+      // the next interpolation starts at the current appearance rather than the previous target.
+      let fromPoints = this.pointBuffer
+      let fromLinks = this.linkBuffer
+      if (this.previous && progress < 1) {
+        fromPoints = this.interpolation.freeze('Point', this.previous.points, this.pointBuffer, progress, this.previous.pointCount, this.pointCount)
+        try {
+          fromLinks = this.interpolation.freeze('Link', this.previous.links, this.linkBuffer, progress, this.previous.linkCount, this.linkCount)
+        } catch (e) { fromPoints.destroy(); throw e }
+      }
+      this.releasePrevious()
+      this.previous = { points: fromPoints, links: fromLinks, pointCount: this.pointCount, linkCount: this.linkCount }
+      if (fromPoints === this.pointBuffer) this.pointBuffer = undefined
+      if (fromLinks === this.linkBuffer) this.linkBuffer = undefined
+    } else {
+      this.releasePrevious()
+    }
+    this.pointBuffer = this.storage(this.pointBuffer, attributes, 'cosmos-point-style', pointStride * 4)
+    this.orderBuffer = this.storage(this.orderBuffer, order, 'cosmos-point-order', 4)
+    this.linkBuffer = this.storage(this.linkBuffer, edges, 'cosmos-link-style', linkStride * 4)
+    this.pointCount = pointCount
+    this.linkCount = linkCount
+  }
+
+  /** Record into a pass opened on the supplied device. The host owns clearing, ending and submitting. */
+  public drawToRenderPass (pass: RenderPass, view: GraphView, options: GraphDrawOptions = {}): void {
+    if (this.isDisposed || !this.pointCount) return
+    if (pass.device !== this.device) throw new Error('The render pass and Graph must use the same WebGPU device')
+    const framebuffer = pass.props.framebuffer ?? this.device.canvasContext?.getCurrentFramebuffer()
+    if (!framebuffer) throw new Error('The host pass requires a framebuffer or a canvas context')
+
+    // Each draw before the host submits needs its own uniform snapshot. Queue writes to the
+    // same buffer would otherwise overwrite the first camera or pick ID with the second.
+    const encoder = this.device.commandEncoder
+    if (this.hostEncoder !== encoder) {
+      this.hostEncoder = encoder
+      this.nextHostUniform = 0
+    }
+    const index = this.nextHostUniform++
+    const uniforms = this.hostUniforms[index] ??= this.device.createBuffer({
+      id: 'cosmos-host-view', byteLength: this.uniforms.byteLength, usage: Buffer.UNIFORM | Buffer.COPY_DST,
+    })
+    this.encode(pass, framebuffer, view, [0, 0, view.width * view.pixelRatio, view.height * view.pixelRatio],
+      !!options.picking, uniforms, options)
+  }
+
+  public draw (view: GraphView, framebuffer = this.device.canvasContext?.getCurrentFramebuffer()): void {
+    if (!framebuffer || this.isDisposed) return
+    const pass = this.device.beginRenderPass({ framebuffer, clearColor: this.transparentBackground, clearDepth: false, clearStencil: false })
+    try {
+      this.encode(pass, framebuffer, view, [0, 0, framebuffer.width, framebuffer.height], false)
+    } finally { pass.end() }
+    this.device.submit()
+    if ((view.styleProgress ?? 1) >= 1) this.releasePrevious()
+  }
+
+  public async pick (xCss: number, yCss: number, view: GraphView): Promise<GraphPick | null> {
+    if (this.isDisposed || !this.pointCount || xCss < 0 || yCss < 0 || xCss >= view.width || yCss >= view.height) return null
+    const revision = this.revision
+    const x = Math.floor(xCss * view.pixelRatio)
+    const y = Math.floor(yCss * view.pixelRatio)
+    const framebuffer = this.pickFramebuffer
+    const pass = this.device.beginRenderPass({ framebuffer, clearColor: transparent, clearDepth: false, clearStencil: false })
+    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], true) } finally { pass.end() }
+    // Each query takes its own snapshot before the next pick can overwrite the one-pixel target.
+    const staging = this.device.createBuffer({ id: 'cosmos-pick-read', byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
+    try {
+      this.device.commandEncoder.copyTextureToBuffer({
+        sourceTexture: this.pickTexture, destinationBuffer: staging, width: 1, height: 1, bytesPerRow: 256,
+      })
+      this.device.submit()
+      const bytes = await staging.readAsync(0, 4)
+      if (this.isDisposed || revision !== this.revision) return null
+      const id = (bytes[0] ?? 0) + (bytes[1] ?? 0) * 256 + (bytes[2] ?? 0) * 65536
+      return id ? { kind: bytes[3] === 255 ? 'point' : 'link', index: id - 1 } : null
+    } finally { staging.destroy() }
+  }
+
+  public destroy (): void {
+    if (this.isDisposed) return
+    this.isDisposed = true
+    this.kernels.forEach(kernel => kernel.destroy())
+    this.kernels.clear()
+    this.interpolation.destroy()
+    this.releasePrevious()
+    this.pickFramebuffer?.destroy()
+    this.pickTexture?.destroy()
+    this.points.destroy()
+    this.pointBuffer?.destroy()
+    this.linkBuffer?.destroy()
+    this.orderBuffer?.destroy()
+    this.hostUniforms.forEach(buffer => buffer.destroy())
+    this.hostUniforms.length = 0
+    this.hostEncoder = undefined
+    this.uniforms?.destroy()
+    this.vertices?.destroy()
+  }
+
+  private storage (old: Buffer | undefined, values: Float32Array | Uint32Array, id: string, minBytes: number): Buffer {
+    const bytes = Math.max(minBytes, values.byteLength)
+    if (bytes > this.device.limits.maxStorageBufferBindingSize) {
+      throw new Error(`${id} requires ${bytes} bytes of storage (device limit ${this.device.limits.maxStorageBufferBindingSize})`)
+    }
+    if (old && old.byteLength >= bytes) {
+      if (values.length) old.write(values)
+      return old
+    }
+    const next = this.device.createBuffer({ id, byteLength: bytes, usage: Buffer.STORAGE | Buffer.COPY_DST })
+    try {
+      if (values.length) next.write(values)
+    } catch (e) {
+      next.destroy()
+      throw e
+    }
+    old?.destroy()
+    return next
+  }
+
+  private releasePrevious (): void {
+    this.previous?.points.destroy()
+    this.previous?.links.destroy()
+    this.previous = undefined
+  }
+
+  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link', picking: boolean): RenderKernel {
+    const color = framebuffer.colorAttachments[0]!.texture.format as TextureFormatColor
+    const depth = framebuffer.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined
+    const samples = framebuffer.colorAttachments[0]!.texture.samples
+    const key = [kind, color, depth, samples, picking].join('/')
+    let kernel = this.kernels.get(key)
+    if (!kernel) {
+      kernel = new RenderKernel(this.device, {
+        id: `cosmos-${key}`,
+        vertexSource: shader[kind],
+        fragmentSource: shader[kind],
+        vertexEntryPoint: `${kind}Vertex`,
+        fragmentEntryPoint: `${kind}Fragment`,
+        topology: 'triangle-strip',
+        shaderLayout: layout,
+        colorAttachmentFormats: [color],
+        depthStencilAttachmentFormat: depth,
+        parameters: {
+          ...(depth ? { depthWriteEnabled: false, depthCompare: 'always' as const } : {}),
+          sampleCount: samples,
+          cullMode: 'none',
+          blend: !picking,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'src-alpha',
+          blendColorDstFactor: 'one-minus-src-alpha',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one-minus-src-alpha',
+        },
+      })
+      this.kernels.set(key, kernel)
+    }
+    return kernel
+  }
+
+  private encode (
+    pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number], picking: boolean,
+    uniforms = this.uniforms, options: GraphDrawOptions = {}
+  ): void {
+    const position = this.positionSource()
+    if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.linkBuffer || !this.points.atlas) return
+    const c = this.config
+    const segments = c.curvedLinks ? Math.max(1, Math.round(c.curvedLinkSegments)) : 1
+    uniforms.write(new Float32Array([
+      view.x, view.y, view.scale, view.pixelRatio, ...region,
+      c.pointSizeScale, +c.scalePointsOnZoom, options.picking?.alpha ?? 1, options.picking?.linkIndexOffset ?? 0,
+      c.linkWidthScale, +c.scaleLinksOnZoom, c.linkOpacity, +c.linkBlending,
+      segments, c.curvedLinkWeight, c.curvedLinkControlPointDistance, 5,
+      ...c.linkVisibilityDistanceRange, c.linkVisibilityMinTransparency, +c.linkColorInterpolateFromEndpoints,
+      view.hoveredPoint ?? -1, c.focusedPointIndex ?? -1, view.hoveredLink ?? -1, c.focusedLinkIndex ?? -1,
+      c.hoveredLinkWidthIncrease, c.focusedLinkWidthIncrease, c.linkDashLength, c.linkDashGap,
+      +picking, c.linkArrowsSizeScale, position.pointCount, options.picking?.alpha ?? 0.5,
+      ...this.hoverColor, ...this.hoverRing, ...this.focusRing,
+      this.previous ? Math.max(0, Math.min(1, view.styleProgress ?? 1)) : 1, this.previous?.pointCount ?? 0,
+      this.previous?.linkCount ?? 0, view.maxPointSize ?? 64,
+      shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
+    ]))
+    const bindings = {
+      params: uniforms,
+      positions: position.buffer,
+      points: this.pointBuffer,
+      links: this.linkBuffer,
+      pointOrder: this.orderBuffer,
+      atlas: this.points.atlas,
+      previousPoints: this.previous?.points ?? this.pointBuffer,
+      previousLinks: this.previous?.links ?? this.linkBuffer,
+    }
+    if (options.links !== false && c.renderLinks && this.linkCount) {
+      this.kernel(framebuffer, 'link', picking).draw(pass, {
+        vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.linkCount, bindings,
+      })
+    }
+    if (options.points === false) return
+    this.kernel(framebuffer, 'point', picking).draw(pass, {
+      vertexArray: this.vertices, vertexCount: 4, instanceCount: Math.min(position.pointCount, this.pointCount), bindings,
+    })
+  }
+}

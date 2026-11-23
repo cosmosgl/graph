@@ -245,6 +245,34 @@ importers:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@26.6.6)(yaml@2.9.0)
 
+  experiments/graph-webgpu:
+    dependencies:
+      '@luma.gl/core':
+        specifier: 10.0.0-alpha.15
+        version: 10.0.0-alpha.15
+      '@luma.gl/graph':
+        specifier: 10.0.0-alpha.15
+        version: 10.0.0-alpha.15(@luma.gl/core@10.0.0-alpha.15)(@luma.gl/shaders@10.0.0-alpha.15)(apache-arrow@21.2.0)
+      d3-selection:
+        specifier: ^3.0.0
+        version: 3.0.0
+      d3-transition:
+        specifier: ^3.0.1
+        version: 3.0.1(d3-selection@3.0.0)
+      d3-zoom:
+        specifier: ^3.0.0
+        version: 3.0.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.3(@types/node@26.6.6)(yaml@2.9.0)
+
   integrations/deck-layers:
     devDependencies:
       '@cosmos.gl/graph':

@@ -21,6 +21,7 @@
       "./test/tsconfig.json",
       "./integrations/deck-layers/tsconfig.typecheck.json",
       "./experiments/cosmos-gpu-lab/tsconfig.json",
+      "./experiments/graph-webgpu/tsconfig.json",
       "./website/tsconfig.json"
     ]
   },
