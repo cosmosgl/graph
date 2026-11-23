@@ -65,6 +65,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'Research-only pilot. Strict production color compatibility remains rejected; ' +
       'larger viewer workloads, full API and full migration are not approved.',
   },
+  'production-graph-api': {
+    question: 'Can the same public Graph caller draw, pick and step the same graph with both built packages?',
+    reference: 'The WebGL Graph with identical inputs, one pinned endpoint, one absent slot and the independently known point IDs.',
+    acceptance: 'Keep point 0 fixed, move point 1 toward the center, preserve point 2 as NaN and report the correct clicked IDs.',
+    coverage: 'One fixed three-slot, one-link graph with gravity, manual stepping, asynchronous readback, clicks and teardown.',
+    limits: 'This fixture covers a single layout and configuration. Use the matched performance benchmark for timing.',
+  },
   'viewer-comparison': {
     question: 'Can the small candidate viewer support the production appearance, update and running-interaction workflow?',
     reference: 'Unchanged workspace production Graph with luma v9, corrected integrated luma v10 runtime, ' +

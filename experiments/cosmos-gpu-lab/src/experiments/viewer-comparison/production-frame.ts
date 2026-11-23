@@ -44,7 +44,14 @@ const createComparisonWebGL: CreateComparisonWebGL = async (input, pixelRatio, {
   } catch (error) { graph.destroy(); throw error }
 }
 
-if (new URLSearchParams(window.location.search).get('view') === 'large-comparison') {
+const params = new URLSearchParams(window.location.search)
+if (params.get('view') === 'public-graph') {
+  const engine = params.get('engine') === 'webgpu' ? 'webgpu' : 'webgl'
+  const session = import('../production-graph-api/frame').then(module => module.mountGraph(host, engine))
+  Object.assign(window, { publicGraph: session })
+  // The parent subscribes after the frame loads, including when initialization failed early.
+  session.catch(() => {})
+} else if (params.get('view') === 'large-comparison') {
   Object.assign(window, { createComparisonWebGL })
 } else {
   Object.assign(window, { cosmosProduction: loadProductionBundle().then(() => createProduction(host)) })

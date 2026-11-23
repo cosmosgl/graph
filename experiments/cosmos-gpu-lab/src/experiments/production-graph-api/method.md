@@ -1,0 +1,40 @@
+The two panes run the same code inside separate frames. The real WebGL and WebGPU packages each create their own Graph, GPU device, canvas and input handlers. The fixed input, colors, gravity settings and pinned IDs are shared with **Examples → Get Started → Manual step** in Storybook.
+
+Build both standalone packages before starting the Lab. These commands run from the repository root.
+
+```sh
+pnpm run build
+pnpm --filter @cosmos.gl/graph-webgpu build
+pnpm --filter @cosmos.gl/gpu-lab dev
+```
+
+Open `#/production-graph-api`. Click the red point in each pane and check for point 0, then click the blue point and check for point 1. Press **Step gravity**. The pinned x coordinate should stay at 1984 while the free endpoint moves left from 2112. Reset reloads both packages. Each pane reports its own initialization or readback error.
+
+This small case exercises pre-initialization setters, NaN absence, linking, pinning, public async reads and picking. The panes share the GPU, so use the separate matched runs to measure performance.
+
+### Moving YouTube graph
+
+Prepare the SNAP YouTube fixture as described in the Lab README, then run the replay from the repository root.
+
+```sh
+node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs
+```
+
+The replay opens visible Chrome. It runs the built WebGPU Graph at 65,536 and 1,000,000 points on the induced YouTube topology. Each run uses a fixed camera, the four recorded drag rectangles and 1,000 tracked labels. A separate input overlay keeps the camera still while the pointer drags.
+
+For correctness, the release handler submits rectangle selection, label gathering and a full position copy in the same task. An independent CSS-space rectangle calculation checks the ordered point IDs against that position snapshot. Each tracked label coordinate must equal the corresponding snapshot coordinate. The timing run omits the full copy and the oracle. It measures from handler entry to the ID result, then to the second animation-frame callback after applying highlights, updating the count, showing the box and drawing the labels. That callback gives the browser an opportunity to paint. The actual time the display presents the frame can differ.
+
+The script saves the tested bundle, source snapshot, browser and device identity, raw samples and screenshots under `captures/public-graph-youtube-*/`. The run exercises the candidate by itself. Use separate matched controls for WebGL performance comparisons.
+
+### Native M3 replay
+
+Chrome 157.0.8103.79 reported an Apple Metal 3 WebGPU adapter on the M3. Both graph sizes completed four correctness drags. All eight ordered ID lists matched the release-time reference, and all 1,000 tracked coordinates matched on every release. On the million-point graph the four rectangles selected 425,378, 4,568, 56,254 and 5,717 IDs in the correctness run.
+
+| Moving points | Links | Time to IDs | Time to feedback opportunity |
+| ---: | ---: | ---: | ---: |
+| 65,536 | 432,898 | 169–290 ms | 254–427 ms |
+| 1,000,000 | 2,852,734 | 989–4,369 ms | 2,003–6,047 ms |
+
+Each range covers the four releases of one timing run at 961 × 541 CSS pixels, device pixel ratio 2 and zoom 0.25. The fixed-camera capture is `captures/public-graph-youtube-dWq8Uu/result.json`. Its tested bundle SHA-256 is `86cd64eb4c0a02bc54d14802c48a34d49b1b89ccfb042398d3dd285f4849b56a`. An earlier harness also panned the camera during a drag. The figures above come exclusively from the replay that verifies the camera center at every release.
+
+Other repository checks were running on the same machine during this development replay. Treat the timing ranges as preliminary observations. Repeat the timing run on an idle machine with matched WebGL controls before making a release performance decision.

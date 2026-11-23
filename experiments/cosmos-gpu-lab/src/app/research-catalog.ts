@@ -282,6 +282,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       next: 'Use the matched Viewer Comparison benchmark and the recorded timing phases to investigate recurring stalls.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
+    'production-graph-api': entry('production-graph-api', {
+      reviewed: '2026-11-24',
+      conclusion: 'The public Graph comparison exercises the same caller in each built package.',
+      variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
+      comparison: 'Fixed gravity fixture, point-ID callbacks and async position reads',
+      method: 'method',
+      next: 'Verify the same application workflows on larger graphs.',
+      reproduce: 'Click both endpoints and press Step gravity.',
+      investigations: [],
+    }),
     'viewer-comparison': entry('viewer-comparison', {
       conclusion: 'On the matched Karate graph, both backends ran at about 18 ms frame p95. WebGPU reduced steady frame p95 on the million-point communities.',
       reviewed: '2026-11-20',
