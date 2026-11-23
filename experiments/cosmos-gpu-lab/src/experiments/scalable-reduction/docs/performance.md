@@ -10,7 +10,7 @@ latency; it does **not** measure completed GPU execution.
 
 ## Bounded benchmark
 
-The Benchmark button records several reduction hierarchies into one command buffer, submits once, and waits for
+After the visible tick has initialized the pipelines, Benchmark waits for earlier GPU work to finish. It then records several reduction hierarchies into one command buffer, submits once, and waits for
 a luma fence:
 
 - 100 iterations below one million points

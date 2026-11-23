@@ -94,18 +94,18 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'scalable-reduction': entry('scalable-reduction', {
-      conclusion: 'The recorded exploratory run reached ten million GPU-resident points; CPU reference coverage and the drawn preview remain capped.',
-      variant: 'Hierarchical WebGPU reduction; luma 10.0.0-alpha.4. Historical GPU identity was not recorded.',
+      conclusion: 'The isolated reduction counted all ten million points and matched the CPU center before and after one resident rotation.',
+      variant: 'Hierarchical WebGPU reduction over generated positions and an independent CPU sum.',
       comparison: 'GPU-generated positions → reduction hierarchy → optional center readback and capped preview',
       method: 'overview',
       evidence: 'results',
-      methodPages: ['algorithm', 'implementation', 'performance', 'limitations'],
+      methodPages: ['implementation', 'performance', 'limitations'],
       next: 'Agree accuracy and resource budgets; validate larger reductions inside an accepted simulation workload.',
       reproduce: 'Select a point count above. Step with readback to inspect the center; unsampled resident ticks remain unchecked.',
       investigations: [{
         page: 'results',
         state: 'Current evidence',
-        description: 'Four exploratory count presets, center observations and bounded reduction timings.',
+        description: 'Two CPU-checked sizes and earlier exploratory timings across four presets.',
       }],
     }),
     'spatial-grid': entry('spatial-grid', {

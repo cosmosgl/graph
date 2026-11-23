@@ -1999,7 +1999,60 @@ button[data-action="play"][aria-pressed="true"] {
   align-items: start; gap: var(--space-2) var(--space-3); padding: 0; margin: 0; border: 0;
 }
 .run-layout :is(.run-settings, .run-secondary-settings) .scale-toolbar label { gap: var(--space-1); }
+.reduction-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-6);
+}
+.reduction-settings .choice-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.reduction-settings .checkbox-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+@media (pointer: coarse) {
+  .reduction-settings .checkbox-control { min-height: 44px; }
+}
 .run-secondary-settings .run-presets { grid-column: 1 / -1; }
+.reduction-preview { display: grid; gap: var(--space-2); container-type: inline-size; }
+.reduction-preview p, .reduction-readouts, .reduction-readouts dd { margin: 0; }
+.reduction-specs, .reduction-readouts dt, .reduction-benchmark output {
+  color: var(--text-secondary);
+  font-size: var(--type-meta);
+}
+.reduction-preview .failed { color: var(--danger-text); }
+.reduction-specs { min-block-size: 1lh; }
+.reduction-readouts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.reduction-readouts dd { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.reduction-readouts [data-output="center"] { min-block-size: 2lh; }
+.reduction-benchmark {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  margin: var(--space-2) 0 0;
+}
+.reduction-benchmark output { overflow-wrap: anywhere; }
+@container (max-width: 32rem) {
+  .reduction-specs { min-block-size: 2lh; }
+}
+@container (max-width: 23rem) {
+  .reduction-benchmark { min-block-size: 2lh; }
+}
+@media (max-width: 540px) {
+  .reduction-readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .run-primary-actions { gap: var(--space-2); margin: 0 0 var(--space-3); }
 .run-primary-actions > button:not(.vocabulary-term-link), .learning-example .controls > button:not(.vocabulary-term-link) {
   min-height: 32px; padding: 5px 9px; white-space: normal;

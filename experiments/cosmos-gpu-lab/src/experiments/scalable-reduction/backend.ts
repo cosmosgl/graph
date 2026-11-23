@@ -1,4 +1,4 @@
-import { Buffer, type ComputePass, type Bindings } from '@luma.gl/core'
+import { Buffer, type ComputePass, type Bindings, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/graph'
 import { describeDevice, bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { graphRgba, graphWgsl } from '../../runtime/palette'
@@ -39,6 +39,7 @@ export type ScalableReductionBackend = {
   readonly positionBytes: number;
   readonly partialBytes: number;
   run: (advance: boolean, readback: boolean) => Promise<ReductionRunResult>;
+  waitForIdle: () => Promise<void>;
   benchmark: (iterations: number) => Promise<ReductionBenchmark>;
   destroy: () => void;
 }
@@ -49,13 +50,20 @@ export function formatBytes (bytes: number): string {
   return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MiB` : `${(bytes / 1024).toFixed(1)} KiB`
 }
 
-export async function createScalableReductionBackend (canvas: HTMLCanvasElement, pointCount: number): Promise<ScalableReductionBackend> {
-  const device = await createDevice('webgpu', canvas)
-  const positionBytes = pointCount * 8; const firstPartialCount = Math.ceil(pointCount / WORKGROUP_SIZE)
-  const partialBytes = Math.max(16, firstPartialCount * 16)
-  if (positionBytes > device.limits.maxStorageBufferBindingSize || positionBytes > device.limits.maxBufferSize ||
-    firstPartialCount > device.limits.maxComputeWorkgroupsPerDimension) {
-    device.destroy(); throw new Error('Point count exceeds this device’s buffer or dispatch limits')
+function createReduction (device: Device, canvas: HTMLCanvasElement, pointCount: number): ScalableReductionBackend {
+  const positionBytes = pointCount * 8
+  const firstPartialCount = Math.ceil(pointCount / WORKGROUP_SIZE)
+  const partialBytes = firstPartialCount * 16
+  const largestBuffer = Math.max(positionBytes, partialBytes)
+  const requirements = [
+    ['maxStorageBufferBindingSize', largestBuffer, 'bytes'],
+    ['maxBufferSize', largestBuffer, 'bytes'],
+    ['maxComputeWorkgroupsPerDimension', firstPartialCount, 'workgroups'],
+  ] as const
+  for (const [limit, required, unit] of requirements) {
+    if (required > device.limits[limit]) {
+      throw new Error(`${limit} allows ${device.limits[limit]} ${unit}. This preset needs ${required}.`)
+    }
   }
   const positions = device.createBuffer({ byteLength: positionBytes, usage: Buffer.STORAGE })
   const partials = [0, 1].map(() => device.createBuffer({ byteLength: partialBytes, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
@@ -136,8 +144,10 @@ export async function createScalableReductionBackend (canvas: HTMLCanvasElement,
         timingKind: 'readback',
       }
     },
+    waitForIdle: () => waitForGpu(device),
     async benchmark (iterations: number): Promise<ReductionBenchmark> {
       check(); if (!initialized) throw new Error('Run one visible tick before benchmarking')
+      await waitForGpu(device)
       const start = performance.now(); const pass = device.beginComputePass()
       for (let i = 0; i < iterations; i++) reduce(pass)
       pass.end(); device.submit(); const submitted = performance.now()
@@ -151,5 +161,20 @@ export async function createScalableReductionBackend (canvas: HTMLCanvasElement,
         ...partials, parameters, drawParameters, centerParameters, ...parameterBuffers]) resource.destroy()
       device.destroy()
     },
+  }
+}
+
+export async function createScalableReductionBackend (
+  canvas: HTMLCanvasElement, pointCount: number, onError?: (error: Error) => void
+): Promise<ScalableReductionBackend> {
+  if (!Number.isInteger(pointCount) || pointCount < 1 || pointCount > 2 ** 24) {
+    throw new RangeError('Point count must be an integer from 1 to 16,777,216 for an exact float32 count')
+  }
+  const device = await createDevice('webgpu', canvas, true, onError)
+  try {
+    return createReduction(device, canvas, pointCount)
+  } catch (error) {
+    device.destroy()
+    throw error
   }
 }

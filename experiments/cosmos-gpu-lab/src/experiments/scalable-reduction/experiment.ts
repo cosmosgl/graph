@@ -8,6 +8,12 @@ export const experiment = defineExperiment({
   summary: 'Reduce up to ten million GPU-resident points through a dynamic hierarchy of compute passes.',
   tags: ['compute', 'million-scale', 'WebGPU'],
   cases,
+  showRecordedSummary: false,
+  howItWorks: {
+    summary: 'WebGPU sums positions and counts in groups of 256, then combines the groups until one sum and count remain. ' +
+      'Dividing them gives the center, shown in gold. Copying it to the CPU checks the count and coordinates. ' +
+      'With copying off, tick time measures how long the CPU takes to submit the work.',
+  },
   create: async (host): Promise<ExperimentInstance> => {
     const module = await import('./view')
     return module.createScalableReductionExperiment(host)
@@ -18,12 +24,6 @@ export const experiment = defineExperiment({
       id: 'overview',
       title: 'Overview',
       load: async (): Promise<string> => (await import('./docs/overview.md?raw')).default,
-    },
-    {
-      kind: 'markdown',
-      id: 'algorithm',
-      title: 'Algorithm',
-      load: async (): Promise<string> => (await import('./docs/algorithm.md?raw')).default,
     },
     {
       kind: 'markdown',

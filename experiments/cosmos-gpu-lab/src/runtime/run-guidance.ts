@@ -19,10 +19,6 @@ const guidance: Record<string, Guidance> = {
     scale: 'Choose whether point size grows with camera zoom.',
     order: 'Reverse which overlapping shape is drawn last, keeping IDs stable.',
   },
-  'scalable-reduction': {
-    'point-count': 'All points participate in reduction; only a capped preview is drawn.',
-    readback: 'Download the center for comparison. Without readback, per-tick accuracy is unchecked.',
-  },
   'spatial-grid': {
     'point-count': 'Every point participates in the grid build and exhaustive validation.',
     'grid-size': 'Cells along each axis. More cells need larger count and offset buffers.',

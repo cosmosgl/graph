@@ -13,10 +13,13 @@ function hashU32 (value: number): number {
   return (result ^ (result >>> 16)) >>> 0
 }
 
+const extent = Math.fround(0.9)
+const span = Math.fround(1.8)
+
 function coordinate (value: number): number {
   const hashed = Math.fround(hashU32(value))
-  const normalized = Math.fround(hashed / 4_294_967_295)
-  return Math.fround(Math.fround(normalized * 1.8) - 0.9)
+  const normalized = hashed / 2 ** 32
+  return Math.fround(Math.fround(normalized * span) - extent)
 }
 
 export function createInitialPositions (pointCount: number): Float32Array {
@@ -28,8 +31,7 @@ export function createInitialPositions (pointCount: number): Float32Array {
   return positions
 }
 
-export function calculateInitialCpuCenter (pointCount: number): ReductionCenter | undefined {
-  if (pointCount > CPU_REFERENCE_LIMIT) return undefined
+export function calculateInitialCpuCenter (pointCount: number): ReductionCenter {
   let x = 0
   let y = 0
   for (let index = 0; index < pointCount; index += 1) {

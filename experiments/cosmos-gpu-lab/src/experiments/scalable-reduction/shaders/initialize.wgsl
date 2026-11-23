@@ -19,7 +19,7 @@ fn hash(value: u32) -> u32 {
 }
 
 fn coordinate(value: u32) -> f32 {
-  return f32(hash(value)) / 4294967295.0 * 1.8 - 0.9;
+  return f32(hash(value)) / 4294967296.0 * 1.8 - 0.9;
 }
 
 @compute @workgroup_size(256)

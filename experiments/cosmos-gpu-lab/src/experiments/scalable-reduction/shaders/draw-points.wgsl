@@ -22,5 +22,5 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(graphPointColor.rgb, 0.72);
+  return graphPointColor;
 }

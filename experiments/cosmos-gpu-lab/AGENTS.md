@@ -32,10 +32,16 @@ report formatting or mock bookkeeping. Parked experiments stay outside the migra
 
 - **Collapsible sections are forbidden on every Lab page.** Use one reading column at every width.
   Keep controls with the preview. Show settings, explanations, results and reports inline, with
-  headings and direct links for long pages. Reserve space for progress and check narrow and wide layouts.
+  headings and direct links for long pages. Check narrow and wide layouts.
 - Give independent questions their own pages and use cases for variations. After a split, match
   the title, method and catalog copy to the question. Mount only controls and diagnostics used by
-  that page. Check every control and measurement mentioned in the copy against the live demo.
+  that page. Verify every control and measurement named in the copy or validation contract
+  against the live demo or the recorded check that supplies it.
+- For streamlined demos, prefer `showRecordedSummary: false`, a short `howItWorks` summary and
+  one primary evidence document. Use `mountRunLayout(host)` to omit the generic `summarizeRun` card.
+- Place each action beside its output. Group preset specs separately from per-tick measurements.
+  Keep `data-run-part` regions as siblings. Reserve space for status, specs and progress so
+  controls and readouts stay in place during reruns and preset switches.
 - Use compact shared choices with clear labels, a visible selected state and room to tap. Rerun
   quick comparisons on click. Add a visible description when a setting or its disabled state needs
   explanation. Essential guidance must be available to touch and keyboard users. See the
@@ -66,8 +72,12 @@ report formatting or mock bookkeeping. Parked experiments stay outside the migra
 
 - Isolate device creation, upload and render failures per preview. Release the failed backend
   and report the error in its panel so the other preview can continue.
-- When previews and live checks share GPU devices, serialize their work. Wait for in-flight
-  operations before destroying their resources.
+- Serialize GPU operations within each view, including live checks that share its device. Wait
+  for in-flight work before reconfiguring or destroying resources.
+- After setup fails, keep preset and reset controls available for recovery. If a device limit
+  was exceeded, name it and show the requested and supported values.
+- Await `waitForGpu(device)` before starting a queue-completion benchmark timer so earlier
+  submissions are excluded from the measurement.
 
 ## Running studies
 

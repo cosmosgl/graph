@@ -5,7 +5,7 @@ import type { PointRenderBackend } from '../point-rendering/backend'
 import { createPointData } from '../point-rendering/point-data'
 import { createWebGLPointRenderer } from '../point-rendering/webgl/backend'
 import { createWebGPUPointRenderer } from '../point-rendering/webgpu/backend'
-import { calculateInitialCpuCenter } from '../scalable-reduction/reference'
+import { calculateInitialCpuCenter, CPU_REFERENCE_LIMIT } from '../scalable-reduction/reference'
 import { summarizeSamples, type SampleSummary, type SimulationBenchmarkBackend } from './backend'
 import { createWebGLSimulationBenchmark } from './webgl-simulation'
 import { createWebGPUSimulationBenchmark } from './webgpu-simulation'
@@ -488,7 +488,7 @@ export async function createPerformanceLab (host: HTMLElement, caseId?: string):
       }
     }
 
-    const cpuCenter = calculateInitialCpuCenter(pointCount)
+    const cpuCenter = pointCount <= CPU_REFERENCE_LIMIT ? calculateInitialCpuCenter(pointCount) : undefined
     for (const slot of slots) {
       if (slot.report.status !== 'complete' || !slot.backend) continue
       slot.report.submit = summarizeSamples(slot.report.submitSamples)

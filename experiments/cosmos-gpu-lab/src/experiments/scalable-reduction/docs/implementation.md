@@ -6,11 +6,10 @@ The experiment allocates:
 
 - One `float32x2` storage buffer for all positions.
 - Two equally sized `vec4f` partial buffers for ping-pong reduction.
-- One 16-byte readback buffer.
 - Small uniform buffers containing the input count for each level.
 
-For ten million points, positions consume approximately 76.3 MB and both partial buffers together consume about
-1.2 MB.
+For ten million points, positions consume approximately 76.3 MiB and both partial buffers together consume about
+1.2 MiB.
 
 ## Resident initialization and movement
 
@@ -31,7 +30,7 @@ The center marker vertex shader reads the final reduction buffer directly:
 let center = result[0].xy / result[0].z;
 ```
 
-It remains visible even when CPU readback is disabled.
+The center stays visible with readback disabled. Enabling readback reads 16 bytes from the final partial buffer to check the point count and center coordinates.
 
 ## Device limits
 

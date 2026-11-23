@@ -37,7 +37,7 @@ between levels, so the allocation is based on the largest partial level rather t
 
 ## Workgroup reduction
 
-Each workgroup loads one value per invocation into 4 KB of workgroup memory. A binary tree then performs eight
+Each workgroup loads one value per invocation into 4 KiB of workgroup memory. A binary tree then performs eight
 synchronized steps: `256 → 128 → 64 → 32 → 16 → 8 → 4 → 2 → 1`.
 
 The hierarchy is built from the selected count at runtime, so non-power-of-two counts are padded with zero contributions

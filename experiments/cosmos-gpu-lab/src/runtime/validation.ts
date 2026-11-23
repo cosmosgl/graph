@@ -150,8 +150,8 @@ export const validationContracts: Record<string, ValidationContract> = {
   },
   'scalable-reduction': {
     question: 'Can hierarchical reduction keep large inputs and outputs on the GPU?',
-    reference: 'Mathematical control: initial CPU center up to one million points, then idealized center rotation.',
-    acceptance: 'Inspect center error, count and reduction completion; the rotated center is not a per-point float32 trajectory oracle.',
+    reference: 'Mathematical control: initial CPU sum and idealized rotation. The demo caps the CPU check at one million points.',
+    acceptance: 'Check exact counts and finite coordinates. At tick zero and after one rotation, the automated center error budget is one float32 epsilon.',
     coverage: 'Selected point count; the displayed preview is capped and CPU reference availability is reported.',
     limits: 'Large reductions do not establish large graph layout correctness or universal accuracy.',
   },
