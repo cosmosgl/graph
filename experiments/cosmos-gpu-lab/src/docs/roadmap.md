@@ -1,4 +1,8 @@
-**Migration requires comparable behavior and no meaningful slowdown against production WebGL.** Default-force motion meets the measured slowdown margin for Karate Club and the two million-point community fixtures.
+**WebGPU will replace WebGL in the production Graph.** Applications will continue to call `new Graph(container, config)`. WebGPU will be the sole runtime for both `Graph` and `GraphSimulation`. Support for the WebGL version ends at cutover.
+
+During development, the Lab can keep loading the production WebGL build from the main workspace's `dist/index.min.js`. Build the WebGPU candidate separately and run the same Storybook stories against both packages. Once WebGPU passes the release checks, it takes over the main package and its build output. The last WebGL revision remains available for historical comparisons.
+
+Default-force motion meets the measured slowdown margin for Karate Club and the two million-point community fixtures.
 [Matched results](#/viewer-comparison?section=doc-migration-results) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
 
 ## Current focus
@@ -17,6 +21,62 @@ The sample has 300,000 points and 300,000 links. The recorded Chrome 157 runs
 used the same camera and measured simulation ticks 13–72.
 [Live demo](#/youtube-network?section=try-friendships-300k)
 
+## Production Graph API
+
+The first milestone is a developer opening the same story twice and getting the same result from the same gesture. The last milestone is an application importing the published `@cosmos.gl/graph` and running entirely on WebGPU. Use the following sequence to get from one to the other.
+
+### Run the same story twice
+
+Develop WebGPU in the private workspace package `experiments/graph-webgpu` on the same branch. Run the WebGL Storybook with `pnpm run storybook` on port 6006 and WebGPU with `pnpm run storybook:webgpu` on port 6007. Both read the same story files, assets and fixtures. The WebGPU preview resolves the public `@cosmos.gl/graph` import to the candidate entry. Each preview shows its engine and revision. Deck integration requires compatible host and engine dependencies before its stories can pass.
+
+Start with the same WebGL build in both previews. Use a paused fixture with overlapping points, identical typed arrays, a fixed camera, viewport and pixel ratio. Check that both previews paint the same scene and a click returns the same foreground point. Generate data once for stories that use randomness. This establishes a repeatable comparison before the first WebGPU draw.
+
+The **Manual step** story and `node scripts/check-storybook-pair.mjs` provide the first control on this branch. The check reads the actual canvas pixels, clicks both endpoints, steps gravity and opens Quick Start in each preview. Run it with both preview URLs set to the WebGL server to check the comparison setup itself.
+
+### Draw and step a real WebGPU Graph
+
+Point the second preview at the candidate. First draw two circles and one solid link through the usual constructor, setters and `render()`. Check the existing pattern of queuing setters and rendering before `ready` resolves. Resize, destroy and recreate the graph. Verify early that the candidate luma version supports compute, drawing and a borrowed WebGPU device.
+
+Pin one endpoint, leave a third point slot absent, then advance one gravity step. Read the positions through the async public API and check that the link follows the free endpoint. Run the same step in a standalone `GraphSimulation`. The production frame loop owns scheduling. The force passes, renderer, picking and queries share the current GPU positions.
+
+Keep data validation, configuration defaults and camera math shared. The candidate owns the device, buffers, compute and draw passes, and async readback. When an application supplies the device or a render pass, it retains ownership. A custom renderer can borrow the current position buffer for that frame. The package smoke test uses the standalone distribution so a working source alias cannot mask a broken build.
+
+### Move the feature stories onto WebGPU
+
+- **Data and layout.** Preserve indices, NaN absence, pins and force order through sparse edits, topology replacement, shrink and regrowth. Start with gravity, center, repulsion, weighted springs and cooling. Follow with mouse repulsion, clusters, attractors and collision. Check individual steps on small graphs and convergence on dense and hub graphs.
+- **Drawing and picking.** Start with circles and solid straight links, then add solid curves with the production click target. Work through shape, image, stroke, ring, gradient, pattern, arrow and depth-order stories. Check the foreground object at overlaps, thin objects at fractional zoom and both pixel ratios in the [visual acceptance rules](#/validation-workflow?section=first-migration-rules).
+- **Application behavior.** Run Quick Start, drag, pause/resume, Fit, resize, updates, transitions, callbacks, area selection and labels through the real story code. Define fresh async reads, any synchronous cache semantics and stale-result handling. Test releasing the pointer during a pick and replacing the graph during a selection.
+
+Review each feature against the WebGL preview. Record intentional public API changes, such as migrating a host from the position texture to a borrowed position buffer. Track remaining differences in the feature inventory.
+
+For each story, fix its inputs and capture the WebGL result, implement the public call on WebGPU, then replay the same gesture in both. Check data and IDs exactly. For images, check interiors, overlap and thin features at pixel ratios 1 and 2. The practical visual budget is one device pixel at a silhouette and two channel levels out of 255 in the interior. For moving layouts, check pins, absence, connectivity and convergence at fixed step counts. Preserve a small failing example when a difference needs further work.
+
+### Compare the built packages in the Lab
+
+Once both packages can run a scenario, load each built package in its own frame. Run the same application code and replay the same inputs. Start with fixed-position rendering and known overlapping IDs. Then compare fixed-tick simulation invariants, edits, selection and callback order. Keep using the existing prototype studies for their original questions.
+
+Move from small fixtures to the million-point dense, hub and YouTube graphs. On moving YouTube, record the camera and positions at release, verify the selected IDs and measure the time until the highlight is visible. Include 1,000 tracked labels, replacement, resize and memory use. Run timed comparisons one engine at a time, with repeated WebGL controls and a slowdown margin declared in advance. [Workloads and metrics](#/million-graph?section=doc-production-envelope)
+
+### Qualify and release the replacement
+
+Exercise standalone Graph, headless simulation and the real `CosmosGraphLayer` on one supported luma family. Verify draw and pick in a host-owned pass, shared-device lifetime, initialization failure and recovery after device loss. Repeat the release scenarios on the supported browser and GPU range. Check the packaged builds, public types, Storybook and migration notes for async reads and custom host renderers.
+
+At cutover, record the final WebGL revision and point historical comparisons to that build. Promote WebGPU to the main package and its normal distribution path. Publish Graph and the Deck integration in lockstep. The public Storybook then runs the WebGPU release, and the WebGL reference remains reproducible.
+
+### Working candidate and remaining release checks
+
+The same-branch candidate runs Quick Start and Manual step. Its browser tests cover resident simulation, input queued before initialization, pinned and absent slots, sparse edits, selection, label sampling, position and style transitions, and drawing and picking in a borrowed host pass. The real-package comparison lives in [Production Graph API](#/production-graph-api).
+
+In the first fixed-camera package replay on Apple M3, all four million-point YouTube selections returned the expected IDs. The 1,000 tracked label coordinates matched the positions captured on every release. The interval from the release handler to the next measured paint opportunity ranged from **2.00 to 6.05 seconds**. Repeat with matched controls and profile latency before calling large moving selections ready for production. [Replay method and results](#/production-graph-api?section=doc-method)
+
+| Remaining check | Evidence needed before cutover |
+| --- | --- |
+| Force controls and layout quality | The candidate uses direct repulsion on small graphs and a hierarchy above 4,096 points. Verify the production sampling and quality controls, long-run convergence, dense overlap and hub behavior with matched inputs. |
+| Appearance across the catalog | Matched captures and picked IDs for every supported style, including moving curves, dashed curves, image alpha, hover and overlaps. Check animated insertion and removal, and selection during size transitions. |
+| Interaction at scale | Compare visible feedback after release and label refresh on moving graphs. Profile channel uploads on highlight changes and report first request, p95 and stalls against repeated WebGL controls. |
+| Public API and packages | Typecheck application and integration consumers against the packed release. Document fresh async reads, completed snapshots and the borrowed position buffer for custom renderers. |
+| Deck and device recovery | Run the real Deck layer and its pick pass on a compatible shared dependency family. Restore a live user session on a replacement device and repeat the agreed checks across supported hardware and browsers. |
+
 ## What remains
 
 - **Scope** The first paired run covers default forces and basic styles on native Chrome on M3. Repeat with production interaction styling and additional supported devices as integration proceeds. [Acceptance scope](#/million-graph?section=doc-production-envelope)
@@ -24,7 +84,7 @@ used the same camera and measured simulation ticks 13–72.
 - **Full simulation** All eight forces match recorded CPU checkpoints through 32,768 points. The resident approximation runs all eight through one million with exact link indices, pins and absence. Both million-point WebGPU layouts take about 267 ms p95. Compare the same force set with production WebGL. Profile collision where it causes a slowdown. Retest dense overlap, multiple hubs, adaptive sampling, cell crossings and long cooling at scale. [Full-force evidence](#/integrated-webgpu?section=doc-composed-interaction)
 - **Appearance and picking** Moving circles and solid straight links match the checked interiors. Isolated shapes, images, rings, widths, gradients and patterned link studies still show some mask and color differences. Resolve visible ownership at edges and overlaps, then check arrows, hover, focus and depth-based occlusion in the same moving renderer. [Moving styles](#/viewer-comparison?section=doc-findings) · [Feature coverage](#feature-coverage)
 - **Graph workflows** Both backends completed moving selection, 1,000 labels, updates and resize on the community fixtures. Resolve the two near-edge polygon discrepancies and verify these workflows through the full production WebGPU API. Transitions, callbacks, point dragging and Fit remain integration checks. [Readback evidence](#/integrated-webgpu?section=doc-readback) · [Matched results](#/viewer-comparison?section=doc-migration-results)
-- **Deck, recovery and release** Use one supported luma version for the production Graph and Deck WebGPU paths. Verify same-device draw, pick and teardown, then recover a full session from unexpected loss and check WebGL availability when WebGPU cannot start. The M3 controls cover current production WebGL and a Lab WebGPU restart. Extend the browser and GPU scope before public release. [Host evidence](#/integrated-webgpu?section=doc-host-ownership)
+- **Deck, recovery and release** Verify same-device draw, pick and teardown, then recover a full session from unexpected WebGPU device loss. When WebGPU is unavailable or the host supplies an incompatible device, verify that `graph.ready` rejects with an actionable error and partial initialization releases its resources. The M3 controls cover current production WebGL and a Lab WebGPU restart. Extend the browser and GPU scope before public release. [Host evidence](#/integrated-webgpu?section=doc-host-ownership)
 
 ## Feature coverage
 

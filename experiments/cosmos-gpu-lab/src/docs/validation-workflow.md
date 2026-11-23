@@ -20,8 +20,9 @@ small-graph checks and recorded large-star and intermittent latency failures.
 - Resident GPU positions shared by simulation and drawing, through public
   luma APIs and the pinned `10.0.0-alpha.15` package family.
 - Point picking, dragging, pan/zoom, basic data replacement and pause/resume.
-- Current native machine first; production Cosmos remains on its existing
-  WebGL/luma version until a separate adoption decision.
+- Validate the first slice on the current native machine. Compare against the main workspace's
+  production WebGL build and record the build identity for each measured run. The [replacement release](#/roadmap?section=production-graph-api)
+  will require WebGPU and must pass the wider feature, host and device checks before cutover.
 
 Patterned links, arrows, images, decorative rings, advanced transitions,
 clusters, per-point attractors, mouse repulsion and host/deck integration are
