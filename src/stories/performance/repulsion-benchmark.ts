@@ -1,10 +1,11 @@
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
+import { makeRng } from '../utils'
 
 // Benchmarks the many-body repulsion cost across point counts, bypassing the
 // requestAnimationFrame refresh cap (which pins the FPS monitor at 120 and hides
 // the real per-step cost). It times batches of `graph.step()` calls — each runs
-// the full force pipeline synchronously on the GPU — followed by a
-// `getPointPositions()` readback that flushes the queue, so the elapsed wall
+// the full force pipeline on the GPU — followed by an awaited
+// position readback that flushes the queue, so the elapsed wall
 // time reflects actual GPU work per step.
 //
 // Data is pure points (no links) so the numbers isolate the repulsion force;
@@ -25,12 +26,10 @@ const nextFrame = (): Promise<void> => new Promise((resolve) => requestAnimation
 
 const makePositions = (n: number): Float32Array => {
   const positions = new Float32Array(n * 2)
+  const random = makeRng(n)
   for (let i = 0; i < n; i += 1) {
-    // Uniform random across the space — a representative cell occupancy for the
-    // grid. (The per-step cost is topology-independent, so exact seeding doesn't
-    // matter.)
-    positions[i * 2] = Math.random() * SPACE_SIZE
-    positions[i * 2 + 1] = Math.random() * SPACE_SIZE
+    positions[i * 2] = random() * SPACE_SIZE
+    positions[i * 2 + 1] = random() * SPACE_SIZE
   }
   return positions
 }
@@ -41,6 +40,7 @@ const timeSize = async (div: HTMLDivElement, positions: Float32Array, isCancelle
   const config: GraphConfig = {
     spaceSize: SPACE_SIZE,
     enableSimulation: true,
+    enableRenderLoop: false,
     fitViewOnInit: false,
     showFPSMonitor: false,
     renderLinks: false,
@@ -54,22 +54,16 @@ const timeSize = async (div: HTMLDivElement, positions: Float32Array, isCancelle
 
   const graph = new Graph(div, config)
   try {
-    // Device init is async; step()/getPointPositions() are no-ops until it resolves.
     await graph.ready
     if (isCancelled()) return null
     graph.setPointPositions(positions)
     graph.render()
-    // Kill the internal rAF loop so it doesn't compete with our manual stepping.
-    // (private at the type level, present at runtime)
-    const stopFrames = (): void => (graph as unknown as { stopFrames: () => void }).stopFrames()
-    stopFrames()
     graph.start(1)
-    stopFrames()
 
     // Wait until positions are actually uploaded and readable before timing.
     let ready = false
     for (let attempt = 0; attempt < 120 && !ready; attempt += 1) {
-      ready = graph.getPointPositions().length > 0
+      ready = (await graph.getPointPositionsAsync()).length > 0
       if (!ready) await nextFrame()
       if (isCancelled()) return null
     }
@@ -78,11 +72,11 @@ const timeSize = async (div: HTMLDivElement, positions: Float32Array, isCancelle
     if (!ready) throw new Error(`positions for ${positions.length / 2} points never became readable`)
 
     for (let i = 0; i < WARMUP_STEPS; i += 1) graph.step()
-    graph.getPointPositions() // flush warmup
+    await graph.getPointPositionsAsync()
 
     const t0 = performance.now()
     for (let i = 0; i < MEASURE_STEPS; i += 1) graph.step()
-    graph.getPointPositions() // flush — forces all queued GPU steps to complete
+    await graph.getPointPositionsAsync()
     const t1 = performance.now()
 
     return (t1 - t0) / MEASURE_STEPS

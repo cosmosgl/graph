@@ -8,6 +8,8 @@ what actions will and will not be tolerated.
 
 ## Our Development Process
 We use Storybook to simplify the development process. You can start it by running `pnpm run storybook` in the root directory.
+
+For the WebGPU migration, run `pnpm run storybook:webgpu` in a second terminal. The WebGL preview uses port 6006 and the WebGPU preview uses 6007. Open **Examples → Get Started → Manual step** in both and advance gravity once. Point 0 stays pinned while point 1 and the link move. Each preview compiles the same story files against its own Graph entry. With both running, `node scripts/check-storybook-pair.mjs` checks rendered pixels, picks, the gravity step and Quick Start in Chrome. The WebGPU static preview builds with `pnpm run build:storybook:webgpu`.
 If you've added a new feature, changed the configuration or public methods, please add a new example with its source code to Storybook if applicable and suggest changes to the docs.
 For non-trivial changes, consider adding a short note in `history/` to capture **why** the change happened.
 Use `history/README.md` for guidance, `history/PROMPT.md` to draft it with any LLM, or run the repo's `/history <why>` skill in Codex/Claude Code to let it gather context and write the file automatically. For follow-up commits that extend a topic that already has an entry, use `/history --update` to revise the latest entry in place.

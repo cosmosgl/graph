@@ -29,6 +29,7 @@ import styleRaw from './style.css?raw'
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Integrations',
   parameters: {
+    requiresWebGLDeck: true,
     controls: {
       disable: true,
     },

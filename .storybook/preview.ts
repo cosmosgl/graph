@@ -24,6 +24,17 @@ import './style.css';
 // read by the same parser and must stay inline for the same reason; 'Camera' is
 // listed ahead of its stories so the section lands in place once it exists.
 const preview: Preview = {
+  decorators: [
+    (story, context) => {
+      if (document.querySelector('#cosmos-preview-build')?.getAttribute('data-engine') === 'WebGPU' &&
+        context.parameters['requiresWebGLDeck']) {
+        const message = document.createElement('p');
+        message.textContent = 'These examples use Deck 9 and its luma 9 device. The WebGPU Graph uses luma 10. The Deck examples will run here once both packages share a compatible device.';
+        return message;
+      }
+      return story();
+    },
+  ],
   parameters: {
     layout: 'fullscreen',
     options: {

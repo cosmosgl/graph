@@ -6,3 +6,4 @@ yarn.lock
 .eslintcache
 *storybook.log
 storybook-static
+storybook-static-webgpu
