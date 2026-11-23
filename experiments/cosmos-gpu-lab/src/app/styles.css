@@ -2255,8 +2255,36 @@ button[data-action="play"][aria-pressed="true"] {
 .case-header, .case-recorded-summary { display: grid; gap: var(--space-2); }
 .reading-document > .case-header h1 { margin: 0; }
 .case-topic-link { justify-self: start; padding-block: var(--space-1); color: var(--accent); text-underline-offset: 3px; }
-.case-meta,
-#doc-automated-cases .prose > p:first-child { color: var(--text-secondary); font-size: var(--type-meta); }
+.case-meta { color: var(--text-secondary); font-size: var(--type-meta); }
+.live-checks { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--control-border); }
+.live-checks h2 { margin: 0 0 12px; font-size: var(--type-subsection); font-weight: 500; }
+.live-checks h3 { margin: 22px 0 8px; font-size: var(--type-body); font-weight: 600; }
+.live-checks-header { color: var(--text-secondary); font-size: var(--type-meta); }
+.live-checks-header button {
+  display: inline; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--accent);
+  font: inherit; text-decoration: underline; text-underline-offset: 3px;
+}
+.live-checks-header button:is(:hover, :active):not(:disabled) { background: transparent; color: var(--accent-hover); }
+.live-checks-header [role="status"]:not(:empty) { display: inline-block; margin-inline-start: .5em; }
+.live-checks-header:has(button:disabled) [role="status"] { display: block; margin-inline-start: 0; }
+.live-checks > p { margin: 12px 0; }
+.live-check-table { overflow-x: auto; }
+.live-check-table table { width: 100%; border-collapse: collapse; font-size: var(--type-body); }
+.live-check-table :is(th, td) { padding: 9px 8px; border-bottom: 1px solid var(--control-border); vertical-align: top; text-align: left; }
+.live-check-table th { background: var(--control-bg); font-size: var(--type-meta); font-weight: 500; }
+.live-check-table td + td { font-size: var(--type-meta); }
+.live-check-table td:first-child { width: 57%; }
+.live-check-table [data-status="passed"] { color: #b3d5fa; }
+.live-check-table [data-status="failed"], .live-check-detail { color: #ffac9f; }
+.live-check-detail { margin: 4px 0 0; overflow-wrap: anywhere; font-size: var(--type-meta); }
+@media (max-width: 480px) {
+  .live-checks-header { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .live-checks-header [role="status"], .live-checks-header::after { grid-area: 2 / 1; overflow-wrap: anywhere; }
+  .live-checks-header [role="status"]:not(:empty) { margin-inline-start: 0; }
+  .live-checks-header[data-status-reserve]::after { content: attr(data-status-reserve); visibility: hidden; }
+  .live-check-table :is(th, td) { padding: 7px 4px; }
+  .live-check-table td:first-child { width: auto; }
+}
 .case-recorded-summary p { margin: 0; }
 .case-question { font-weight: 500; }
 .case-recorded-summary > .readiness-badge { justify-self: start; }

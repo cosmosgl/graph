@@ -1,8 +1,11 @@
 import { createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { createSelectionWebGL, createSelectionWebGPU } from './backend'
+import { createLiveChecks } from '../../runtime/live-checks'
+import { createSelectionWebGL, createSelectionWebGPU, type SelectionBackend } from './backend'
+import { selectionEnvironmentLabel } from './case'
 import { pointAt, type Camera, type Pair, type Query } from './reference'
+import { runSelectionTrial, selectionGroups } from './suite'
 
 const width = 320
 const height = 204
@@ -69,13 +72,53 @@ function position (event: PointerEvent, box: DOMRect): Pair {
   return [(event.clientX - box.left) * width / box.width, (event.clientY - box.top) * height / box.height]
 }
 
+type Backends = { gl: SelectionBackend; gpu: SelectionBackend; runtimeLabel: string }
+
+async function createBackends (scope: ReturnType<typeof resourceScope>): Promise<Backends> {
+  if (!navigator.gpu) throw new Error('WebGPU is unavailable in this browser.')
+  const glDevice = scope.own(await createDevice('webgl', document.createElement('canvas'), false))
+  const gl = scope.own(createSelectionWebGL(glDevice))
+  const gpuDevice = scope.own(await createDevice('webgpu', document.createElement('canvas'), false))
+  const gpu = scope.own(await createSelectionWebGPU(gpuDevice))
+  const { renderer, vendor, gpuArchitecture, fallback } = gpuDevice.info
+  const adapter = renderer || [vendor, gpuArchitecture].filter(Boolean).join(' ') || 'unidentified adapter'
+  return { gl, gpu, runtimeLabel: `WebGPU: ${adapter}${fallback ? ' (fallback)' : ''}` }
+}
+
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   const scope = resourceScope()
+  let backends: Backends | undefined
+  let unavailableReason: string | undefined
+  try { backends = await createBackends(scope) } catch (error) {
+    scope.destroy()
+    unavailableReason = `Live comparison unavailable. ${error instanceof Error ? error.message : String(error)}`
+  }
+  let pending = 0
+  let disposed = false
+  const finishRequest = (): void => {
+    pending--
+    if (disposed && !pending) scope.destroy()
+  }
+  const checks = createLiveChecks({
+    sectionId: 'doc-automated-cases',
+    recordedLabel: 'Recorded (M3)',
+    recordedEnvironment: selectionEnvironmentLabel,
+    ruleNote: 'A check passes when WebGL and WebGPU return the point IDs expected by the CPU calculation in the same order.',
+    groups: selectionGroups,
+    unavailableReason,
+    runtimeLabel: backends?.runtimeLabel,
+    async runCheck (id) {
+      if (!backends) throw new Error(unavailableReason)
+      pending++
+      try { return await runSelectionTrial(id, backends.gl, backends.gpu) } finally { finishRequest() }
+    },
+  })
+  if (!backends) {
+    host.replaceChildren(checks.element)
+    return { destroy: checks.destroy }
+  }
   try {
-    const glDevice = scope.own(await createDevice('webgl', document.createElement('canvas'), false))
-    const gl = scope.own(createSelectionWebGL(glDevice))
-    const gpuDevice = scope.own(await createDevice('webgpu', document.createElement('canvas'), false))
-    const gpu = scope.own(await createSelectionWebGPU(gpuDevice))
+    const { gl, gpu } = backends
 
     host.innerHTML = `<div class="choice-control selection-tools" role="group" aria-label="Selection tool">
       <div class="choice-options"><button type="button" data-tool="rect">Rectangle</button>
@@ -83,8 +126,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       <div class="backend-panels selection-preview">${['WebGL', 'WebGPU'].map(name =>
     `<div class="backend-panel"><strong>${name}</strong><canvas aria-label="${name} selection preview"></canvas></div>`).join('')}</div>
       <p role="status"></p>
-      <p class="case-meta">The rectangle catches dots whose bounding boxes touch it. The lasso checks their centers.
-      After <a href="https://github.com/cosmosgl/graph/pull/296">PR #296</a> merges, update both to count any overlap with the dot itself.</p>`
+      <p class="case-meta">The rectangle includes dots whose bounding boxes touch it. The lasso checks their centers.</p>`
     const canvases = Array.from(host.querySelectorAll('canvas'))
     const buttons = host.querySelectorAll<HTMLButtonElement>('button[data-tool]')
     const status = host.querySelector<HTMLElement>('[role="status"]')!
@@ -93,8 +135,6 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     let ids = [new Set<number>(), new Set<number>()]
     let drag: { pointer: number; canvas: HTMLCanvasElement; start: Pair } | undefined
     let revision = 0
-    let pending = 0
-    let disposed = false
 
     const render = (): void => canvases.forEach((canvas, i) => draw(canvas, query, ids[i], ids[1 - i]))
     const compare = async (): Promise<void> => {
@@ -116,8 +156,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       } catch (error) {
         if (request === revision) status.textContent = `Selection failed: ${String(error)}`
       } finally {
-        pending--
-        if (disposed && !pending) scope.destroy()
+        finishRequest()
       }
     }
     const cancelDrag = (): void => {
@@ -175,15 +214,17 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         if (drag?.pointer === event.pointerId && drag.canvas === canvas) choose(tool)
       }
     }
+    host.append(checks.element)
     choose(tool)
     return {
-      pause (): void { if (drag) choose(tool) },
+      pause (): void { checks.stop(); if (drag) choose(tool) },
       destroy (): void {
+        checks.destroy()
         disposed = true
         revision++
         cancelDrag()
         if (!pending) scope.destroy()
       },
     }
-  } catch (error) { scope.destroy(); throw error }
+  } catch (error) { checks.destroy(); scope.destroy(); throw error }
 }

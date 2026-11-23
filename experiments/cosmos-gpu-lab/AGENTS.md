@@ -30,6 +30,15 @@ bookkeeping, and parked experiments out of the migration suite.
 - **Prefer interactive previews for visual and pointer behavior.** For selection,
   picking or rendering parity, show the same input on WebGL and WebGPU. Keep
   the automated GPU test as the pass/fail check.
+- **Offer in-page checks only for fast, deterministic parity suites.** When an
+  experiment has a small correctness suite (under ~1 s), you may share its
+  cases between the Vitest file and the page using `src/runtime/live-checks.ts`
+  so visitors can verify them on their own GPU. Show two columns — the recorded
+  baseline and `This GPU` (filled on click) — with one **run on this GPU**
+  button that reads **stop** during a run. Omit per-row buttons and JSON export.
+  Keep the table readable when WebGPU is unavailable, do not retrofit stress tests or timing
+  benchmarks, and treat in-page runs as a live sanity check rather than formal
+  evidence; committed Vitest runs remain the official record.
 - **Write Lab pages for readers.** For committed correctness tests, list the cases
   and outcomes. Omit the run date from these summaries. A short hardware note
   or link to the test source is optional.

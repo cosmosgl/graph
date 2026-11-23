@@ -1,3 +1,4 @@
+import { selectionCase } from '../../experiments/selection/case'
 import type { CaseReadiness } from './types'
 
 // Each summary refers to the named case and its recorded inputs; it is not a
@@ -83,16 +84,17 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Test unplanned loss and complete host state',
   },
   'selection/shape-selection': {
-    badge: 'Automated checks passed',
+    badge: 'Isolated checks passed',
     tone: 'pass',
-    finding: 'In 19 automated cases, WebGL and WebGPU selected the exact points predicted by an independent calculation on the CPU.',
+    finding: selectionCase.recorded.conclusion,
     area: 'Integration',
-    status: 'Production lasso untested',
+    status: 'Production WebGPU selection unverified',
     evidence: [
       { tone: 'pass', text: '19 isolated queries matched' },
-      { tone: 'unknown', text: 'Production lasso wiring open' },
+      { tone: 'warn', text: 'On replay, production WebGL and WebGPU agreed on both lasso edge points. The CPU reference placed each on the opposite side.' },
     ],
-    next: 'Connect production selection and check larger queries',
+    next: 'After PR #296 merges, match its footprint rules for both tools and replay the two lasso edge cases. ' +
+      'Verify selected IDs and time to highlight through the production WebGPU Graph API on the moving million-point YouTube graph.',
   },
   'integrated-webgpu/tracked-positions': {
     badge: 'Positions matched',

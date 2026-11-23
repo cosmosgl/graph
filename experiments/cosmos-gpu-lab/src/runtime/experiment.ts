@@ -2,6 +2,7 @@ import { validationContractMarkdown } from './validation'
 import type { AgentFindings } from './agent-findings'
 import type { StudyRecord } from './study-record'
 import type { ResultChart } from './result-chart'
+import type { LiveCheckGroup } from './live-checks'
 export type ExperimentInstance = {
   // Stop playback/sweeps at a safe boundary without discarding the current run.
   pause?: () => void;
@@ -48,7 +49,9 @@ export type ReportPage = {
   load: () => Promise<ExperimentReport>;
 }
 
-export type ExperimentPage = MarkdownPage | ReportPage
+// This evidence is rendered by the experiment with its own GPU resources.
+export type LiveChecksPage = { kind: 'live-checks'; id: string; title: string; load: () => Promise<readonly LiveCheckGroup[]> }
+export type ExperimentPage = MarkdownPage | ReportPage | LiveChecksPage
 
 // A case has one question and its own bounded evidence. The files that retain
 // detailed research remain attached to the experiment, not copied into the UI.

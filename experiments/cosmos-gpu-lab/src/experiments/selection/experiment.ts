@@ -1,4 +1,5 @@
 import { defineExperiment } from '../../runtime/experiment'
+import type { LiveCheckGroup } from '../../runtime/live-checks'
 import { selectionCase } from './case'
 
 export const experiment = defineExperiment({
@@ -13,9 +14,9 @@ export const experiment = defineExperiment({
   cases: [selectionCase],
   create: async host => (await import('./view')).createView(host),
   pages: [{
-    kind: 'markdown',
+    kind: 'live-checks',
     id: 'automated-cases',
     title: 'Automated test results',
-    load: async (): Promise<string> => (await import('./automated-cases.md?raw')).default,
+    load: async (): Promise<LiveCheckGroup[]> => (await import('./suite')).selectionGroups,
   }],
 })

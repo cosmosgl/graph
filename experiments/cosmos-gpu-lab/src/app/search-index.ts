@@ -172,12 +172,15 @@ function experimentEntries (experiment: ExperimentDefinition): SearchEntry[] {
     }
     if (item.recorded) {
       const finding = item.recorded
+      const evidence = experiment.headerContent === 'question-only' && experiment.showRecordedSummary === false ? finding.evidence[0] : undefined
       results.push(entry({
         key: `${experiment.id}/${item.id}/finding`,
         title: item.title,
         kind: 'Recorded finding',
         context: experiment.title,
-        href: experimentSectionHref(experiment.id, experiment.singlePage ? 'recorded-findings' : findingSection(item)),
+        href: evidence
+          ? experimentHref(experiment.id, evidence.page, evidence.section)
+          : experimentSectionHref(experiment.id, experiment.singlePage ? 'recorded-findings' : findingSection(item)),
         experimentId: experiment.id,
         caseId: item.id,
         text: publicText([finding.conclusion, finding.scope, finding.limits, finding.date,
@@ -281,6 +284,19 @@ export async function buildSearchIndex (): Promise<SearchIndex> {
   })
   for (const experiment of experiments) {
     for (const page of caseEvidencePages(experiment)) {
+      if (page.kind === 'live-checks') {
+        jobs.push(page.load().then(groups => groups.map(group => ({
+          key: `${experiment.id}/${page.id}/${headingSlug(group.heading)}`,
+          kind: 'Evidence',
+          title: page.title,
+          heading: group.heading,
+          context: experiment.title,
+          experimentId: experiment.id,
+          href: experimentHref(experiment.id, page.id, headingSlug(group.heading)),
+          text: group.items.map(item => `${item.title}. ${item.description} ${item.recorded}.`).join(' '),
+        }))))
+        continue
+      }
       if (page.kind !== 'markdown') continue
       jobs.push((async (): Promise<SearchEntry[]> => indexMarkdown(await page.load(), {
         key: `${experiment.id}/document/${page.id}`,

@@ -21,6 +21,10 @@ struct Style { color: vec4f, size: vec4f }
 @group(0) @binding(3) var<storage, read_write> selected: array<u32>;
 @group(0) @binding(4) var<storage, read> styles: array<Style>;
 
+// A fresh output buffer contains zero, so every in-range invocation must write one of these flags.
+const SELECTED = 1u;
+const UNSELECTED = 2u;
+
 fn inRect(center: vec2f, resolvedSize: f32) -> bool {
   let size = resolvedSize * selection.sizeScale;
   if (size <= 0.0) { return false; }
@@ -51,15 +55,17 @@ fn inPolygon(center: vec2f) -> bool {
 fn main(@builtin(global_invocation_id) id: vec3u) {
   if (id.x >= selection.pointCount) { return; }
   let point = points[id.x];
-  selected[id.x] = 0u;
-  if (point.w > 0.5) { return; }
+  if (point.w > 0.5) {
+    selected[id.x] = UNSELECTED;
+    return;
+  }
   let normalized = (point.xy - selection.origin) * (2.0 / selection.viewport);
   let center = normalized * selection.zoom + selection.translation;
   if (selection.usePolygon != 0u) {
-    selected[id.x] = select(0u, 1u, inPolygon(center));
+    selected[id.x] = select(UNSELECTED, SELECTED, inPolygon(center));
   } else {
     var size = point.z;
     if (selection.useStyles != 0u) { size = styles[id.x].size.x; }
-    selected[id.x] = select(0u, 1u, inRect(center, size));
+    selected[id.x] = select(UNSELECTED, SELECTED, inRect(center, size));
   }
 }

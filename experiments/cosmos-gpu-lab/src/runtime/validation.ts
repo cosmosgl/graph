@@ -100,8 +100,8 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: selectionCase.question,
     reference: selectionCase.reference,
     acceptance: 'The recorded checks require exact ordered ID agreement across WebGL, WebGPU and the CPU reference.',
-    coverage: 'Fixed edge cases and a 257-point fixture with pan, zoom and irregular polygon boundaries.',
-    limits: 'The demo uses stationary points. Production pointer wiring, arbitrary near-edge rounding and large-query cost remain open.',
+    coverage: selectionCase.recorded.scope,
+    limits: selectionCase.recorded.limits,
   },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',

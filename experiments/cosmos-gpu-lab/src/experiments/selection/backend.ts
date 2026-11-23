@@ -13,8 +13,8 @@ import type { Camera, Pair, Point, Query } from './reference'
 import source from './selection.wgsl?raw'
 
 type Select = (points: Point[], camera: Camera, query: Query) => Promise<number[]>
-type Backend = { select: Select; destroy(): void }
-type WebGPUBackend = Backend & {
+export type SelectionBackend = { select: Select; destroy(): void }
+type WebGPUBackend = SelectionBackend & {
   selectResident(positions: PositionSource, styles: Buffer, camera: Camera, query: Query): Promise<number[]>;
 }
 
@@ -26,9 +26,16 @@ function pathForGpu ({ viewport }: Camera, path: Pair[]): Pair[] {
   return path.map(([x, y]) => [x, viewport[1] - y])
 }
 
-function indices (mask: ArrayLike<number>, count: number, stride = 1): number[] {
+function selectedIndices (mask: ArrayLike<number>, count: number, api: 'WebGL' | 'WebGPU'): number[] {
+  const stride = api === 'WebGL' ? 4 : 1
+  // WebGL writes 0 or 1 to the red channel. WebGPU reserves its buffer's initial zero for unwritten flags.
+  const unselected = api === 'WebGL' ? 0 : 2
   const results: number[] = []
-  for (let i = 0; i < count; i++) if (mask[i * stride] === 1) results.push(i)
+  for (let i = 0; i < count; i++) {
+    const flag = mask[i * stride]
+    if (flag === 1) results.push(i)
+    else if (flag !== unselected) throw new Error(`${api} returned invalid selection flag ${flag} for point ${i}`)
+  }
   return results
 }
 
@@ -60,9 +67,7 @@ export async function createSelectionWebGPU (device: Device): Promise<WebGPUBack
           points: positions.buffer,
           path: own(upload(device, Float32Array.from(path))),
           selection: own(upload(device, params, Buffer.UNIFORM)),
-          selected: styles
-            ? own(device.createBuffer({ byteLength: count * 4, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-            : own(upload(device, new Uint32Array(count).fill(2))),
+          selected: own(device.createBuffer({ byteLength: count * 4, usage: Buffer.STORAGE | Buffer.COPY_SRC })),
           styles: styles ?? dummyStyles,
         }
         const pass = device.beginComputePass()
@@ -70,8 +75,7 @@ export async function createSelectionWebGPU (device: Device): Promise<WebGPUBack
         device.submit()
         const bytes = await bindings.selected.readAsync(0, count * 4)
         const mask = new Uint32Array(bytes.buffer, bytes.byteOffset, count)
-        if (mask.some(value => value !== 0 && value !== 1)) throw new Error('WebGPU left a selection flag unwritten')
-        return indices(mask, count)
+        return selectedIndices(mask, count, 'WebGPU')
       } finally { request.destroy() }
     }
     return {
@@ -89,7 +93,7 @@ export async function createSelectionWebGPU (device: Device): Promise<WebGPUBack
   } catch (error) { scope.destroy(); throw error }
 }
 
-export function createSelectionWebGL (device: Device): Backend {
+export function createSelectionWebGL (device: Device): SelectionBackend {
   const scope = resourceScope(); const own = scope.own
   try {
     if (!device.isTextureFormatRenderable('rgba32float')) throw new Error('RGBA32F rendering unavailable')
@@ -169,8 +173,7 @@ export function createSelectionWebGL (device: Device): Backend {
           const pass = device.beginRenderPass({ framebuffer, clearColor: [0.5, 0, 0, 0], clearDepth: false })
           try { model.draw(pass) } finally { pass.end() }
           const rgba = device.readPixelsToArrayWebGL(framebuffer) as Float32Array
-          if (points.some((_, i) => rgba[i * 4] !== 0 && rgba[i * 4] !== 1)) throw new Error('WebGL left a selection flag unwritten')
-          return indices(rgba, points.length, 4)
+          return selectedIndices(rgba, points.length, 'WebGL')
         } finally { passScope.destroy() }
       },
       destroy: scope.destroy,

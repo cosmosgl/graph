@@ -86,6 +86,7 @@ function moveReferences (wrapper: HTMLElement, page: ExperimentPage, references:
 async function renderArticle (
   parent: HTMLElement, references: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary, page: ExperimentPage
 ): Promise<void> {
+  if (page.kind === 'live-checks') return
   const wrapper = document.createElement('section'); wrapper.className = 'experiment-article'
   wrapper.id = articleSectionId(page.id); wrapper.dataset.documentId = page.id
   wrapper.dataset.articleTitle = page.title === 'Overview' ? 'Concept and pipeline' : page.title

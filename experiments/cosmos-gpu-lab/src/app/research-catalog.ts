@@ -1,10 +1,12 @@
 import { selectionCase } from '../experiments/selection/case'
 import { validationContracts } from '../runtime/validation'
+import { readinessFor } from './readiness'
 import type { ResearchSummary } from './research'
 
 // Editorial summaries of existing documents, not verdicts inferred from a run.
 // Empty investigations mean no recorded measurement matrix is published here.
 export function additionalResearch (reviewed: string): Record<string, ResearchSummary> {
+  const [selectionEvidence] = selectionCase.recorded.evidence
   const entry = (id: string, details: Omit<ResearchSummary, 'question' | 'reviewed' | 'scope' | 'reproduce'> &
     Partial<Pick<ResearchSummary, 'scope' | 'reproduce' | 'reviewed'>>): ResearchSummary => ({
     question: validationContracts[id].question,
@@ -323,14 +325,15 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [],
     }),
     selection: entry('selection', {
-      conclusion: 'All 19 queries returned the same ordered IDs, including two empty results handled before GPU dispatch.',
-      reviewed: '2026-11-19',
+      conclusion: selectionCase.recorded.conclusion,
+      reviewed: selectionCase.recorded.date,
       variant: 'Production WebGL selection shaders, WebGPU selection compute kernel, and independent CPU reference',
       comparison: selectionCase.reference,
+      evidence: selectionEvidence.page,
       method: 'validation-contract',
       reproduce: 'Choose Rectangle or Lasso and drag on either preview.',
-      next: 'After PR #296 merges, check footprint overlap for both tools.',
-      investigations: [],
+      next: readinessFor('selection', selectionCase).next,
+      investigations: [{ page: selectionEvidence.page, state: 'Current evidence', description: selectionCase.recorded.scope }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +

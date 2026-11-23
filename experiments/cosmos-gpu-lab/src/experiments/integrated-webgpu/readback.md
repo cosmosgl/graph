@@ -226,7 +226,32 @@ LAB_NATIVE_VISIBLE=1 VITE_LAB_RESIDENT_READBACK=1 \
   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/million-graph/resident-readback.test.ts
 ```
 
+### Which points differ at a lasso edge?
+
+Replaying each captured point alone in Chrome 157 on Apple Metal 3 reproduced
+both disagreements. The production WebGL shader and both WebGPU selection paths
+agreed on each point. The CPU reference classified each center on the opposite
+side of the edge.
+
+| Captured point | Distance to edge (CSS pixels) | WebGL | WebGPU | CPU |
+| --- | ---: | --- | --- | --- |
+| Dense graph, ID 487769 | 0.00000098 | Selected | Selected | Outside |
+| Hub graph, ID 396707 | 0.00002343 | Outside | Outside | Selected |
+
 ## Reproduce
+
+For the isolated lasso replay, use world centers `[2904.85693359375, -124.65457153320312]`
+(dense) and `[3559.733154296875, -62.88345718383789]` (hub), each present with size 5.
+The reconstructed camera projects both centers to the exact screen coordinates in the capture.
+Its origin is `[0.20263671875, 0.90283203125]`, zoom is `0.06270151756146213`,
+translation is zero, and the viewport is 961 × 541 CSS pixels at DPR 2.
+The polygon vertices below are in top-left CSS coordinates.
+
+```text
+[[641.1321505668996, 270.5566089384625], [671.1321505668996, 245.5566089384625],
+ [707.1321505668996, 255.5566089384625], [701.1321505668996, 288.5566089384625],
+ [674.1321505668996, 282.5566089384625]]
+```
 
 Use the native adapter in visible Chrome. Set a unique `LAB_ARTIFACT_RUN`,
 `LAB_SOURCE_REVISION` and `LAB_SOURCE_SNAPSHOT`.

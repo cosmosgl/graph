@@ -165,7 +165,7 @@ function removeReproductionInstructions (host: HTMLElement): void {
 export async function renderEvidenceContent (
   target: HTMLElement, experiment: ExperimentDefinition, page: ExperimentPage
 ): Promise<void> {
-  if (!isReaderPage(experiment, page)) return
+  if (page.kind === 'live-checks' || !isReaderPage(experiment, page)) return
   const connected = target.isConnected
   // Load into a detached container so a cancelled navigation cannot leave table observers behind.
   const content = document.createElement('div')
@@ -219,12 +219,14 @@ function mountCaseEvidence (recorded: HTMLElement, experiment: ExperimentDefinit
   }
   const primaryEvidence = experiment.initialEvidence === 'first-recorded' ? startingCase(experiment).recorded?.evidence[0]?.page : undefined
   for (const page of caseEvidencePages(experiment)) {
+    if (page.kind === 'live-checks') continue
     if (primaryEvidence && page.id !== primaryEvidence) continue
     add(page)().catch(() => {})
   }
   return async (section): Promise<string | undefined> => {
     const page = evidencePageAt(experiment, section)
     if (!page || !isReaderPage(experiment, page)) return undefined
+    if (page.kind === 'live-checks') return articleSectionId(page.id)
     await add(page)()
     return articleSectionId(page.id)
   }
