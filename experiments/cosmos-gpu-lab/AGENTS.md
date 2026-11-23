@@ -41,7 +41,9 @@ bookkeeping, and parked experiments out of the migration suite.
   evidence; committed Vitest runs remain the official record.
 - **Write Lab pages for readers.** For committed correctness tests, list the cases
   and outcomes. Omit the run date from these summaries. A short hardware note
-  or link to the test source is optional.
+  or link to the test source is optional. Name exact units (drawing-buffer, CSS
+  or device pixels) matching the canvas setup, and note when a demo shader or
+  fixture simplifies production Cosmos.
   Put replay instructions in `agent-recipe.md`. Keep CLI flags, local `captures/`
   paths, snapshot hashes and dependency inventories in the runbook or run record.
 - **Collapsible sections are forbidden on every Lab page.** Put settings, explanations, results,
@@ -55,7 +57,8 @@ bookkeeping, and parked experiments out of the migration suite.
 - **Link directly to sections.** Use `#/experiment?section=<id>` and keep links
   near the relevant content. Preserve the live view, settings, and results
   when readers jump within a case. Honor query parameters on links that switch
-  modes.
+  modes. When removing or renaming a doc page, redirect its old `doc-<id>`
+  section in `src/app/experiment-route.ts`.
 - **Chart results that benefit from a visual.** Give each mini chart one clear
   takeaway, direct labels, units, and the recorded conditions. Use the recorded
   values and a shared zero baseline for comparable bars. Show steps or phases
@@ -79,6 +82,9 @@ bookkeeping, and parked experiments out of the migration suite.
 - **Keep reruns steady.** Give temporary progress messages a fixed place so
   the controls and renders stay in position. Check the live page at narrow and
   wide widths.
+- **Isolate preview failures.** Catch device creation, upload, and render errors
+  per backend, release the failed backend before clearing it, and report
+  unavailability in that panel without blocking the other backend.
 
 ## Running studies
 

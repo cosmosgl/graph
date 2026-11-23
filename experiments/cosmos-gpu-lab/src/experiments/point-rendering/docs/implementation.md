@@ -1,35 +1,25 @@
 # Implementation
 
-## Shared input contract
+## Shared input
 
-The experiment creates two flat arrays:
-
-```text
-positions = [x0, y0, x1, y1, ...]
-colors    = [r0, g0, b0, a0, r1, g1, b1, a1, ...]
-```
-
-Positions are already in clip space so camera transforms do not obscure the primitive comparison.
-The WebGL backend binds the arrays as vertex attributes. The WebGPU backend keeps them in two
-read-only storage buffers and uses `instance_index` as the point index.
+Both renderers receive clip-space `positions` (`[x, y, ...]`) and RGBA `colors` (`[r, g, b, a, ...]`).
+WebGL binds them as vertex attributes. WebGPU reads them from storage buffers indexed by `instance_index`.
 
 ## WebGL point sprite
-
-The vertex shader submits one position and selects the rasterized square's diameter:
 
 ```glsl
 gl_Position = vec4(position, 0.0, 1.0);
 gl_PointSize = pointDiameter;
 ```
 
-The fragment shader converts the supplied `[0, 1]` point coordinate into a `[-1, 1]` circle
-coordinate. `fwidth` estimates the screen-space derivative so `smoothstep` produces a narrow
-antialiasing ramp rather than a hard, jagged discard.
+The fragment shader maps `gl_PointCoord` from `[0, 1]` to `[-1, 1]` and uses
+`fwidth(length(local))` to set the width of the fade just inside the edge. At small diameters, that fade can dim
+much of the disc. Production Cosmos centers its smoothing ramp on the edge and measures it in device pixels.
 
 ## WebGPU instanced quad
 
-The luma `RenderKernel.draw` uses `vertexCount: 6` and `instanceCount: pointCount`. `vertex_index` chooses one of six compile-time quad
-corners while `instance_index` chooses the point:
+`RenderKernel.draw` submits six vertices per point. Each vertex offsets one corner from the point’s
+center, using `pixelToClip` to convert drawing-buffer pixels to clip space on each axis.
 
 ```wgsl
 let corner = QUAD[vertexIndex];
@@ -43,25 +33,17 @@ output.position = vec4f(
 output.local = corner;
 ```
 
-Multiplying by `pixelToClip` makes the diameter screen-space and aspect-correct: one pixel in X
-and one pixel in Y are converted independently. The local corner becomes the fragment shader's
-circle coordinate, replacing `gl_PointCoord`.
+- **Y orientation.** The quad’s `local.y` increases upward. WebGL’s `gl_PointCoord.y` increases
+  downward. Flipping Y preserves a circle’s radius but mirrors a directional image.
+- **Viewport clipping.** All centers in this demo lie inside the viewport. For a wide point centered
+  past a side edge, the [WebGL clipping rule](https://registry.khronos.org/webgl/specs/latest/1.0/#:~:text=Wide%20point%20primitive%20clipping)
+  allows the sprite to disappear or remain partly visible. WebGPU clips each triangle individually.
 
-## Blending
+## Blending and resources
 
-Both pipelines use source-alpha compositing:
+Source-alpha blending mixes the point color with the color already drawn, using the point’s alpha
+multiplied by edge coverage. Differences in rasterization and derivative estimates can affect edge pixels.
 
-```text
-output.rgb = source.rgb × source.alpha + destination.rgb × (1 − source.alpha)
-```
-
-The shader also multiplies alpha by geometric coverage at the edge. Small differences between the
-two panels may still appear because WebGL and WebGPU can choose different rasterization and
-derivative details.
-
-## Resource lifetime
-
-WebGL uses `Model`, vertex buffers and a `UniformStore` uniform block. WebGPU uses `RenderKernel`,
-storage buffers and a uniform buffer. Changing diameter updates uniforms only. WebGL replaces its
-vertex buffers when data changes; WebGPU writes into capacity-checked buffers. Both retain their
-pipelines. Completion measurements use luma fences. No native handles or GPU commands are used.
+Dragging the diameter slider updates a uniform and redraws the circles. Regenerating the layout or
+changing the point count replaces WebGL’s vertex buffers and rewrites WebGPU’s preallocated storage
+buffers. Both renderers reuse their pipelines.

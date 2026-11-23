@@ -11,7 +11,6 @@ const shared: Guidance = {
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match authored routes and control attributes. */
 const guidance: Record<string, Guidance> = {
   'center-mass': {},
-  'point-rendering': { count: 'Number of circles drawn by each backend.', diameter: 'Circle diameter in CSS pixels; the same size is sent to both renderers.' },
   'point-styling': {
     fixture: 'Shapes, overlaps and edge cases have different acceptance scope.',
     zoom: 'Camera scale shared by rendering and picking.',
@@ -104,7 +103,7 @@ const guidance: Record<string, Guidance> = {
   },
   'performance-lab': {
     workload: 'An isolated render or reduction workload, not full Cosmos frame rate.',
-    diameter: 'Circle diameter in CSS pixels; larger circles increase fragment work.',
+    diameter: 'Circle diameter in drawing-buffer pixels. Larger circles increase fragment work.',
     preset: 'Warmups and measured samples. Setup is excluded from sampled iterations.',
   },
   'precision-diagnostics': {

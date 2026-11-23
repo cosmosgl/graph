@@ -4,11 +4,14 @@ export const cases: ExperimentCase[] = [{
   id: 'circle-comparison',
   title: 'Compare circle rendering',
   kind: 'demonstrate',
-  question: 'How do WebGL and WebGPU draw the same circles?',
-  description: 'The two panels draw the same 1,024 points: WebGL uses point sprites and WebGPU uses quads.',
+  question: 'How does WebGPU draw a circle using triangles?',
+  description: 'WebGL draws one sprite per point. WebGPU builds a square from two triangles per point.',
   tryIt: 'Compare the two panels, then change the point diameter or regenerate the layout.',
   reference: 'Both panels receive the same positions, colors and circle diameter.',
-  acceptance: 'This is a visual comparison; it does not calculate pixel differences or test picking.',
+  acceptance: 'Inspect the circle geometry visually. The point shapes and picking experiments check production pixels and IDs.',
   recorded: null,
-  evidence: [{ label: 'How the comparison works', page: 'case-method' }],
+  evidence: [
+    { label: 'Where the circle edge comes from', page: 'case-method' },
+    { label: 'Implementation', page: 'implementation' },
+  ],
 }]

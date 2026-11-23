@@ -1,16 +1,11 @@
-# How the circle comparison works
+# Where the circle edge comes from
 
-Both panels use the same positions, colors, canvas size and circle diameter.
-Each backend makes one draw call.
+WebGL starts with a square point sprite. WebGPU builds the same square from two triangles.
+Both demo shaders use each pixel’s distance from the center to fade the edge into a circle.
+Production Cosmos uses a different smoothing rule.
 
-| | WebGL | WebGPU |
-| --- | --- | --- |
-| Geometry | One point sprite per circle | One quad made of six vertices per circle |
-| Circle coordinates | Supplied by the point-sprite pipeline | Supplied by the quad's vertices |
-| Edge | Fragment distance and derivative-based coverage | The same intended coverage rule |
+The diameter is measured in the 480 × 340 drawing buffer. If the page displays a preview at half
+that width, a 14-pixel circle appears about 7 CSS pixels wide.
 
-WebGPU's portable point primitive does not provide the wide programmable point
-sprite used here, so this example expands each point into a quad instead.
-
-This is a visual comparison. It does not measure pixel parity or test other
-shapes, images, picking, transitions or full application behavior.
+This demo compares the geometry by eye. For measured results, see [point shapes](#/point-shapes)
+for edge pixels and [point picking](#/point-picking) for the IDs returned where shapes overlap.

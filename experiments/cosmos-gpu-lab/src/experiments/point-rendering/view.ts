@@ -1,213 +1,111 @@
-import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
-import type { PointRenderBackend, PointRenderData } from './backend'
+import type { PointRenderBackend } from './backend'
 import { createPointData, POINT_COUNTS } from './point-data'
 import { createWebGLPointRenderer } from './webgl/backend'
 import { createWebGPUPointRenderer } from './webgpu/backend'
 
-type BackendSlot = {
-  id: 'webgl' | 'webgpu';
+const previews = [
+  { name: 'WebGL', primitive: 'Point sprites', verticesPerPoint: 1, create: createWebGLPointRenderer },
+  { name: 'WebGPU', primitive: 'Instanced quads', verticesPerPoint: 6, create: createWebGPUPointRenderer },
+]
+
+type PreviewSlot = typeof previews[number] & {
+  canvas: HTMLCanvasElement;
+  status: HTMLElement;
   backend?: PointRenderBackend;
 }
 
-function element<T extends HTMLElement> (host: ParentNode, selector: string): T {
-  const found = host.querySelector<T>(selector)
-  if (!found) throw new Error(`Missing ${selector}`)
-  return found
-}
-
-function setStatus (
-  host: HTMLElement,
-  slot: BackendSlot,
-  message: string,
-  failed = false
-): void {
-  const status = element<HTMLElement>(host, `[data-status="${slot.id}"]`)
-  status.textContent = message
-  status.classList.toggle('failed', failed)
-}
-
-function showBackendError (host: HTMLElement, slot: BackendSlot, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
-  setStatus(host, slot, 'Unavailable', true)
-  const canvas = element<HTMLCanvasElement>(host, `[data-canvas="${slot.id}"]`)
-  canvas.insertAdjacentHTML('afterend', '<p class="canvas-error"></p>')
-  const errorOutput = canvas.nextElementSibling
-  if (errorOutput) errorOutput.textContent = message
-}
-
-export async function createPointRenderingExperiment (
-  host: HTMLElement
-): Promise<ExperimentInstance> {
-  const countOptions = POINT_COUNTS.map(count =>
-    `<option value="${count}" ${count === 1024 ? 'selected' : ''}>${count.toLocaleString('en-US')}</option>`
-  ).join('')
-
-  let runError: string | undefined
-  host.innerHTML = `
-    <section class="point-rendering-demo">
-      <div
-      data-run-part="configuration" class="scale-toolbar point-toolbar">
-        <label>
-          Points
-          <select data-control="count">${countOptions}</select>
-        </label>
-        <label class="range-control">
-          Diameter <output data-output="diameter">14 px</output>
-          <input data-control="diameter" type="range" min="2" max="40" step="1" value="14">
-        </label>
-        <div class="controls">
-          <button data-action="regenerate" type="button"
-      data-run-action="primary">Regenerate layout</button>
-        </div>
-      </div>
-
-      <section
-      data-run-part="results" class="summary" aria-live="polite">
-        <span>Shared input <strong data-output="count">1,024 points</strong></span>
-        <span>Position + color data <strong data-output="bytes">24 KiB</strong></span>
-        <span>Draw calls <strong>1 per backend</strong></span>
-      </section>
-
-      <section
-      data-run-part="visualization" class="backend-panels point-render-panels">
-        <article class="backend-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Cosmos/WebGL approach</p>
-              <h2>Point sprite</h2>
-            </div>
-            <span data-status="webgl" class="status">Starting…</span>
-          </div>
-          <canvas data-canvas="webgl" width="480" height="340"></canvas>
-          <dl>
-            <div><dt>Primitive</dt><dd>point-list</dd></div>
-            <div><dt>Submitted</dt><dd data-output="webgl-vertices">1,024 vertices</dd></div>
-            <div><dt>Circle coordinates</dt><dd>gl_PointCoord</dd></div>
-          </dl>
-        </article>
-
-        <article class="backend-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">WebGPU approach</p>
-              <h2>Instanced quad</h2>
-            </div>
-            <span data-status="webgpu" class="status">Starting…</span>
-          </div>
-          <canvas data-canvas="webgpu" width="480" height="340"></canvas>
-          <dl>
-            <div><dt>Primitive</dt><dd>triangle-list</dd></div>
-            <div><dt>Submitted</dt><dd data-output="webgpu-vertices">6,144 vertices (6 × 1,024)</dd></div>
-            <div><dt>Circle coordinates</dt><dd>vertex varying</dd></div>
-          </dl>
-        </article>
-      </section>
-
-      <p class="demo-note"
-      data-run-part="explanation">
-        Both canvases receive identical positions, colors and CSS-pixel diameter. The WebGL
-        shader uses the point-sprite path used by Cosmos today; WebGPU expands each instance
-        into two triangles because portable wide points are not available.
-      </p>
-    </section>
-  `
-
-  const countSelect = element<HTMLSelectElement>(host, '[data-control="count"]')
-  const diameterInput = element<HTMLInputElement>(host, '[data-control="diameter"]')
-  const regenerateButton = element<HTMLButtonElement>(host, '[data-action="regenerate"]')
-  const slots: BackendSlot[] = [{ id: 'webgl' }, { id: 'webgpu' }]
-  let data: PointRenderData = createPointData(1024, 0)
+export async function createPointRenderingExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   let phase = 0
-  const renderErrors = new Set<string>()
-  let destroyed = false
+  let data = createPointData(1024, phase)
+  const counts = POINT_COUNTS.map(count =>
+    `<button type="button" data-count="${count}" aria-pressed="${count === data.count}">${count.toLocaleString('en-US')}</button>`
+  ).join('')
+  host.innerHTML = `<div class="choice-controls point-toolbar">
+    <div class="choice-control" role="group" aria-labelledby="circle-count-label">
+      <span id="circle-count-label" class="choice-label">Points</span>
+      <div class="choice-options">${counts}</div>
+    </div>
+    <div class="choice-control">
+      <label class="choice-label" for="circle-diameter">Diameter</label>
+      <div class="range-control">
+        <input id="circle-diameter" type="range" min="2" max="40" step="1" value="14">
+        <output for="circle-diameter">14 buffer px</output>
+      </div>
+    </div>
+    <button type="button" data-regenerate>Regenerate layout</button>
+  </div>
+  <div class="backend-panels point-render-panels">${previews.map(({ name, primitive }) =>
+    `<section class="backend-panel"><strong>${name} · ${primitive}</strong>
+      <canvas width="480" height="340" aria-label="${name} circle preview"></canvas>
+      <p class="case-meta" role="status" aria-label="${name} preview status">Starting…</p></section>`
+  ).join('')}</div>`
 
-  const updateMetrics = (): void => {
-    const bytes = data.positions.byteLength + data.colors.byteLength
-    const pointNoun = data.count === 1 ? 'point' : 'points'
-    const vertexNoun = data.count === 1 ? 'vertex' : 'vertices'
-    element<HTMLElement>(host, '[data-output="count"]').textContent =
-      `${data.count.toLocaleString('en-US')} ${pointNoun}`
-    element<HTMLElement>(host, '[data-output="bytes"]').textContent =
-      `${(bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB`
-    element<HTMLElement>(host, '[data-output="webgl-vertices"]').textContent =
-      `${data.count.toLocaleString('en-US')} ${vertexNoun}`
-    element<HTMLElement>(host, '[data-output="webgpu-vertices"]').textContent =
-      `${(data.count * 6).toLocaleString('en-US')} vertices (6 × ${data.count.toLocaleString('en-US')})`
-  }
-
-  const render = (): void => {
-    const diameter = Number(diameterInput.value)
-    element<HTMLOutputElement>(host, '[data-output="diameter"]').value = `${diameter} px`
-    for (const slot of slots) {
-      if (!slot.backend) continue
-      try {
-        slot.backend.render(diameter)
-      } catch (error) {
-        runError = String(error); renderErrors.add(slot.id)
-        slot.backend.destroy()
-        slot.backend = undefined
-        showBackendError(host, slot, error)
-      }
-    }
-  }
-
-  const setData = (): void => {
-    updateMetrics()
-    for (const slot of slots) slot.backend?.setData(data)
-    render()
-  }
-
-  countSelect.addEventListener('change', () => {
-    data = createPointData(Number(countSelect.value), phase)
-    setData()
-  })
-  diameterInput.addEventListener('input', render)
-  regenerateButton.addEventListener('click', () => {
-    phase += 1
-    data = createPointData(data.count, phase)
-    setData()
-  })
-
-  const constructors: Array<{
-    slot: BackendSlot;
-    create: () => Promise<PointRenderBackend>;
-  }> = [
-    {
-      slot: slots[0],
-      create: () => createWebGLPointRenderer(element(host, '[data-canvas="webgl"]')),
-    },
-    {
-      slot: slots[1],
-      create: () => createWebGPUPointRenderer(element(host, '[data-canvas="webgpu"]')),
-    },
-  ]
-
-  mountRunLayout(host, () => summarizeRun(
-    slots.some(s => s.backend) ? 'Ready' : 'Preparing',
-    [],
-    'Visual comparison only: pixel parity and picking are not tested here.',
-    slots.filter(s => renderErrors.has(s.id)).map(s => s.id),
-    runError), { experiment: 'point-rendering', showChecks: false, devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
-  await Promise.all(constructors.map(async ({ slot, create }) => {
-    try {
-      slot.backend = await create()
-      slot.backend.setData(data)
-      slot.backend.render(Number(diameterInput.value))
-      setStatus(host, slot, 'Ready')
-    } catch (error) {
-      runError = String(error); renderErrors.add(slot.id)
-      showBackendError(host, slot, error)
-    }
+  const diameter = host.querySelector<HTMLInputElement>('#circle-diameter')!
+  const diameterOutput = host.querySelector<HTMLOutputElement>('output')!
+  const buttons = host.querySelectorAll<HTMLButtonElement>('button[data-count]')
+  const panels = host.querySelectorAll<HTMLElement>('.backend-panel')
+  const slots: PreviewSlot[] = previews.map((preview, index) => ({
+    ...preview,
+    canvas: panels[index].querySelector('canvas')!,
+    status: panels[index].querySelector<HTMLElement>('[role="status"]')!,
   }))
-  updateMetrics()
+
+  function release (slot: PreviewSlot): void {
+    const backend = slot.backend
+    slot.backend = undefined
+    try { backend?.destroy() } catch (error) { console.warn(`Could not release the ${slot.name} preview`, error) }
+  }
+
+  function unavailable (slot: PreviewSlot, error: unknown): void {
+    release(slot)
+    slot.canvas.hidden = true
+    slot.status.className = 'canvas-error'
+    slot.status.textContent = error instanceof Error ? error.message : String(error)
+  }
+
+  function draw (slot: PreviewSlot, upload: boolean): void {
+    if (!slot.backend) return
+    try {
+      if (upload) slot.backend.setData(data)
+      slot.backend.render(Number(diameter.value))
+      if (upload) {
+        const vertices = data.count * slot.verticesPerPoint
+        slot.status.textContent = `${vertices.toLocaleString('en-US')} ${vertices === 1 ? 'vertex' : 'vertices'} in one draw call`
+      }
+    } catch (error) {
+      unavailable(slot, error)
+    }
+  }
+
+  const updatePoints = (count: number): void => {
+    data = createPointData(count, phase)
+    for (const button of buttons) button.setAttribute('aria-pressed', String(Number(button.dataset.count) === count))
+    for (const slot of slots) draw(slot, true)
+  }
+  for (const button of buttons) button.onclick = (): void => updatePoints(Number(button.dataset.count))
+  diameter.oninput = (): void => {
+    diameterOutput.value = `${diameter.value} buffer px`
+    for (const slot of slots) draw(slot, false)
+  }
+  host.querySelector<HTMLButtonElement>('[data-regenerate]')!.onclick = (): void => {
+    phase++
+    updatePoints(data.count)
+  }
+
+  await Promise.all(slots.map(async slot => {
+    try {
+      slot.backend = await slot.create(slot.canvas)
+    } catch (error) {
+      unavailable(slot, error)
+      return
+    }
+    draw(slot, true)
+  }))
 
   return {
     destroy (): void {
-      disposeRunLayout(host)
-      if (destroyed) return
-      destroyed = true
-      for (const slot of slots) slot.backend?.destroy()
+      for (const slot of slots) release(slot)
       host.replaceChildren()
     },
   }

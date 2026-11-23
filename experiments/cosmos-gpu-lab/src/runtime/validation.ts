@@ -164,8 +164,8 @@ export const validationContracts: Record<string, ValidationContract> = {
   },
   'point-rendering': {
     question: 'How do WebGL sprites and WebGPU quads draw the selected circles?',
-    reference: 'Matched visual comparison of positions, colors, camera and circle size; no CPU force oracle.',
-    acceptance: 'Inspect geometry, coverage and blending; full production visual acceptance is not established.',
+    reference: 'Both previews draw the same clip-space positions, colors and diameter in drawing-buffer pixels.',
+    acceptance: 'Visual inspection of the geometry, edge coverage and blending in the demo shaders.',
     coverage: 'Selected rendering controls and available backends.',
     limits: 'Other shapes, full styling, picking and interaction remain separate.',
   },

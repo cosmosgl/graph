@@ -5,8 +5,12 @@ import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'point-rendering',
   title: 'Circle point rendering',
-  summary: 'Compare Cosmos WebGL point sprites with portable WebGPU instanced quads.',
+  summary: 'See how a WebGL point sprite and a WebGPU quad draw a circle.',
   tags: ['rendering', 'points', 'WebGL', 'WebGPU'],
+  presentation: 'demo',
+  headerContent: 'question-only',
+  showRecordedSummary: false,
+  howItWorks: false,
   cases,
   create: async (host): Promise<ExperimentInstance> => {
     const module = await import('./view')
@@ -16,26 +20,15 @@ export const experiment = defineExperiment({
     {
       kind: 'markdown',
       id: 'case-method',
-      title: 'Circle comparison method',
+      title: 'Where the circle edge comes from',
+      relatedExperiments: ['point-shapes', 'point-picking'],
       load: async (): Promise<string> => (await import('./docs/case-method.md?raw')).default,
-    },
-    {
-      kind: 'markdown',
-      id: 'overview',
-      title: 'Overview',
-      load: async (): Promise<string> => (await import('./docs/overview.md?raw')).default,
     },
     {
       kind: 'markdown',
       id: 'implementation',
       title: 'Implementation',
       load: async (): Promise<string> => (await import('./docs/implementation.md?raw')).default,
-    },
-    {
-      kind: 'markdown',
-      id: 'limitations',
-      title: 'Next steps',
-      load: async (): Promise<string> => (await import('./docs/limitations.md?raw')).default,
     },
   ],
 })
