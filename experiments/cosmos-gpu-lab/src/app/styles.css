@@ -1098,8 +1098,22 @@ button[data-action="play"][aria-pressed="true"] {
 }
 
 .grid-canvas {
-  image-rendering: auto;
+  display: block;
+  width: min(100%, 23rem);
+  justify-self: center;
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  background: var(--background-secondary, #20242b);
 }
+.grid-readouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+.grid-readouts dt { font-size: var(--type-meta); color: var(--text-secondary); }
+.grid-readouts dd { margin: 0; font-variant-numeric: tabular-nums; }
+
 
 .scale-metrics strong.metric-error {
   color: var(--danger-text);

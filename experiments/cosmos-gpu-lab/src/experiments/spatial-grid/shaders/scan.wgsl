@@ -20,7 +20,11 @@ fn main(
 ) {
   let index = globalId.x;
   let lane = localId.x;
-  scratch[lane] = select(0u, inputValues[index], index < parameters.count);
+  var value = 0u;
+  if (index < parameters.count) {
+    value = inputValues[index];
+  }
+  scratch[lane] = value;
   workgroupBarrier();
 
   var stride = 1u;

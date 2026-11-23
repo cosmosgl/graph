@@ -2,14 +2,15 @@ import { headingSlug } from '../app/sections'
 
 export type CheckStatus = 'passed' | 'failed'
 export type CheckResult = { status: CheckStatus; detail?: string }
-export type LiveCheckItem = { id: string; title: string; description: string; recorded: CheckStatus }
+export type LiveCheckItem = { id: string; title: string; description: string; recorded: CheckStatus; recordedOnly?: boolean }
 export type LiveCheckGroup = { heading: string; items: readonly LiveCheckItem[] }
 export type LiveChecksOptions = {
   recordedLabel: string;
   recordedEnvironment: string;
   ruleNote: string;
   groups: readonly LiveCheckGroup[];
-  runCheck: (id: string) => Promise<CheckResult>;
+  showDuration?: boolean;
+  runCheck: (id: string, signal: AbortSignal) => Promise<CheckResult>;
   runtimeLabel?: string;
   unavailableReason?: string;
   sectionId?: string;
@@ -23,7 +24,9 @@ function textElement<K extends keyof HTMLElementTagNameMap> (tag: K, text: strin
 
 const labels = { passed: 'Passed', failed: 'Failed' }
 
-export function createLiveChecks (options: LiveChecksOptions): { element: HTMLElement; stop(): void; disable(reason: string): void; destroy(): void } {
+export function createLiveChecks (options: LiveChecksOptions): {
+  element: HTMLElement; stop(): void; enable(): void; disable(reason: string): void; destroy(): void;
+} {
   const element = document.createElement('section')
   element.className = 'live-checks'
   if (options.sectionId) element.id = options.sectionId
@@ -41,7 +44,7 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   element.append(textElement('h2', 'Automated test results'), header, textElement('p', options.ruleNote))
 
   const rows = new Map<string, { cell: HTMLTableCellElement; detail: HTMLElement; result?: CheckResult }>()
-  let runId = 0
+  let controller: AbortController | undefined
   let active: string | undefined
   let destroyed = false
   const listeners = new AbortController()
@@ -71,7 +74,7 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   }
 
   function stop (): void {
-    runId++
+    controller?.abort()
     if (active === undefined) return
     const previous = active
     active = undefined
@@ -83,7 +86,9 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   async function start (): Promise<void> {
     if (destroyed || runAll.disabled) return
     stop()
-    const current = runId
+    controller = new AbortController()
+    const { signal } = controller
+    const startTime = performance.now()
     for (const [id, row] of rows) {
       row.result = undefined
       render(id)
@@ -96,16 +101,17 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
       render(id)
       status.textContent = `Running ${index} of ${rows.size}…`
       let result: CheckResult
-      try { result = await options.runCheck(id) } catch (error) {
+      try { result = await options.runCheck(id, signal) } catch (error) {
         result = { status: 'failed', detail: error instanceof Error ? error.message : String(error) }
       }
-      if (current !== runId) return
+      if (signal.aborted) return
       row.result = result
       active = undefined
       render(id)
     }
     runAll.textContent = runLabel
-    status.textContent = summary()
+    const duration = options.showDuration ? ` Total time ${((performance.now() - startTime) / 1000).toFixed(2)} s.` : ''
+    status.textContent = summary() + duration
   }
 
   for (const group of options.groups) {
@@ -129,8 +135,8 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
       description.append(textElement('strong', `${item.title}. `), item.description, detail)
       row.insertCell().textContent = labels[item.recorded]
       const cell = row.insertCell()
-      cell.textContent = '—'
-      rows.set(item.id, { cell, detail })
+      cell.textContent = item.recordedOnly ? 'Recorded only' : '—'
+      if (!item.recordedOnly) rows.set(item.id, { cell, detail })
     }
     const scroll = document.createElement('div')
     scroll.className = 'live-check-table'
@@ -138,10 +144,8 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
     element.append(heading, scroll)
   }
 
-  if (!runAll.disabled) {
-    // Size the narrow status row for a stopped run with both passes and failures.
-    header.dataset.statusReserve = `Stopped. ${formatSummary(rows.size, rows.size)}`
-  }
+  const reserve = `Stopped. ${formatSummary(rows.size, rows.size)}${options.showDuration ? ' Total time 99.99 s.' : ''}`
+  if (!runAll.disabled) header.dataset.statusReserve = reserve
   runAll.addEventListener('click', () => {
     if (active !== undefined) stop()
     else start()
@@ -149,6 +153,12 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   return {
     element,
     stop,
+    enable (): void {
+      if (!runAll.disabled) return
+      runAll.disabled = false
+      header.dataset.statusReserve = reserve
+      status.textContent = ''
+    },
     disable (reason): void {
       stop()
       runAll.disabled = true

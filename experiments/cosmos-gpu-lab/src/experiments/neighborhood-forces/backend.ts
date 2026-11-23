@@ -89,7 +89,7 @@ export async function createNeighborhoodBackend (
     uniforms.write(new Uint8Array(parameterData))
 
     if (method === 'grid') {
-      grid = createSpatialGridResources(device, positions, count, gridSize)
+      grid = await createSpatialGridResources(device, positions, count, gridSize)
     }
     const forceLayout = bindingLayout([
       ['positions', 'read-only-storage'], ['forces', 'storage'], ['params', 'uniform'],

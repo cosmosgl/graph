@@ -19,9 +19,9 @@ fn main(@builtin(global_invocation_id) globalId: vec3<u32>) {
   let normalized = clamp(
     positions[pointIndex] * 0.5 + vec2<f32>(0.5),
     vec2<f32>(0.0),
-    vec2<f32>(0.99999994),
+    vec2<f32>(1.0),
   );
-  let cell = vec2<u32>(normalized * f32(parameters.gridSize));
+  let cell = min(vec2<u32>(normalized * f32(parameters.gridSize)), vec2<u32>(parameters.gridSize - 1u));
   let cellIndex = cell.y * parameters.gridSize + cell.x;
   atomicAdd(&cellCounts[cellIndex], 1u);
 }

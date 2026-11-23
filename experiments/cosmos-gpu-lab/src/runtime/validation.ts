@@ -159,7 +159,7 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Does count/scan/scatter include each input point exactly once in the correct cell?',
     reference: 'Structural reference: independent CPU histogram, exclusive scan and membership checks.',
     acceptance: 'Exact counts, offsets and membership; order within each cell may differ.',
-    coverage: 'Exhaustive validation of the selected build, outside timing.',
+    coverage: 'Exhaustive checks outside timing. Recorded fixtures cover uniform, diagonal and clustered points, including a repeated three-level scan.',
     limits: 'Correct cell membership does not establish the accuracy of a force using that grid.',
   },
   'point-rendering': {

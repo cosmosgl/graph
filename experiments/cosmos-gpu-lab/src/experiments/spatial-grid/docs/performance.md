@@ -1,6 +1,6 @@
 # Performance interpretation
 
-The benchmark records six synchronized samples after one warm-up. Each sample batches several full
+The benchmark records six synchronized samples after one warm-up. Before each timer starts, the builder waits for earlier GPU work to finish. Each sample batches one or more full
 builds in a single command encoder and reports the normalized build duration. The batch size falls as
 point count increases.
 
@@ -29,7 +29,4 @@ Test the same point count against several grid sizes and distributions:
 The fastest builder is not automatically the fastest simulation. The useful choice minimizes the
 combined cost of **grid construction plus neighbour traversal**.
 
-## Next benchmark
-
-The next experiment should consume this exact CSR representation for a nine-cell neighbour query.
-That will reveal the crossover between grid resolution, build cost and force-evaluation cost.
+[Neighborhood forces](#/neighborhood-forces) measures traversal using these cell ranges.

@@ -30,8 +30,8 @@ reorders their indices into useful groups. It combines several reusable WebGPU p
 
 The heatmap is drawn from the validated readback and is not part of the timed GPU build.
 
-## What is deliberately not included yet
+## Where the index is used
 
-This experiment builds the neighbourhood index but does not calculate a force. The next layer can
-consume `cellOffsets` and `pointIndices` directly, keeping the grid GPU-resident between simulation
-passes.
+[Neighborhood forces](#/neighborhood-forces) visits nearby cell ranges to find candidate points.
+The [resident many-body hierarchy](#/many-body-grid) uses the grouped indices to build its finest cells.
+Both read the index directly on the GPU.

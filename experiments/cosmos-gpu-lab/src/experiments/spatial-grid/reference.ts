@@ -119,7 +119,7 @@ export function validateGrid (
 
   const seen = new Uint8Array(pointCount)
   for (let cell = 0; cell < cellCount; cell += 1) {
-    const end = Math.min(pointCount, offsets[cell] + counts[cell])
+    const end = Math.min(pointCount, offsets[cell + 1])
     for (let cursor = offsets[cell]; cursor < end; cursor += 1) {
       const pointIndex = pointIndices[cursor]
       if (pointIndex >= pointCount || pointCell(positions, pointIndex, gridSize) !== cell) {

@@ -12,7 +12,6 @@ import { readinessBadge, recordedObservations } from './readiness/presentation'
 import { articleSectionId, experimentHref } from './router'
 
 type CaseFrame = {
-  documentView: HTMLElement;
   stage: HTMLElement;
   slot: HTMLElement;
   recorded: HTMLElement;
@@ -246,7 +245,7 @@ function mountComparison (
     const heading = document.createElement('h2'); heading.textContent = 'How it works'
     const content = document.createElement('div')
     renderMarkdown(content, howItWorks.summary, {}, { sectionNavigation: false, tables: false })
-    unlinkOtherExperiments(content, experiment)
+    unlinkOtherExperiments(content, experiment, howItWorks.relatedExperiments)
     section.append(heading, content)
     if (howItWorks.figure) {
       const figure = document.createElement('div')
@@ -347,7 +346,6 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   stage.append(recorded)
   const openEvidence = mountCaseEvidence(recorded, experiment)
   return {
-    documentView,
     stage,
     slot,
     recorded,

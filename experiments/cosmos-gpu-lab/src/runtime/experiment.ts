@@ -97,7 +97,7 @@ export type ExperimentDefinition = {
   cases?: ExperimentCase[];
   caseChooserLabel?: string;
   presentation?: 'demo';
-  howItWorks?: false | { summary: string; figure?: (host: HTMLElement) => void };
+  howItWorks?: false | { summary: string; relatedExperiments?: readonly string[]; figure?: (host: HTMLElement) => void };
   showPeerLinks?: boolean;
   initialEvidence?: 'first-recorded';
   showRecordedSummary?: boolean;

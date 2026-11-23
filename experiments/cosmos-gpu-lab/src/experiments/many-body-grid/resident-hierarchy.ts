@@ -29,7 +29,7 @@ export async function createResidentHierarchy (
   readStructure(): Promise<Structure>;
   readBounds(): Promise<Float32Array>;
   readCellCenters(limit: number): Promise<Float32Array>;
-  readIndex(): ReturnType<ReturnType<typeof createSpatialGridResources>['readback']>;
+  readIndex(): ReturnType<Awaited<ReturnType<typeof createSpatialGridResources>>['readback']>;
   destroy(): void;
 }> {
   if (!Number.isInteger(count) || count < 1 || count > 1000000 || slotCount !== 8) throw new Error('Invalid resident hierarchy size')
@@ -52,7 +52,7 @@ export async function createResidentHierarchy (
       count, l.finest, slotCount, 0, l.offsets[level], l.offsets[level + 1], l.sizes[level + 1], 0,
     ]), Buffer.UNIFORM)))
     const bounds = own(await createGpuBounds(device, count, l.finest, box))
-    const grid = own(createSpatialGridResources(device, [normalized], count, l.finest)); bytes += grid.gridBytes
+    const grid = own(await createSpatialGridResources(device, [normalized], count, l.finest)); bytes += grid.gridBytes
     const normalize = own(await Kernel.createAsync(device, {
       source: normalizeSource,
       shaderLayout: {

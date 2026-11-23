@@ -41,6 +41,11 @@ export function experimentDestination (experiment: ExperimentDefinition, request
     if (section === 'case-comparison' || /^doc-algorithm(?:-|$)/.test(section ?? '')) section = 'run-explanation'
     if (section === 'run-diagnostics') section = 'reduction-benchmark'
   }
+  if (experiment.id === 'spatial-grid') {
+    if (section === 'case-comparison') section = 'run-explanation'
+    if (section === 'run-more-settings') section = 'run-configuration'
+    if (section === 'run-diagnostics') section = 'grid-benchmark'
+  }
   if (experiment.id === 'point-rendering' && /^doc-(?:overview|limitations)(?:-|$)/.test(section ?? '')) section = 'doc-case-method'
   if (experiment.id === 'point-shapes' && section === 'run-results') section = 'doc-automated-cases'
   if (experiment.id === 'point-shapes' && section === 'run-more-settings') section = 'run-configuration'

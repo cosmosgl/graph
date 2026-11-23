@@ -35,7 +35,7 @@ pointIndices 4N bytes
 cell arrays  12C bytes plus 4-byte sentinel
 ```
 
-One million points therefore need roughly 12 MB for the core position/index data. Grid resolution
+One million points therefore need about 11.4 MiB for the core position/index data. Grid resolution
 mostly affects the comparatively small cell arrays; point count dominates memory.
 
 ## Buffer views in a future luma abstraction

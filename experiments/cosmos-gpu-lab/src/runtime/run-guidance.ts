@@ -19,11 +19,6 @@ const guidance: Record<string, Guidance> = {
     scale: 'Choose whether point size grows with camera zoom.',
     order: 'Reverse which overlapping shape is drawn last, keeping IDs stable.',
   },
-  'spatial-grid': {
-    'point-count': 'Every point participates in the grid build and exhaustive validation.',
-    'grid-size': 'Cells along each axis. More cells need larger count and offset buffers.',
-    distribution: 'Changes cell occupancy and contention without changing point count.',
-  },
   'neighborhood-forces': {
     radius: 'Interaction distance in simulation coordinates.',
     density: 'Compress the same input area to increase local neighbor density.',

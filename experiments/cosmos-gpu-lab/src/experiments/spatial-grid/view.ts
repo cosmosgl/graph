@@ -1,392 +1,238 @@
+import { createLiveChecks } from '../../runtime/live-checks'
 import { milliseconds } from '../../runtime/result-format'
-import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
-import {
-  createSpatialGridBackend,
-  formatGridBytes,
-  type SpatialGridBackend,
-} from './backend'
-import {
-  createCpuGridReference,
-  createGridPositions,
-  type CpuGridReference,
-  type GridValidation,
-  type PointDistribution,
-  validateGrid,
-} from './reference'
+import { gridGroups, gridTrials, runGridTrial } from './grid-suite'
+import { gridEnvironment } from './cases'
+import { createSpatialGridBackend, formatGridBytes, GridDeviceUnavailable, type SpatialGridBackend } from './backend'
+import { createCpuGridReference, createGridPositions, validateGrid, type PointDistribution } from './reference'
 
-const POINT_PRESETS = [100_000, 1_000_000, 5_000_000] as const
-const GRID_PRESETS = [32, 64, 128, 256] as const
-const DEFAULT_POINT_COUNT = 100_000
-const DEFAULT_GRID_SIZE = 128
-
-function element<T extends HTMLElement> (host: ParentNode, selector: string): T {
-  const found = host.querySelector<T>(selector)
-  if (!found) throw new Error(`Missing ${selector}`)
-  return found
+function choices (key: string, label: string, options: Array<[string, string]>, selected: string): string {
+  return `<div class="choice-control" role="group" data-control="${key}" aria-label="${label}">
+    <span class="choice-label">${label}</span><div class="choice-options">
+    ${options.map(([value, text]) => `<button type="button" value="${value}" aria-pressed="${value === selected}">${text}</button>`).join('')}
+    </div></div>`
 }
 
-function nextFrame (): Promise<void> {
-  return new Promise(resolve => window.requestAnimationFrame(() => resolve()))
-}
-
-function benchmarkIterations (pointCount: number): number {
-  if (pointCount >= 5_000_000) return 1
-  if (pointCount >= 1_000_000) return 3
-  return 10
-}
-
-function percentile (values: number[], fraction: number): number {
-  const sorted = [...values].sort((left, right) => left - right)
-  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)] ?? 0
-}
-
-function validationLabel (validation: GridValidation): string {
-  if (validation.valid) return 'Exact · every point appears once'
-  return [
-    `${validation.countMismatches} count`,
-    `${validation.offsetMismatches} offset`,
-    `${validation.invalidMemberships} membership`,
-    `${validation.duplicateIndices} duplicate`,
-    `${validation.missingIndices} missing`,
-  ].join(' · ')
-}
-
-function renderHeatmap (
-  canvas: HTMLCanvasElement,
-  reference: CpuGridReference,
-  gridSize: number,
-  pointCount: number,
-  distribution: PointDistribution
-): void {
+function renderHeatmap (canvas: HTMLCanvasElement, counts: Uint32Array, size: number): { occupied: number; maximum: number } {
+  // One image pixel per cell. CSS scales the occupancy map with nearest-neighbor sampling.
+  canvas.width = canvas.height = size
   const context = canvas.getContext('2d')
-  if (!context) return
-  const width = canvas.width
-  const height = canvas.height
-  context.fillStyle = '#20242b'
-  context.fillRect(0, 0, width, height)
-
-  const plotSize = Math.min(height - 54, width - 280)
-  const left = 26
-  const top = 27
-  const cellSize = plotSize / gridSize
-  const scale = Math.log1p(reference.maximumCellLoad)
-  for (let y = 0; y < gridSize; y += 1) {
-    for (let x = 0; x < gridSize; x += 1) {
-      const count = reference.counts[y * gridSize + x]
-      const intensity = scale === 0 ? 0 : Math.log1p(count) / scale
-      const red = Math.round(42 + intensity * 112)
-      const green = Math.round(54 + intensity * 151)
-      const blue = Math.round(68 + intensity * 120)
-      context.fillStyle = `rgb(${red}, ${green}, ${blue})`
-      context.fillRect(
-        left + x * cellSize,
-        top + (gridSize - y - 1) * cellSize,
-        Math.ceil(cellSize),
-        Math.ceil(cellSize)
-      )
+  if (!context) throw new Error('Heatmap canvas unavailable')
+  let maximum = 0
+  let occupied = 0
+  for (const count of counts) {
+    maximum = Math.max(maximum, count)
+    if (count > 0) occupied++
+  }
+  const scale = Math.log1p(maximum)
+  const image = context.createImageData(size, size)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const intensity = scale && Math.log1p(counts[y * size + x]) / scale
+      const pixel = ((size - 1 - y) * size + x) * 4
+      image.data[pixel] = 42 + intensity * 112
+      image.data[pixel + 1] = 54 + intensity * 151
+      image.data[pixel + 2] = 68 + intensity * 120
+      image.data[pixel + 3] = 255
     }
   }
-  context.strokeStyle = '#68717d'
-  context.strokeRect(left - 0.5, top - 0.5, plotSize + 1, plotSize + 1)
-
-  const textLeft = left + plotSize + 28
-  context.fillStyle = '#e4e6e8'
-  context.font = '500 15px system-ui, sans-serif'
-  context.fillText('Cell occupancy', textLeft, top + 12)
-  context.fillStyle = '#9fa5ae'
-  context.font = '12px ui-monospace, monospace'
-  const lines = [
-    `${pointCount.toLocaleString('en-US')} points`,
-    `${gridSize} × ${gridSize} cells`,
-    `${reference.occupiedCells.toLocaleString('en-US')} occupied`,
-    `${reference.maximumCellLoad.toLocaleString('en-US')} max load`,
-    distribution,
-  ]
-  lines.forEach((line, index) => context.fillText(line, textLeft, top + 42 + index * 22))
-
-  const legendTop = top + 180
-  const gradient = context.createLinearGradient(textLeft, 0, textLeft + 170, 0)
-  gradient.addColorStop(0, 'rgb(42, 54, 68)')
-  gradient.addColorStop(1, 'rgb(154, 205, 188)')
-  context.fillStyle = gradient
-  context.fillRect(textLeft, legendTop, 170, 8)
-  context.fillStyle = '#858c96'
-  context.font = '10px ui-monospace, monospace'
-  context.fillText('0', textLeft, legendTop + 23)
-  context.fillText('log(max)', textLeft + 122, legendTop + 23)
+  context.putImageData(image, 0, 0)
+  return { occupied, maximum }
 }
 
-export async function createSpatialGridExperiment (
-  host: HTMLElement
-): Promise<ExperimentInstance> {
-  let runError: string | undefined
+export async function createSpatialGridExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `
-    <section class="spatial-grid-demo">
-      <div
-      data-run-part="configuration" class="scale-toolbar grid-toolbar">
-        <label>
-          <span>Points</span>
-          <select data-control="point-count">
-            ${POINT_PRESETS.map(count => `
-              <option value="${count}" ${count === DEFAULT_POINT_COUNT ? 'selected' : ''}>
-                ${count.toLocaleString('en-US')}
-              </option>
-            `).join('')}
-          </select>
-        </label>
-        <label>
-          <span>Grid</span>
-          <select data-control="grid-size">
-            ${GRID_PRESETS.map(size => `
-              <option value="${size}" ${size === DEFAULT_GRID_SIZE ? 'selected' : ''}>
-                ${size} × ${size}
-              </option>
-            `).join('')}
-          </select>
-        </label>
-        <label>
-          <span>Distribution</span>
-          <select data-control="distribution">
-            <option value="uniform">Uniform</option>
-            <option value="clusters">Eight clusters</option>
-            <option value="diagonal">Diagonal stress case</option>
-          </select>
-        </label>
-        <div class="controls">
-          <button class="button-primary" data-action="build" type="button" disabled
-      data-run-action="primary">Build + validate</button>
-          <button data-action="benchmark" type="button" disabled
-      data-run-action="diagnostic">Benchmark</button>
-        </div>
+    <div class="choice-controls" data-run-part="configuration">
+      ${choices('point-count', 'Points', [['100000', '100k'], ['1000000', '1M'], ['5000000', '5M']], '100000')}
+      ${choices('grid-size', 'Cells per axis', ['32', '64', '128', '256'].map(size => [size, size]), '128')}
+      ${choices('distribution', 'Distribution', [['uniform', 'Uniform'], ['clusters', 'Eight clusters'], ['diagonal', 'Diagonal']], 'uniform')}
+    </div>
+    <div class="reduction-preview" data-run-part="visualization">
+      <canvas class="grid-canvas" width="128" height="128" aria-label="GPU cell occupancy. Brighter cells contain more points."></canvas>
+      <div id="run-results">
+        <output data-output="status"></output>
+        <button type="button" data-action="retry" hidden>Retry</button>
       </div>
-
-      <section class="scale-status" aria-live="polite"
-      data-run-part="metrics">
-        <span data-output="status"
-      data-run-part="status">Creating WebGPU resources…</span>
-        <span data-output="phase">Preparing</span>
-      </section>
-
-      <div class="grid-pipeline" aria-label="Spatial grid build stages">
-        <span>positions</span><b>→</b><span>count</span><b>→</b><span>scan</span><b>→</b>
-        <span>scatter</span><b>→</b><span>CSR grid</span>
+      <p class="reduction-specs" data-output="specs"></p>
+      <dl class="grid-readouts">
+        <div><dt>Occupied cells</dt><dd data-output="occupied">—</dd></div>
+        <div><dt>Peak cell load</dt><dd data-output="maximum">—</dd></div>
+        <div><dt>Build + completion</dt><dd data-output="timing">—</dd></div>
+      </dl>
+      <div class="controls reduction-benchmark" id="grid-benchmark">
+        <button type="button" data-action="benchmark" disabled>Benchmark</button>
+        <output data-output="benchmark"></output>
       </div>
-
-      <canvas class="scale-canvas grid-canvas"
-      data-run-part="visualization" data-output="canvas" width="900" height="440"></canvas>
-
-      <section class="scale-metrics grid-metrics"
-      data-run-part="results">
-        <div><span>Scan hierarchy</span><strong data-output="hierarchy">—</strong></div>
-        <div><span>Position storage</span><strong data-output="positions">—</strong></div>
-        <div><span>Grid storage</span><strong data-output="grid-memory">—</strong></div>
-        <div><span>Occupied cells</span><strong data-output="occupied">—</strong></div>
-        <div><span>Maximum cell load</span><strong data-output="maximum">—</strong></div>
-        <div><span>Correctness</span><strong data-output="validation">—</strong></div>
-        <div><span>Build + completion</span><strong data-output="timing">—</strong></div>
-        <div><span>Steady-state benchmark</span><strong data-output="benchmark">Not run</strong></div>
-      </section>
-
-      <p class="demo-note"
-      data-run-part="explanation">
-        Timed builds keep positions, counts, offsets, cursors and grouped point indices on the GPU.
-        Readback and exhaustive CPU validation happen once after the build and are excluded from the timing.
-      </p>
-    </section>
-  `
-
-  const pointCountSelect = element<HTMLSelectElement>(host, '[data-control="point-count"]')
-  const gridSizeSelect = element<HTMLSelectElement>(host, '[data-control="grid-size"]')
-  const distributionSelect = element<HTMLSelectElement>(host, '[data-control="distribution"]')
-  const buildButton = element<HTMLButtonElement>(host, '[data-action="build"]')
-  const benchmarkButton = element<HTMLButtonElement>(host, '[data-action="benchmark"]')
-  const statusOutput = element<HTMLElement>(host, '[data-output="status"]')
-  const phaseOutput = element<HTMLElement>(host, '[data-output="phase"]')
-  const timingOutput = element<HTMLElement>(host, '[data-output="timing"]')
-  const benchmarkOutput = element<HTMLElement>(host, '[data-output="benchmark"]')
-  const validationOutput = element<HTMLElement>(host, '[data-output="validation"]')
-  const canvas = element<HTMLCanvasElement>(host, '[data-output="canvas"]')
-
+    </div>`
+  const buttons = Array.from(host.querySelectorAll<HTMLButtonElement>('.choice-options button'))
+  const retry = host.querySelector<HTMLButtonElement>('[data-action="retry"]')!
+  const benchmarkButton = host.querySelector<HTMLButtonElement>('[data-action="benchmark"]')!
+  const selected = (key: string): string => host.querySelector<HTMLButtonElement>(`[data-control="${key}"] [aria-pressed="true"]`)!.value
+  const output = (name: string): HTMLElement => host.querySelector<HTMLElement>(`[data-output="${name}"]`)!
+  const status = output('status')
+  const benchmarkOutput = output('benchmark')
+  const canvas = host.querySelector('canvas')!
   let backend: SpatialGridBackend | undefined
-  let positions: Float32Array | undefined
-  let reference: CpuGridReference | undefined
-  let destroyed = false
-  let latestValidation: boolean | undefined
+  let validated = false
+  let benchmarkCancelled = false
   let busy = false
-  let revision = 0
+  let destroyed = false
+  let pending = Promise.resolve()
 
-  const setControlsDisabled = (disabled: boolean): void => {
-    pointCountSelect.disabled = disabled
-    gridSizeSelect.disabled = disabled
-    distributionSelect.disabled = disabled
-    buildButton.disabled = disabled
-    benchmarkButton.disabled = disabled
+  function controls (): void {
+    for (const button of buttons) button.disabled = busy
+    retry.hidden = busy || validated
+    benchmarkButton.disabled = busy || !validated
   }
 
-  const buildAndValidate = async (): Promise<void> => {
-    if (!backend || !positions || !reference || busy || destroyed) return
-    busy = true
-    setControlsDisabled(true)
-    try {
-      statusOutput.textContent = 'Encoding count, hierarchical scan and scatter passes…'
-      phaseOutput.textContent = 'GPU build'
-      await nextFrame()
-      const elapsed = await backend.build()
-      timingOutput.textContent = `${milliseconds(elapsed)} ms`
-
-      statusOutput.textContent = 'Reading the finished CSR grid for exhaustive validation…'
-      phaseOutput.textContent = 'CPU validation'
-      await nextFrame()
-      const grid = await backend.readback()
-      const validation = validateGrid(
-        positions,
-        backend.gridSize,
-        reference,
-        grid.counts,
-        grid.offsets,
-        grid.pointIndices
-      )
-      latestValidation = validation.valid
-      validationOutput.textContent = validationLabel(validation)
-      validationOutput.classList.toggle('metric-error', !validation.valid)
-      renderHeatmap(
-        canvas,
-        reference,
-        backend.gridSize,
-        backend.pointCount,
-        distributionSelect.value as PointDistribution
-      )
-      statusOutput.textContent = validation.valid
-        ? 'GPU grid matches the CPU reference exactly.'
-        : 'Validation found a mismatch; inspect the correctness metric.'
-      phaseOutput.textContent = validation.valid ? 'Ready' : 'Mismatch'
-    } finally {
-      busy = false
-      if (!destroyed) setControlsDisabled(false)
-    }
-  }
-
-  const configure = async (): Promise<void> => {
-    runError = undefined; latestValidation = undefined
-    revision += 1
-    const configurationRevision = revision
-    backend?.destroy()
+  async function release (): Promise<void> {
+    const current = backend
     backend = undefined
-    positions = undefined
-    reference = undefined
-    setControlsDisabled(true)
-    busy = true
-    benchmarkOutput.textContent = 'Not run'
-    validationOutput.textContent = '—'
-    timingOutput.textContent = '—'
-    const pointCount = Number(pointCountSelect.value)
-    const gridSize = Number(gridSizeSelect.value)
-    const distribution = distributionSelect.value as PointDistribution
-    statusOutput.textContent = `Generating ${pointCount.toLocaleString('en-US')} deterministic positions…`
-    phaseOutput.textContent = 'CPU setup'
-    await nextFrame()
-
-    try {
-      const nextPositions = createGridPositions(pointCount, distribution)
-      const nextReference = createCpuGridReference(nextPositions, gridSize)
-      statusOutput.textContent = 'Allocating GPU grid buffers and pipelines…'
-      phaseOutput.textContent = 'GPU setup'
-      await nextFrame()
-      const nextBackend = await createSpatialGridBackend(nextPositions, gridSize)
-      if (destroyed || configurationRevision !== revision) {
-        nextBackend.destroy()
-        return
-      }
-      positions = nextPositions
-      reference = nextReference
-      backend = nextBackend
-      element<HTMLElement>(host, '[data-output="hierarchy"]').textContent =
-        nextBackend.scanHierarchy.map(count => count.toLocaleString('en-US')).join(' → ')
-      element<HTMLElement>(host, '[data-output="positions"]').textContent =
-        formatGridBytes(nextBackend.positionBytes)
-      element<HTMLElement>(host, '[data-output="grid-memory"]').textContent =
-        formatGridBytes(nextBackend.gridBytes)
-      element<HTMLElement>(host, '[data-output="occupied"]').textContent =
-        `${nextReference.occupiedCells.toLocaleString('en-US')} / ${nextBackend.cellCount.toLocaleString('en-US')}`
-      element<HTMLElement>(host, '[data-output="maximum"]').textContent =
-        `${nextReference.maximumCellLoad.toLocaleString('en-US')} points`
-      busy = false
-      await buildAndValidate()
-    } catch (error) {
-      runError = String(error)
-      statusOutput.textContent = error instanceof Error ? error.message : String(error)
-      phaseOutput.textContent = 'Unavailable'
-      busy = false
-      if (!destroyed) {
-        pointCountSelect.disabled = false
-        gridSizeSelect.disabled = false
-        distributionSelect.disabled = false
-      }
+    if (current) {
+      try { await current.waitForIdle() } finally { current.destroy() }
     }
   }
 
-  buildButton.addEventListener('click', () => {
-    buildAndValidate().catch(error => {
-      statusOutput.textContent = error instanceof Error ? error.message : String(error)
-      phaseOutput.textContent = 'Failed'
-    })
-  })
-  benchmarkButton.addEventListener('click', () => {
-    if (!backend || busy || destroyed) return
+  function resetBuild (): void {
+    validated = false
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    for (const key of ['occupied', 'maximum', 'timing']) output(key).textContent = '—'
+    output('specs').textContent = ''
+    benchmarkOutput.textContent = ''
+    status.classList.remove('failed')
+  }
+
+  function perform (work: () => Promise<void>, feedback: HTMLElement): void {
+    if (busy || destroyed) return
+    checks.stop()
     busy = true
-    setControlsDisabled(true)
-    const activeBackend = backend
-    const iterations = benchmarkIterations(activeBackend.pointCount)
+    controls()
+    feedback.classList.remove('failed')
+    pending = pending.then(work).catch(async (error: unknown) => {
+      if (destroyed) return
+      if (error instanceof GridDeviceUnavailable) checks.disable(error.message)
+      if (feedback === status) {
+        resetBuild()
+        await release().catch(() => {})
+        if (destroyed) return
+      }
+      feedback.classList.add('failed')
+      feedback.textContent = error instanceof Error ? error.message : String(error)
+    }).finally(() => {
+      busy = false
+      if (!destroyed) controls()
+    })
+  }
+
+  function build (): void {
+    perform(async () => {
+      if (destroyed) return
+      resetBuild()
+      status.textContent = 'Building grid…'
+      await release()
+      if (destroyed) return
+      const pointCount = Number(selected('point-count'))
+      const gridSize = Number(selected('grid-size'))
+      const positions = createGridPositions(pointCount, selected('distribution') as PointDistribution)
+      const reference = createCpuGridReference(positions, gridSize)
+      backend = await createSpatialGridBackend(positions, gridSize)
+      if (destroyed) return
+      checks.enable()
+      const elapsed = await backend.build()
+      if (destroyed) return
+      status.textContent = 'Checking cell ranges…'
+      const grid = await backend.readback()
+      if (destroyed) return
+      const check = validateGrid(positions, gridSize, reference, grid.counts, grid.offsets, grid.pointIndices)
+      const { occupied, maximum } = renderHeatmap(canvas, grid.counts, gridSize)
+      output('specs').textContent = `Scan ${backend.scanHierarchy.map(n => n.toLocaleString('en-US')).join(' → ')} · ` +
+        `${formatGridBytes(backend.positionBytes)} positions · ${formatGridBytes(backend.gridBytes)} grid`
+      output('occupied').textContent = `${occupied.toLocaleString('en-US')} / ${backend.cellCount.toLocaleString('en-US')}`
+      output('maximum').textContent = `${maximum.toLocaleString('en-US')} points`
+      output('timing').textContent = `${milliseconds(elapsed)} ms`
+      validated = check.valid
+      status.classList.toggle('failed', !validated)
+      status.textContent = validated
+        ? 'Every point appears once in the correct cell.'
+        : `Mismatches: ${check.countMismatches} counts, ${check.offsetMismatches} offsets, ${check.invalidMemberships} memberships, ` +
+        `${check.duplicateIndices} duplicate IDs, ${check.missingIndices} missing IDs.`
+    }, status)
+  }
+
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      const group = button.closest('[role="group"]')!
+      if (button.getAttribute('aria-pressed') === 'true') return
+      for (const option of group.querySelectorAll('button')) option.setAttribute('aria-pressed', String(option === button))
+      build()
+    })
+  }
+  retry.addEventListener('click', build)
+  async function benchmark (): Promise<void> {
+    if (destroyed || benchmarkCancelled || !backend || !validated) return
+    const { pointCount } = backend
+    const iterations = pointCount >= 5_000_000 ? 1 : pointCount >= 1_000_000 ? 3 : 10
+    benchmarkOutput.textContent = 'Warming up…'
+    await backend.benchmark(iterations)
     const samples: number[] = []
-    statusOutput.textContent = `Benchmarking ${iterations} builds per sample…`
-    phaseOutput.textContent = 'Warm-up'
-    activeBackend.benchmark(iterations)
-      .then(async () => {
-        for (let sample = 0; sample < 6; sample += 1) {
-          phaseOutput.textContent = `Sample ${sample + 1} / 6`
-          const result = await activeBackend.benchmark(iterations)
-          samples.push(result.averageMilliseconds)
+    for (let i = 0; i < 6; i++) {
+      if (destroyed || benchmarkCancelled) return
+      benchmarkOutput.textContent = `Sample ${i + 1} of 6…`
+      samples.push((await backend.benchmark(iterations)).averageMilliseconds)
+    }
+    if (destroyed || benchmarkCancelled) return
+    samples.sort((a, b) => a - b)
+    // Nearest-rank percentiles of six per-build samples.
+    benchmarkOutput.textContent = `p50 ${milliseconds(samples[2])} ms · p95 ${milliseconds(samples[5])} ms per build`
+  }
+  benchmarkButton.addEventListener('click', () => {
+    benchmarkCancelled = false
+    perform(benchmark, benchmarkOutput)
+  })
+
+  const checks = createLiveChecks({
+    sectionId: 'doc-validation',
+    recordedEnvironment: gridEnvironment,
+    recordedLabel: 'Recorded',
+    ruleNote: 'Each case checks every cell count, range and point ID against the CPU, including four corner points.',
+    groups: gridGroups,
+    showDuration: true,
+    unavailableReason: navigator.gpu ? undefined : 'WebGPU is unavailable.',
+    runCheck: (id, signal) => {
+      const trial = gridTrials.find(item => item.distribution === id)!
+      const result = pending.then(async () => {
+        try {
+          await runGridTrial(trial, undefined, signal)
+        } catch (error) {
+          if (error instanceof GridDeviceUnavailable && !signal.aborted) {
+            checks.disable(error.message)
+            validated = false
+            controls()
+          }
+          throw error
         }
-        const p50 = percentile(samples, 0.5)
-        const p95 = percentile(samples, 0.95)
-        benchmarkOutput.textContent = `p50 ${milliseconds(p50)} ms · p95 ${milliseconds(p95)} ms`
-        statusOutput.textContent = 'Steady-state benchmark complete.'
-        phaseOutput.textContent = 'Ready'
+        return { status: 'passed' as const }
       })
-      .catch(error => {
-        statusOutput.textContent = error instanceof Error ? error.message : String(error)
-        phaseOutput.textContent = 'Failed'
-      })
-      .finally(() => {
-        busy = false
-        if (!destroyed) setControlsDisabled(false)
-      })
+      pending = result.then(() => {}, () => {})
+      return result
+    },
   })
-
-  pointCountSelect.addEventListener('change', () => { configure().catch(console.error) })
-  gridSizeSelect.addEventListener('change', () => { configure().catch(console.error) })
-  distributionSelect.addEventListener('change', () => { configure().catch(console.error) })
-  mountRunLayout(host, () => summarizeRun(
-    busy ? 'Running' : backend ? 'Ready' : 'Preparing',
-    [latestValidation],
-    'Force accuracy, layout quality and rendering parity.',
-    [],
-    runError,
-    'exhaustive grid builds'), {
-    experiment: 'spatial-grid',
-    devices: () => backend?.info ? [backend.info] : [],
-    secondarySettings: ['[data-control="distribution"]'],
-  })
-  configure().catch(console.error)
-
+  mountRunLayout(host)
+  build()
   return {
+    pageEndSection: checks.element,
+    pause (): void {
+      checks.stop()
+      benchmarkCancelled = true
+      if (busy && benchmarkOutput.textContent) benchmarkOutput.textContent = 'Benchmark interrupted.'
+    },
     destroy (): void {
-      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
-      revision += 1
-      backend?.destroy()
+      checks.destroy()
+      disposeRunLayout(host)
+      pending.then(release).catch(() => {})
       host.replaceChildren()
     },
   }
