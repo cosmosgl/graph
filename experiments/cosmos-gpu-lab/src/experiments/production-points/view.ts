@@ -1,7 +1,7 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { disposeRunLayout, mountRunLayout } from '../../runtime/run-layout'
 import { comparePoints } from './compare'
-import { defaultDiameter, fractionalDiameters, pointCases, pointShapes, pointsViewport } from './fixture'
+import { defaultDiameter, fractionalDiameters, pointCases, pointPlacements, pointShapes, pointsViewport, tieControlDiameter } from './fixture'
 import type { PointsSession } from './frame'
 import './view.css'
 
@@ -17,23 +17,31 @@ type Lane = {
 export function createPointsView (host: HTMLElement, caseId?: string): ExperimentInstance {
   const ratio = caseId === 'dpr-2' ? 2 : 1
   const compactHeadings = ['Aligned', 'Size', 'Position', 'Both']
+  const placementLabels = {
+    standard: '(0.25, 0.375) CSS px',
+    offgrid: '(0.1, 0.4) CSS px',
+    ties: '1/32-device-pixel rounding ties',
+  }
   host.innerHTML = `<div class="scale-toolbar" data-run-part="configuration">
-      <label>Fractional diameter (CSS px)
-        <select data-points-diameter>${fractionalDiameters.map(value => `<option value="${value}">${value}</option>`).join('')}</select>
+      <label>Center offset
+        <select data-points-placement>${pointPlacements.map(id => `<option value="${id}">${placementLabels[id]}</option>`).join('')}</select>
+      </label>
+      <label>Diameter (CSS px)
+        <select data-points-diameter>${fractionalDiameters.map(value => `<option value="${value}">${value}</option>`).join('')}
+          <option value="${tieControlDiameter}" hidden disabled>24 / 22 control</option></select>
       </label>
     </div>
     <button type="button" data-run-action="primary" data-points-reload>Reload</button>
     <div class="points-comparison" data-run-part="visualization">
       <div class="points-comparison-panels"></div>
-      <p class="points-grid-key">The previews show shapes left to right and input cases top to bottom, in table order.</p>
+      <p class="points-grid-key"></p>
       <label class="points-difference-control"><input type="checkbox" data-points-highlight disabled>
         Highlight differing pixels in magenta on WebGPU</label>
     </div>
     <p class="points-comparison-verdict" data-run-part="status" data-points-result></p>
     <div class="points-comparison-table" data-run-part="status">
-      <table><caption>Differing device pixels by shape and fractional input</caption>
-        <thead><tr><th scope="col">Shape</th>${pointCases.map((label, i) => `<th scope="col" aria-label="${label}">
-          <span class="points-heading-full">${label}</span><span class="points-heading-compact">${compactHeadings[i]}</span></th>`).join('')}</tr></thead>
+      <table><caption>Differing device pixels by shape and row</caption>
+        <thead><tr><th scope="col">Shape</th>${pointCases.map(() => '<th scope="col"></th>').join('')}</tr></thead>
         <tbody data-points-counts>${pointShapes.map(shape =>
     `<tr><th scope="row">${shape}</th>${pointCases.map(() => '<td>—</td>').join('')}</tr>`).join('')}</tbody>
       </table>
@@ -43,7 +51,11 @@ export function createPointsView (host: HTMLElement, caseId?: string): Experimen
   panels.style.setProperty('--points-width', `${pointsViewport.width}px`)
   panels.style.setProperty('--points-height', `${pointsViewport.height}px`)
   const reload = host.querySelector<HTMLButtonElement>('[data-points-reload]')!
+  const placement = host.querySelector<HTMLSelectElement>('[data-points-placement]')!
   const diameter = host.querySelector<HTMLSelectElement>('[data-points-diameter]')!
+  const tieControl = diameter.querySelector<HTMLOptionElement>(`option[value="${tieControlDiameter}"]`)!
+  const gridKey = host.querySelector<HTMLElement>('.points-grid-key')!
+  const columnHeadings = host.querySelectorAll<HTMLTableCellElement>('.points-comparison-table thead th:not(:first-child)')
   diameter.value = String(defaultDiameter)
   const highlight = host.querySelector<HTMLInputElement>('[data-points-highlight]')!
   const verdict = host.querySelector<HTMLElement>('[data-points-result]')!
@@ -86,7 +98,9 @@ export function createPointsView (host: HTMLElement, caseId?: string): Experimen
     frame.height = String(pointsViewport.height)
     frame.tabIndex = -1
     frame.inert = true
-    frame.src = new URL(`production-viewer.html?view=points&engine=${lane.engine}&ratio=${ratio}&diameter=${diameter.value}`, document.baseURI).href
+    const url = new URL('production-viewer.html', document.baseURI)
+    url.search = new URLSearchParams({ view: 'points', engine: lane.engine, ratio: String(ratio), diameter: diameter.value, placement: placement.value }).toString()
+    frame.src = url.href
     try {
       await new Promise<void>((resolve, reject) => {
         const abort = (): void => reject(new Error('Point preview closed'))
@@ -110,7 +124,7 @@ export function createPointsView (host: HTMLElement, caseId?: string): Experimen
   function show (): void {
     if (lifetime.signal.aborted) return
     const [gl, gpu] = lanes.map(lane => lane.snapshot)
-    reload.disabled = diameter.disabled = false
+    reload.disabled = diameter.disabled = placement.disabled = false
     if (!gl || !gpu) {
       verdict.textContent = 'Comparison requires both graph snapshots.'
       return
@@ -135,7 +149,7 @@ export function createPointsView (host: HTMLElement, caseId?: string): Experimen
 
   function run (both: boolean): void {
     if (reload.disabled || lifetime.signal.aborted) return
-    reload.disabled = diameter.disabled = highlight.disabled = overlay.hidden = true
+    reload.disabled = diameter.disabled = placement.disabled = highlight.disabled = overlay.hidden = true
     verdict.textContent = 'Comparing both canvases…'
     for (const cell of table.querySelectorAll('td')) cell.textContent = '—'
     // When one backend failed, keep the successful capture visible while retrying the other.
@@ -143,10 +157,27 @@ export function createPointsView (host: HTMLElement, caseId?: string): Experimen
     pending = Promise.all((!both && unavailable.length ? unavailable : lanes).map(load)).then(show)
   }
 
+  function setPlacement (): void {
+    const ties = placement.value === 'ties'
+    if (!ties && diameter.value === String(tieControlDiameter)) diameter.value = String(defaultDiameter)
+    tieControl.hidden = tieControl.disabled = !ties
+    columnHeadings.forEach((heading, i) => {
+      const full = ties ? `Tie row ${i + 1}` : pointCases[i]!
+      const compact = ties ? `Row ${i + 1}` : compactHeadings[i]!
+      heading.setAttribute('aria-label', full)
+      heading.innerHTML = `<span class="points-heading-full">${full}</span><span class="points-heading-compact">${compact}</span>`
+    })
+    gridKey.textContent = ties
+      ? 'Each center falls halfway between two 1/16-device-pixel grid lines on both axes. Each table column reports one preview row.'
+      : 'The upper two rows use integer centers. The lower two apply the selected offset right and down. Rows alternate between 22 px and the selected diameter.'
+    run(true)
+  }
+
   reload.onclick = (): void => run(false)
   diameter.onchange = (): void => run(true)
+  placement.onchange = setPlacement
   highlight.onchange = (): void => { overlay.hidden = !highlight.checked }
-  run(true)
+  setPlacement()
   return {
     destroy (): void {
       lifetime.abort()

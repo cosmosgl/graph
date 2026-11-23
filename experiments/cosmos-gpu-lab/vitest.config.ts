@@ -13,7 +13,7 @@ export default defineConfig({
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_SOURCE_REVISION': JSON.stringify(process.env.LAB_SOURCE_REVISION ?? ''),
     'import.meta.env.LAB_SOURCE_SNAPSHOT': JSON.stringify(process.env.LAB_SOURCE_SNAPSHOT ?? ''),
-    'import.meta.env.LAB_NATIVE_GPU': true,
+    'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_SWIFTSHADER !== '1',
     'import.meta.env.LAB_SCALE_COUNT': Number(process.env.LAB_SCALE_COUNT ?? 0),
     'import.meta.env.LAB_RESIDENT_HIERARCHY_SCALE': process.env.LAB_RESIDENT_HIERARCHY_SCALE === '1',
     'import.meta.env.LAB_RUN_ID': JSON.stringify(process.env.LAB_ARTIFACT_RUN ?? ''),

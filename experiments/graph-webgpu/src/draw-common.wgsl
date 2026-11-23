@@ -14,6 +14,8 @@ struct Params {
   focusRing: vec4f,
   transition: vec4f,       // eased progress, source point count, source link count, max size (CSS)
   shades: vec4f,           // stroke direction, stroke contrast, ring direction, ring contrast
+  pointViewport: vec4f,    // world origin and full CSS viewport, including during 1×1 picking
+  pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

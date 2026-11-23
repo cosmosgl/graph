@@ -294,14 +294,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-points': entry('production-points', {
       reviewed: '2026-11-24',
-      conclusion: 'At both pixel ratios on M3 every RGBA pixel matched across all eight Lab shapes and all four fractional diameters.',
+      conclusion: 'All 26 Points frames matched WebGL byte for byte on both Apple M3 and SwiftShader.',
       variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
       comparison: 'Full native-resolution canvases and differing pixel counts for each shape and condition',
       method: 'method',
       evidence: 'results',
-      next: 'Compare the edge pixels at additional subpixel positions and on other adapters.',
-      reproduce: 'Choose a pixel ratio and highlight the differing pixels.',
-      investigations: [{ page: 'results', state: 'Current evidence', description: 'Native RGBA comparisons for four fractional diameters and both pixel ratios.' }],
+      next: 'Investigate the one-level differences at other M3 sizes and offsets.',
+      reproduce: 'Choose a pixel ratio, center placement and diameter. Use the highlight to locate a difference.',
+      investigations: [{
+        page: 'results', state: 'Current evidence', description: 'Exact counts for all three center presets, both pixel ratios and both adapters.',
+      }],
     }),
     'production-force-collision': entry('production-force-collision', {
       reviewed: '2026-11-24',

@@ -76,8 +76,8 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Do all eight point shapes produce identical pixels in the WebGL and WebGPU Graph packages at pixel ratios 1 and 2?',
     reference: 'The built WebGL Graph, drawing the same point indices, sizes, positions, camera, fill and background as the built WebGPU Graph.',
     acceptance: 'Exact parity requires zero differing RGBA pixels over the complete canvas. Each sample must have the expected opaque center.',
-    coverage: 'All eight shapes at diameters 22, 22.125, 22.3, 22.625 and 22.75 CSS pixels and two center placements at each pixel ratio. ' +
-      'The camera and 264 × 152 CSS pixel viewport stay fixed.',
+    coverage: 'All eight shapes at four fractional CSS diameters. Compare integer centers, CSS offsets (0.25, 0.375) and (0.1, 0.4), ' +
+      'and 32 positions halfway between 1/16-device-pixel grid lines. Include 22 and 24 CSS pixel controls at both ratios in the 264 × 152 CSS pixel viewport.',
     limits: 'The fixture covers static opaque fills and the sampled sizes and centers. It does not exercise strokes, images, rings or picking.',
   },
   'production-force-collision': {

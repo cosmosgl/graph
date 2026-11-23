@@ -431,7 +431,9 @@ export class Graph {
   }
 
   private view (): GraphView {
-    const { screenSize: [width, height], worldOrigin, maxPointSize, hostHoveredPointIndex, hostHoveredLinkIndex } = this.simulation.store
+    const {
+      screenSize: [width, height], worldOrigin, transform, maxPointSize, hostHoveredPointIndex, hostHoveredLinkIndex,
+    } = this.simulation.store
     const { x, y, k } = this.camera.eventTransform
     return {
       width,
@@ -443,6 +445,7 @@ export class Graph {
       hoveredPoint: hostHoveredPointIndex ?? (this.config.renderHoveredPointRing ? this.hoveredPoint : undefined),
       hoveredLink: hostHoveredLinkIndex ?? this.hoveredLink,
       maxPointSize,
+      pointProjection: { origin: worldOrigin, transform: [transform[0], transform[4], transform[6], transform[7]] },
       styleProgress: this.transition.progress,
     }
   }

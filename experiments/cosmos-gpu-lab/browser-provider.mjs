@@ -1,12 +1,16 @@
 import { playwright } from '@vitest/browser-playwright'
 
 export function labBrowser () {
-  // The lab investigates the current machine. Do not force a software adapter.
+  // Native is the default. Opt in to exercise both production packages on SwiftShader.
+  const args = process.env.LAB_DEFAULT_GPU_FLAGS !== '1' ? ['--enable-unsafe-webgpu'] : []
+  if (process.env.LAB_SWIFTSHADER === '1') {
+    args.push('--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader')
+  }
   const residentStudy = process.env.VITE_LAB_RESIDENT_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_REAL_GRAPH === '1' ||
     process.env.VITE_LAB_MOTION_STYLES === '1' || process.env.VITE_LAB_RESIDENT_READBACK === '1'
   const provider = playwright({ launchOptions: {
     channel: 'chrome',
-    args: process.env.LAB_DEFAULT_GPU_FLAGS !== '1' ? ['--enable-unsafe-webgpu'] : [],
+    args,
   }, ...(residentStudy ? { contextOptions: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 } } : {}) })
   const inline = process.env.LAB_INLINE_BROWSER === '1'
   if (inline) {

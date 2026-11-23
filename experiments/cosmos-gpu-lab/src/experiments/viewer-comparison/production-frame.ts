@@ -1,5 +1,5 @@
 import type { Graph } from '../../../../../dist/index.js'
-import { parseDiameter } from '../production-points/fixture'
+import { parseDiameter, parsePlacement } from '../production-points/fixture'
 import { applyComparisonInput, seed, type ComparisonInput } from './comparison-input'
 import { createProduction } from './production'
 import { loadProductionBundle } from './production-bundle'
@@ -59,8 +59,9 @@ if (params.get('view') === 'public-graph') {
   session.catch(() => {})
 } else if (params.get('view') === 'points') {
   const ratio = params.get('ratio') === '2' ? 2 : 1
-  const diameter = parseDiameter(params.get('diameter'))
-  const session = import('../production-points/frame').then(module => module.mountPoints(host, engine, ratio, diameter))
+  const placement = parsePlacement(params.get('placement'))
+  const diameter = parseDiameter(params.get('diameter'), placement)
+  const session = import('../production-points/frame').then(module => module.mountPoints(host, engine, ratio, diameter, placement))
   Object.assign(window, { pointsComparison: session })
   session.catch(() => {})
 } else if (params.get('view') === 'large-comparison') {

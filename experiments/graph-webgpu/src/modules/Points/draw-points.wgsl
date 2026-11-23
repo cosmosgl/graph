@@ -7,6 +7,8 @@ struct Sprite {
   @location(4) @interpolate(flat) ring: vec4f,
   @location(5) @interpolate(flat) spriteRadius: f32,
   @location(6) @interpolate(flat) center: vec2f,
+  @location(7) @interpolate(flat) originAndGradient: vec4f,
+  @location(8) @interpolate(flat) slope: vec4f,
 }
 
 // Subpixel ties round upward in WebGL's lower-left window coordinates.
@@ -50,16 +52,31 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
     let upper = center + out.spriteRadius;
     let origin = snapSpriteEdge(lower, 256.0);
     let span = snapSpriteEdge(upper, 16.0) - snapSpriteEdge(lower, 16.0);
+    if (any(span <= vec2f(0))) { return out; }
+    out.originAndGradient = vec4f(origin, 1.0 / span);
+    out.slope = tileSlope(span);
     let bound = select(origin, origin + span, corner > vec2f(0));
     // WebGL includes the bottom sample on a tie. Place the horizontal quad edge one
     // raster subpixel above the preceding sample to preserve that rule on both triangles.
     let precedingSample = ceil(bound.y - 0.5) - 0.5;
     edge = vec2f(bound.x, precedingSample + 1.0 / 256.0);
-    out.spriteUV = (edge - origin) / span;
+  } else if (swiftShaderPointRaster) {
+    // SwiftShader projects the center and each corner independently onto a 1/16-pixel grid.
+    // The half-pixel offset puts pixel samples at integer coordinates for rasterization.
+    let viewport = params.pointViewport.zw;
+    let halfViewport = viewport * params.camera.w * 0.5;
+    let subpixelScale = halfViewport * 16.0;
+    let subpixelOffset = subpixelScale - 8.0;
+    let normalized = (position.xy - params.pointViewport.xy) * (2.0 / viewport);
+    let ndc = normalized * params.pointProjection.xy + params.pointProjection.zw;
+    let lowerLeft = round(ndc * subpixelScale + subpixelOffset) / 16.0 + 0.5;
+    let windowOrigin = vec2f(0, halfViewport.y * 2.0);
+    out.center = (lowerLeft - windowOrigin) * windowAxes;
+    let cornerNdc = ndc + corner * out.spriteRadius / halfViewport;
+    edge = ceil(round(cornerNdc * subpixelScale + subpixelOffset) / 16.0) - windowOrigin;
   } else {
-    let snappedCenter = select(snapSpriteEdge(center, 256.0), round(center * 16.0) / 16.0, swiftShaderPointRaster);
+    let snappedCenter = snapSpriteEdge(center, 256.0);
     edge = ceil(snappedCenter + corner * out.spriteRadius - 0.5);
-    out.center = snappedCenter * windowAxes;
     out.spriteUV = (edge - snappedCenter) / (2.0 * out.spriteRadius) + 0.5;
   }
   out.position = clip(edge * windowAxes);
@@ -78,7 +95,15 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
     let inverseDiameter = 1.0 / (2.0 * input.spriteRadius);
     uv = (pixel - input.center) * inverseDiameter * vec2f(1, -1) + 0.5;
   }
-  let pointCoord = vec2f(uv.x, 1.0 - uv.y) * 2.0 - 1.0;
+  var orientedUV = vec2f(uv.x, 1.0 - uv.y);
+  if (applePointRaster) {
+    let height = round(params.pointViewport.w * params.camera.w);
+    let windowOrigin = vec2f(0, height);
+    let pixel = (input.position.xy + params.region.xy) * vec2f(1, -1) + windowOrigin;
+    orientedUV = applePointCoordinates(pixel, input.originAndGradient.xy + windowOrigin,
+                                       input.originAndGradient.zw, input.slope);
+  }
+  let pointCoord = orientedUV * 2.0 - 1.0;
   let offset = pointCoord * input.spriteRadius;
   let coreCoord = pointCoord * (input.spriteRadius / radius);
   var distance: f32;

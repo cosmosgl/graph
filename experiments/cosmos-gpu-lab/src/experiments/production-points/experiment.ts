@@ -10,8 +10,8 @@ export const experiment = defineExperiment({
   showRecordedSummary: false,
   caseChooserLabel: 'Pixel ratio',
   howItWorks: {
-    summary: 'Each canvas has eight shape columns. From top to bottom, the rows use integer inputs, fractional diameters, ' +
-      'fractional positions, and both together. The two graphs use identical drawing calls and a fixed camera.',
+    summary: 'Each canvas has eight shape columns. Choose a CSS pixel offset to compare integer and shifted centers, ' +
+      'or choose rounding ties to place every center halfway between 1/16-device-pixel grid lines.',
   },
   cases: ([1, 2] as const).map(ratio => ({
     id: `dpr-${ratio}`,
@@ -23,10 +23,10 @@ export const experiment = defineExperiment({
     acceptance: 'All four channels of every device pixel must agree.',
     recorded: {
       date: '2026-11-24',
-      environment: 'Native Chrome on Apple M3, Metal',
-      scope: `All eight shapes at five diameters and two center placements, pixel ratio ${ratio}.`,
-      conclusion: 'Every pixel matched for all eight shapes at all four fractional diameters and the 22 CSS pixel control.',
-      limits: 'Opaque fills, fixed camera and one tested GPU.',
+      environment: 'Chrome 157 on Apple M3 (Metal) and SwiftShader',
+      scope: `All eight shapes at four fractional diameters and three center presets, plus the 24 / 22 control at pixel ratio ${ratio}.`,
+      conclusion: 'All 13 frames matched every RGBA byte on each tested adapter.',
+      limits: 'Opaque fills and a fixed camera. Other M3 sizes and offsets showed one-level edge differences.',
       evidence: [{ label: 'Exact pixel counts', page: 'results' }],
     },
   })),

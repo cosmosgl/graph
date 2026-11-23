@@ -2,13 +2,17 @@ import { expect, it } from 'vitest'
 import { writeArtifact } from '../../testing/artifacts'
 import { shapeDistance } from '../point-styling/reference'
 import { comparePoints } from './compare'
-import { fractionalDiameters, pointBackground, pointCell, pointFill, pointSamples, pointsViewport } from './fixture'
+import { fractionalDiameters, pointBackground, pointCell, pointFill, pointPlacements, pointSamples, pointsViewport, tieControlDiameter, type PointPlacement } from './fixture'
 import { mountPoints, type PointsSession } from './frame'
 
 // Check the intended silhouette independently of the paired RGBA comparison. Only this
 // geometry check excludes the one-device-pixel band where antialiasing mixes the colors.
-function checkShapes (image: ImageData, ratio: 1 | 2, diameter: number): void {
-  for (const point of pointSamples(diameter)) {
+function checkShapes (image: ImageData, ratio: 1 | 2, diameter: number, placement: PointPlacement): void {
+  for (const point of pointSamples(diameter, placement, ratio)) {
+    if (placement === 'ties') {
+      // The input must still hit a rounding tie after changing device pixel ratio.
+      expect([(point.x * ratio * 32) % 2, (point.y * ratio * 32) % 2]).toEqual([1, 1])
+    }
     const radius = point.diameter * ratio / 2
     const left = point.column * pointCell.width * ratio
     const top = point.row * pointCell.height * ratio
@@ -26,8 +30,13 @@ function checkShapes (image: ImageData, ratio: 1 | 2, diameter: number): void {
   }
 }
 
+const fixtures = pointPlacements.flatMap(placement => {
+  const diameters = placement === 'ties' ? [...fractionalDiameters, tieControlDiameter] : fractionalDiameters
+  return diameters.map(diameter => ({ placement, diameter }))
+})
+
 for (const ratio of [1, 2] as const) {
-  it.each(fractionalDiameters)(`compares the packaged point shapes at ${ratio}× with fractional diameter %s`, async diameter => {
+  it.each(fixtures)(`compares the packaged point shapes at ${ratio}× with $placement centers and diameter $diameter`, async ({ placement, diameter }) => {
     const frames: HTMLIFrameElement[] = []
     const sessions: PointsSession[] = []
     try {
@@ -42,19 +51,24 @@ for (const ratio of [1, 2] as const) {
         const host = doc.createElement('div')
         host.style.cssText = 'position:relative;width:100vw;height:100vh'
         doc.body.append(host)
-        sessions.push(await mountPoints(host, engine, ratio, diameter))
+        sessions.push(await mountPoints(host, engine, ratio, diameter, placement))
       }
       const [gl, gpu] = await Promise.all(sessions.map(session => session.snapshot()))
       const comparison = comparePoints(gl, gpu, ratio)
-      await writeArtifact(`package-points-${ratio}x-${String(diameter).replace('.', '-')}`, {
-        ratio, diameter, exact: comparison.differingPixels === 0, ...comparison,
+      const suffix = placement === 'standard' ? '' : `-${placement}`
+      const devices = sessions.map(session => session.deviceInfo)
+      await writeArtifact(`package-points-${ratio}x-${String(diameter).replace('.', '-')}${suffix}`, {
+        ratio, diameter, placement, devices, exact: comparison.differingPixels === 0, ...comparison,
       })
-      for (const image of [gl, gpu]) checkShapes(image, ratio, diameter)
-      for (const counts of comparison.byShape) {
-        // The 22 CSS pixel control matches at the integer and fractional center.
-        expect([counts[0], counts[2]]).toEqual([0, 0])
+      if (import.meta.env.LAB_NATIVE_GPU) {
+        expect(devices[0].gpuType).not.toBe('cpu')
+        expect(devices[1].fallback).toBe(false)
+      } else {
+        expect(devices[0].renderer).toMatch(/SwiftShader/i)
+        expect(devices[1].gpuArchitecture).toBe('swiftshader')
       }
-      expect(comparison.differingPixels, `different RGBA pixels at ${diameter} CSS px and ${ratio}×`).toBe(0)
+      for (const image of [gl, gpu]) checkShapes(image, ratio, diameter, placement)
+      expect(comparison.differingPixels, `different RGBA pixels at ${diameter} CSS px, ${placement} centers and ${ratio}×`).toBe(0)
     } finally {
       for (const session of sessions) session.destroy()
       for (const frame of frames) frame.remove()

@@ -16,14 +16,14 @@ const packageCollision: CaseReadiness = {
 const packagePoints: CaseReadiness = {
   badge: 'Fixture pixels match',
   tone: 'pass',
-  finding: 'Every pixel matched for all eight shapes at both Lab center placements and all four fractional diameters on M3.',
+  finding: 'All eight shapes matched WebGL at both CSS offsets and the rounding ties on Apple M3 and SwiftShader.',
   area: 'Integration',
   status: 'Exact pixel parity on the packaged Points fixture',
   evidence: [
     { tone: 'pass', text: 'The opaque shape interiors and background passed the independent geometry check.' },
-    { tone: 'pass', text: 'All 802,560 native-resolution pixels agreed across the eight frames.' },
+    { tone: 'pass', text: 'All 2,608,320 device pixels per adapter agreed across the 26 frames.' },
   ],
-  next: 'Compare additional center placements and adapters.',
+  next: 'See the additional M3 size and offset checks for the remaining one-level edge differences.',
 }
 
 // Each summary refers to the named case and its recorded evidence. These are
