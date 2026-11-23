@@ -38,6 +38,8 @@ export type ExperimentDestination = { href: string; section: string | null; live
 export function experimentDestination (experiment: ExperimentDefinition, requested: string | null): ExperimentDestination {
   let section = requested
   if (experiment.id === 'point-rendering' && /^doc-(?:overview|limitations)(?:-|$)/.test(section ?? '')) section = 'doc-case-method'
+  if (experiment.id === 'point-shapes' && section === 'run-results') section = 'doc-automated-cases'
+  if (experiment.id === 'point-shapes' && section === 'run-more-settings') section = 'run-configuration'
   if (experiment.id === 'selection' && /^doc-selection(?:-|$)/.test(section ?? '')) section = null
   const page = evidencePageAt(experiment, section ?? '')
   if (section?.startsWith('doc-agent-recipe') || (page && !isReaderPage(experiment, page))) {

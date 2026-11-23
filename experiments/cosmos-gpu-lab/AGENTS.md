@@ -46,6 +46,10 @@ bookkeeping, and parked experiments out of the migration suite.
   fixture simplifies production Cosmos.
   Put replay instructions in `agent-recipe.md`. Keep CLI flags, local `captures/`
   paths, snapshot hashes and dependency inventories in the runbook or run record.
+- **Keep inline explanations timeless.** Write inline technical explanations
+  (such as how the backends work and why they differ) without dates, luma
+  version recaps, or tables already covered by `Automated test results`. Keep
+  dated run logs and provenance in archived docs or `agent-recipe.md`.
 - **Collapsible sections are forbidden on every Lab page.** Put settings, explanations, results,
   and run details in ordinary sections that readers can scroll to directly.
   Show reports and tables inline when a run produces them. Organize long pages
@@ -79,12 +83,22 @@ bookkeeping, and parked experiments out of the migration suite.
 - **Use compact choice buttons.** Use `choice-control` for each labeled group
   and `choice-controls` to lay out multiple groups. Leave room to tap,
   highlight the selected option, and rerun quick comparisons on click.
+- **Mount only this page's controls and keep them quiet.** After splitting an
+  experiment, do not leave hidden controls or diagnostic sections from sibling
+  experiments in the DOM. Use one consistent label layout per panel, muted
+  labels with bordered segmented option groups, and self-explanatory option
+  labels instead of inline helper sentences. Disable controls that have no
+  effect in the current state (with a short `title` explaining why) rather
+  than adding explanatory prose.
 - **Keep reruns steady.** Give temporary progress messages a fixed place so
   the controls and renders stay in position. Check the live page at narrow and
   wide widths.
 - **Isolate preview failures.** Catch device creation, upload, and render errors
   per backend, release the failed backend before clearing it, and report
   unavailability in that panel without blocking the other backend.
+- **Serialize shared GPU work and teardown.** When a live preview and
+  `live-checks.ts` share GPU devices, queue renders and checks sequentially
+  and wait for in-flight work to finish before calling `destroy()`.
 
 ## Running studies
 

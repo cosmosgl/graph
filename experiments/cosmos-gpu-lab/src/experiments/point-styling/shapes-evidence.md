@@ -1,32 +1,24 @@
----
-source: Recorded findings
-recorded: 2026-11-12
-device: Apple M3; Chrome 157; luma.gl 10.0.0-alpha.4
-scope: Frozen point shapes, overlaps and defaults at selected zooms and pixel ratios
----
+# How point shapes work
 
-# Point-shape evidence
-
-The comparison draws the same shapes in production WebGL and the WebGPU port.
-An independent CPU shape mask supplies a geometric reference. The recorded
-pixel gate requires exact IDs and masks, no invisible picks, and color channels
-within 2/255.
-
-On 12 November 2026, all 12 selected M3 configurations passed: five shape and
-stroke settings, four overlap settings, and three default/edge-case settings.
-The default inline images were byte-identical across the two GPU targets. These
-are frozen images, not a complete Graph or cross-device validation.
+WebGL draws each point as a square sprite (`GL_POINTS`). The shader uses hardware-interpolated
+`gl_PointCoord` to decide how much of each pixel the shape covers and whether a click hits it.
+WebGPU draws a quad with six vertices, padded by one device pixel on each side. Its shader subtracts
+the point center from the pixel center, clips to the sprite bounds, then evaluates the shape.
 
 ## Fractional positions and sizes
 
-A separate fixture used diameters from 0.25 to 42.5 CSS pixels and quarter-pixel
-coordinates. Both recorded rows failed the original parity contract:
+At **1× pixel ratio**, a requested `gl_PointSize` of 13.3 device pixels produced a coordinate span
+of 13.25 on Apple M3 with Metal. That shift can change an edge pixel’s opacity or which point a
+click picks. WebGPU uses the requested diameter. Its picks match the CPU’s calculated outline for these circles in **Closed** mode.
 
-| Pixel ratio | WebGL/WebGPU ID differences | CPU mask failures, WebGL / WebGPU | Color pixels beyond 2/255 |
-| ---: | ---: | ---: | ---: |
-| 1 | 2 | 2 / 0 | 27 |
-| 2 | 0 | 6 / 6 | 46 |
+At **2× pixel ratio**, choose **Fractional sizes** and **1× zoom**, then inspect pixel **(630, 120)**.
+Its center falls exactly on the circle’s top edge. WebGL’s half-open sprite bounds exclude the top
+and right edges, so WebGL picks background. With **WebGPU bounds** set to **Closed**, WebGPU includes
+the edge and picks point 2. The padding lets the shader evaluate that pixel at the original diameter.
 
-Neither row had invisible picks. These failures are separate from the 12 passing
-configurations; a regression test completing does not approve the fractional
-fixture. The result does not establish a driver defect or behavior on other GPUs.
+## One-device-pixel boundary check
+
+More than one device pixel from the outline, both renderers must pick exactly the point the CPU
+predicts, and each color and alpha channel must agree within 2/255. WebGPU must keep thin points
+visible, and fully transparent pixels must return background in both previews. Moving subpixel circles,
+other GPUs and exact polygon-edge ties still need testing. See circle rendering and picking in the [integrated graph](#/integrated-webgpu).

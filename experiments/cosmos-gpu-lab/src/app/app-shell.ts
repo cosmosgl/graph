@@ -210,7 +210,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       const isCurrent = (): boolean => request === launch && frame.stage.isConnected
       const ready = (async (): Promise<void> => {
         try {
-          await owner.show(experiment, frame.slot, item.id)
+          const instance = await owner.show(experiment, frame.slot, item.id)
+          if (isCurrent() && instance.pageEndSection) frame.documentView.append(instance.pageEndSection)
         } catch (error) {
           if (!isCurrent()) return
           frame.status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`

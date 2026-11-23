@@ -13,6 +13,8 @@ scope. Historical rejections remain; review them before full approval. See
 [first-migration rules](#/validation-workflow?section=first-migration-rules) and
 [return conditions](#/roadmap?section=parked-investigations).
 
+Test paths and replay commands in this historical study use the [archived test suite at `08e5ff5d`](https://github.com/cosmosgl/graph/tree/08e5ff5dd3ffdd4ca970a7bd96f22d7d3778a468/experiments/cosmos-gpu-lab/src/experiments/point-styling).
+
 ## Question
 
 Can a luma WebGPU quad renderer preserve Cosmos point styling and select the point actually

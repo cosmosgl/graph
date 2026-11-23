@@ -1,6 +1,6 @@
 import { Buffer, type Device, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
-import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
+import { ALPHA_BLEND, bindingLayout, createDevice, describeDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { StoredAlphaPassTimer } from './stored-alpha-timing'
 import { resolveStoredAlpha, validateStoredAlpha, regionScissor } from './stored-alpha'
@@ -70,7 +70,7 @@ export async function createStylingWebGPU (
     const displayKernel = make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor, false, true)
     return {
       atlas: dynamic,
-      info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      info: describeDevice(device),
       adapter: device.info,
       async render (points, settings, diagnose = false, variant = 'production', display = true, storedAlpha): Promise<Snapshot> {
         if (storedAlpha) validateStoredAlpha(points, settings, variant, storedAlpha)

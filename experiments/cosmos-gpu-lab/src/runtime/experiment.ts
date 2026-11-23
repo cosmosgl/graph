@@ -4,6 +4,8 @@ import type { StudyRecord } from './study-record'
 import type { ResultChart } from './result-chart'
 import type { LiveCheckGroup } from './live-checks'
 export type ExperimentInstance = {
+  // A live section displayed at the end of the case page and retained with the run.
+  pageEndSection?: HTMLElement;
   // Stop playback/sweeps at a safe boundary without discarding the current run.
   pause?: () => void;
   // Resume presentation after returning to a retained run, without restarting playback.

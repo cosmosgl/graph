@@ -42,16 +42,16 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
     next: 'Investigate the mask and color-boundary differences.',
   },
   'point-shapes/shapes': {
-    badge: 'Edge checks fail',
-    tone: 'fail',
-    finding: 'WebGL and WebGPU returned different picking IDs at two edge pixels when testing fractional sizes and positions at 1× pixel ratio.',
+    badge: '1 px boundary passes',
+    tone: 'review',
+    finding: 'Nine checks passed on M3. Shapes and strokes matched at half zoom under both sizing rules. Strict fractional circle edges still differ.',
     area: 'Integration',
-    status: 'Checks failed',
+    status: 'Frozen shapes pass the practical check',
     evidence: [
-      { tone: 'pass', text: '12 selected configurations passed' },
-      { tone: 'fail', text: 'Fractional edge checks failed' },
+      { tone: 'pass', text: 'Closed WebGPU bounds matched the CPU circle mask at 1× and 2×. Every thin circle painted.' },
+      { tone: 'fail', text: 'Strict fractional parity failed. At 1× the 13.3 px circle had a fitted WebGL coordinate span of 13.25 px.' },
     ],
-    next: 'Check fractional sizes and positions on more devices.',
+    next: 'Check moving subpixel circles, exact polygon-edge ties and another GPU.',
   },
   'point-picking/picking': {
     badge: 'High pick cost',

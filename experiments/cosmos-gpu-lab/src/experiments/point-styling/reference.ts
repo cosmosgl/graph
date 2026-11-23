@@ -332,3 +332,81 @@ export async function compareSnapshotsAsync (gl: Snapshot, gpu: Snapshot, points
   }
   return step.value
 }
+
+type RegionCounts = Pick<Comparison, 'pixels' | 'idDisagreements' | 'webglReferenceFailures' | 'webgpuReferenceFailures' | 'colorFailures'>
+export type PracticalBoundary = {
+  valid: boolean; boundary: RegionCounts; outside: RegionCounts; wrongObjectPixels: number;
+  webglInvisiblePicks: number; webgpuInvisiblePicks: number; thinPointIds: number[]; vanishedPointIds: number[];
+}
+
+// The three shape fixtures contain bodies and inset strokes. Only their outer
+// contours get the one-device-pixel allowance. Reuse the full-frame audit so
+// background, interior pixels and invisible picks keep their original checks.
+export function evaluatePracticalBoundary (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings, strict: Comparison): PracticalBoundary {
+  const bodies = points.map((point, id) => {
+    const p = resolvePoint(point, settings)
+    const d = diameter(p, settings)
+    if (p.absent || p.shape === 8 || d <= 0 || p.color[3] <= 0 || settings.opacity <= 0) return null
+    const [cx, cy] = center(p, settings)
+    const radius = Math.max(d, 1) / 2
+    const distance = (x: number, y: number): number => shapeDistance((x - cx) / radius, (y - cy) / radius, p.shape) * radius
+    const canPaint = (x: number, y: number): boolean => Math.abs(x - cx) <= radius && Math.abs(y - cy) <= radius && distance(x, y) < 0.5
+    return { id, cx, cy, d, radius, distance, canPaint }
+  })
+  const band = new Set<number>()
+  const thinPointIds: number[] = []
+  const vanishedPointIds: number[] = []
+  for (const body of bodies) {
+    if (!body) continue
+    const { id, cx, cy, d, radius, distance } = body
+    const left = Math.max(0, Math.ceil(cx - radius - 1.5)); const right = Math.min(gl.width - 1, Math.floor(cx + radius + 0.5))
+    const top = Math.max(0, Math.ceil(cy - radius - 1.5)); const bottom = Math.min(gl.height - 1, Math.floor(cy + radius + 0.5))
+    // A body at most two device pixels wide can fit entirely inside its edge band.
+    const thin = d <= 2 && cx + radius > 0 && cy + radius > 0 && cx - radius < gl.width && cy - radius < gl.height
+    let painted = false
+    for (let y = top; y <= bottom; y++) {
+      for (let x = left; x <= right; x++) {
+        const px = x + 0.5; const py = y + 0.5; const index = y * gl.width + x
+        if (Math.abs(distance(px, py)) <= 1) band.add(index)
+        // Count actual alpha, including antialiasing outside the picking mask.
+        // Paint from a neighboring point cannot establish this point's visibility.
+        if (thin && !painted && gpu.color[index * 4 + 3] > 0 && body.canPaint(px, py)) {
+          painted = !bodies.some(other => other && other.id !== id && other.canPaint(px, py))
+        }
+      }
+    }
+    if (thin) {
+      thinPointIds.push(id)
+      if (!painted) vanishedPointIds.push(id)
+    }
+  }
+  const boundary = { pixels: band.size, idDisagreements: 0, webglReferenceFailures: 0, webgpuReferenceFailures: 0, colorFailures: 0 }
+  const expectedGl = prepareReferencePick(points, settings, strict.pickingRules.webgl)
+  const expectedGpu = strict.pickingRules.webgpu === strict.pickingRules.webgl ? expectedGl : prepareReferencePick(points, settings, strict.pickingRules.webgpu)
+  let wrongObjectPixels = 0
+  for (const index of band) {
+    const x = index % gl.width; const y = Math.floor(index / gl.width)
+    const a = pick(gl, x, y); const b = pick(gpu, x, y)
+    const refA = expectedGl(x + 0.5, y + 0.5); const refB = expectedGpu(x + 0.5, y + 0.5)
+    if (a !== b) boundary.idDisagreements++
+    if (a !== refA) boundary.webglReferenceFailures++
+    if (b !== refB) boundary.webgpuReferenceFailures++
+    const atOwnEdge = (id: number | null): boolean => id === null || Math.abs(bodies[id]?.distance(x + 0.5, y + 0.5) ?? Infinity) <= 1
+    if ((a !== refA && !(atOwnEdge(a) && atOwnEdge(refA))) || (b !== refB && !(atOwnEdge(b) && atOwnEdge(refB)))) wrongObjectPixels++
+    const offset = index * 4
+    for (let c = 0; c < 4; c++) {
+      if (Math.abs(gl.color[offset + c] - gpu.color[offset + c]) > COLOR_BUDGET) { boundary.colorFailures++; break }
+    }
+  }
+  const outside = {
+    pixels: strict.pixels - boundary.pixels,
+    idDisagreements: strict.idDisagreements - boundary.idDisagreements,
+    webglReferenceFailures: strict.webglReferenceFailures - boundary.webglReferenceFailures,
+    webgpuReferenceFailures: strict.webgpuReferenceFailures - boundary.webgpuReferenceFailures,
+    colorFailures: strict.colorFailures - boundary.colorFailures,
+  }
+  const { webglInvisiblePicks, webgpuInvisiblePicks } = strict
+  const valid = outside.idDisagreements === 0 && outside.webglReferenceFailures === 0 && outside.webgpuReferenceFailures === 0 &&
+    outside.colorFailures === 0 && webglInvisiblePicks === 0 && webgpuInvisiblePicks === 0 && wrongObjectPixels === 0 && vanishedPointIds.length === 0
+  return { valid, boundary, outside, wrongObjectPixels, webglInvisiblePicks, webgpuInvisiblePicks, thinPointIds, vanishedPointIds }
+}

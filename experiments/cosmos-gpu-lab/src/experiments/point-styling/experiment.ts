@@ -1,13 +1,21 @@
 import { defineExperiment } from '../../runtime/experiment'
 import type { ExperimentPage } from '../../runtime/experiment'
+import type { LiveCheckGroup } from '../../runtime/live-checks'
 import { cases, pointStylingExperimentIds } from './cases'
 
 const evidencePages: ExperimentPage[] = [
   {
     kind: 'markdown',
     id: 'shapes-evidence',
-    title: 'Point-shape evidence',
+    relatedExperiments: ['integrated-webgpu'],
+    title: 'How point shapes work',
     load: async (): Promise<string> => (await import('./shapes-evidence.md?raw')).default,
+  },
+  {
+    kind: 'live-checks',
+    id: 'automated-cases',
+    title: 'Automated test results',
+    load: async (): Promise<readonly LiveCheckGroup[]> => (await import('./shapes-suite')).shapeGroups,
   },
   {
     kind: 'markdown',
@@ -57,9 +65,12 @@ export const experiments = cases.map(item => defineExperiment({
   summary: item.description,
   tags: ['rendering', 'picking', 'WebGL', 'WebGPU'],
   cases: [item],
-  create: async host => (await import('./view')).createStylingView(host, item.id),
+  ...item.id === 'shapes' ? { presentation: 'demo', headerContent: 'question-only', showRecordedSummary: false, howItWorks: false } as const : {},
+  create: async host => item.id === 'shapes'
+    ? (await import('./shapes-view')).createShapesView(host)
+    : (await import('./view')).createStylingView(host, item.id),
   pages: [
-    ...evidencePages.filter(page => page.id === item.recorded.evidence[0].page),
+    ...evidencePages.filter(page => item.recorded.evidence.some(link => link.page === page.id)),
     ...item.id === 'shapes' ? archivePages : [],
   ],
 }))

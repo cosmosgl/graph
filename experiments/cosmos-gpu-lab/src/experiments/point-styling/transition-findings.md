@@ -34,5 +34,5 @@ The first attempt used `target`, a reserved WGSL word, and stopped before
 the numerical checks. Its capture remains in
 `captures/point-transition-m3-20261119-YSkByV/`.
 
-Reproduce with the fixed times and gates in `transition-method.md` and
-`src/experiments/point-styling/transition.test.ts`.
+The [transition protocol](#/point-shapes?section=doc-transition-method) gives the fixed times
+and acceptance rules. The [archived transition test](https://github.com/cosmosgl/graph/blob/08e5ff5dd3ffdd4ca970a7bd96f22d7d3778a468/experiments/cosmos-gpu-lab/src/experiments/point-styling/transition.test.ts) contains the 12 checkpoints.

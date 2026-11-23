@@ -12,6 +12,7 @@ import { readinessBadge, recordedObservations } from './readiness/presentation'
 import { articleSectionId, experimentHref } from './router'
 
 type CaseFrame = {
+  documentView: HTMLElement;
   stage: HTMLElement;
   slot: HTMLElement;
   recorded: HTMLElement;
@@ -173,7 +174,7 @@ export async function renderEvidenceContent (
     renderMarkdown(content, await page.load(), page.assets, {
       examples: page.examples,
       sectionNavigation: false,
-      headingLevelOffset: 2,
+      headingLevelOffset: 1,
       tables: false,
     })
     addArticleSections(content, experiment.id, page.id)
@@ -346,6 +347,7 @@ export function renderCaseFrame (host: HTMLElement, experiment: ExperimentDefini
   stage.append(recorded)
   const openEvidence = mountCaseEvidence(recorded, experiment)
   return {
+    documentView,
     stage,
     slot,
     recorded,

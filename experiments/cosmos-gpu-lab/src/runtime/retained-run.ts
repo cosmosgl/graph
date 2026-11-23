@@ -11,7 +11,7 @@ type MoveTarget = HTMLElement & { moveBefore?: (node: Node, child: Node | null) 
 export function createRetainedRun (disposePresentation: (host: HTMLElement) => void = (): void => {}): {
   readonly id: string | undefined;
   readonly caseId: string | undefined;
-  show(definition: ExperimentDefinition, parent: HTMLElement, caseId?: string): Promise<void>;
+  show(definition: ExperimentDefinition, parent: HTMLElement, caseId?: string): Promise<ExperimentInstance>;
   hide(): void;
   destroy(): void;
   } {
@@ -23,6 +23,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
   const hide = (): void => {
     if (!current || !current.visible) return
     current.instance?.pause?.()
+    current.instance?.pageEndSection?.remove()
     current.visible = false
     if (!current.host.querySelector('iframe')) { current.host.remove(); return }
     const target = document.createElement('div') as MoveTarget
@@ -38,6 +39,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
     if (!current) { clearParking(); return }
     const run = current; current = undefined; run.retired = true
     run.instance?.pause?.()
+    run.instance?.pageEndSection?.remove()
     const evidence = run.instance?.saveEvidence?.()
     if (evidence !== undefined) savedEvidence.set(evidenceKey(run), evidence)
     disposePresentation(run.host)
@@ -48,7 +50,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
     get caseId (): string | undefined { return current?.caseId },
     hide,
     destroy,
-    async show (definition, parent, caseId): Promise<void> {
+    async show (definition, parent, caseId): Promise<ExperimentInstance> {
       if (current?.id !== definition.id || current.caseId !== caseId) destroy()
       if (!current) {
         const host = document.createElement('div'); host.className = 'experiment-run'
@@ -80,8 +82,9 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
         else parent.append(run.host)
       }
       clearParking()
-      await run.ready
+      const instance = await run.ready
       if (returning && current === run && run.visible && !run.retired) run.instance?.resume?.()
+      return instance
     },
   }
 }

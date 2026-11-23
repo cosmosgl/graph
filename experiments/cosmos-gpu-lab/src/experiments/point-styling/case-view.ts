@@ -1,40 +1,29 @@
 export type StylingCaseId = 'shapes' | 'picking' | 'images' | 'effects'
 
-type CasePresentation = { fixture: string; fixtures: string[]; controls: string[]; diagnostics: string[] }
+export type SecondaryStylingCase = Exclude<StylingCaseId, 'shapes'>
 
-const presentations: Record<StylingCaseId, CasePresentation> = {
-  shapes: {
-    fixture: 'shapes',
-    fixtures: ['shapes', 'edge-cases', 'fractional'],
-    controls: ['renderer', 'fixture', 'opacity', 'zoom', 'ratio', 'scale'],
-    diagnostics: [],
-  },
+type CasePresentation = { fixture: string; fixtures: string[]; controls: string[] }
+
+const presentations: Record<SecondaryStylingCase, CasePresentation> = {
   picking: {
     fixture: 'overlap',
     fixtures: ['overlap', 'shapes', 'edge-cases', 'tiny-alpha', 'tiny-overlap', 'alpha-stack'],
     controls: ['renderer', 'fixture', 'opacity', 'order', 'zoom', 'ratio', 'scale'],
-    diagnostics: ['picking'],
   },
   images: {
     fixture: 'atlas-images',
     fixtures: ['atlas-images', 'atlas-shapes', 'atlas-overlap', 'atlas-edges', 'atlas-decoding', 'atlas-dynamic',
       'atlas-packing-grid', 'atlas-packing-edges', 'atlas-packing-overlap'],
     controls: ['renderer', 'fixture', 'image-filter', 'atlas-isolation', 'zoom', 'ratio', 'scale', 'opacity', 'order'],
-    diagnostics: ['images'],
   },
   effects: {
     fixture: 'point-effects',
     fixtures: ['point-effects'],
     controls: ['renderer', 'effects-scene', 'effects-profile', 'overlay-arithmetic', 'polygon-arithmetic', 'zoom', 'ratio', 'scale', 'opacity', 'order'],
-    diagnostics: ['effects'],
   },
 }
 
-export function stylingCaseId (requested?: string): StylingCaseId {
-  return requested && Object.hasOwn(presentations, requested) ? requested as StylingCaseId : 'shapes'
-}
-
-export function refreshStylingCase (host: HTMLElement, id: StylingCaseId): void {
+export function refreshStylingCase (host: HTMLElement, id: SecondaryStylingCase): void {
   const presentation = presentations[id]
   const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
   for (const label of host.querySelectorAll<HTMLLabelElement>('.styling-toolbar label, .run-secondary-settings label')) {
@@ -48,16 +37,10 @@ export function refreshStylingCase (host: HTMLElement, id: StylingCaseId): void 
   }
   const imageUpdates = fixture.value === 'atlas-dynamic'
   host.querySelector<HTMLElement>('[data-image-actions]')!.hidden = id !== 'images' || !imageUpdates
-  host.querySelector<HTMLElement>('[data-image-stage]')!.hidden = id !== 'images' || !['atlas-dynamic', 'atlas-decoding'].includes(fixture.value)
-  host.querySelector<HTMLElement>('[data-inspect-center]')!.hidden = id !== 'picking'
-  for (const section of host.querySelectorAll<HTMLElement>('[data-case-diagnostic]')) {
-    section.hidden = !presentation.diagnostics.includes(section.dataset.caseDiagnostic!)
-  }
-  const diagnostics = host.querySelector<HTMLElement>('#run-diagnostics')
-  if (diagnostics) diagnostics.hidden = presentation.diagnostics.length === 0
+  if (id === 'images') host.querySelector<HTMLElement>('[data-image-stage]')!.hidden = !['atlas-dynamic', 'atlas-decoding'].includes(fixture.value)
 }
 
-export function initializeStylingCase (host: HTMLElement, id: StylingCaseId): void {
+export function initializeStylingCase (host: HTMLElement, id: SecondaryStylingCase): void {
   const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
   // Hidden native options can still be announced by assistive technology.
   // Each case has its own view instance, so remove unrelated options entirely.

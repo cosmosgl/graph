@@ -23,7 +23,7 @@ function textElement<K extends keyof HTMLElementTagNameMap> (tag: K, text: strin
 
 const labels = { passed: 'Passed', failed: 'Failed' }
 
-export function createLiveChecks (options: LiveChecksOptions): { element: HTMLElement; stop(): void; destroy(): void } {
+export function createLiveChecks (options: LiveChecksOptions): { element: HTMLElement; stop(): void; disable(reason: string): void; destroy(): void } {
   const element = document.createElement('section')
   element.className = 'live-checks'
   if (options.sectionId) element.id = options.sectionId
@@ -50,7 +50,8 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
     const running = active === id
     cell.textContent = running ? 'Running…' : result ? labels[result.status] : '—'
     cell.dataset.status = running ? 'running' : result?.status ?? ''
-    detail.textContent = !running && result?.status === 'failed' ? result.detail ?? '' : ''
+    detail.textContent = running ? '' : result?.detail ?? ''
+    detail.dataset.status = result?.status ?? ''
     detail.hidden = !detail.textContent
   }
 
@@ -80,7 +81,7 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   }
 
   async function start (): Promise<void> {
-    if (destroyed || options.unavailableReason) return
+    if (destroyed || runAll.disabled) return
     stop()
     const current = runId
     for (const [id, row] of rows) {
@@ -148,6 +149,12 @@ export function createLiveChecks (options: LiveChecksOptions): { element: HTMLEl
   return {
     element,
     stop,
+    disable (reason): void {
+      stop()
+      runAll.disabled = true
+      delete header.dataset.statusReserve
+      status.textContent = reason
+    },
     destroy (): void {
       destroyed = true
       stop()
