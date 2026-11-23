@@ -2006,6 +2006,8 @@ button[data-action="play"][aria-pressed="true"] {
 .run-workbench { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 .run-workbench > *, .run-visualization, .run-diagnostics, .run-layout [data-run-part] { min-width: 0; }
 .run-layout :is(#run-configuration, #run-run, #run-results, #run-diagnostics) { scroll-margin-top: 24px; }
+#benchmark-controls { margin-top: var(--space-3); }
+#benchmark-controls > .controls:first-child { margin-bottom: var(--space-2); }
 .run-settings:empty { display: none; }
 .run-settings > [data-run-section="configuration"] { margin: 0; }
 .run-layout :is(.run-settings, .run-secondary-settings) .scale-toolbar {

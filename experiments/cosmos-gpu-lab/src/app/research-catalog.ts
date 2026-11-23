@@ -341,16 +341,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [{ page: selectionEvidence.page, state: 'Current evidence', description: selectionCase.recorded.scope }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
-        'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',
+      conclusion: 'The integrated graph simulates, draws and picks from shared GPU positions. The initial 1,024-point chain met the local pilot targets.',
       reviewed: '2026-11-19',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       method: 'method',
       evidence: 'findings',
       next: 'Integrate the Lab readback contract with production Graph callers and verify end-to-end label and selection latency.',
-      reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
-        'or the current session’s assessment; keep the native tab visible.',
+      reproduce: 'Press Run, pause the layout, then select and drag a point.',
       investigations: [
         { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
         { page: 'host-ownership', state: 'Supporting investigation', description: 'Borrowed luma device, shared draw pass and explicit checkpoint restart.' },
@@ -360,6 +358,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
           description: 'Compact readback of moving GPU positions and ordered snapshots across updates.',
         },
       ],
+    }),
+    'integrated-webgpu-benchmarks': entry('integrated-webgpu-benchmarks', {
+      conclusion: 'The recorded 8,192-point star missed its frame target. A cooled Karate Club pick took 68.2 ms against the 50 ms target.',
+      reviewed: '2026-11-19',
+      variant: 'Core forces with circle points and solid straight links',
+      comparison: 'Complete frame intervals, feedback latency and sampled pixel checks on the original workloads',
+      method: 'protocol',
+      next: 'Compare local observations with the original pilot gates.',
+      reproduce: 'Choose a workload and press Measure this graph, keeping the tab visible.',
+      investigations: [],
     }),
     'resident-layout': entry('resident-layout', {
       conclusion: 'GPU bounds meet the migration requirement. They need zero routine position downloads and matched the CPU-bounds reference at all 40 checks.',

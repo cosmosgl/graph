@@ -1,5 +1,7 @@
 # First integrated migration: scope and protocol
 
+Run these checks on the [benchmark page](#/integrated-webgpu-benchmarks).
+
 This is a lab-owned runtime, not a production Graph implementation. It follows the
 [first-migration rules](#/validation-workflow?section=first-migration-rules). Production Cosmos and all historical acceptance tests remain unchanged.
 

@@ -174,6 +174,9 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 
 ## Experiments
 
+- `integrated-webgpu` runs the interactive graph and links its recorded findings.
+- `integrated-webgpu-benchmarks` runs the pilot matrix, profiling controls and cooled picking replays.
+
 - `precision-diagnostics`: production GLSL/native WGSL gravity versus analytic and compatibility
   references, plus controlled serial/blocked/tree sums on exact bounded-integer fixtures.
 - `point-shapes`, `point-picking`, `point-images` and `point-rings-greyout`: separate WebGL and WebGPU

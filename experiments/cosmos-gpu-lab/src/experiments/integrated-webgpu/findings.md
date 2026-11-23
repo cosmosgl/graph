@@ -152,7 +152,7 @@ additional timed-window acceptance evidence.
 
 ## Reproduce
 
-Open [First integrated WebGPU graph](#/integrated-webgpu). Start at 1,024 points and
+Open [Integrated WebGPU graph benchmarks](#/integrated-webgpu-benchmarks). Start at 1,024 points and
 check picking/dragging before selecting **Evaluate declared matrix**. Keep the tab visible
 and stop builds/tests while timing. Completed rows remain visible; **Export JSON** includes
 raw frame intervals, adapter information and per-row checks. Captures stay local.
@@ -445,6 +445,10 @@ No build or test process ran alongside measurement.
 [Declared protocol](#/integrated-webgpu?section=doc-method-settled-karate-club-assessment).
 
 ### Geometry improves, but the original camera loses points
+
+```example
+karateFit
+```
 
 | Tick / framing | Stress RMS | Spring mismatch RMS | Circle overlap pairs | Visible centers | Radius, world units |
 | --- | ---: | ---: | ---: | ---: | ---: |

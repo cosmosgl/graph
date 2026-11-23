@@ -1,3 +1,4 @@
+import type { Workload } from './data'
 import { measureQuality } from './quality'
 import { type Integrated, nextFrame } from './runtime'
 import { validateFrame, fit } from './validation'
@@ -73,36 +74,48 @@ export async function evaluate (r: Integrated, cancelled: () => boolean, progres
   frames: ReturnType<typeof percentiles>; within33: number; frameCount: number; durationMs: number;
   interactions: Awaited<ReturnType<typeof interactionCheck>>; validation: Awaited<ReturnType<typeof validateFrame>>;
   quality: { warmup: ReturnType<typeof measureQuality>; end: ReturnType<typeof measureQuality>; residual: ReturnType<typeof measureQuality> };
-  info: string; viewport: number[]; tick: number; visible: boolean; intervals: number[];
+  workload: { kind: Workload; count: number }; links: number; info: string; viewport: number[]; tick: number; visible: boolean; intervals: number[];
 }> {
-  r.pause(); const visibility = (): void => { if (document.visibilityState !== 'visible') throw new Error('Measurement interrupted: browser is not visible') }
-  for (let i = 0; i < 60; i++) { if (cancelled()) throw new Error('Cancelled'); visibility(); await nextFrame(); await r.frame(true) }
-  const warmPositions = (await r.backend.read()).positions
-  fit(r, warmPositions); const warmup = measureQuality(r, warmPositions, r.data.input.points); await r.frame(false)
-  const intervals: number[] = []; let previous = await nextFrame(); const start = previous
-  for (let i = 0; i < 300; i++) {
-    if (cancelled()) throw new Error('Cancelled'); visibility()
-    await r.frame(true); const now = await nextFrame(); intervals.push(now - previous); previous = now
-    if (i % 60 === 0) progress(`Measuring frame ${i + 1}/300`)
+  r.pause()
+  let hidden = document.hidden
+  const visibility = (): void => { hidden ||= document.hidden }
+  const check = (): void => {
+    if (cancelled()) throw new Error('Cancelled')
+    if (hidden || document.visibilityState !== 'visible') throw new Error('Measurement interrupted: tab became hidden')
   }
-  progress('Checking quality, interaction and rendered samples outside frame timing')
-  const endPositions = (await r.backend.read()).positions
-  const end = measureQuality(r, endPositions, warmPositions)
-  await r.frame(true) // One untimed residual-motion probe; no acceptance threshold is invented.
-  const residual = measureQuality(r, (await r.backend.read()).positions, endPositions)
-  const interactions = await interactionCheck(r); const validation = await validateFrame(r)
-  return {
-    frames: percentiles(intervals),
-    within33: intervals.filter(v => v <= 33).length / intervals.length,
-    intervals,
-    frameCount: intervals.length,
-    durationMs: previous - start,
-    interactions,
-    validation,
-    quality: { warmup, end, residual },
-    info: r.info,
-    viewport: [r.canvas.width, r.canvas.height, r.renderer.ratio],
-    tick: r.tick,
-    visible: document.visibilityState === 'visible',
-  }
+  document.addEventListener('visibilitychange', visibility)
+  try {
+    for (let i = 0; i < 60; i++) { check(); await nextFrame(); await r.frame(true) }
+    const warmPositions = (await r.backend.read()).positions
+    fit(r, warmPositions); const warmup = measureQuality(r, warmPositions, r.data.input.points); await r.frame(false)
+    const intervals: number[] = []; let previous = await nextFrame(); const start = previous
+    for (let i = 0; i < 300; i++) {
+      check()
+      await r.frame(true); const now = await nextFrame(); intervals.push(now - previous); previous = now
+      if (i % 60 === 0) progress(`Measuring frame ${i + 1}/300`)
+    }
+    progress('Checking quality, interaction and rendered samples outside frame timing')
+    const endPositions = (await r.backend.read()).positions
+    const end = measureQuality(r, endPositions, warmPositions)
+    await r.frame(true) // One untimed residual-motion probe; no acceptance threshold is invented.
+    const residual = measureQuality(r, (await r.backend.read()).positions, endPositions)
+    const interactions = await interactionCheck(r); const validation = await validateFrame(r)
+    check()
+    return {
+      workload: { kind: r.data.kind, count: r.data.input.points.length / 4 },
+      links: r.data.graph.links.length / 2,
+      frames: percentiles(intervals),
+      within33: intervals.filter(v => v <= 33).length / intervals.length,
+      intervals,
+      frameCount: intervals.length,
+      durationMs: previous - start,
+      interactions,
+      validation,
+      quality: { warmup, end, residual },
+      info: r.info,
+      viewport: [r.canvas.width, r.canvas.height, r.renderer.ratio],
+      tick: r.tick,
+      visible: document.visibilityState === 'visible',
+    }
+  } finally { document.removeEventListener('visibilitychange', visibility) }
 }

@@ -104,6 +104,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: selectionCase.recorded.limits,
   },
   'integrated-webgpu': {
+    question: 'Can one WebGPU graph simulate, draw and respond to interaction?',
+    reference: 'The same resident positions feed the simulation, circle and link drawing, and point picking.',
+    acceptance: 'Observe layout motion, point selection and dragging. The linked benchmarks apply the original timing and sampled-pixel gates.',
+    coverage: 'Core and composed forces, circle points, straight links, camera controls and point interaction.',
+    limits: 'Exploratory viewer with fixed screen-space styling. See the recorded evidence for the measured devices and workloads.',
+  },
+  'integrated-webgpu-benchmarks': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',
     acceptance: 'Pilot timing checks use 95% of complete intervals <= 33 ms and pick feedback <= 50 ms. Require no interior ID errors or invisible picks ' +

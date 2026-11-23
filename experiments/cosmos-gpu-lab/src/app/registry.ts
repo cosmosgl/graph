@@ -100,7 +100,7 @@ const catalogTopics: CatalogTopic[] = [
   {
     id: 'precision-performance',
     title: 'Precision and performance',
-    links: ['precision-diagnostics', 'performance-lab', 'resident-frame-timing', 'gpu-stage-profile'],
+    links: ['precision-diagnostics', 'performance-lab', 'resident-frame-timing', 'gpu-stage-profile', 'integrated-webgpu-benchmarks'],
   },
   {
     id: 'milestones',

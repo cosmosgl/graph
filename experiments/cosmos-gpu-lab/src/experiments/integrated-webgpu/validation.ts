@@ -1,4 +1,12 @@
 import type { Integrated } from './runtime'
+export function viewportProbes (width: number, height: number): [number, number][] {
+  let seed = 1097
+  const coordinate = (extent: number): number => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+    return Math.floor(seed / 2 ** 32 * extent)
+  }
+  return Array.from({ length: 2048 }, () => [coordinate(width), coordinate(height)])
+}
 export async function validateFrame (runtime: Integrated): Promise<{
   finite: boolean; samples: number; boundarySamples: number; interiorIdFailures: number; interiorColorFailures: number;
   invisiblePicks: number; paintedSamples: number; visiblePoints: number;
@@ -27,12 +35,7 @@ export async function validateFrame (runtime: Integrated): Promise<{
     paintedSamples: 0,
     visiblePoints: projected.filter(p => !p.absent && p.color[3] > 0 && p.x >= 0 && p.y >= 0 && p.x < width && p.y < height).length,
   }
-  const sites: [number, number][] = []
-  let seed = 1097
-  for (let i = 0; i < 2048; i++) {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; const x = seed % width
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; sites.push([x, seed % height])
-  }
+  const sites = viewportProbes(width, height)
   // Deliberately include point interiors and geometric edges, not just empty random pixels.
   for (const p of projected.slice(0, 128)) for (const dx of [0, p.radius, p.radius + 2]) sites.push([Math.floor(p.x + dx), Math.floor(p.y)])
   const blend = (dst: number[], src: number[]): void => {

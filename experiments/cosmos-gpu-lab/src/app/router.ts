@@ -41,6 +41,9 @@ export function readRoute (): AppRoute {
   }
 
   const experimentId = decodeURIComponent(segments.join('/'))
+  if (experimentId === 'integrated-webgpu' && ['run-results', 'run-diagnostics'].includes(currentSection() ?? '')) {
+    return { kind: 'experiment', experimentId: 'integrated-webgpu-benchmarks' }
+  }
   // Preserve bookmarks to the selection case and its evidence from before the split.
   if (experimentId === 'integrated-webgpu' && /^(?:(?:try|finding)-shape-selection$|doc-selection(?:-|$))/.test(currentSection() ?? '')) {
     return { kind: 'experiment', experimentId: 'selection' }

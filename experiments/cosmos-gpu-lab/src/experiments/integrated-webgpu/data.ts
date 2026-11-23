@@ -3,13 +3,13 @@ import { compositionFixture, type CompositionFixture } from '../combined-layout/
 import { karateEdges } from './karate'
 export type Workload = Fixture | 'karate'
 export type IntegratedForceMode = 'core' | 'composed' | 'composed-collision'
-export function workload (kind: Workload, count = 1024): ReturnType<typeof createGraph> {
+export function workload (kind: Workload, count = 1024): ReturnType<typeof createGraph> & { kind: Workload } {
   const result = createGraph({ fixture: kind === 'karate' ? 'chain' : kind, count: kind === 'karate' ? 34 : count, decay: 5000 })
   if (kind === 'karate') {
     result.graph.links = new Float32Array(karateEdges.flatMap(([a, b]) => [a, b]))
     result.graph.weights = new Float32Array(karateEdges.map(([, , w]) => w))
   }
-  return result
+  return { ...result, kind }
 }
 
 export function composeWorkload (data: ReturnType<typeof workload>, mode: IntegratedForceMode): CompositionFixture | undefined {

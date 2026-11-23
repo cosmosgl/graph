@@ -37,6 +37,14 @@ export type ExperimentDestination = { href: string; section: string | null; live
 
 export function experimentDestination (experiment: ExperimentDefinition, requested: string | null): ExperimentDestination {
   let section = requested
+  if (experiment.id === 'integrated-webgpu') {
+    if (section === 'case-comparison') section = 'run-explanation'
+    if (section === 'recorded-findings') section = 'doc-overview'
+    const finding = experiment.cases?.find(item => findingSection(item) === section)
+    const evidence = finding?.recorded?.evidence[0]
+    if (evidence) section = articleSectionId(evidence.page, evidence.section)
+  }
+  if (experiment.id === 'integrated-webgpu-benchmarks' && section === 'run-diagnostics') section = 'benchmark-controls'
   if (experiment.id === 'scalable-reduction') {
     if (section === 'case-comparison' || /^doc-algorithm(?:-|$)/.test(section ?? '')) section = 'run-explanation'
     if (section === 'run-diagnostics') section = 'reduction-benchmark'

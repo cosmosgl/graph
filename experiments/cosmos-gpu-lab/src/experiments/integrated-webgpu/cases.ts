@@ -1,4 +1,12 @@
 import type { ExperimentCase } from '../../runtime/experiment'
+import type { ResultChart } from '../../runtime/result-chart'
+
+export const karateFitChart: ResultChart = {
+  title: 'Fit brought all 34 points back into view',
+  context: 'Visible point centers · Same Karate Club layout at tick 5,000',
+  unit: 'of 34',
+  bars: [['Original camera', 17], ['After Fit', 34]],
+}
 
 export const cases: ExperimentCase[] = [
   {
@@ -17,6 +25,7 @@ export const cases: ExperimentCase[] = [
       scope: 'A 300-frame window, sampled rendering and bounded picking and dragging on the initial graph matrix.',
       limits: 'One device and a limited feature set; later interaction outliers and the 8,192-point star remain unresolved.',
       evidence: [
+        { label: 'Pilot evidence overview', page: 'overview' },
         { label: 'Integrated graph evidence', page: 'findings' },
         { label: 'Interactive composed forces', page: 'composed-interaction' },
         { label: 'Evaluation scope', page: 'method' },
@@ -38,12 +47,7 @@ export const cases: ExperimentCase[] = [
       scope: 'The cooled 34-point graph and a subsequent 102-pick replay on the same saved geometry.',
       limits: 'The original timing failure remains unresolved; physical display latency and other devices were not measured.',
       evidence: [{ label: 'Cooled graph assessment', page: 'findings', section: 'cooled-karate-club-readability-and-exploration' }],
-      charts: [{
-        title: 'Fit brought all 34 points back into view',
-        context: 'Visible point centers · Same Karate Club layout at tick 5,000',
-        unit: 'of 34',
-        bars: [['Original camera', 17], ['After Fit', 34]],
-      }],
+      charts: [karateFitChart],
     },
   },
   {

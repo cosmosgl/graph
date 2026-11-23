@@ -96,7 +96,11 @@ export async function createIntegrated (
       readback = await createIntegratedReadback(() => backend.positionSource!(), canvas, drawing, () => tick, data.input.points)
     }
     let raf = 0; let generation = 0; let lastFrame = 0; let pending: Promise<void> = Promise.resolve()
-    let press: { pointer: number; x: number; y: number; id: number | null; token: number; ready: boolean } | undefined
+    type Press = {
+      pointer: number; startX: number; startY: number; x: number; y: number; id: number | null; token: number;
+      ready: boolean; reading: boolean; released: boolean; origin?: Float32Array;
+    }
+    let press: Press | undefined
     let secondary: { pointer: number; x: number; y: number } | undefined
     let inFrame = false; let stepping = false; let replacing = false
     const feedback: Feedback[] = []; const intervals: number[] = []
@@ -320,6 +324,26 @@ export async function createIntegrated (
         destroyed = true; generation++; abort.abort(); api.pause(true); readback?.destroy(); drawing.destroy(); backend.destroy(); device.destroy()
       },
     }
+    const movePoint = (state: Press): void => {
+      if (state.id === null || state.token !== generation || destroyed || state.reading) return
+      if (!state.origin) {
+        if (state.x === state.startX && state.y === state.startY) return
+        // Only a drag needs the picked point's center and original pin flag.
+        state.reading = true
+        backend.positionSource!().buffer.readAsync(state.id * 16, 16).then(bytes => {
+          state.origin = new Float32Array(bytes.buffer, bytes.byteOffset, 4).slice()
+          state.reading = false
+          movePoint(state)
+        }).catch(e => { if (state.token === generation) fail(e) })
+        return
+      }
+      const [startX, startY] = api.world(state.startX, state.startY)
+      const [x, y] = api.world(state.x, state.y)
+      api.patchPositions(state.id, new Float32Array([
+        state.origin[0] + (x - startX), state.origin[1] + (y - startY),
+        state.released ? state.origin[2] : 1, state.origin[3],
+      ]))
+    }
     canvas.addEventListener('pointerdown', event => {
       if (event.button === 2 && composition) {
         if (!event.isTrusted || press || secondary || replacing || destroyed || error) return
@@ -331,10 +355,24 @@ export async function createIntegrated (
         return
       }
       if (event.button !== 0 || press || secondary || replacing) return
-      const [x, y] = coords(event); const state = { pointer: event.pointerId, x, y, id: null as number | null, token: generation + 1, ready: false }
+      const [x, y] = coords(event); const state: Press = {
+        pointer: event.pointerId,
+        startX: x,
+        startY: y,
+        x,
+        y,
+        id: null,
+        token: generation + 1,
+        ready: false,
+        reading: false,
+        released: false,
+      }
       press = state; canvas.setPointerCapture(event.pointerId)
       api.pick(x, y, event.timeStamp).then(id => {
-        if (press === state) { state.ready = true; state.id = id; if (id !== null) api.drag(id, state.x, state.y) }
+        if (state.token !== generation || destroyed) return
+        state.ready = true; state.id = id
+        if (id !== null) movePoint(state)
+        else api.pan(state.x - state.startX, state.y - state.startY)
       }).catch(fail)
     }, listener)
     canvas.addEventListener('pointermove', event => {
@@ -347,14 +385,15 @@ export async function createIntegrated (
       }
       if (!press || press.pointer !== event.pointerId) return
       const [x, y] = coords(event)
-      if (press.id !== null) api.drag(press.id, x, y)
-      else if (press.ready && press.token === generation) api.pan(x - press.x, y - press.y)
+      if (press.id === null && press.ready && press.token === generation) api.pan(x - press.x, y - press.y)
       press.x = x; press.y = y
+      movePoint(press)
     }, listener)
     const release = (event: PointerEvent): void => {
       if (secondary?.pointer === event.pointerId && event.isTrusted) { clearSecondary(); return }
       if (!press || press.pointer !== event.pointerId) return
-      if (press.id !== null) api.drag(press.id, press.x, press.y, true)
+      press.released = true
+      movePoint(press)
       press = undefined
     }
     canvas.addEventListener('pointerup', release, listener); canvas.addEventListener('pointercancel', release, listener)

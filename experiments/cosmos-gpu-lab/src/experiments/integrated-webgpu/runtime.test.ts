@@ -1,12 +1,12 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { createOracle } from '../combined-layout/reference'
 import { forceSettings } from '../combined-layout/production-settings'
 import { compare, compareArray } from '../many-body/reference'
 import { createComparisonCandidate } from '../viewer-comparison/comparison-candidate'
 import { prepareComparisonInput } from '../viewer-comparison/comparison-input'
 import { writeArtifact } from '../../testing/artifacts'
-import { validateFrame } from './validation'
-import { interactionCheck } from './evaluate'
+import { validateFrame, viewportProbes } from './validation'
+import { evaluate, interactionCheck } from './evaluate'
 import { createIntegrated, nextFrame } from './runtime'
 import { workload } from './data'
 
@@ -152,4 +152,56 @@ it('paints hard-edged and default one-pixel smooth links at DPR 1', async () => 
       }
     }
   } finally { candidate.destroy() }
+})
+
+it('measures the resident Karate graph and rejects a transiently hidden evaluation', async () => {
+  const canvas = document.createElement('canvas')
+  const r = await createIntegrated(canvas, 'karate', 8192)
+  try {
+    r.resize(960, 600, 1)
+    const result = await evaluate(r, () => false, () => {})
+    expect(result.workload).toEqual({ kind: 'karate', count: 34 })
+    expect(result.links).toBe(78)
+    const interrupted = evaluate(r, () => false, () => {})
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true)
+    try { document.dispatchEvent(new Event('visibilitychange')) } finally { hidden.mockRestore() }
+    document.dispatchEvent(new Event('visibilitychange'))
+    await expect(interrupted).rejects.toThrow('tab became hidden')
+  } finally { r.destroy() }
+})
+
+it('samples every row and column parity combination at both declared viewport scales', () => {
+  for (const ratio of [1, 2]) {
+    const sites = viewportProbes(960 * ratio, 600 * ratio)
+    expect(sites).toHaveLength(2048)
+    expect(new Set(sites.map(([x, y]) => 2 * (x % 2) + y % 2)).size).toBe(4)
+  }
+})
+
+it('selects a stationary off-center press and drags by the pointer displacement', async () => {
+  const canvas = document.createElement('canvas')
+  document.body.append(canvas)
+  const r = await createIntegrated(canvas, 'chain', 4)
+  try {
+    r.resize(64, 64, 1); r.renderer.camera.zoom = 1
+    const positions = new Float32Array([0, 0, 0, 0, 20, 20, 1, 0, 20, -20, 1, 0, -20, 20, 1, 0])
+    r.backend.setPositions(positions)
+    r.renderer.setStyle(0, [1, 1, 1, 1], 16)
+    // Synthetic events have no browser-owned pointer capture.
+    vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => {})
+    const pointer = (type: string, x: number): void => {
+      const rect = canvas.getBoundingClientRect()
+      canvas.dispatchEvent(new PointerEvent(type, { pointerId: 1, clientX: rect.left + x, clientY: rect.top + 32 }))
+    }
+    pointer('pointerdown', 36)
+    await vi.waitFor(() => expect(r.feedback).toHaveLength(1))
+    expect(r.renderer.selected).toBe(0)
+    expect((await r.backend.read()).positions).toEqual(positions)
+    pointer('pointerup', 36)
+    expect((await r.backend.read()).positions).toEqual(positions)
+    pointer('pointerdown', 36); pointer('pointermove', 42)
+    await vi.waitFor(async () => expect(Array.from((await r.backend.read()).positions.slice(0, 4))).toEqual([6, 0, 1, 0]))
+    pointer('pointerup', 42)
+    expect(Array.from((await r.backend.read()).positions.slice(0, 4))).toEqual([6, 0, 0, 0])
+  } finally { r.destroy(); canvas.remove() }
 })

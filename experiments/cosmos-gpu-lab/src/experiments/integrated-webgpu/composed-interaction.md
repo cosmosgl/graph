@@ -1,7 +1,6 @@
 # Composed forces with real pointer input
 
-In **First integrated WebGPU graph**, choose **Composed forces** and click
-**Replace graph / reset**. Hold the right mouse button over the graph to
+In **First integrated WebGPU graph**, choose **Composed forces** to load the graph paused. Hold the right mouse button over the graph to
 repel points while paused or running. The cluster and attractor buttons
 update their inputs at the current tick. **Composed with collision** adds
 two collision passes. It checks every pair through 4,096 points and uses
