@@ -59,7 +59,7 @@ In the packaged Lines replay, scrub a dashed endpoint across a pixel boundary an
 
 The packaged 8,192-slot dense and hub graphs kept the same community retention through tick 100. WebGPU had deeper residual overlaps in both. Both click comparisons met the native M3 margins. WebGPU's frame p95 stayed near 17.6 ms, and the WebGL controls varied enough to leave relative frame speed unassessed across two independent blocks. Larger graphs, deeper overlaps and moving selection remain open. [Dense communities](#/production-forces?section=try-dense) · [Hub](#/production-forces?section=try-hubs) · [Frame and click timings](#/production-forces?section=doc-scale-timing)
 
-Move from small fixtures to the million-point dense, hub and YouTube graphs. On moving YouTube, record the camera and positions at release, verify the selected IDs and measure the time until the highlight is visible. Include 1,000 tracked labels, replacement, resize and memory use. Run timed comparisons one engine at a time, with repeated WebGL controls and a slowdown margin declared in advance. [Workloads and metrics](#/million-graph?section=doc-production-envelope)
+Extend packaged comparisons to million-point dense and hub graphs, data replacement, resize and memory use. The moving YouTube replay now records the camera and release positions, checks selected IDs and 1,000 tracked labels and measures the wait for a highlighted frame. Run timed comparisons one engine at a time, with repeated WebGL controls. Declare a slowdown margin before a release acceptance run. [Workloads and metrics](#/million-graph?section=doc-production-envelope) · [Moving YouTube replay](#/production-graph-api?section=doc-youtube-selection)
 
 ### Qualify and release the replacement
 
@@ -71,7 +71,7 @@ At cutover, record the final WebGL revision and point historical comparisons to 
 
 The same-branch candidate runs Quick Start and Manual step. Its browser tests cover resident simulation, input queued before initialization, pinned and absent slots, sparse edits, selection, label sampling, position and style transitions, and drawing and picking in a borrowed host pass. The real-package comparison lives in [Production Graph API](#/production-graph-api).
 
-In the first fixed-camera package replay on Apple M3, all four million-point YouTube selections returned the expected IDs. The 1,000 tracked label coordinates matched the positions captured on every release. The interval from the release handler to the next measured paint opportunity ranged from **2.00 to 6.05 seconds**. Repeat with matched controls and profile latency before calling large moving selections ready for production. [Replay method and results](#/production-graph-api?section=doc-method)
+In the paired M3 replay, both packages returned exact rectangle IDs and 1,000 tracked coordinates on the moving 65,536-point YouTube graph. At one million points WebGPU returned exact results, while WebGL's async queries timed out. WebGPU release-to-highlight feedback still takes seconds. Reduce that delay before treating million-point moving selection as ready for production. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
 
 | Remaining check | Evidence needed before cutover |
 | --- | --- |

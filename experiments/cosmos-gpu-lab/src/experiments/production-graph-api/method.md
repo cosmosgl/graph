@@ -16,19 +16,21 @@ This small case exercises pre-initialization setters, NaN absence, linking, pinn
 
 ### Moving YouTube graph
 
+The paired M3 replay uses both built packages and reports readback, highlight updates and label redraw separately. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
+
 Prepare the SNAP YouTube fixture as described in the Lab README, then run the replay from the repository root.
 
 ```sh
 node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs
 ```
 
-The replay opens visible Chrome. It runs the built WebGPU Graph at 65,536 and 1,000,000 points on the induced YouTube topology. Each run uses a fixed camera, the four recorded drag rectangles and 1,000 tracked labels. A separate input overlay keeps the camera still while the pointer drags.
+### Earlier WebGPU-only replay
+
+The earlier replay opened visible Chrome and ran the built WebGPU Graph at 65,536 and 1,000,000 points on the induced YouTube topology. Each run used a fixed camera, the four recorded drag rectangles and 1,000 tracked labels. A separate input overlay kept the camera still while the pointer dragged.
 
 For correctness, the release handler submits rectangle selection, label gathering and a full position copy in the same task. An independent CSS-space rectangle calculation checks the ordered point IDs against that position snapshot. Each tracked label coordinate must equal the corresponding snapshot coordinate. The timing run omits the full copy and the oracle. It measures from handler entry to the ID result, then to the second animation-frame callback after applying highlights, updating the count, showing the box and drawing the labels. That callback gives the browser an opportunity to paint. The actual time the display presents the frame can differ.
 
-The script saves the tested bundle, source snapshot, browser and device identity, raw samples and screenshots under `captures/public-graph-youtube-*/`. The run exercises the candidate by itself. Use separate matched controls for WebGL performance comparisons.
-
-### Native M3 replay
+The historical capture includes the tested bundle, source snapshot, browser and device identity, raw samples and screenshots. It provides a single-engine baseline.
 
 Chrome 157.0.8103.79 reported an Apple Metal 3 WebGPU adapter on the M3. Both graph sizes completed four correctness drags. All eight ordered ID lists matched the release-time reference, and all 1,000 tracked coordinates matched on every release. On the million-point graph the four rectangles selected 425,378, 4,568, 56,254 and 5,717 IDs in the correctness run.
 
@@ -39,4 +41,4 @@ Chrome 157.0.8103.79 reported an Apple Metal 3 WebGPU adapter on the M3. Both gr
 
 Each range covers the four releases of one timing run at 961 × 541 CSS pixels, device pixel ratio 2 and zoom 0.25. The fixed-camera capture is `captures/public-graph-youtube-dWq8Uu/result.json`. Its tested bundle SHA-256 is `86cd64eb4c0a02bc54d14802c48a34d49b1b89ccfb042398d3dd285f4849b56a`. An earlier harness also panned the camera during a drag. The figures above come exclusively from the replay that verifies the camera center at every release.
 
-Other repository checks were running on the same machine during this development replay. Treat the timing ranges as preliminary observations. Repeat the timing run on an idle machine with matched WebGL controls before making a release performance decision.
+Other repository checks were running on the same machine during this historical replay. The paired replay above adds WebGL controls and separates readback from the two UI updates.

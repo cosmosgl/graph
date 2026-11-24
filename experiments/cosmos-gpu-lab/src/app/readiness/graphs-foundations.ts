@@ -88,13 +88,14 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     tone: 'pass',
     finding: selectionCase.recorded.conclusion,
     area: 'Integration',
-    status: 'Production WebGPU selection unverified',
+    status: 'Moving rectangles verified on M3, lasso edge cases open',
     evidence: [
       { tone: 'pass', text: '19 isolated queries matched' },
+      { tone: 'pass', text: 'The packaged WebGPU Graph returned the expected moving rectangle IDs and 1,000 tracked coordinates at both YouTube graph sizes.' },
       { tone: 'warn', text: 'On replay, production WebGL and WebGPU agreed on both lasso edge points. The CPU reference placed each on the opposite side.' },
     ],
     next: 'After PR #296 merges, match its footprint rules for both tools and replay the two lasso edge cases. ' +
-      'Verify selected IDs and time to highlight through the production WebGPU Graph API on the moving million-point YouTube graph.',
+      'Reduce the release-to-highlight delay in the million-point rectangle replay.',
   },
   'integrated-webgpu/tracked-positions': {
     badge: 'Positions matched',

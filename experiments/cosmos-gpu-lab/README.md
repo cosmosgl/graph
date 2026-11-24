@@ -102,6 +102,8 @@ The **YouTube Network** demo uses the benchmark's prepared
 [SNAP fixture](src/experiments/million-graph/production-envelope.md#workloads).
 The Lab serves the prepared dataset in development and includes it in the build when present.
 
+Open **Moving YouTube selection and labels** (`#/production-graph-api?section=doc-youtube-selection`) for the real-package M3 replay at 65,536 and one million points. The driver repeats four native drags and measures both readbacks, the highlight setter and the Storybook label redraw. [Replay instructions](src/experiments/production-graph-api/agent-recipe.md)
+
 ## Interface palette
 
 Keep charcoal surfaces and neutral reading text. Shared tokens in `src/app/styles.css` use pale

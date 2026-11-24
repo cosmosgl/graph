@@ -284,13 +284,17 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-graph-api': entry('production-graph-api', {
       reviewed: '2026-11-24',
-      conclusion: 'The public Graph comparison exercises the same caller in each built package.',
+      conclusion: 'Both packages returned exact selections and 1,000 labels at 65,536 points. At one million points, WebGL async reads timed out.',
       variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
-      comparison: 'Fixed gravity fixture, point-ID callbacks and async position reads',
+      comparison: 'Manual gravity and picking, plus four moving selection rectangles and 1,000 tracked labels on the YouTube graph',
       method: 'method',
-      next: 'Profile the delay from release to visible feedback on the moving million-point graph.',
-      reproduce: 'Click both endpoints and press Step gravity.',
-      investigations: [],
+      next: 'Reduce the wait for a highlighted frame at one million points and repeat the same drag replay.',
+      reproduce: 'Click both endpoints and press Step gravity. The moving YouTube replay runs each package separately on M3.',
+      investigations: [{
+        page: 'youtube-selection',
+        state: 'Current evidence',
+        description: 'Release-time IDs, tracked labels and interaction latency at two YouTube graph sizes.',
+      }],
     }),
     'production-lines': entry('production-lines', {
       reviewed: '2026-11-24',

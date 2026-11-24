@@ -66,11 +66,11 @@ export const validationContracts: Record<string, ValidationContract> = {
       'larger viewer workloads, full API and full migration are not approved.',
   },
   'production-graph-api': {
-    question: 'Can the same public Graph caller draw, pick and step the same graph with both built packages?',
-    reference: 'The WebGL Graph with identical inputs, one pinned endpoint, one absent slot and the independently known point IDs.',
-    acceptance: 'Keep point 0 fixed, move point 1 toward the center, preserve point 2 as NaN and report the correct clicked IDs.',
-    coverage: 'One fixed three-slot, one-link graph with gravity, manual stepping, asynchronous readback, clicks and teardown.',
-    limits: 'This fixture covers a single layout and configuration. Use the matched performance benchmark for timing.',
+    question: 'Can the same public Graph caller step, pick and select moving points with both built packages?',
+    reference: 'Known IDs on the small graph. On YouTube, each engine supplies its own full position snapshot at release for the rectangle and label checks.',
+    acceptance: 'Keep point 0 pinned, move point 1 inward and preserve absent point 2. Return exact ordered IDs and coordinates for 1,000 labels per drag.',
+    coverage: 'Manual gravity and clicks, plus four moving rectangles at two YouTube sizes with readback, highlight and label redraw timings on M3.',
+    limits: 'The YouTube replay uses a fixed camera, two-pixel points and one native GPU. The two running simulations can reach different layouts at release.',
   },
   'production-lines': {
     question: 'Does the same link draw at the same pixels and return the same ID in both Graph packages?',

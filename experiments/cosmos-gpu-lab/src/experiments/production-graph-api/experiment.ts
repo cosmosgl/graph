@@ -3,7 +3,7 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare one gravity step and point selection through the two built Cosmos packages.',
+  summary: 'Compare manual stepping, moving selection and tracked labels through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
@@ -27,5 +27,10 @@ export const experiment = defineExperiment({
     id: 'method',
     title: 'Reproduce the package comparison',
     load: async (): Promise<string> => (await import('./method.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'youtube-selection',
+    title: 'Moving YouTube selection and labels',
+    load: async (): Promise<string> => (await import('./youtube-selection.md?raw')).default,
   }],
 })
