@@ -141,16 +141,23 @@ it('matches every RGBA byte of the general link shader for overlapping solid str
     config.hoveredLinkColor = undefined
     data.inputLinks = new Float32Array([0, 1, 1, 2, 2, 0, 0, 1])
     data.inputLinkWidths = new Float32Array([0.625, 1.125, 3.25, 1.875])
-    data.inputLinkColors = new Float32Array([1, 0.1, 0, 0.5, 0, 0.8, 0.2, 0.75, 0, 0.1, 1, 1, 1, 0.2, 1, 0.375])
-    data.update()
     positions.write(new Float32Array([9.625, 23.2, 0, 0, 76.125, 39.1, 0, 0, 42.25, 11.375, 0, 0]))
-    renderer.update()
-    for (const curved of [false, true]) {
-      config.curvedLinks = curved
-      const reference = await capture(0)
-      expect(reference.some(v => v !== 0)).toBe(true)
-      const solid = await capture()
-      expect(solid.findIndex((value, i) => value !== reference[i])).toBe(-1)
+    for (const colors of [
+      [1, 0.1, 0, 0.5, 0, 0.8, 0.2, 0.75, 0, 0.1, 1, 1, 1, 0.2, 1, 0.375],
+      // Uniform RGB still preserves per-link alpha, width, focus and curvature.
+      [0.4, 0.2, 0.7, 0.5, 0.4, 0.2, 0.7, 0.75, 0.4, 0.2, 0.7, 1, 0.4, 0.2, 0.7, 0.375],
+    ]) {
+      data.inputLinkColors = new Float32Array(colors)
+      data.update()
+      renderer.update()
+      for (const curved of [false, true]) {
+        config.curvedLinks = curved
+        config.focusedLinkIndex = curved ? 2 : undefined
+        const reference = await capture(0)
+        expect(reference.some(v => v !== 0)).toBe(true)
+        const solid = await capture()
+        expect(solid.findIndex((value, i) => value !== reference[i])).toBe(-1)
+      }
     }
     expect(scene.errors).toEqual([])
   } finally { pixels.destroy(); scene.destroy() }

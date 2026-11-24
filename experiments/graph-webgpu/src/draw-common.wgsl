@@ -17,6 +17,7 @@ struct Params {
   pointViewport: vec4f,    // world origin and full CSS viewport, including during 1×1 picking
   pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
   linkPickPixel: vec2f,    // top-left texel of WebGL's CSS-resolution pointer index pass
+  uniformLinkRgb: vec3f,  // shared solid-link color; opacity and width still vary per link
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

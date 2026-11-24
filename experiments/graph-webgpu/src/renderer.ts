@@ -6,7 +6,7 @@ import { RenderKernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '../../../src/config'
 import { getRgbaColor } from '../../../src/helper'
 import type { GraphData } from '../../../src/modules/GraphData'
-import { packLinks, linkStride } from './modules/Lines'
+import { packLinks, linkStride, type LinkRgb } from './modules/Lines'
 import { Points, pointStride, shadeDirection } from './modules/Points'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
@@ -91,6 +91,7 @@ export class GraphRenderer {
   private pointCount = 0
   private linkCount = 0
   private hasOnlySolidLinks = false
+  private uniformLinkRgb?: LinkRgb
   private revision = 0
   private isDisposed = false
   private transparentBackground: Rgba = transparent
@@ -120,7 +121,7 @@ export class GraphRenderer {
     this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 17 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 18 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
       this.pickTexture = device.createTexture({ id: 'cosmos-pick', width: 1, height: 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
       this.pickFramebuffer = device.createFramebuffer({ colorAttachments: [this.pickTexture] })
@@ -147,7 +148,7 @@ export class GraphRenderer {
     this.focusRing = getRgbaColor(config.focusedPointRingColor)
 
     const { attributes, order, mask, colors } = this.points.pack(data, config, clearColor)
-    const { edges, hasOnlySolidLinks } = packLinks(data, config)
+    const { edges, hasOnlySolidLinks, uniformRgb } = packLinks(data, config)
     const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
     const animate = options.animate && this.pointCount > 0
     if (animate && this.pointBuffer && this.linkBuffer) {
@@ -174,6 +175,7 @@ export class GraphRenderer {
     this.pointCount = pointCount
     this.linkCount = linkCount
     this.hasOnlySolidLinks = hasOnlySolidLinks
+    this.uniformLinkRgb = uniformRgb
     this.highlightPass.setColors(colors)
     this.highlightMask = mask
     this.order = order
@@ -310,7 +312,7 @@ export class GraphRenderer {
     this.previous = undefined
   }
 
-  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link' | 'solidLink', picking: boolean): RenderKernel {
+  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link' | 'solidLink' | 'uniformRgbLink', picking: boolean): RenderKernel {
     const color = framebuffer.colorAttachments[0]!.texture.format as TextureFormatColor
     const depth = framebuffer.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined
     const samples = framebuffer.colorAttachments[0]!.texture.samples
@@ -322,7 +324,7 @@ export class GraphRenderer {
         id: `cosmos-${key}`,
         vertexSource: source,
         fragmentSource: source,
-        vertexEntryPoint: `${kind}Vertex`,
+        vertexEntryPoint: kind === 'uniformRgbLink' ? 'solidLinkVertex' : `${kind}Vertex`,
         fragmentEntryPoint: `${kind}Fragment`,
         topology: 'triangle-strip',
         shaderLayout: layout,
@@ -369,7 +371,8 @@ export class GraphRenderer {
       shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),
-      ...(linkPickPixel ?? [0, 0]),
+      ...(linkPickPixel ?? [0, 0]), 0, 0,
+      ...(this.uniformLinkRgb ?? [0, 0, 0]), 0,
     ]))
     const bindings = {
       params: uniforms,
@@ -384,7 +387,8 @@ export class GraphRenderer {
     if (options.links !== false && c.renderLinks && this.linkCount) {
       const useSolid = this.hasOnlySolidLinks && !picking && c.linkBlending && !c.linkColorInterpolateFromEndpoints &&
         view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
-      this.kernel(framebuffer, useSolid ? 'solidLink' : 'link', picking).draw(pass, {
+      const kind = useSolid ? (this.uniformLinkRgb ? 'uniformRgbLink' : 'solidLink') : 'link'
+      this.kernel(framebuffer, kind, picking).draw(pass, {
         vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.linkCount, bindings,
       })
     }

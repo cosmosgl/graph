@@ -156,6 +156,13 @@ fn fallingRamp(high: f32, low: f32, sample: f32) -> f32 {
   return vec4f(input.color.rgb, input.color.a * coverage);
 }
 
+// Keep the same vertex and interpolants as the general solid pass. A draw-wide
+// color needs only the per-link faded alpha in the fragment shader.
+@fragment fn uniformRgbLinkFragment(input: SolidRibbon) -> @location(0) vec4f {
+  let coverage = fallingRamp(0.5, 0.5 - input.smoothing, abs(input.across));
+  return vec4f(params.uniformLinkRgb, input.color.a * coverage);
+}
+
 @fragment fn linkFragment(input: Ribbon) -> @location(0) vec4f {
   let t = input.coord.x;
   let side = abs(input.coord.y);
