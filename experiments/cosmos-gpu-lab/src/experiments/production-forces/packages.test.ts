@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { writeArtifact } from '../../testing/artifacts'
-import { positionStats } from './compare'
+import { combinedMetrics, positionStats } from './compare'
 import { absentIndex, forceCases, forcePositions, origin, type ForceCase } from './fixture'
 import { createForcePreview, type ForceSession } from './frame'
 import { createForcesView } from './view'
@@ -85,7 +85,18 @@ it.each(forceCases)('compares packaged %s at fixed ticks', async fixture => {
       const stats = positions.map((xy, i) => positionStats(xy, previous[i]))
       const motion = stats.map(s => s.rmsDelta)
       const radius = stats.map(s => s.radius)
-      records.push({ tick, different: pair.different, maxDelta: pair.maxDelta, rmsDelta: pair.rmsDelta, radius, motion })
+      let combined
+      if (fixture === 'combined') {
+        const [gl, gpu] = positions.map(combinedMetrics)
+        combined = { webgl: gl, webgpu: gpu, positions: positions.map(xy => [...xy]) }
+        // A two-endpoint distance can differ by at most twice the per-point Euclidean error.
+        const lengthBudget = 2 * Math.SQRT2 * 0.01
+        expect.soft(Math.abs(gl.penetration - gpu.penetration)).toBeLessThan(lengthBudget)
+        gl.linkLengths.forEach((v, i) => expect.soft(Math.abs(v - gpu.linkLengths[i])).toBeLessThan(lengthBudget))
+        expect.soft(Math.abs(motion[0] - motion[1])).toBeLessThan(lengthBudget)
+        if (!tick) expect(gl.penetration).toBeGreaterThan(0)
+      }
+      records.push({ tick, combined, different: pair.different, maxDelta: pair.maxDelta, rmsDelta: pair.rmsDelta, radius, motion })
       for (const [i, xy] of positions.entries()) {
         expect(xy.length).toBe(initial.length)
         expect([...xy.subarray(0, 2)]).toEqual([...initial.subarray(0, 2)])
@@ -138,4 +149,66 @@ it('applies four held-button impulses when the responsive previews run straight 
     view.destroy()
     host.remove()
   }
+})
+
+// CSS coordinates fixed from the native WebGL reference before running the candidate.
+// Link 0 is deliberately isolated from other links and points at both midpoints.
+const combinedProbes = [
+  { xy: [79, 61], initial: 'Background', final: 'Link 0' },
+  { xy: [72, 84], initial: 'Link 0', final: 'Background' },
+  { xy: [44, 40], initial: 'Point 0', final: 'Point 0' },
+] as const
+
+type ProbeResult = { xy: readonly [number, number]; expected: string; actual: string; rgba: number[] }
+
+async function checkCombinedProbes (session: ForceSession, state: 'initial' | 'final'): Promise<ProbeResult[]> {
+  const results = []
+  for (const { xy, [state]: expected } of combinedProbes) {
+    const [x, y] = xy
+    const rgba = session.readPixel(x, y)
+    const actual = await session.click(x, y)
+    const color = expected === 'Point 0' ? [242, 107, 71, 255] : expected === 'Link 0' ? [255, 199, 107, 255] : [24, 32, 43, 255]
+    expect.soft(rgba, `paint at ${x},${y} in ${state} layout`).toEqual(color)
+    expect.soft(actual, `click at ${x},${y} in ${state} layout`).toBe(expected)
+    results.push({ xy, expected, actual, rgba })
+  }
+  return results
+}
+
+it('draws and picks the simulated link after reset, batch stepping and individual steps', async () => {
+  const records = []
+  for (const engine of ['webgl', 'webgpu'] as const) {
+    let batchPositions: number[] | undefined
+    for (const batch of [true, false]) {
+      const session = await createForcePreview(document.body, engine, 'combined')
+      try {
+        let xy = await session.advance(0)
+        const initial = await checkCombinedProbes(session, 'initial')
+        const stepsPerUpdate = batch ? 8 : 1
+        for (let tick = 0; tick < 8; tick += stepsPerUpdate) xy = await session.advance(stepsPerUpdate)
+        if (batch) batchPositions = [...xy]
+        else expect([...xy]).toEqual(batchPositions)
+        const final = await checkCombinedProbes(session, 'final')
+        records.push({ engine, batch, device: session.device, initial, final, xy: [...xy] })
+      } finally { session.destroy() }
+    }
+  }
+  await writeArtifact('package-forces-combined-picks', { browser: navigator.userAgent, records })
+})
+
+it('changes the WebGL trajectory when any one of the three forces is disabled', async () => {
+  const records = []
+  let reference: Float32Array | undefined
+  for (const disabled of [undefined, 'simulationLinkSpring', 'simulationRepulsion', 'simulationCollision'] as const) {
+    const session = await createForcePreview(document.body, 'webgl', 'combined', { config: disabled ? { [disabled]: 0 } : {} })
+    try {
+      await session.advance(0)
+      const xy = await session.advance(8)
+      reference ??= xy
+      const { maxDelta } = positionStats(xy, reference)
+      if (disabled) expect.soft(maxDelta, `disabling ${disabled} should move a coordinate beyond the parity budget`).toBeGreaterThan(0.01)
+      records.push({ disabled: disabled ?? 'none', maxDelta, xy: [...xy], metrics: combinedMetrics(xy), device: session.device })
+    } finally { session.destroy() }
+  }
+  await writeArtifact('package-forces-combined-reference', { browser: navigator.userAgent, records })
 })

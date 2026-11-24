@@ -56,7 +56,7 @@ const packageForce: CaseReadiness = {
   evidence: [
     { tone: 'pass', text: 'The first update moved the expected points. The pinned point and absent slot stayed fixed throughout.' },
   ],
-  next: 'Repeat with several forces active on the same graph.',
+  next: 'See the combined case for weighted springs, direct repulsion and collision acting in the same tick.',
 }
 
 // Each summary refers to the named case and its recorded evidence. These are
@@ -108,6 +108,18 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
       { tone: 'info', text: 'The results include one native timing run with repeated WebGL controls.' },
     ],
     next: 'Check convergence on dense communities and hubs with multiple forces active.',
+  },
+  'production-forces/combined': {
+    badge: 'Positions and picks match',
+    tone: 'pass',
+    finding: 'The packages agreed on every live coordinate at ticks 0, 1, 4 and 8. Both drew and picked link 0 at its new midpoint.',
+    area: 'Integration',
+    status: 'Three forces, drawing and picking agree on the small combined graph',
+    evidence: [
+      { tone: 'pass', text: 'Removing each force in turn changed the WebGL trajectory. The pinned and absent slots stayed fixed with all three active.' },
+      { tone: 'pass', text: 'On M3 and SwiftShader, eight single steps reproduced the batch result, including paint and click IDs at all three probes.' },
+    ],
+    next: 'Replay on a dense community and a hub graph, then measure native frame times and picking latency.',
   },
   'production-points/dpr-1': packagePoints,
   'production-points/dpr-2': packagePoints,

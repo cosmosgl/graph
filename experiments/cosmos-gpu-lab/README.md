@@ -84,7 +84,7 @@ Open **Lines in the Cosmos packages** (`#/production-lines`) to compare four lin
 
 Open the endpoint motion case (`#/production-lines?section=try-endpoint-motion`) to scrub two dashed or solid links through a pixel boundary. At 1×, move the phase to −1 device pixel and enable the difference overlay to inspect the worst recorded native dashed frame.
 
-Open **Forces in the Cosmos packages** (`#/production-forces`) to run the same seeded graph through one force at a time. Step both packages and read back their positions. The hierarchical repulsion case uses 8,192 slots and follows the spread and settling of the layout through tick 32.
+Open **Forces in the Cosmos packages** (`#/production-forces`) to step both packages and read back their positions. The combined case (`#/production-forces?section=try-combined`) runs weighted springs, repulsion and collision together. Run to tick 8 and click the gold link halfway between the orange point and its lower neighbor. Its former midpoint now returns a background click. The hierarchical repulsion case uses 8,192 slots and follows the spread and settling of the layout through tick 32.
 
 ```sh
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-lines/packages.test.ts src/experiments/production-forces/packages.test.ts

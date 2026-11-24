@@ -33,3 +33,11 @@ The isolated benchmark used Chrome 157, Node 24.6.0, pnpm 10.15.0, WebGL luma.gl
 | WebGPU candidate for final correctness | `44933b5ca508aa04395fc69b45ca088ab0aba4e90e2849def09a458bac66f435` |
 
 The timing record is `native-timing/package-forces-hierarchy-timing.json`. The archive and the two exact standalone bundles are alongside it. The later combined build includes link drawing and picking changes, exact zero-axis handling for the pointer and method ordering. The hierarchical repulsion implementation is the same in both builds.
+
+## Combined force comparison
+
+Open `#/production-forces?section=try-combined`. Rebuild both packages before starting the force suite. The native and SwiftShader commands above cover the combined case and its two additional checks. `package-forces-combined.json` retains the 0/1/4/8 coordinate arrays, metrics and backend descriptors. `package-forces-combined-reference.json` records the WebGL force-off controls. `package-forces-combined-picks.json` records the initial and final RGBA samples and public click IDs for both reset paths.
+
+The initial independent native WebGL trajectory and its repeat are in `captures/combined-forces-20261124/webgl-reference-first.json`. They also identify the midpoint probes at tick 0 and tick 8. Focused paired runs for the same graph use `captures/combined-forces-20261124/native/` and `swiftshader/`. The source for the controls and public caller is in this directory's `fixture.ts`, `frame.ts` and `packages.test.ts`. Frame coordinates are relative to the individual canvas. To verify them with an actual mouse, center the canvas in view and account for its displayed scale.
+
+The focused run used the WebGL and final WebGPU correctness bundles in the table above. Their hashes and the force fixture source hashes are in `combined-forces-20261124/manifest.json`. The native reference process reported Chrome 158.0.8127.37. Both Vitest runs recorded a Chrome 158 user agent, and checked the adapters at runtime. The real mouse replays are in `captures/motion-mixed-20261124/ui/combined-{1200,1000,390}.json`.

@@ -2,6 +2,7 @@ import { defineExperiment } from '../../runtime/experiment'
 import { forceCases, forces, type ForceCase } from './fixture'
 
 const descriptions: Record<ForceCase, string> = {
+  combined: 'Follow an overlapping pair and weighted links through eight updates. Click either graph to see which object moved under the pointer.',
   gravity: 'Pull each free point toward the fixed world origin.',
   center: 'Pull each free point toward the centroid of the present points.',
   springs: 'Connect endpoints using unequal weights, including a zero-weight spring and an absent endpoint.',
@@ -29,9 +30,11 @@ export const experiment = defineExperiment({
     id,
     title: forces[id],
     kind: 'compare',
-    question: id === 'hierarchy'
-      ? 'How closely do both layouts spread and settle under hierarchical repulsion?'
-      : `How closely do the two packages move points under ${forces[id].toLowerCase()}?`,
+    question: id === 'combined'
+      ? 'Does a link draw and pick at its new position when three forces move its endpoints?'
+      : id === 'hierarchy'
+        ? 'How closely do both layouts spread and settle under hierarchical repulsion?'
+        : `How closely do the two packages move points under ${forces[id].toLowerCase()}?`,
     description: descriptions[id],
     reference: 'The workspace WebGL Graph runs the same public API calls.',
     acceptance: id === 'hierarchy'

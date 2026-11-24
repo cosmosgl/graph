@@ -305,13 +305,13 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-forces': entry('production-forces', {
       reviewed: '2026-11-24',
-      conclusion: 'Six small force cases matched exactly. Centering agreed within 0.00025 graph units and both hierarchical layouts settled.',
+      conclusion: 'Six isolated forces matched exactly. With springs, repulsion and collision together, both the coordinates and the moved link ID matched.',
       variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
       comparison: 'Seeded positions, fixed step counts, pinned and absent slots, and approximate repulsion convergence',
       method: 'method',
       evidence: 'results',
-      next: 'Compare how differences accumulate when several forces run together.',
-      reproduce: 'Choose a force to inspect both trajectories.',
+      next: 'Replay the combined forces on dense communities and hub graphs and measure native frame times and picking latency.',
+      reproduce: 'Choose the combined case, run to tick 8 and click the golden link in both previews.',
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Per-force measurements in the two built packages.' }],
     }),
     'production-points': entry('production-points', {

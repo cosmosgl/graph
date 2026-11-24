@@ -1,4 +1,4 @@
-import { absentIndex } from './fixture'
+import { absentIndex, combinedDiameters, combinedLinks, combinedPadding } from './fixture'
 
 type PositionStats = { different: number; maxDelta: number; rmsDelta: number; radius: number; cx: number; cy: number }
 
@@ -36,4 +36,14 @@ export function positionStats (positions: Float32Array, reference: Float32Array)
     if (i !== 2 * absentIndex) radiusSquared += (positions[i] - cx) ** 2 + (positions[i + 1] - cy) ** 2
   }
   return { different, maxDelta, rmsDelta: Math.sqrt(squaredError / count), radius: Math.sqrt(radiusSquared / count), cx, cy }
+}
+
+/** Collision applies padding to each point's radius. All lengths are world-space graph units. */
+export function combinedMetrics (positions: Float32Array): { penetration: number; linkLengths: number[] } {
+  function distance (a: number, b: number): number {
+    return Math.hypot(positions[2 * a] - positions[2 * b], positions[2 * a + 1] - positions[2 * b + 1])
+  }
+  const contact = (combinedDiameters[1] + combinedDiameters[2]) / 2 + 2 * combinedPadding
+  const linkLengths = [0, 1].map(id => distance(combinedLinks[2 * id], combinedLinks[2 * id + 1]))
+  return { penetration: Math.max(0, contact - distance(1, 2)), linkLengths }
 }

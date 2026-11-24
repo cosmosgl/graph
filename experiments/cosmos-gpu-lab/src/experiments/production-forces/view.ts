@@ -1,6 +1,6 @@
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { positionStats } from './compare'
+import { combinedMetrics, positionStats } from './compare'
 import { forceCases, forcePositions } from './fixture'
 import { createForcePreview, type ForceSession } from './frame'
 import './view.css'
@@ -9,6 +9,7 @@ export function createForcesView (host: HTMLElement, caseId?: string): Experimen
   const fixture = forceCases.find(c => c === caseId) ?? 'gravity'
   const initial = forcePositions(fixture)
   const limit = fixture === 'hierarchy' ? 32 : 8
+  const combined = fixture === 'combined'
   host.innerHTML = `<button data-run-action="primary" type="button" data-step>Step once</button>
     <button data-run-action="primary" type="button" data-end>Run to tick ${limit}</button>
     <button data-run-action="primary" type="button" data-reset>Reset</button>
@@ -28,8 +29,15 @@ export function createForcesView (host: HTMLElement, caseId?: string): Experimen
     const status = document.createElement('p')
     status.setAttribute('role', 'status')
     section.append(heading, surface, status)
+    const details = document.createElement('p')
+    const pick = document.createElement('output')
+    if (combined) {
+      pick.dataset.forcePick = ''
+      pick.setAttribute('aria-label', `${heading.textContent} click result`)
+      section.append(details, pick)
+    }
     panels.append(section)
-    return { engine, surface, status, session: undefined as ForceSession | undefined, xy: undefined as Float32Array | undefined }
+    return { engine, surface, status, details, pick, session: undefined as ForceSession | undefined, xy: undefined as Float32Array | undefined }
   })
   let pending: Promise<void>
   let disposed = false
@@ -45,13 +53,26 @@ export function createForcesView (host: HTMLElement, caseId?: string): Experimen
           lane.session?.destroy()
           lane.session = lane.xy = undefined
           lane.status.textContent = 'Loading package…'
-          lane.session = await createForcePreview(lane.surface, lane.engine, fixture)
+          lane.pick.textContent = 'Click a link or point'
+          lane.details.textContent = ''
+          lane.session = await createForcePreview(lane.surface, lane.engine, fixture, {
+            onPick: id => { lane.pick.textContent = id },
+          })
         }
         if (!lane.session || disposed) return
+        const previous = lane.xy ?? initial
         lane.xy = await lane.session.advance(reload ? 0 : target - tick)
         const stats = positionStats(lane.xy, initial)
         if (lane.xy[0] !== initial[0] || lane.xy[1] !== initial[1]) throw new Error('Pinned point moved')
         lane.status.textContent = `RMS radius ${stats.radius.toFixed(3)} graph units`
+        if (combined) {
+          const { penetration, linkLengths } = combinedMetrics(lane.xy)
+          const displacement = positionStats(lane.xy, previous).rmsDelta
+          lane.details.textContent = `Points 1 and 2 overlap by ${penetration.toFixed(3)}. ` +
+            `Links 0 and 1 measure ${linkLengths.map(v => v.toFixed(3)).join(' and ')}. ` +
+            `RMS movement since tick ${reload ? 0 : tick} is ${displacement.toFixed(3)} graph units.`
+          lane.pick.textContent = 'Click a link or point'
+        }
       } catch (error) {
         lane.session?.destroy()
         lane.session = lane.xy = undefined
@@ -67,6 +88,7 @@ export function createForcesView (host: HTMLElement, caseId?: string): Experimen
           ? `Tick ${tick}. ${different.toLocaleString()} point positions differ. ` +
             `Largest coordinate difference ${maxDelta.toPrecision(4)}, RMS point difference ${rmsDelta.toPrecision(4)} graph units.`
           : `Tick ${tick}. All ${(gl.length / 2 - 1).toLocaleString()} present point positions match exactly. The pinned point and absent slot are preserved.`
+        if (combined && tick === limit) result.textContent += ' Click halfway along the descending link from the orange point in either preview.'
       } else {
         result.textContent = `Tick ${tick}. Both package readbacks are needed to compare positions.`
       }

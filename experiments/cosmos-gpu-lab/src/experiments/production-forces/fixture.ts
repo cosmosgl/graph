@@ -9,6 +9,7 @@ export const forces = {
   clusters: 'Clusters',
   repulsion: 'All-pairs repulsion',
   hierarchy: 'Hierarchical repulsion',
+  combined: 'Springs, repulsion and collision',
 } as const
 
 export type ForceCase = keyof typeof forces
@@ -19,7 +20,26 @@ export const absentIndex = 6
 export const hierarchyCount = 8192
 export const pointer: [number, number] = [origin + 32, origin]
 
+export const combinedPadding = 2
+export const combinedDiameters = [16, 28, 18, 12, 16, 12, 14, 12] as const
+export const combinedLinks = [0, 1, 1, 3, 3, 4, 0, 5, 3, 7] as const
+
 const strength: Record<ForceCase, GraphConfig> = {
+  combined: {
+    simulationLinkSpring: 0.5,
+    simulationLinkDistance: 44,
+    simulationLinkDistRandomVariationRange: [1, 1],
+    simulationRepulsion: 12,
+    simulationCollision: 1,
+    simulationCollisionPadding: combinedPadding,
+    simulationCollisionIterations: 2,
+    simulationCollisionCooling: 0,
+    linkDefaultColor: '#ffc76b',
+    linkDefaultWidth: 4,
+    linkDefaultArrows: false,
+    linkOpacity: 1,
+    linkVisibilityMinTransparency: 1,
+  },
   gravity: { simulationGravity: 0.75 },
   center: { simulationCenter: 6 },
   springs: { simulationLinkSpring: 0.5, simulationLinkDistance: 14, simulationLinkDistRandomVariationRange: [1, 1] },
@@ -57,6 +77,9 @@ export function forceConfig (fixture: ForceCase): GraphConfig {
 }
 
 export function forcePositions (fixture: ForceCase): Float32Array {
+  if (fixture === 'combined') {
+    return Float32Array.from([-100, 56, -45, -32, -37, -36, 55, 0, 92, 34, 30, 58, NaN, NaN, 90, -58], v => v + origin)
+  }
   if (fixture !== 'hierarchy') {
     return Float32Array.from([-50, 30, 40, 0, 20, 24, -40, -16, 8, -48, -20, 44, NaN, NaN, 24, 8], v => v + origin)
   }
@@ -79,6 +102,11 @@ export function loadForce (graph: Graph, fixture: ForceCase): void {
   if (fixture !== 'hierarchy') {
     const rgba = Float32Array.from({ length: xy.length * 2 }, (_, i) => (i < 4 ? [0.95, 0.42, 0.28, 1] : [0.47, 0.83, 0.91, 1])[i % 4])
     graph.setPointColors(rgba)
+  }
+  if (fixture === 'combined') {
+    graph.setPointSizes(Float32Array.from(combinedDiameters))
+    graph.setLinks(Float32Array.from(combinedLinks))
+    graph.setLinkStrength(Float32Array.of(0.45, 1, 0.35, 0.8, 0.6))
   }
   if (fixture === 'springs') {
     graph.setLinks(new Float32Array([0, 1, 1, 2, 2, 4, 4, 6, 5, 7]))
