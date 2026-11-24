@@ -75,7 +75,7 @@ On M3, both packages returned exact rectangle IDs and 1,000 tracked coordinates 
 
 | Remaining check | Evidence needed before cutover |
 | --- | --- |
-| Force controls and layout quality | The candidate uses direct repulsion on small graphs and a hierarchy above 4,096 points. Verify the production sampling and quality controls, long-run convergence, dense overlap and hub behavior with matched inputs. |
+| Force controls and layout quality | Above 4,096 points both engines now sample nearby points and group distant cells using the same quality settings. The seeded 22,500-point lasso closely matched initial expansion and late motion within clusters on M3. Repeat on other adapters and quantify the runtime cost and long-run overlap on dense and hub graphs. [Force comparisons](#/production-forces?section=doc-results) |
 | Appearance across the catalog | Matched captures and picked IDs for every supported style, including moving curves, dashed curves, image alpha, hover and overlaps. Check animated insertion and removal, and selection during size transitions. |
 | Interaction at scale | Compare visible feedback after release and label refresh on moving graphs. Profile channel uploads on highlight changes and report first request, p95 and stalls against repeated WebGL controls. |
 | Public API and packages | Typecheck application and integration consumers against the packed release. Document fresh async reads, completed snapshots and the borrowed position buffer for custom renderers. |

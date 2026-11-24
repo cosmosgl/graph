@@ -20,6 +20,22 @@ VITE_LAB_FORCE_TIMING=1 LAB_NATIVE_VISIBLE=1 LAB_ARTIFACT_RUN=force-native-timin
 
 ## Recorded source and outputs
 
+### Replay Lasso Selection at the same simulation ticks
+
+Start `pnpm run storybook` and `pnpm run storybook:webgpu` in separate terminals. From the repository root run the following command with native Chrome installed.
+
+```sh
+node experiments/cosmos-gpu-lab/scripts/lasso-story-replay.mjs
+```
+
+The driver opens the real story at each preview URL, pauses the running Graph at the requested tick and reads every position. It checks the mesh digest, cluster assignments, simulation seed, camera and native adapter. It writes a source archive, a per-tick JSON report and side-by-side canvas captures at ticks 1, 60 and 240 to a new `captures/lasso-story-*` directory. Open the resulting `comparison.html` to view the frames. Optional positional arguments override the WebGL and WebGPU preview URLs.
+
+The checks allow one CSS pixel of RMS position difference after the first step, one CSS pixel of difference in the 90% radius at every checkpoint, and 5% difference in internal motion across ticks 240–248. Internal motion removes each cluster's translation separately for every step. See the results for the observed differences.
+
+Chrome 158.0.8127.37 on Apple M3 ran the baseline at `captures/lasso-story-2026-11-24T19-49-32-982Z/` and the corrected force from `d9c902e4` at `captures/lasso-story-2026-11-24T19-58-51-187Z/`. Both used the same 22,500-point mesh, Graph seed, camera and viewport.
+
+### Earlier packaged force runs
+
 The local capture root is `experiments/cosmos-gpu-lab/captures/package-forces-20261124/`. Final correctness records are under `final-44933b5c-native/` and `final-44933b5c-swiftshader/`. The original miss is in `baseline-native.json`. It ran on the baseline WebGPU bundle with SHA-256 `9d1b715dd6686f741caf344c514385f8202e1d216ca8ebfebb259fc641a82b85`.
 
 The isolated benchmark used Chrome 157, Node 24.6.0, pnpm 10.15.0, WebGL luma.gl 9.3.6 and WebGPU luma.gl 10.0.0-alpha.15. The WebGL device reported ANGLE Metal Apple M3, and WebGPU reported Apple metal-3 and fallback false. Both builds used the worktree based on `5a3321f57d0a6b6187fbe5c097934a9b95ab2601`.

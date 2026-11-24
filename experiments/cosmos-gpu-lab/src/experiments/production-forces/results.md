@@ -38,11 +38,25 @@ Both packages spread the same 8,192-slot cloud from an RMS radius of 51.210 grap
 | Apple M3 | 118.1048 / 118.3848 | 0.010832 / 0.010895 | 1.03450 |
 | SwiftShader | 118.1048 / 118.3848 | 0.010832 / 0.010896 | 1.03465 |
 
-These figures describe one seeded cloud with repulsion enabled in isolation. The two packages use different hierarchical approximations. The [method](#/production-forces?section=doc-method) defines the spread and settling requirements.
+These figures are from the earlier WebGPU tree approximation. With the new grid, the paired RMS position difference on the same M3 cloud at tick 32 was 0.00223 graph units. [Spread and settling checks](#/production-forces?section=doc-method)
+
+## Lasso Selection in both Storybooks
+
+The 22,500-point story starts its 25 color groups in the same small square. On Apple M3 the old WebGPU force expanded the cloud less on the first tick and left the individual points moving visibly after the groups formed. Both previews now seed the mesh and simulation independently. All initial positions matched. The table gives the radius around the layout center that contains 90% of the points, in graph units.
+
+| Simulation tick | WebGL | Previous WebGPU | WebGPU with the grid |
+| ---: | ---: | ---: | ---: |
+| 0 | 22.97 | 22.97 | 22.97 |
+| 1 | 3,265.64 | 2,859.68 | 3,265.64 |
+| 10 | 642.41 | 651.42 | 642.34 |
+| 60 | 1,048.07 | 1,052.84 | 1,048.29 |
+| 240 | 1,040.25 | 1,039.61 | 1,040.08 |
+
+Across ticks 240–248, the RMS movement per point per tick, after subtracting each color group's translation, was **0.04383** on WebGL, **0.79801** on the previous WebGPU force and **0.04374** with the grid. The distance between corresponding point IDs was 0.032 units RMS after one tick and 6.95 units at tick 240. The two implementations accumulate cell positions differently. At the story zoom of 0.4 the latter distance is about 2.8 CSS pixels.
 
 ## Native runtime at 8,192 slots
 
-The same public application used one manual step, one paused draw and one awaited full position readback per sample. Visible Chrome ran a single Graph at a time on the M3. Each trial used a fresh graph, four warm-up updates and 24 timed updates at ticks 5 through 28.
+The following timings are from the earlier WebGPU tree approximation. The same public application used one manual step, one paused draw and one awaited full position readback per sample. Visible Chrome ran a single Graph at a time on the M3. Each trial used a fresh graph, four warm-up updates and 24 timed updates at ticks 5 through 28.
 
 | Trial | Median milliseconds per update | 95th percentile |
 | --- | ---: | ---: |
@@ -54,7 +68,9 @@ The measurements include browser scheduling, GPU submission and position transfe
 
 ## Dense communities and the movable hub
 
-At tick 100, the RMS distance between corresponding points was below 0.45% of the WebGL layout radius on both graphs. Both packages preserved all 127 pins, the absent slot and all 8,182 ordered links. They retained the same fraction of each community at every checkpoint. The table shows the native Apple M3 measurements. Distances are in graph units. [Layout checks and thresholds](#/production-forces?section=doc-scale-method)
+With the new grid the native M3 replay measured a paired RMS distance at tick 100 of 0.52 units for dense communities and 2.43 units for the hub, respectively 0.016% and 0.075% of the WebGL RMS radius. Both packages retained the same fraction of each community at every checkpoint and passed the paint, pick, pin and topology checks. [Layout checks and thresholds](#/production-forces?section=doc-scale-method)
+
+The table below records the earlier WebGPU tree comparison on the same graphs. Both packages preserved all 127 pins, the absent slot and all 8,182 ordered links. Distances are in graph units.
 
 | At tick 100 | Dense WebGL | Dense WebGPU | Hub WebGL | Hub WebGPU |
 | --- | ---: | ---: | ---: | ---: |
