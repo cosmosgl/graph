@@ -377,11 +377,19 @@ export class GraphSimulation {
     this.config.onSimulationEnd?.()
   }
 
-  public runSimulationStep (forceExecution = false): boolean {
-    if (!this.isReady || !this.state || !this.config.enableSimulation || (!this.store.isSimulationRunning && !forceExecution)) return false
+  public runSimulationStep (forceExecution = false, pointer?: readonly [number, number], blocked = false): boolean {
+    if (!this.isReady || !this.state || !this.config.enableSimulation) return false
+    // As in WebGL, a held right button applies its kick before the ordinary
+    // forces, even when the graph is paused or the camera blocks layout.
+    if (pointer && this.config.simulationRepulsionFromMouse) {
+      this.state.applyPointer(this.config, ...pointer)
+      this.version++
+    }
+    if (!forceExecution && (!this.store.isSimulationRunning || blocked)) return false
     this.state.step(this.config)
     this.version++
     this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
+    if (pointer) this.store.alpha = Math.max(0.1, this.store.alpha)
     this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
     this.config.onSimulationTick?.(this.store.alpha, this.store.hoveredPoint?.index, this.store.hoveredPoint?.position)
     if (this.store.isSimulationRunning && this.store.alpha < ALPHA_MIN) this.end()

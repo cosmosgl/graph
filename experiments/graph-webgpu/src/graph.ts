@@ -128,7 +128,7 @@ export class Graph {
       this.area?.invalidateSizes()
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
-      this.renderOneFrame()
+      this.drawFrame()
       if (isFirst && this.canvas && this.config.fitViewOnInit && this.config.initialZoomLevel === undefined) {
         this.fitTimer = setTimeout(() => {
           if (this.config.fitViewByPointIndices) this.fitViewByPointIndices(this.config.fitViewByPointIndices, this.config.fitViewDuration, this.config.fitViewPadding)
@@ -141,14 +141,10 @@ export class Graph {
   }
 
   public renderOneFrame (): void {
+    if (!this.isReady) { this.whenReady(() => this.renderOneFrame()); return }
     if (!this.canvas || this.isDestroyed) return
-    if (this.transition.isActive) {
-      const positions = this.transition.isActiveFor(TransitionProperty.Positions)
-      this.transition.step()
-      const live = this.getPointPositionBuffer()
-      if (positions && live && this.positionTransition?.write(live, this.transition.progress)) this.simulation.markPositionsChanged()
-    }
-    this.renderer?.draw(this.view())
+    this.runSimulationStep()
+    this.drawFrame()
   }
 
   /** Record into the host's open pass using the viewport supplied to setViewTransform(). */
@@ -188,7 +184,12 @@ export class Graph {
     })
   }
 
-  public step (): void { this.whenReady(() => { this.simulation.step(); this.renderOneFrame() }) }
+  public step (): void {
+    this.whenReady(() => {
+      this.runSimulationStep(true)
+      this.requestFrame()
+    })
+  }
 
   public setPointPositions (positions: Float32Array, dontRescale?: boolean): void {
     this.whenReady(() => {
@@ -424,6 +425,25 @@ export class Graph {
     this.attribution?.remove()
   }
 
+  private drawFrame (): void {
+    if (!this.canvas || this.isDestroyed) return
+    if (this.transition.isActive) {
+      const positions = this.transition.isActiveFor(TransitionProperty.Positions)
+      this.transition.step()
+      const live = this.getPointPositionBuffer()
+      if (positions && live && this.positionTransition?.write(live, this.transition.progress)) this.simulation.markPositionsChanged()
+    }
+    this.renderer?.draw(this.view())
+  }
+
+  private runSimulationStep (forceExecution = false): void {
+    if (!this.hasRendered) return
+    const simulateDuringZoom = this.camera.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
+    const blocked = this.transition.isActiveFor(TransitionProperty.Positions) || (this.camera.isRunning && !simulateDuringZoom)
+    const pointer = this.config.enableRightClickRepulsion ? this.mouseRepulsion : undefined
+    this.simulation.runSimulationStep(forceExecution, pointer, blocked)
+  }
+
   private whenReady (operation: () => void): void {
     if (this.isDestroyed) return
     if (this.isReady) operation()
@@ -486,10 +506,6 @@ export class Graph {
     this.frame = requestAnimationFrame(() => {
       this.frame = 0
       if (this.isDestroyed || this.simulation.device?.isLost) return
-      if (this.mouseRepulsion && this.config.enableRightClickRepulsion) this.simulation.applyMouseRepulsion(...this.mouseRepulsion)
-      const simulateDuringZoom = this.camera.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
-      if (this.hasRendered && !this.transition.isActiveFor(TransitionProperty.Positions) &&
-        (!this.camera.isRunning || simulateDuringZoom)) this.simulation.runSimulationStep()
       this.renderOneFrame()
       if (this.hasRendered && (this.isSimulationRunning || this.transition.isActive || this.mouseRepulsion)) this.requestFrame()
     })

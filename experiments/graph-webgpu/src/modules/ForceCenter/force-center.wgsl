@@ -6,5 +6,12 @@
 @compute @workgroup_size(64) fn center(@builtin(global_invocation_id) id: vec3u) {
   if (id.x >= arrayLength(&positions)) { return; }
   let c = centroid[0];
-  output[id.x] = vec4f((c.xy / max(c.z, 1.) - positions[id.x].xy) * (params.z * params.w * 0.01), 0., 0.);
+  let delta = c.xy / max(c.z, 1.) - positions[id.x].xy;
+  let distance = length(delta);
+  var velocity = vec2f(0.);
+  if (distance > 0.) {
+    let angle = atan2(delta.y, delta.x);
+    velocity = (params.z * params.w * distance * 0.01) * vec2f(cos(angle), sin(angle));
+  }
+  output[id.x] = vec4f(velocity, 0., 0.);
 }

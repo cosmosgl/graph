@@ -4,5 +4,12 @@
 
 @compute @workgroup_size(64) fn gravity(@builtin(global_invocation_id) id: vec3u) {
   if (id.x >= arrayLength(&positions)) { return; }
-  output[id.x] = vec4f((params.xy - positions[id.x].xy) * (params.z * params.w * 0.1), 0., 0.);
+  let delta = params.xy - positions[id.x].xy;
+  let distance = length(delta);
+  var velocity = vec2f(0.);
+  if (distance > 0.) {
+    let angle = atan2(delta.y, delta.x);
+    velocity = (params.z * params.w * distance * 0.1) * vec2f(cos(angle), sin(angle));
+  }
+  output[id.x] = vec4f(velocity, 0., 0.);
 }

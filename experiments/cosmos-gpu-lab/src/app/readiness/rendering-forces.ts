@@ -47,6 +47,18 @@ const exactLine: CaseReadiness = {
   status: 'Exact match on the packaged link fixture',
 }
 
+const packageForce: CaseReadiness = {
+  badge: 'Positions match',
+  tone: 'pass',
+  finding: 'Both packages returned the same coordinates at ticks 0, 1, 4 and 8 on Apple M3 and SwiftShader.',
+  area: 'Integration',
+  status: 'Exact positions on the single-force fixture',
+  evidence: [
+    { tone: 'pass', text: 'The first update moved the expected points. The pinned point and absent slot stayed fixed throughout.' },
+  ],
+  next: 'Repeat with several forces active on the same graph.',
+}
+
 // Each summary refers to the named case and its recorded evidence. These are
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
@@ -60,6 +72,30 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'production-lines/arrows': packageLine,
   'production-lines/hover': packageLine,
   'production-lines/zoom': exactLine,
+  'production-forces/gravity': packageForce,
+  'production-forces/springs': packageForce,
+  'production-forces/mouse': packageForce,
+  'production-forces/attractors': packageForce,
+  'production-forces/clusters': packageForce,
+  'production-forces/repulsion': packageForce,
+  'production-forces/center': {
+    ...packageForce,
+    badge: 'Within 0.00025 units',
+    finding: 'Every coordinate stayed within 0.00025 graph units of WebGL on Apple M3 and SwiftShader through eight ticks.',
+    status: 'Centering passes the coordinate check',
+  },
+  'production-forces/hierarchy': {
+    badge: 'Layouts settled',
+    tone: 'pass',
+    finding: 'Both seeded 8,192-slot layouts spread and settled. Their final RMS position difference was 0.88% of the WebGL radius on each adapter.',
+    area: 'Integration',
+    status: 'Approximate repulsion passes the convergence check',
+    evidence: [
+      { tone: 'pass', text: 'The fixture preserved the pin and hole. Both layouts slowed to less than 5% of their first-tick motion.' },
+      { tone: 'info', text: 'The results include one native timing run with repeated WebGL controls.' },
+    ],
+    next: 'Check convergence on dense communities and hubs with multiple forces active.',
+  },
   'production-points/dpr-1': packagePoints,
   'production-points/dpr-2': packagePoints,
   'production-force-collision/contacts': packageCollision,

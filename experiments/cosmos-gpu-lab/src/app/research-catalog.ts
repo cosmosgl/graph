@@ -303,6 +303,17 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       reproduce: 'Choose a link case and pixel ratio to replay the comparison.',
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Measured color, geometry and pick agreement in the built packages.' }],
     }),
+    'production-forces': entry('production-forces', {
+      reviewed: '2026-11-24',
+      conclusion: 'Six small force cases matched exactly. Centering agreed within 0.00025 graph units and both hierarchical layouts settled.',
+      variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
+      comparison: 'Seeded positions, fixed step counts, pinned and absent slots, and approximate repulsion convergence',
+      method: 'method',
+      evidence: 'results',
+      next: 'Compare how differences accumulate when several forces run together.',
+      reproduce: 'Choose a force to inspect both trajectories.',
+      investigations: [{ page: 'results', state: 'Current evidence', description: 'Per-force measurements in the two built packages.' }],
+    }),
     'production-points': entry('production-points', {
       reviewed: '2026-11-24',
       conclusion: 'All 26 Points frames matched WebGL byte for byte on both Apple M3 and SwiftShader.',

@@ -13,7 +13,7 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
     return;
   }
 
-  let delta = point.xy - params.xy;
+  let delta = params.xy - point.xy;
   let distance = length(delta);
   // There is no direction at coincidence. The legacy shader calls atan(0, 0).
   if (distance == 0.) {
@@ -22,5 +22,8 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
   }
   let clamped = max(distance, 10.);
   let strength = 100. * params.z / (clamped * clamped);
-  forces[index] = vec4f(strength * (delta / distance), 0., 0.);
+  let angle = atan2(delta.y, delta.x);
+  // Preserve the exact stationary axis through the sin(pi) roundoff of an axial kick.
+  let direction = select(vec2f(cos(angle), sin(angle)), vec2f(0.), delta == vec2f(0.));
+  forces[index] = vec4f(-strength * direction, 0., 0.);
 }

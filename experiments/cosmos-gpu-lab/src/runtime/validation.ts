@@ -79,6 +79,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'Straight and moving links, curves, gradients, dashes, dots, arrows, hover and zoom at pixel ratios 1 and 2.',
     limits: 'Small deterministic fixtures exercise individual features. The shared stories also exercise controls on larger graphs.',
   },
+  'production-forces': {
+    question: 'How does each force move the same graph when both packages receive the same public calls?',
+    reference: 'The built WebGL Graph stepped from identical inputs, with independent checks on direction, pins and absent slots.',
+    acceptance: 'Compare coordinates at fixed ticks, preserve pinned and absent slots and measure the approximate repulsion trajectory against the reference.',
+    coverage: 'Gravity, centering, weighted springs, mouse repulsion, attractors, clusters and both repulsion paths. Collision has a dedicated comparison.',
+    limits: 'Force-isolated graphs expose which calculation differs. Combined-force and million-point workloads have separate studies.',
+  },
   'production-points': {
     question: 'Do all eight point shapes produce identical pixels in the WebGL and WebGPU Graph packages at pixel ratios 1 and 2?',
     reference: 'The built WebGL Graph, drawing the same point indices, sizes, positions, camera, fill and background as the built WebGPU Graph.',
