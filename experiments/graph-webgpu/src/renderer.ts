@@ -76,6 +76,7 @@ export class GraphRenderer {
   private pickTexture!: Texture
   private pickFramebuffer!: Framebuffer
   private readonly points: Points
+  private readonly linkSource: string
   private readonly pointSource: string
   private pointBuffer?: Buffer
   private linkBuffer?: Buffer
@@ -109,9 +110,10 @@ export class GraphRenderer {
       `const swiftShaderPointRaster = ${device.info.gpuArchitecture === 'swiftshader'};`,
       pointShader,
     ].join('\n')
+    this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 16 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 17 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
       this.pickTexture = device.createTexture({ id: 'cosmos-pick', width: 1, height: 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
       this.pickFramebuffer = device.createFramebuffer({ colorAttachments: [this.pickTexture] })
@@ -205,7 +207,10 @@ export class GraphRenderer {
     const y = Math.floor(yCss * view.pixelRatio)
     const framebuffer = this.pickFramebuffer
     const pass = this.device.beginRenderPass({ framebuffer, clearColor: transparent, clearDepth: false, clearStencil: false })
-    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], true) } finally { pass.end() }
+    // The WebGL link index is CSS-resolution and uses lower-left coordinates.
+    // Integer mouse y lies on a texel boundary and selects the sample above it.
+    const linkPixel: [number, number] = [Math.floor(xCss), Math.max(0, Math.ceil(yCss) - 1)]
+    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], true, this.uniforms, {}, linkPixel) } finally { pass.end() }
     // Each query takes its own snapshot before the next pick can overwrite the one-pixel target.
     const staging = this.device.createBuffer({ id: 'cosmos-pick-read', byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
     try {
@@ -273,7 +278,7 @@ export class GraphRenderer {
     const key = [kind, color, depth, samples, picking].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
-      const source = kind === 'link' ? linkShader : this.pointSource
+      const source = kind === 'link' ? this.linkSource : this.pointSource
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
         vertexSource: source,
@@ -304,7 +309,7 @@ export class GraphRenderer {
 
   private encode (
     pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number], picking: boolean,
-    uniforms = this.uniforms, options: GraphDrawOptions = {}
+    uniforms = this.uniforms, options: GraphDrawOptions = {}, linkPickPixel?: [number, number]
   ): void {
     const position = this.positionSource()
     if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.linkBuffer || !this.points.atlas) return
@@ -318,13 +323,14 @@ export class GraphRenderer {
       ...c.linkVisibilityDistanceRange, c.linkVisibilityMinTransparency, +c.linkColorInterpolateFromEndpoints,
       view.hoveredPoint ?? -1, c.focusedPointIndex ?? -1, view.hoveredLink ?? -1, c.focusedLinkIndex ?? -1,
       c.hoveredLinkWidthIncrease, c.focusedLinkWidthIncrease, c.linkDashLength, c.linkDashGap,
-      +picking, c.linkArrowsSizeScale, position.pointCount, options.picking?.alpha ?? 0.5,
+      linkPickPixel ? 2 : +picking, c.linkArrowsSizeScale, position.pointCount, options.picking?.alpha ?? 0.5,
       ...this.hoverColor, ...this.hoverRing, ...this.focusRing,
       this.previous ? Math.max(0, Math.min(1, view.styleProgress ?? 1)) : 1, this.previous?.pointCount ?? 0,
       this.previous?.linkCount ?? 0, view.maxPointSize ?? 64,
       shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),
+      ...(linkPickPixel ?? [0, 0]),
     ]))
     const bindings = {
       params: uniforms,

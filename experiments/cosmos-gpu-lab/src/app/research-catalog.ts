@@ -292,6 +292,17 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       reproduce: 'Click both endpoints and press Step gravity.',
       investigations: [],
     }),
+    'production-lines': entry('production-lines', {
+      reviewed: '2026-11-24',
+      conclusion: 'Straight and moving links match in paint and picking on both adapters. The style results list every remaining pixel difference.',
+      variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
+      comparison: 'Full RGBA captures and public callback IDs for identical geometry, styles and pointer locations',
+      method: 'method',
+      evidence: 'results',
+      next: 'Check patterned vertical line endings at subpixel ties, then combine styles on moving links.',
+      reproduce: 'Choose a link case and pixel ratio to replay the comparison.',
+      investigations: [{ page: 'results', state: 'Current evidence', description: 'Measured color, geometry and pick agreement in the built packages.' }],
+    }),
     'production-points': entry('production-points', {
       reviewed: '2026-11-24',
       conclusion: 'All 26 Points frames matched WebGL byte for byte on both Apple M3 and SwiftShader.',

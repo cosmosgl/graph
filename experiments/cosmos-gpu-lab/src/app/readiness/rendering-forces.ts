@@ -26,10 +26,40 @@ const packagePoints: CaseReadiness = {
   next: 'See the additional M3 size and offset checks for the remaining one-level edge differences.',
 }
 
+const packageLine: CaseReadiness = {
+  badge: 'Stroke and picks checked',
+  tone: 'review',
+  finding: 'The stroke stayed within the edge and color allowances. Both packages selected the expected objects before and after the endpoint moved.',
+  area: 'Integration',
+  status: 'Packaged link fixture passes the practical checks',
+  evidence: [
+    { tone: 'pass', text: 'The two packages passed on Apple M3 and SwiftShader at pixel ratios 1 and 2.' },
+    { tone: 'info', text: 'The results list the exact pixel counts for each style and adapter.' },
+  ],
+  next: 'Check styled vertical line endings at subpixel ties, then combine styles on moving links.',
+}
+
+const exactLine: CaseReadiness = {
+  ...packageLine,
+  badge: 'Pixels and picks match',
+  tone: 'pass',
+  finding: 'Every RGBA pixel matched on Apple M3 and SwiftShader at both ratios. The click callbacks selected the expected objects.',
+  status: 'Exact match on the packaged link fixture',
+}
+
 // Each summary refers to the named case and its recorded evidence. These are
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
 export const renderingAndForces: Record<string, CaseReadiness> = {
+  'production-lines/straight': exactLine,
+  'production-lines/moving': exactLine,
+  'production-lines/gradient': exactLine,
+  'production-lines/curved': packageLine,
+  'production-lines/dashed': exactLine,
+  'production-lines/dotted': packageLine,
+  'production-lines/arrows': packageLine,
+  'production-lines/hover': packageLine,
+  'production-lines/zoom': exactLine,
   'production-points/dpr-1': packagePoints,
   'production-points/dpr-2': packagePoints,
   'production-force-collision/contacts': packageCollision,

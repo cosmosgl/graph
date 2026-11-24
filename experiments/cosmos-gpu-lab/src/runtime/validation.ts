@@ -72,6 +72,13 @@ export const validationContracts: Record<string, ValidationContract> = {
     coverage: 'One fixed three-slot, one-link graph with gravity, manual stepping, asynchronous readback, clicks and teardown.',
     limits: 'This fixture covers a single layout and configuration. Use the matched performance benchmark for timing.',
   },
+  'production-lines': {
+    question: 'Does the same link draw at the same pixels and return the same ID in both Graph packages?',
+    reference: 'The built WebGL Graph drawing the same endpoints, widths, styles and camera, plus independently specified pointer targets.',
+    acceptance: 'Compare every RGBA pixel and report exact differences. Check the stroke and the expected point, link or background at each probe.',
+    coverage: 'Straight and moving links, curves, gradients, dashes, dots, arrows, hover and zoom at pixel ratios 1 and 2.',
+    limits: 'Small deterministic fixtures exercise individual features. The shared stories also exercise controls on larger graphs.',
+  },
   'production-points': {
     question: 'Do all eight point shapes produce identical pixels in the WebGL and WebGPU Graph packages at pixel ratios 1 and 2?',
     reference: 'The built WebGL Graph, drawing the same point indices, sizes, positions, camera, fill and background as the built WebGPU Graph.',

@@ -8,7 +8,7 @@ struct Params {
   visibility: vec4f,       // near/far distances, minimum alpha, gradient enabled
   selected: vec4f,         // hovered point, focused point, hovered link, focused link
   widths: vec4f,           // hovered/focused link increase, dash length/gap
-  modes: vec4f,            // picking, arrow scale, point count, link picking alpha
+  modes: vec4f,            // pass (0 color, 1 host picking, 2 pointer), arrow scale, point count, link picking alpha
   hoverColor: vec4f,       // negative alpha when the visible link color is retained
   hoverRing: vec4f,
   focusRing: vec4f,
@@ -16,6 +16,7 @@ struct Params {
   shades: vec4f,           // stroke direction, stroke contrast, ring direction, ring contrast
   pointViewport: vec4f,    // world origin and full CSS viewport, including during 1×1 picking
   pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
+  linkPickPixel: vec2f,    // top-left texel of WebGL's CSS-resolution pointer index pass
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

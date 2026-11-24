@@ -75,6 +75,8 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     expect(ring[1]).toBe(0)
     expect((await pixel(32, 35))[1]).toBe(255)
     expect(graph.config.focusedPointIndex).toBeUndefined()
+    draw(true)
+    expect(await pixel(50, 38)).toEqual([233, 3, 0, 7]) // host pick includes the widened host-hover stroke
     graph.destroy()
     // The host can keep drawing and reading its own targets after the graph releases its resources.
     draw()

@@ -619,7 +619,11 @@ export class Graph {
     const revision = this.revision
     const valid = (): boolean => !this.isDestroyed && !this.simulation.device?.isLost && revision === this.revision
     const bounds = canvas.getBoundingClientRect()
-    const hit = await this.renderer.pick(clientX - bounds.left, clientY - bounds.top, this.view())
+    const view = this.view()
+    // Only the pointer's own hover changes the link index used by canvas events.
+    // A host hover affects the visible and borrowed-pass draws.
+    view.hoveredLink = this.hoveredLink
+    const hit = await this.renderer.pick(clientX - bounds.left, clientY - bounds.top, view)
     if (!valid()) return null
     const point = hit?.kind === 'point' ? hit.index : undefined
     const link = hit?.kind === 'link' ? hit.index : undefined

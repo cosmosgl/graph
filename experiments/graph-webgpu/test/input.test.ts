@@ -103,3 +103,48 @@ it('resolves the pressed point, buffers early movement, preserves grab offset an
     host.remove()
   }
 })
+
+it('keeps host link hover styling independent of canvas pointer picks', async () => {
+  const host = document.createElement('div')
+  host.style.cssText = 'width:200px;height:120px'
+  document.body.append(host)
+  const onLinkClick = vi.fn()
+  const onBackgroundClick = vi.fn()
+  const graph = new Graph(host, {
+    spaceSize: 200,
+    pixelRatio: 1,
+    enableSimulation: false,
+    enableRenderLoop: false,
+    fitViewOnInit: false,
+    rescalePositions: false,
+    linkDefaultWidth: 2,
+    linkDefaultArrows: false,
+    hoveredLinkColor: 'rgba(0,0,0,0)',
+    hoveredLinkWidthIncrease: 12,
+    onLinkClick,
+    onBackgroundClick,
+  })
+  try {
+    await graph.ready
+    graph.setPointPositions(new Float32Array([40, 100, 160, 100]), true)
+    graph.setLinks(new Float32Array([0, 1]))
+    graph.render(1, 0)
+    graph.setHostHoveredLink(0)
+    const canvas = host.querySelector('canvas')!
+    const { left, top } = canvas.getBoundingClientRect()
+    const click = (y: number): void => {
+      canvas.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, clientX: left + 100, clientY: top + y }))
+    }
+    // The host hid the visible stroke; a canvas click still uses the pointer's own index.
+    click(60)
+    await vi.waitFor(() => expect(onLinkClick).toHaveBeenCalledTimes(1))
+    expect(onLinkClick.mock.calls[0]?.[0]).toBe(0)
+    graph.setConfigPartial({ hoveredLinkColor: 'red' })
+    click(67)
+    await vi.waitFor(() => expect(onBackgroundClick).toHaveBeenCalledTimes(1))
+    expect(onLinkClick).toHaveBeenCalledTimes(1)
+  } finally {
+    graph.destroy()
+    host.remove()
+  }
+})

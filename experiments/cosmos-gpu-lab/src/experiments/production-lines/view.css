@@ -1,0 +1,12 @@
+.package-lines-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 256px), 1fr)); gap: var(--space-3); max-width: calc(512px + var(--space-3)); }
+.package-lines-panels section { min-width: 0; }
+.package-lines-panels h3 { margin: 0 0 var(--space-2); font-size: var(--type-subsection); }
+.package-lines-panels section p { margin: 4px 0; overflow-wrap: anywhere; color: var(--text-secondary); }
+.package-lines-surface { position: relative; width: min(100%, 256px); height: 160px; overflow: auto; background: #18202b; }
+.package-lines-surface iframe { pointer-events: none; }
+.package-lines-surface > canvas { position: absolute; inset: 0; width: 256px; height: 160px; max-width: none; z-index: 1; pointer-events: none; }
+.package-lines-highlight { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+.package-lines-result { overflow-x: auto; }
+.package-lines-result table { text-align: left; font-size: var(--type-meta); font-variant-numeric: tabular-nums; }
+.package-lines-result caption { text-align: left; font-weight: 600; }
+.package-lines-result th, .package-lines-result td { padding: 4px 8px 4px 0; }
