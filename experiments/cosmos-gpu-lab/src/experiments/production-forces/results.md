@@ -54,6 +54,24 @@ The 22,500-point story starts its 25 color groups in a small square. On Apple M3
 
 Across ticks 240–248, the RMS movement per point per tick, after subtracting each color group's translation, was **0.04383** on WebGL, **0.79801** on the previous WebGPU force and **0.04374** with the grid. The distance between corresponding point IDs was 0.032 units RMS after one tick and 6.95 units at tick 240. The two implementations accumulate cell positions differently. At the story zoom of 0.4 the latter distance is about 2.8 CSS pixels.
 
+### What the shimmer fix costs on M3
+
+During expansion, a simulation step and draw completed in a median **7.80 ms on WebGL** and **2.50 ms on corrected WebGPU**. After settling, the medians were **4.80 ms** and **1.90 ms**. The earlier WebGPU force took 1.30 ms on the settled layout. Across the three trial orders, the corrected WebGPU medians ranged from 1.80 to 2.00 ms, the earlier WebGPU medians from 1.20 to 1.40 ms, and WebGL from 4.80 to 4.85 ms.
+
+| Measurement in ms, median / p95 | WebGL | WebGPU before fix | WebGPU after fix |
+| --- | ---: | ---: | ---: |
+| Step and draw during expansion, ticks 2–25 | 7.80 / 13.60 | 1.55 / 2.80 | 2.50 / 5.90 |
+| Settled simulation step, ticks 241–264 | 4.70 / 5.50 | 1.20 / 1.70 | 1.70 / 2.20 |
+| Settled draw alone | 0.70 / 1.20 | 0.70 / 1.00 | 0.70 / 1.00 |
+| Settled step and draw together | 4.80 / 5.70 | 1.30 / 1.70 | 1.90 / 2.40 |
+| Settled interval between automatic updates | 16.75 / 18.30 | 16.70 / 18.30 | 16.65 / 18.60 |
+
+The extra work showed up in simulation. In three pairs starting from identical corrected WebGPU positions at tick 240, the next step took a median **2.00 ms** with repulsion enabled and **1.00 ms** with it disabled. This probe times grid construction, distant-cell forces and nearby point sampling together.
+
+Startup was more expensive on all three builds. The first manual simulation step in a fresh graph took 22.7 ms on WebGL, 7.4 ms on the old WebGPU force and 14.4 ms on the corrected one (three-trial medians). In the normal preview loop the interval from tick 1 to tick 2 on corrected WebGPU was 29.8–32.4 ms. All 72 settled intervals on each engine were below 20 ms.
+
+One foreground graph ran at a time in Chrome 158 at 680 × 536 and DPR 1. Each expansion and settled row pools 72 samples. The manual timer starts before the Graph call and stops when the browser observes GPU completion. The empty-fence median was 0.6 ms on WebGL and 0.1 ms on corrected WebGPU. Each combined frame has one completion wait. The automatic interval measures the story's simulation callbacks. The driver `scripts/lasso-story-timing.mjs` seeds the inputs only in its own benchmark pages.
+
 ## Native runtime at 8,192 slots
 
 The following timings are from the earlier WebGPU tree approximation. The same public application used one manual step, one paused draw and one awaited full position readback per sample. Visible Chrome ran a single Graph at a time on the M3. Each trial used a fresh graph, four warm-up updates and 24 timed updates at ticks 5 through 28.

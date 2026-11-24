@@ -34,6 +34,24 @@ The checks allow one CSS pixel of RMS position difference after the first step, 
 
 Chrome 158.0.8127.37 on Apple M3 ran the baseline at `captures/lasso-story-2026-11-24T19-49-32-982Z/` and the corrected force from `d9c902e4` at `captures/lasso-story-2026-11-24T19-58-51-187Z/`. Both used the same 22,500-point mesh, Graph seed, camera and viewport.
 
+### Time the lasso simulation and draw on M3
+
+Build the WebGL and WebGPU standalone packages and start both Storybooks as above. Use a visible Chrome window and run the timing driver on its own. With no arguments it compares the current packages in both orders.
+
+```sh
+node experiments/cosmos-gpu-lab/scripts/lasso-story-timing.mjs
+```
+
+To repeat the three-package comparison, add `--before-bundle <path-to-pre-fix-index.min.js> --before-revision 347fd782`. The driver rotates the order across three blocks. Every session runs the original story in a fresh page with one archived package, the same seeded mesh, a 680 × 536 viewport, pixel ratio 1 and zoom 0.4.
+
+The split trial runs one manual simulation step and waits for GPU completion, then draws the paused graph and waits again. The combined trial submits a moving frame and waits once. The measurements include JavaScript submission and the time for Chrome to observe completion. WebGL polls a native fence using posted tasks. WebGPU waits on the queue's completion promise. Each manual session measures its empty-queue observation cost. Full position snapshots run outside the timers.
+
+Each lane gets a five-step warm-up in a separate page. Fresh trials record tick 1 separately, then 24 samples at ticks 2–25 and another 24 at ticks 241–264. The host-driven trials use the size-based sample count. A separate trial runs the story's automatic loop with its normal adaptive sampling and measures the interval between simulation callbacks. This measures update cadence. The screen's presentation time is outside the probe.
+
+For the corrected WebGPU package a separate trial switches off repulsion after tick 240. The driver checks that this trial and both repulsion-on manual trials reached the same position hash at tick 240. Tick 241 therefore measures a step from identical coordinates. Later steps evolve according to each trial's settings. The capture includes the source archive, the three package files and their SHA-256 hashes, the raw samples and a summary by block and phase.
+
+The reported run is `captures/lasso-timing-mGOTOJ/`. To reproduce it locally, pass the archived `webgl.js`, `webgpu.js` and `before.js` to `--webgl-bundle`, `--webgpu-bundle` and `--before-bundle`, respectively. The corresponding position-parity replay from the restored story sources is in `captures/lasso-story-2026-11-24T20-08-31-054Z/`.
+
 ### Earlier packaged force runs
 
 The local capture root is `experiments/cosmos-gpu-lab/captures/package-forces-20261124/`. Final correctness records are under `final-44933b5c-native/` and `final-44933b5c-swiftshader/`. The original miss is in `baseline-native.json`. It ran on the baseline WebGPU bundle with SHA-256 `9d1b715dd6686f741caf344c514385f8202e1d216ca8ebfebb259fc641a82b85`.
