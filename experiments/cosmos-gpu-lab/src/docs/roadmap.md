@@ -71,7 +71,7 @@ At cutover, record the final WebGL revision and point historical comparisons to 
 
 The same-branch candidate runs Quick Start and Manual step. Its browser tests cover resident simulation, input queued before initialization, pinned and absent slots, sparse edits, selection, label sampling, position and style transitions, and drawing and picking in a borrowed host pass. The real-package comparison lives in [Production Graph API](#/production-graph-api).
 
-In the paired M3 replay, both packages returned exact rectangle IDs and 1,000 tracked coordinates on the moving 65,536-point YouTube graph. At one million points WebGPU returned exact results, while WebGL's async queries timed out. WebGPU release-to-highlight feedback still takes seconds. Reduce that delay before treating million-point moving selection as ready for production. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
+On M3, both packages returned exact rectangle IDs and 1,000 tracked coordinates on the moving 65,536-point YouTube graph. At one million points WebGPU returned exact results and WebGL's async queries timed out. Limiting queued frames and simplifying solid-link shading reduced feedback from 1.51–4.99 seconds to 0.46–0.90 seconds at the same four layout ticks. Earlier layouts still take longer. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
 
 | Remaining check | Evidence needed before cutover |
 | --- | --- |

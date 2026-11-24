@@ -284,11 +284,11 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-graph-api': entry('production-graph-api', {
       reviewed: '2026-11-24',
-      conclusion: 'Both packages returned exact selections and 1,000 labels at 65,536 points. At one million points, WebGL async reads timed out.',
+      conclusion: 'At one million points, WebGPU preserved selected IDs and 1,000 labels. At matched ticks, feedback fell from 1.51–4.99 s to 0.46–0.90 s.',
       variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
       comparison: 'Manual gravity and picking, plus four moving selection rectangles and 1,000 tracked labels on the YouTube graph',
       method: 'method',
-      next: 'Reduce the wait for a highlighted frame at one million points and repeat the same drag replay.',
+      next: 'Measure a highlight-only style update on the early million-point layout.',
       reproduce: 'Click both endpoints and press Step gravity. The moving YouTube replay runs each package separately on M3.',
       investigations: [{
         page: 'youtube-selection',

@@ -36,6 +36,14 @@ the Graph. Holding the right mouse button must repel nearby points during
 a manually scheduled update. Reading the positions after each update lets
 us check the impulse, the release and the pinned point separately.
 
+On the moving million-point YouTube graph, rectangle selection and 1,000
+tracked labels shared the GPU queue with simulation and drawing. A pointer
+release could find four or five frames already submitted. Most of the wait
+for either answer came from work that preceded the queries. The WebGPU
+Graph now waits for its previous automatic frame to complete before
+submitting another. Hosts can still step or draw explicitly. Replaying
+the same drags at the same simulation ticks preserved every selected ID.
+
 ## Example
 
 Open **Examples → Get Started → Manual step** in both previews. Click either
