@@ -8,7 +8,20 @@ export type IsolatedCosts = {
   pointsAndLinks: FrameCost[];
   pointsOnly: FrameCost[];
 }
-export type FrozenDraw = { tick: number; positionsSha256: string; coordinates: number; draws: FrameCost[] }
+export type FrozenDraw = {
+  tick: number;
+  positionsSha256: string;
+  coordinates: number;
+  highlights: {
+    count: number;
+    idsSha256: string;
+    clear: FrameCost;
+    apply: FrameCost;
+    toggleOne: FrameCost;
+    restoreOne: FrameCost;
+  };
+  draws: FrameCost[];
+}
 
 /** All timestamps use the browser clock when luma acknowledges queued work. */
 export class YoutubeQueueProfile {
@@ -38,14 +51,31 @@ export class YoutubeQueueProfile {
   }
 
   public async frozenDraw (targetTick: number): Promise<FrozenDraw> {
-    await this.freeze()
+    const ids = this.graph.config.highlightedPointIndices
+    if (!ids) throw new Error('No selection available for the frozen highlight comparison')
+    // Start with ordinary point colors in the committed style buffers. The final
+    // screenshot must come from applying the highlight through the interactive setter.
+    await this.freeze(true)
     if (this.currentTick() > targetTick) throw new Error(`Draw tick ${targetTick} passed before freeze at ${this.currentTick()}`)
     while (this.currentTick() < targetTick) await this.measure(() => this.graph.simulation.step(), 1)
     const xy = await this.graph.getPointPositionsAsync()
     const positionsSha256 = await arrayHash(xy)
+    const toggled = ids.length ? ids.slice(1) : [0]
+    const setHighlights = (indices: number[] | undefined): Promise<FrameCost> => this.measure(() => {
+      this.graph.setConfigPartial({ highlightedPointIndices: indices })
+    }, 0)
+    const highlights = {
+      count: ids.length,
+      idsSha256: await arrayHash(Uint32Array.from(ids)),
+      apply: await setHighlights(ids),
+      toggleOne: await setHighlights(toggled),
+      restoreOne: await setHighlights(ids),
+      clear: await setHighlights(undefined),
+    }
+    await setHighlights(ids)
     const draws: FrameCost[] = []
     for (let i = 0; i < 3; i++) draws.push(await this.measure(() => this.graph.renderOneFrame(), 0))
-    return { tick: this.currentTick(), coordinates: xy.length, positionsSha256, draws }
+    return { tick: this.currentTick(), coordinates: xy.length, positionsSha256, highlights, draws }
   }
 
   public async isolatedCosts (): Promise<IsolatedCosts> {
@@ -62,11 +92,13 @@ export class YoutubeQueueProfile {
     return costs
   }
 
-  private async freeze (): Promise<void> {
+  private async freeze (clearHighlights = false): Promise<void> {
     if (this.error) throw this.error
     this.isAutonomous = false
     this.graph.pause()
-    this.graph.setConfigPartial({ enableRenderLoop: false })
+    this.graph.setConfigPartial(clearHighlights
+      ? { enableRenderLoop: false, highlightedPointIndices: undefined }
+      : { enableRenderLoop: false })
     await this.mark().completedAt
   }
 

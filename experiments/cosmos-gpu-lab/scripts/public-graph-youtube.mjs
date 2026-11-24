@@ -265,6 +265,7 @@ async function replay(count, mode, engine, trial) {
       run.frozenDraw = await page.evaluate(tick => window.publicYoutube.frozenDraw(tick), drawTick)
       assert.equal(run.frozenDraw.tick, drawTick)
       assert.equal(run.frozenDraw.coordinates, count * 2)
+      assert.equal(run.frozenDraw.highlights.count, run.samples.at(-1).selected, 'frozen highlight count differs from final release')
       const filename = `${name}-tick-${drawTick}-canvas.png`
       run.frozenDraw.image = { filename, ...await captureFrozenCanvas(page, resolve(capture, filename)) }
       const image = run.frozenDraw.image
