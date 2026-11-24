@@ -42,7 +42,7 @@ node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs 1000000 --engin
 node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs 1000000 --engine webgpu --mode correctness --release-ticks 10,26,40,54
 ```
 
-To compare the cost and pixels of a particular drawing change, add `--draw-tick 72` to the fixed-tick **profile** command. After the drags, this mode stops the autonomous loop, drains the GPU, and steps the simulation to precisely tick 72. It hashes the full position array, times three separately fenced draws with zero simulation steps, and captures the graph canvas at its 1,922 × 1,082 backing resolution. Compare `frozenDraw.positionsSha256`, `frozenDraw.image.rgbaSha256` and the median of the three `completedMs` values. The ordinary profile command measures the isolated simulation and draw stages described above.
+To compare highlights at identical positions, add `--draw-tick 72` to the fixed-tick **profile** command. After the drags, this mode clears highlights, stops the autonomous loop, drains the GPU and steps the simulation to tick 72. It saves a full-position digest, then times applying the fourth drag's IDs, removing one ID, restoring it and clearing the selection. Each operation starts with an empty queue and records both the setter's return and GPU completion. The driver reapplies the same IDs, times three separately fenced draws with zero simulation steps, and captures the 1,922 × 1,082 graph canvas. Compare `frozenDraw.highlights`, `frozenDraw.positionsSha256` and `frozenDraw.image.rgbaSha256` across builds. Older frozen-draw captures recorded the draw costs and canvas without the intervening highlight measurements.
 
 For a before/after timing comparison, run the following command on both builds. It runs two independent four-drag WebGPU sessions per size with natural release ticks and no diagnostic fences or full position copies.
 
@@ -97,3 +97,24 @@ Build the pacing-only WebGPU control from revision `306932ef6c1cd97dbb67c2f71195
 Both tick 72 controls had the same hash for all 2,000,000 position coordinates and the same hash for every RGBA pixel of the canvas. Median complete draw time fell from 146.0 to 102.6 ms (29.7%). The earlier control `public-graph-youtube-0Ue4Cx` failed the screenshot height check at 1,084 pixels. The corrected full-canvas controls above supplied the pixel and timing comparison.
 
 Compare `00VPxf` with `b13DT7` for elapsed time before and after both changes, using the same WebGPU-only schedule and eight releases per size. In the final matched-package replay, all four WebGPU releases at each size and all four 65,536-point WebGL releases matched their ordered-ID and 1,000-label oracles. Each of these three cases also completed all eight timed interactions. The million-point WebGL control again returned null for selection and labels on all 12 releases. At the four fixed release ticks, every ordered ID-list hash in `TQXSaU` equaled its pre-change hash in `1mMhjr`, with zero mismatches for the tracked coordinates against each release snapshot.
+
+## M3 highlight update comparison
+
+The control used the WebGPU package from revision `2049589715dc9ea9d6376ddcf31ad7726290b78c` (bundle SHA-256 `b1309cbce12c73ada5d6d21115c7614fe115ab2891efbb2bb62a1848f292c145`). Build the candidate from revision `6e55d54c65b1afc408e9620679d2b4f013007b96` and verify its WebGPU bundle SHA-256 `5192e217ff340aba11786de07c9fc28c9f25e71c2b6f25b2752f125ed9ff2be2`. Both used the same WebGL bundle (`71f4cc54f0cf4912afead56d0ea865e85cb45078b44b378ae8cdae1360ef1f8d`). Chrome 158.0.8127.37 ran on Apple M3 and reported an Apple Metal 3 WebGPU adapter. The static site under each capture contains the actual packages tested. The baseline frozen profile used the expanded driver with the control package.
+
+| Sessions | Directory under `captures/` | Source archive SHA-256 |
+| --- | --- | --- |
+| Both packages, timing before highlight changes | `public-graph-youtube-CMOdeh` | `48f5d2236b94a54cc436d52bef1f9d694efd65790de25b29029b86254f364d5d` |
+| WebGPU-only timing before, both sizes | `public-graph-youtube-nsnevk` | `df5afc6f63bff51182eeee099efab21041a2b82d086757b801466ddb0b2a9284` |
+| Frozen highlight edits, before | `public-graph-youtube-YqmYe1` | `dfa0895e2480239e27afa91fa7ede8328c5f13e079548d82f7687bfc6b89d2e1` |
+| Frozen highlight edits, after | `public-graph-youtube-WBarDg` | `da6e09f1532f3f944712c0fade92971982fd1347b8374565e78498a8f21f118d` |
+| Million-point WebGPU correctness after, fixed release ticks | `public-graph-youtube-NWVd7Y` | `cff68007cb8d086abdbae6e489a669ba0de4cc50d3e47e40ed96d3b665b30cfe` |
+| Both packages, correctness and timing after, both sizes | `public-graph-youtube-coS13K` | `fcc209ab81a1ea5b3733e243d464dfce6661740a268588cf821251eb58de1c15` |
+| WebGPU-only timing after, both sizes | `public-graph-youtube-Ss0TcG` | `b65ecfcd0d68a90b3c2fcc2001fb13b60ab1e4c2ea6a2b4b05db31526e41e78c` |
+| Million-point WebGL with synchronous queries | `public-graph-youtube-r351FX` | `e826a49db9f084c4cbc642e92f77ce906f9966e20a69cafe7576c53ee128f19e` |
+
+Compare the eight `mode: timing` releases per engine and size in `CMOdeh` and `coS13K`. On both builds the four-drag timing blocks ran WebGL/WebGPU, then WebGPU/WebGL. For a fresh replay, use the default driver on the candidate and `--mode timing` on the control. To repeat the WebGPU-only comparison (`nsnevk` and `Ss0TcG`), add `--engine webgpu` to both timing runs. The earlier 290.7 ms million-point WebGPU setter median comes from `N9hawp`.
+
+The four ordered ID digests at 65,536 points matched between `N9hawp` and `coS13K` at ticks 6, 10, 14 and 18. At one million points compare `TQXSaU` with `NWVd7Y` at ticks 10, 26, 40 and 54. All four complete ID digests matched. All 1,000 tracked XY pairs matched each corresponding release snapshot. In the tick-72 captures, the 4,705 highlighted IDs had digest `bf492cb35fe0417747127a3f7d8167c4da603912dc8b34ae5a51b9e7338815dc`, the positions had digest `22e7a5a0f82c9f227613f452f7ce32adeb0437f609fc33d32b76348810bb5509` and the raw RGBA canvas had digest `91d6cf2b4105439e6c65603ab00ccbd19b6ba9dcb60d7452023ee54cdda12110` on both builds.
+
+On million-point WebGL all 12 async releases in `coS13K` returned null for both APIs. In the separate `--mode blocking` run (`r351FX`), the four ordered selections contained 463,961, 5,533, 74,713 and 7,814 IDs. All 1,000 tracked XY pairs matched on every drag. For the time spent inside synchronous rectangle selection, read `timings.selectionSubmitMs`.
