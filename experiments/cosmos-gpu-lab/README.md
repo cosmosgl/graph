@@ -82,6 +82,8 @@ LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/prod
 
 Open **Lines in the Cosmos packages** (`#/production-lines`) to compare four links, their crossing and a point painted over a link. Choose a style, move an endpoint and switch between pixel ratios 1 and 2. Each run reports exact RGBA differences and the object that each package selected at the same pointer coordinates.
 
+Open the endpoint motion case (`#/production-lines?section=try-endpoint-motion`) to scrub two dashed or solid links through a pixel boundary. At 1×, move the phase to −1 device pixel and enable the difference overlay to inspect the worst recorded native dashed frame.
+
 Open **Forces in the Cosmos packages** (`#/production-forces`) to run the same seeded graph through one force at a time. Step both packages and read back their positions. The hierarchical repulsion case uses 8,192 slots and follows the spread and settling of the layout through tick 32.
 
 ```sh

@@ -5,3 +5,13 @@ Move endpoint 1 to change the horizontal stroke into a diagonal with the same pu
 The Lab captures both full canvases after a synchronous draw. The overlay marks any difference in any of the four channels. The edge check counts painted pixels more than one device pixel from the other mask in either direction. A pixel fully surrounded by paint in both masks passes the interior check when all channels differ by at most two levels. The exact RGBA count includes edge pixels and smaller color differences.
 
 A sequence of pointer presses, releases and clicks exercises the public point, link and background callbacks. The expected ID comes from the fixed geometry. The probes exercise the stroke, the wider click target, overlapping links, a foreground point and empty canvas. Patterned links include a click inside a paint gap. Native-resolution pixel samples independently check the visible features.
+
+## Dashed endpoint motion
+
+The two vertical links have a width of 2.3 CSS pixels. At phase zero, link 0 runs from (226.25, 82.5) to (226.25, 137.43) and link 1 from (73.25, 136.5) to (73.25, 83.47), in CSS pixels on the fixed canvas. Both source endpoints move by the same vertical offset. Choose a dashed stroke with 8 CSS pixels of paint and a 6 CSS-pixel gap, or its solid control.
+
+Scrub from −1 to +1 device pixels in steps of 1/32. **Show worst M3 phase** jumps to the offset with the largest recorded channel difference for that ratio. The overlay marks every differing canvas pixel. The click table checks the stroke and gap on each link and an empty part of the canvas. Both packages receive identical pointer coordinates.
+
+The test replays all 65 phases forward and then backward. It checks each complete dash at its center for at least half the foreground contrast and each complete gap at its center for the background color. The partially clipped final period can change as the link length changes. The test compares both full canvases at every phase using the outline and interior budgets above. A SHA-256 digest checks that returning to a phase reproduces the entire canvas in each engine.
+
+The temporal check follows the blue channel, which has the highest contrast for this uniform stroke color. It follows every pixel in the swept bounds and fringe of the two links. During a monotone sweep, a flash is an excursion and return of more than two levels while the corresponding WebGL pixel stays within a two-level range. An ordinary one-way antialiased edge transition produces no such reversal. The return sweep must reproduce the same frames in reverse. At offsets −1, 0 and +1 device pixels in both directions, public click callbacks must return the independently expected point, link or background ID.

@@ -299,8 +299,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Full RGBA captures and public callback IDs for identical geometry, styles and pointer locations',
       method: 'method',
       evidence: 'results',
-      next: 'Check patterned vertical line endings at subpixel ties, then combine styles on moving links.',
-      reproduce: 'Choose a link case and pixel ratio to replay the comparison.',
+      next: 'Combine styles on moving links and measure picking on dense graphs.',
+      reproduce: 'Choose a link case and pixel ratio. In the endpoint-motion case, scrub the phase to inspect the differing pixels.',
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Measured color, geometry and pick agreement in the built packages.' }],
     }),
     'production-forces': entry('production-forces', {

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { comparePixels } from '../../runtime/compare-pixels'
 import { writeArtifact } from '../../testing/artifacts'
 import { compareLines } from './compare'
+import { findMotionFlashes, inspectMotionPaint, motionCase, motionPixelIndices, phaseSteps, type MotionStyle } from './motion'
 import { background, exactLineCases, lineCases, type LineCase } from './fixture'
 import { mountLinePreview, type LineSession, type LineSnapshot } from './frame'
 
@@ -88,4 +89,68 @@ for (const ratio of [1, 2] as const) {
       host.remove()
     }
   })
+}
+
+async function frameDigest (image: ImageData): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', image.data))
+  return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+for (const ratio of [1, 2] as const) {
+  it.each<MotionStyle>(['dashed', 'solid'])(`replays %s cap motion forward and backward at ${ratio}×`, async style => {
+    const sessions: LineSession[] = []
+    const host = document.createElement('div')
+    document.body.append(host)
+    try {
+      for (const engine of ['webgl', 'webgpu'] as const) sessions.push(await mountLinePreview(host, engine, ratio, motionCase, style))
+      const devices = sessions.map(s => s.deviceInfo)
+      if (import.meta.env.LAB_NATIVE_GPU) {
+        expect(devices[0]!.gpuType).not.toBe('cpu'); expect(devices[1]!.fallback).toBe(false)
+      } else {
+        expect(devices[0]!.renderer).toMatch(/SwiftShader/i); expect(devices[1]!.gpuArchitecture).toBe('swiftshader')
+      }
+      const ascending = Array.from({ length: 2 * phaseSteps + 1 }, (_, i) => i - phaseSteps)
+      const indices = motionPixelIndices(ratio)
+      const trace: [Uint8Array[], Uint8Array[]] = [[], []]
+      const hashes = new Map<number, string[]>()
+      const frames = []
+      let worst = { phase: 0, maxChannelDelta: -1, differingPixels: 0 }
+      for (const reverse of [false, true]) {
+        for (const phase of reverse ? [...ascending].reverse() : ascending) {
+          const pick = phase === 0 || Math.abs(phase) === phaseSteps
+          const [gl, gpu] = await Promise.all([sessions[0]!.measure(phase, pick), sessions[1]!.measure(phase, pick)])
+          const comparison = compareLines(gl, gpu)
+          const paint = [gl, gpu].map(frame => inspectMotionPaint(frame.pixels, phase, ratio, style))
+          const digest = await Promise.all([gl, gpu].map(frame => frameDigest(frame.pixels)))
+          if (!reverse) {
+            hashes.set(phase, digest)
+            for (const [i, frame] of [gl, gpu].entries()) trace[i]!.push(Uint8Array.from(indices, p => frame.pixels.data[4 * p + 2]!))
+          }
+          const reproduced = !reverse || digest.every((hash, i) => hashes.get(phase)?.[i] === hash)
+          const picks = pick ? { webgl: gl.picks, webgpu: gpu.picks } : undefined
+          frames.push({ phase, direction: reverse ? 'reverse' : 'forward', ...comparison, paint, picks, reproduced })
+          if (comparison.maxChannelDelta > worst.maxChannelDelta ||
+            (comparison.maxChannelDelta === worst.maxChannelDelta && comparison.differingPixels > worst.differingPixels)) {
+            worst = { phase, maxChannelDelta: comparison.maxChannelDelta, differingPixels: comparison.differingPixels }
+          }
+        }
+      }
+      const flashes = findMotionFlashes(trace[0], trace[1], indices, ratio)
+      await writeArtifact(`package-lines-cap-motion-${style}-${ratio}x`, {
+        devices, browser: navigator.userAgent, ratio, style, phaseSteps, frames, worst, flashes,
+      })
+      for (const row of frames) {
+        const label = `${style} ${ratio}× ${row.direction} phase ${row.phase}/${phaseSteps}`
+        expect.soft(row.outsideEdgeBand, `${label} outline`).toBe(0)
+        expect.soft(row.interiorColorFailures, `${label} interior`).toBe(0)
+        expect.soft(row.pickFailures, `${label} click IDs`).toBe(0)
+        expect.soft(row.paint, `${label} dash centers and gaps`).toEqual([{ missing: 0, paintedGaps: 0 }, { missing: 0, paintedGaps: 0 }])
+        expect.soft(row.reproduced, `${label} reproduced byte for byte on each engine`).toBe(true)
+      }
+      expect(flashes.pixels, `WebGPU flashed while WebGL held steady: ${JSON.stringify(flashes)}`).toBe(0)
+    } finally {
+      for (const session of sessions) session.destroy()
+      host.remove()
+    }
+  }, 180000)
 }

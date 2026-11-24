@@ -32,3 +32,20 @@ A separate SwiftShader sweep placed 30 vertical links in alternating directions 
 | Arrows | 25 | 6 | 0 |
 
 The single gradient difference at 2× was one channel level. Pattern and arrow coverage at these endpoints remain open comparisons.
+
+## Dashed endpoints in motion
+
+On Apple M3, both moving endpoints preserved every complete dash and every tested click target. The 1× dashed frame with the largest channel difference occurred at −1 device pixel. Six cap pixels differed, with a maximum difference of 95/255. Their silhouettes stayed within one device pixel. This motion check supports keeping the current renderer.
+
+| Adapter | Stroke | Ratio | Exact forward frames out of 65 | Worst offset in device pixels | Differing pixels at that offset | Maximum channel difference |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Apple M3 | Dashed | 1× | 62 | −1 | 6 | 95 |
+| Apple M3 | Dashed | 2× | 62 | −0.5 | 10 | 93 |
+| Apple M3 | Solid | 1× | 62 | −1 | 6 | 186 |
+| Apple M3 | Solid | 2× | 63 | −0.5 | 10 | 186 |
+| SwiftShader | Dashed | 1× | 61 | +1/32 | 24 | 94 |
+| SwiftShader | Dashed | 2× | 60 | +17/32 | 40 | 18 |
+| SwiftShader | Solid | 1× | 65 | All exact | 0 | 0 |
+| SwiftShader | Solid | 2× | 65 | All exact | 0 | 0 |
+
+Each reverse sweep reproduced every forward frame within its engine. Across 520 frame pairs on each adapter, zero pixels exceeded the outline or interior allowances, every complete sampled dash and gap stayed intact, and the temporal check detected zero flashes. All 120 paired click probes per adapter returned the expected IDs. In the dashed case, both paint and gap returned link 0 on the downward stroke and link 1 on the upward stroke. The clear background probe returned background. The table ranks phases by maximum channel difference, then differing pixel count, then the earliest forward phase.

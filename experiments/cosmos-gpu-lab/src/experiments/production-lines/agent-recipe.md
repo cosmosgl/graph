@@ -40,3 +40,14 @@ The distinct 30-link control lives in `experiments/cosmos-gpu-lab/captures/produ
 ```sh
 node experiments/cosmos-gpu-lab/captures/production-lines-renderer-r3ZMwk/cap-sweep.cjs software straight,gradient,dashed,dotted,arrows /tmp/cosmos-caps.json
 ```
+
+## Endpoint motion with both real packages
+
+Open `#/production-lines?section=try-endpoint-motion`. The tracked reproducer in `motion.ts` reduces the 30-link sweep to its original links 28 and 19. The dedicated tests use the same phase setter and package frames as the Lab. No archived bundle or generated fixture is needed after building the two workspace packages.
+
+```sh
+LAB_ARTIFACT_RUN=motion-native pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-lines/packages.test.ts -t 'cap motion'
+LAB_ARTIFACT_RUN=motion-software LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-lines/packages.test.ts -t 'cap motion'
+```
+
+The initial runs are in `captures/packaged-motion-20261124/{m3-first,software-first}/` under the Lab. They used the public packages built from checkpoint `07379e2a`, the tracked motion fixture, and headless Chrome 158. The JSON for each style and ratio records the browser user agent, runtime-reported WebGL and WebGPU device information, exact and practical comparisons for all 130 frame pairs, and expected and observed IDs from both event callbacks. Replay with a unique artifact run name. The procedure measures correctness and records no timing claims.

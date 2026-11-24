@@ -2,17 +2,20 @@ import type { DeviceInfo } from '@luma.gl/core'
 import type { Engine } from '../production-graph-api/frame'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import { lineConfig, lineProbes, lineViewport, loadLines, moveEndpoint, type LineCase, type Probe } from './fixture'
+import { loadMotion, motionCase, motionProbes, setPhase, type MotionStyle } from './motion'
 
 export type PickResult = Probe & { actual: string }
 export type LineSnapshot = { pixels: ImageData; picks: PickResult[] }
 export type LineSession = {
   deviceInfo: DeviceInfo;
-  measure(moved: boolean): Promise<LineSnapshot>;
+  measure(state: boolean | number, withPicks?: boolean): Promise<LineSnapshot>;
   destroy(): void;
 }
 
 /** Each iframe has its own Cosmos global, document, canvas and event coordinates. */
-export async function mountLinePreview (parent: HTMLElement, engine: Engine, ratio: 1 | 2, scene: LineCase): Promise<LineSession> {
+export async function mountLinePreview (
+  parent: HTMLElement, engine: Engine, ratio: 1 | 2, scene: LineCase | typeof motionCase, style: MotionStyle = 'dashed'
+): Promise<LineSession> {
   const frame = document.createElement('iframe')
   frame.title = `${engine === 'webgl' ? 'WebGL' : 'WebGPU'} ${scene} links`
   frame.tabIndex = -1
@@ -32,7 +35,7 @@ export async function mountLinePreview (parent: HTMLElement, engine: Engine, rat
     let onPick: ((value: string) => void) | undefined
     let hovered: number | undefined
     const graph = new GRAPH(host, {
-      ...lineConfig(scene, ratio),
+      ...lineConfig(scene === motionCase ? 'straight' : scene, ratio),
       onLinkClick: (id): void => onPick?.(`Link ${id}`),
       onPointClick: (id): void => onPick?.(`Point ${id}`),
       onBackgroundClick: (): void => onPick?.('Background'),
@@ -43,7 +46,8 @@ export async function mountLinePreview (parent: HTMLElement, engine: Engine, rat
     await graph.ready
     const deviceInfo = graph.simulation.device?.info
     if (deviceInfo?.type !== engine) throw new Error(`Requested ${engine}, Graph reports ${deviceInfo?.type}`)
-    loadLines(graph, scene)
+    if (scene === motionCase) loadMotion(graph, style)
+    else loadLines(graph, scene)
     const canvas = host.querySelector('canvas')!
     const copy = doc.createElement('canvas')
     copy.width = lineViewport.width * ratio
@@ -105,9 +109,15 @@ export async function mountLinePreview (parent: HTMLElement, engine: Engine, rat
     return {
       deviceInfo,
       destroy: dispose,
-      async measure (moved): Promise<LineSnapshot> {
-        moveEndpoint(graph, moved)
-        const probes = lineProbes(scene, moved)
+      async measure (state, withPicks = true): Promise<LineSnapshot> {
+        let probes: Probe[]
+        if (scene === motionCase && typeof state === 'number') {
+          setPhase(graph, state, ratio)
+          probes = withPicks ? motionProbes(state, ratio, style) : []
+        } else if (scene !== motionCase && typeof state === 'boolean') {
+          moveEndpoint(graph, state)
+          probes = lineProbes(scene, state)
+        } else throw new Error('Expected a phase for the motion sweep or an endpoint choice for a static fixture')
         if (scene === 'hover') await hover(probes[0]!.xy)
         graph.renderOneFrame()
         if (canvas.width !== copy.width || canvas.height !== copy.height) throw new Error(`Unexpected ${engine} drawing buffer dimensions`)

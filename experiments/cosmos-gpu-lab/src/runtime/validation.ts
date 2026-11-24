@@ -76,7 +76,7 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'Does the same link draw at the same pixels and return the same ID in both Graph packages?',
     reference: 'The built WebGL Graph drawing the same endpoints, widths, styles and camera, plus independently specified pointer targets.',
     acceptance: 'Compare every RGBA pixel and report exact differences. Check the stroke and the expected point, link or background at each probe.',
-    coverage: 'Straight and moving links, curves, gradients, dashes, dots, arrows, hover and zoom at pixel ratios 1 and 2.',
+    coverage: 'Links, styles, hover and zoom at pixel ratios 1 and 2. Sweep opposite-facing dashed and solid caps forward and back in 1/32-device-pixel steps.',
     limits: 'Small deterministic fixtures exercise individual features. The shared stories also exercise controls on larger graphs.',
   },
   'production-forces': {

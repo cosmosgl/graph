@@ -36,7 +36,7 @@ const packageLine: CaseReadiness = {
     { tone: 'pass', text: 'The two packages passed on Apple M3 and SwiftShader at pixel ratios 1 and 2.' },
     { tone: 'info', text: 'The results list the exact pixel counts for each style and adapter.' },
   ],
-  next: 'Check styled vertical line endings at subpixel ties, then combine styles on moving links.',
+  next: 'See the endpoint-motion case for thin dashed links crossing a subpixel tie.',
 }
 
 const exactLine: CaseReadiness = {
@@ -63,6 +63,19 @@ const packageForce: CaseReadiness = {
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
 export const renderingAndForces: Record<string, CaseReadiness> = {
+  'production-lines/endpoint-motion': {
+    badge: 'Native motion checked',
+    tone: 'pass',
+    finding: 'Every complete dash remained visible as the endpoints crossed a pixel boundary on Apple M3. Reversing the sweep reproduced each frame.',
+    area: 'Integration',
+    status: 'Dashed links and solid controls pass the native motion checks',
+    evidence: [
+      { tone: 'pass', text: 'All 65 phases at both pixel ratios passed the outline, interior-color and flash checks.' },
+      { tone: 'pass', text: 'The stroke and its gap returned the expected link ID. Clear background returned a background click.' },
+      { tone: 'info', text: 'At 1× the worst dashed frame differed at six edge pixels, with a largest channel difference of 95/255.' },
+    ],
+    next: 'Recheck these phases if stroke geometry, interpolation or picking changes.',
+  },
   'production-lines/straight': exactLine,
   'production-lines/moving': exactLine,
   'production-lines/gradient': exactLine,
