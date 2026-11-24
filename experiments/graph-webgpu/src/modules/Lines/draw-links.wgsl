@@ -21,7 +21,7 @@ fn swiftWindowRow(worldY: f32, targetRatio: f32) -> f32 {
   return round(((params.pointViewport.w - screenY) * targetRatio - 0.5) * 16.0);
 }
 
-@vertex fn linkVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> Ribbon {
+fn linkRibbon(vertex: u32, index: u32) -> Ribbon {
   var out: Ribbon;
   out.position = vec4f(2,2,2,1);
   let edge = currentLink(index);
@@ -119,6 +119,24 @@ fn swiftWindowRow(worldY: f32, targetRatio: f32) -> f32 {
   return out;
 }
 
+@vertex fn linkVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> Ribbon {
+  return linkRibbon(vertex, index);
+}
+
+// A solid blended stroke needs only the signed distance across the same strip,
+// its antialiasing width and its color. Keep this interface small on tile GPUs.
+struct SolidRibbon {
+  @builtin(position) position: vec4f,
+  @location(0) across: f32,
+  @location(1) @interpolate(flat) color: vec4f,
+  @location(2) @interpolate(flat) smoothing: f32,
+}
+
+@vertex fn solidLinkVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) index: u32) -> SolidRibbon {
+  let ribbon = linkRibbon(vertex, index);
+  return SolidRibbon(ribbon.position, ribbon.coord.y, ribbon.color, ribbon.geometry.x);
+}
+
 fn dotDistance(coord: vec2f, span: f32, width: f32, period: f32) -> f32 {
   let phase = clamp(coord.x, 0.0, 1.0) * span;
   let along = phase - floor(phase / period) * period - period * 0.5;
@@ -131,6 +149,11 @@ fn fallingRamp(high: f32, low: f32, sample: f32) -> f32 {
   if (low >= high) { return select(0.0, 1.0, sample <= high); }
   let t = clamp((sample - high) / (low - high), 0.0, 1.0);
   return t * t * (3.0 - 2.0 * t);
+}
+
+@fragment fn solidLinkFragment(input: SolidRibbon) -> @location(0) vec4f {
+  let coverage = fallingRamp(0.5, 0.5 - input.smoothing, abs(input.across));
+  return vec4f(input.color.rgb, input.color.a * coverage);
 }
 
 @fragment fn linkFragment(input: Ribbon) -> @location(0) vec4f {

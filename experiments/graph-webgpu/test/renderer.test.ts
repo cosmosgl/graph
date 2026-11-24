@@ -118,6 +118,44 @@ it('keeps the displayed scene usable when replacing the image atlas fails', asyn
   } finally { allocation.mockRestore(); scene.destroy() }
 })
 
+it('matches every RGBA byte of the general link shader for overlapping solid strokes', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { data, device, framebuffer, positions, renderer, view } = scene
+  const { width, height } = framebuffer
+  const bytesPerRow = width * 4
+  const pixels = device.createBuffer({ byteLength: bytesPerRow * height, usage: Buffer.COPY_SRC | Buffer.COPY_DST })
+  async function capture (hoveredLink?: number): Promise<Uint8Array> {
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, { ...view, hoveredLink }, { points: false })
+    pass.end()
+    device.commandEncoder.copyTextureToBuffer({
+      sourceTexture: framebuffer.colorAttachments[0]!.texture, destinationBuffer: pixels, width, height, bytesPerRow,
+    })
+    device.submit()
+    return (await pixels.readAsync()).slice()
+  }
+  try {
+    // Hover takes the general path. A zero width increase and unchanged color preserve its appearance.
+    config.hoveredLinkWidthIncrease = 0
+    config.hoveredLinkColor = undefined
+    data.inputLinks = new Float32Array([0, 1, 1, 2, 2, 0, 0, 1])
+    data.inputLinkWidths = new Float32Array([0.625, 1.125, 3.25, 1.875])
+    data.inputLinkColors = new Float32Array([1, 0.1, 0, 0.5, 0, 0.8, 0.2, 0.75, 0, 0.1, 1, 1, 1, 0.2, 1, 0.375])
+    data.update()
+    positions.write(new Float32Array([9.625, 23.2, 0, 0, 76.125, 39.1, 0, 0, 42.25, 11.375, 0, 0]))
+    renderer.update()
+    for (const curved of [false, true]) {
+      config.curvedLinks = curved
+      const reference = await capture(0)
+      expect(reference.some(v => v !== 0)).toBe(true)
+      const solid = await capture()
+      expect(solid.findIndex((value, i) => value !== reference[i])).toBe(-1)
+    }
+    expect(scene.errors).toEqual([])
+  } finally { pixels.destroy(); scene.destroy() }
+})
+
 it('interpolates point colors and retargets an interrupted update from the displayed frame', async () => {
   const scene = await createScene()
   const { data, view, renderer, framebuffer, readPixel, errors } = scene

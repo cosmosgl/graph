@@ -85,6 +85,7 @@ export class GraphRenderer {
   private interpolation: StyleTransition
   private pointCount = 0
   private linkCount = 0
+  private hasOnlySolidLinks = false
   private revision = 0
   private isDisposed = false
   private transparentBackground: Rgba = transparent
@@ -140,7 +141,7 @@ export class GraphRenderer {
     this.focusRing = getRgbaColor(config.focusedPointRingColor)
 
     const { attributes, order } = this.points.pack(data, config, clearColor)
-    const edges = packLinks(data, config)
+    const { edges, hasOnlySolidLinks } = packLinks(data, config)
     const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
     const animate = options.animate && this.pointCount > 0
     if (animate && this.pointBuffer && this.linkBuffer) {
@@ -166,6 +167,7 @@ export class GraphRenderer {
     this.linkBuffer = this.storage(this.linkBuffer, edges, 'cosmos-link-style', linkStride * 4)
     this.pointCount = pointCount
     this.linkCount = linkCount
+    this.hasOnlySolidLinks = hasOnlySolidLinks
   }
 
   /** Record into a pass opened on the supplied device. The host owns clearing, ending and submitting. */
@@ -271,14 +273,14 @@ export class GraphRenderer {
     this.previous = undefined
   }
 
-  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link', picking: boolean): RenderKernel {
+  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link' | 'solidLink', picking: boolean): RenderKernel {
     const color = framebuffer.colorAttachments[0]!.texture.format as TextureFormatColor
     const depth = framebuffer.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined
     const samples = framebuffer.colorAttachments[0]!.texture.samples
     const key = [kind, color, depth, samples, picking].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
-      const source = kind === 'link' ? this.linkSource : this.pointSource
+      const source = kind === 'point' ? this.pointSource : this.linkSource
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
         vertexSource: source,
@@ -343,7 +345,9 @@ export class GraphRenderer {
       previousLinks: this.previous?.links ?? this.linkBuffer,
     }
     if (options.links !== false && c.renderLinks && this.linkCount) {
-      this.kernel(framebuffer, 'link', picking).draw(pass, {
+      const useSolid = this.hasOnlySolidLinks && !picking && c.linkBlending && !c.linkColorInterpolateFromEndpoints &&
+        view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
+      this.kernel(framebuffer, useSolid ? 'solidLink' : 'link', picking).draw(pass, {
         vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.linkCount, bindings,
       })
     }
