@@ -6,6 +6,7 @@ export type ReleaseOracle = {
   expected: number;
   expectedIdsSha256: string;
   selectedIdsSha256: string | null;
+  trackedPositionsSha256: string | null;
   missing: number | null;
   extra: number | null;
   wrongLabels: number | null;
@@ -51,20 +52,32 @@ export async function verifyRelease (
   const unexpectedLabelIds = positions ? [...positions.keys()].filter(id => !wanted.has(id)) : null
   const wrongLabelExamples: LabelMismatch[] = []
   let wrongLabels = 0
+  let trackedPositionsSha256: string | null = null
   if (positions) {
-    for (const id of tracked) {
+    // A map's insertion order can vary between engines. Hash the actual XY
+    // pairs by ascending tracked ID so the complete reply can be compared.
+    const coordinates = new Float32Array(tracked.length * 2)
+    const orderedIds = [...tracked].sort((a, b) => a - b)
+    let returned = 0
+    for (const id of orderedIds) {
       const actual = positions.get(id)
+      if (actual) {
+        coordinates.set(actual, returned * 2)
+        returned++
+      }
       if (actual?.[0] !== xy[2 * id] || actual?.[1] !== xy[2 * id + 1]) {
         wrongLabels++
         if (wrongLabelExamples.length < 12) wrongLabelExamples.push({ id, expected: [xy[2 * id], xy[2 * id + 1]], actual: actual ?? null })
       }
     }
     wrongLabels += unexpectedLabelIds!.length
+    if (returned === tracked.length && unexpectedLabelIds!.length === 0) trackedPositionsSha256 = await arrayHash(coordinates)
   }
   return {
     expected: expected.length,
     expectedIdsSha256: await arrayHash(Uint32Array.from(expected)),
     selectedIdsSha256: selected ? await arrayHash(Uint32Array.from(selected)) : null,
+    trackedPositionsSha256,
     missing: selected ? missing : null,
     extra: selected ? extra : null,
     wrongLabels: positions ? wrongLabels : null,

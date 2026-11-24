@@ -183,6 +183,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
         }
       }
       const blocking = mode === 'blocking'
+      const releasedFrame = profile?.lastSubmittedFrame
       const beforeQueries = profile?.mark()
       const ids = blocking
         ? readBlocking('selection', () => graph.findPointsInRect(rect), release)
@@ -242,8 +243,16 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       }
       const ordered = selected?.every((id, i) => !i || selected[i - 1] < id) ?? null
       let queueProfile: ReplaySample['profile']
-      if (beforeQueries && beforeHighlight && afterHighlight) {
+      if (beforeQueries && beforeHighlight && afterHighlight && releasedFrame) {
+        const stepDone = await releasedFrame.step.completedAt
+        const drawDone = await releasedFrame.draw.completedAt
         queueProfile = {
+          frameTickAtRelease: releasedFrame.tick,
+          frameAgeAtReleaseMs: release - releasedFrame.draw.submittedAt,
+          // Signed offsets distinguish work already acknowledged at release.
+          stepDoneAfterReleaseMs: stepDone - release,
+          drawDoneAfterReleaseMs: drawDone - release,
+          drawWaitAfterStepAtReleaseMs: Math.max(0, drawDone - Math.max(release, stepDone)),
           unacknowledgedFramesAtRelease: beforeQueries.pendingFrames,
           unacknowledgedFramesBeforeHighlight: beforeHighlight.pendingFrames,
           queueAheadAtReleaseMs: await beforeQueries.completedAt - release,

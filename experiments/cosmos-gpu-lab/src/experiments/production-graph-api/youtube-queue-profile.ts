@@ -2,6 +2,7 @@ import type { Graph } from '../../../../../dist/index.js'
 import { arrayHash } from './youtube-oracle'
 
 type Marker = { submittedAt: number; completedAt: Promise<number>; pendingFrames: number }
+type SubmittedFrame = { tick: number; step: Marker; draw: Marker }
 type FrameCost = { submitMs: number; completedMs: number; ticks: number }
 export type IsolatedCosts = {
   simulation: FrameCost[];
@@ -25,6 +26,7 @@ export type FrozenDraw = {
 
 /** All timestamps use the browser clock when luma acknowledges queued work. */
 export class YoutubeQueueProfile {
+  public lastSubmittedFrame?: SubmittedFrame
   private submittedTick: number
   private completedTick: number
   private isAutonomous = true
@@ -43,10 +45,16 @@ export class YoutubeQueueProfile {
 
   public afterStep (tick: number): void {
     if (!this.isAutonomous) return
-    // The package submits the draw after the tick callback in this same task.
+    // The WebGPU tick callback follows the simulation submission. The draw
+    // follows the callback and is submitted before this task's microtasks.
+    const step = this.mark()
     queueMicrotask(() => {
       this.submittedTick = tick
-      this.mark().completedAt.then(() => { this.completedTick = Math.max(this.completedTick, tick) }, cause => { this.error = cause })
+      const draw = this.mark()
+      this.lastSubmittedFrame = { tick, step, draw }
+      Promise.all([step.completedAt, draw.completedAt]).then(() => {
+        this.completedTick = Math.max(this.completedTick, tick)
+      }, cause => { this.error = cause })
     })
   }
 

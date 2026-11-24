@@ -13,7 +13,10 @@ const lab = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const root = resolve(lab, '../..')
 const { values, positionals } = parseArgs({
   allowPositionals: true,
-  options: { mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' }, 'draw-tick': { type: 'string' } },
+  options: {
+    mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' },
+    'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' },
+  },
 })
 const counts = positionals.length ? positionals.map(Number) : [65536, 1000000]
 const linkCounts = new Map([[65536, 432898], [1000000, 2852734]])
@@ -30,8 +33,9 @@ const boxes = [
 ]
 const releaseTicks = values['release-ticks']?.split(',').map(Number)
 if (releaseTicks) {
-  assert.ok(positionals.length === 1 && values.engine && ['correctness', 'profile'].includes(values.mode),
-    '--release-ticks requires one point count, --engine, and --mode correctness or profile')
+  const canTime = values.mode === 'timing' && values.engine === 'webgpu'
+  assert.ok(positionals.length === 1 && values.engine && (canTime || ['correctness', 'profile'].includes(values.mode)),
+    '--release-ticks requires one point count and engine for correctness, WebGPU profile or WebGPU timing')
   assert.ok(releaseTicks.length === boxes.length && releaseTicks.every((tick, i) =>
     Number.isSafeInteger(tick) && tick >= 4 && (!i || tick > releaseTicks[i - 1])),
   'Supply four strictly increasing integer release ticks starting at 4 or later')
@@ -47,11 +51,13 @@ await mkdir(captureRoot, { recursive: true })
 const capture = await mkdtemp(resolve(captureRoot, 'public-graph-youtube-'))
 console.log(`Capture: ${capture}`)
 const source = await captureBenchmarkSource(root, lab, capture)
+const packagedWebGPU = resolve(root, 'experiments/graph-webgpu/dist/index.min.js')
+const selectedWebGPU = values['webgpu-bundle'] ? resolve(values['webgpu-bundle']) : packagedWebGPU
 const result = {
   source,
   bundles: {
     webgl: source.productionSha256,
-    webgpu: await sha256(resolve(root, 'experiments/graph-webgpu/dist/index.min.js')),
+    webgpu: await sha256(selectedWebGPU),
   },
   fixtureSha256: await sha256(resolve(captureRoot, 'fixtures/youtube-million.bin')),
   cpu, node: process.version, arguments: process.argv.slice(2), boxes, counts, runs: [],
@@ -68,6 +74,15 @@ await save()
 const site = resolve(capture, 'site')
 await build({
   configFile: false, root: lab, base: './',
+  plugins: selectedWebGPU === packagedWebGPU ? [] : [{
+    name: 'replay-captured-webgpu-package',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (importer && source.endsWith('?url') && resolve(dirname(importer), source.slice(0, -4)) === packagedWebGPU) {
+        return selectedWebGPU + '?url'
+      }
+    },
+  }],
   build: { outDir: site, assetsInlineLimit: 0, rollupOptions: {
     input: resolve(lab, 'src/experiments/production-graph-api/youtube-check.ts'),
     preserveEntrySignatures: 'strict', output: { entryFileNames: 'public-youtube.js' },
@@ -116,6 +131,11 @@ function checkSample(sample, index, mode, previousTick) {
   assert.ok(Math.abs(sample.center[0] - 480.5) < 0.01 && Math.abs(sample.center[1] - 270.5) < 0.01, 'camera moved during selection')
   assert.ok(sample.tickAtRelease >= 4 && sample.tickAtRelease > previousTick, 'graph did not advance between releases')
   if (releaseTicks) assert.equal(sample.tickAtRelease, releaseTicks[index], 'native pointerup missed its requested simulation tick')
+  if (mode === 'profile') {
+    assert.equal(sample.profile?.frameTickAtRelease, sample.tickAtRelease, 'queue markers came from a different frame')
+    assert.ok(sample.profile.frameAgeAtReleaseMs >= 0, 'frame was submitted after release')
+    assert.ok(sample.profile.drawDoneAfterReleaseMs >= sample.profile.stepDoneAfterReleaseMs, 'draw acknowledged before the step')
+  }
   const { selectionReadyMs, labelReadyMs, readbackReadyMs } = sample.timings
   assert.ok([selectionReadyMs, labelReadyMs, readbackReadyMs].every(ms => Number.isFinite(ms) && ms >= 0), 'missing readback timestamps')
   assert.ok(readbackReadyMs + 0.01 >= Math.max(selectionReadyMs, labelReadyMs), 'readback phase ended before both reads settled')
