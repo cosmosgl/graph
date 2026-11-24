@@ -7,12 +7,14 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
   const nClusters = 25
   let selectionRequest = 0
   // wholeness 0: the story renders no links, so skip generating them
-  const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 0)
+  const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 0, undefined, 2453)
 
   const { div, graph } = createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
+    // Seed the force independently of the mesh so both previews replay the same motion inputs.
+    randomSeed: 'lasso-replay',
     simulationGravity: 1.5,
     simulationCluster: 0.3,
     simulationRepulsion: 8,

@@ -2,8 +2,13 @@ import { scaleLinear, scaleSequential } from 'd3-scale'
 import { interpolateWarm } from 'd3-scale-chromatic'
 import { getRgbaColor, defaultConfigValues } from '@cosmos.gl/graph'
 
-function getRandom (min: number, max: number): number {
-  return Math.random() * (max - min) + min
+function meshRandom (seed?: number): () => number {
+  if (seed === undefined) return Math.random
+  let state = seed >>> 0
+  return (): number => {
+    state = (Math.imul(1664525, state) + 1013904223) >>> 0
+    return state / 4294967296
+  }
 }
 
 function getPositionOnCircle (radius: number, angle: number, center: number): [number, number] {
@@ -32,8 +37,11 @@ export function generateMeshData (
   m: number,
   nClusters: number,
   wholeness: number,
-  radialness = [10, 1000]
+  radialness = [10, 1000],
+  seed?: number
 ): MeshData {
+  const random = meshRandom(seed)
+  const getRandom = (min: number, max: number): number => random() * (max - min) + min
   const pointColorScale = scaleSequential(interpolateWarm)
   pointColorScale.domain([0, nClusters])
   const radius = scaleLinear(radialness)
@@ -78,12 +86,12 @@ export function generateMeshData (
     const nextPointLine = Math.floor(nextPointIndex / n)
     const bottomPointLine = Math.floor(bottomPointIndex / n)
 
-    if (pointLine === nextPointLine && Math.random() < wholeness) {
+    if (pointLine === nextPointLine && random() < wholeness) {
       links.push(pointIndex)
       links.push(nextPointIndex)
     }
 
-    if (bottomPointLine < m && Math.random() < wholeness) {
+    if (bottomPointLine < m && random() < wholeness) {
       links.push(pointIndex)
       links.push(bottomPointIndex)
     }
