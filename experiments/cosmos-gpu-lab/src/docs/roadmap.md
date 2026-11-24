@@ -11,7 +11,7 @@ Default-force motion meets the measured slowdown margin for Karate Club and the 
 migrationFocus
 ```
 
-**Solid curves are in the WebGPU pilot for integration.** Keep the Cosmos click target five CSS pixels wider than the painted curve. Allow up to one device pixel of shift at the painted edge or the edge of that click target. The three [automated checks](#/curved-links?section=doc-automated-cases) passed on frozen M3 fixtures. Moving curves and performance under this pilot rule remain untested. The frozen M3 study used stricter checks and a different picking rule for its headline result. [Curve evidence](#/curved-links?section=doc-case-evidence)
+**Compare both engines through Graph.** The packaged Lines cases exercise moving endpoints, thin strokes, styles and the wider click target. The force cases step identical inputs and read back each point. The earlier frozen-curve study records the pilot's one-device-pixel edge allowance. [Lines](#/production-lines?section=try-straight) · [Forces](#/production-forces?section=try-gravity) · [Curve pilot](#/curved-links?section=doc-automated-cases)
 
 ```example
 youtubeMotion
@@ -54,6 +54,8 @@ For each story, fix its inputs and capture the WebGL result, implement the publi
 ### Compare the built packages in the Lab
 
 Once both packages can run a scenario, load each built package in its own frame. Run the same application code and replay the same inputs. Start with fixed-position rendering and known overlapping IDs. Then compare fixed-tick simulation invariants, edits, selection and callback order. Keep using the existing prototype studies for their original questions.
+
+The packaged Lines replay checks the painted stroke and the picked ID independently. A click in the gap between two dashes should still return that link. The force replay checks fixed-tick coordinates for the small layouts and compares how the two hierarchical layouts spread and settle. Both pages keep the exact differences visible. [Lines results](#/production-lines?section=doc-results) · [Force results](#/production-forces?section=doc-results)
 
 Move from small fixtures to the million-point dense, hub and YouTube graphs. On moving YouTube, record the camera and positions at release, verify the selected IDs and measure the time until the highlight is visible. Include 1,000 tracked labels, replacement, resize and memory use. Run timed comparisons one engine at a time, with repeated WebGL controls and a slowdown margin declared in advance. [Workloads and metrics](#/million-graph?section=doc-production-envelope)
 

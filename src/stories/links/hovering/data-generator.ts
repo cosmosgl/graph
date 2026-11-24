@@ -1,3 +1,5 @@
+import { makeRng } from '../../utils'
+
 interface Point {
   id: number;
 }
@@ -49,7 +51,7 @@ function generatePoints (count: number): Point[] {
   return points
 }
 
-function generateConnections (points: Point[]): Link[] {
+function generateConnections (points: Point[], random: () => number): Link[] {
   const connections: Link[] = []
   const pointCount = points.length
 
@@ -84,8 +86,8 @@ function generateConnections (points: Point[]): Link[] {
 
   // Random connections
   for (let i = 0; i < 30; i++) {
-    const source = Math.floor(Math.random() * pointCount)
-    const target = Math.floor(Math.random() * pointCount)
+    const source = Math.floor(random() * pointCount)
+    const target = Math.floor(random() * pointCount)
     if (source !== target) {
       const exists = connections.some(conn =>
         (conn.source === source && conn.target === target) ||
@@ -100,13 +102,13 @@ function generateConnections (points: Point[]): Link[] {
   return connections
 }
 
-function generatePointPositions (points: Point[]): Float32Array {
+function generatePointPositions (points: Point[], random: () => number): Float32Array {
   const radius = 100
   const positions = new Float32Array(points.length * 2)
 
   points.forEach((point, i) => {
     const angle = (i / points.length) * Math.PI * 2
-    const pointRadius = radius + (Math.random() - 0.5) * 20
+    const pointRadius = radius + (random() - 0.5) * 20
 
     positions[i * 2] = Math.cos(angle) * pointRadius
     positions[i * 2 + 1] = Math.sin(angle) * pointRadius
@@ -176,10 +178,12 @@ function generateLinkData (connections: Link[], points: Point[]): {
 }
 
 export function generateData (pointCount: number = 500): NetworkData {
+  // A pointer gesture should hit the same link in either Storybook preview.
+  const random = makeRng(42)
   const points = generatePoints(pointCount)
-  const connections = generateConnections(points)
+  const connections = generateConnections(points, random)
 
-  const pointPositions = generatePointPositions(points)
+  const pointPositions = generatePointPositions(points, random)
   const pointColors = generatePointColors(points)
   const pointSizes = generatePointSizes(points)
 

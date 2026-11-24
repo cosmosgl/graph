@@ -80,6 +80,17 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-points/pack
 LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-points/packages.test.ts
 ```
 
+Open **Lines in the Cosmos packages** (`#/production-lines`) to compare four links, their crossing and a point painted over a link. Choose a style, move an endpoint and switch between pixel ratios 1 and 2. Each run reports exact RGBA differences and the object that each package selected at the same pointer coordinates.
+
+Open **Forces in the Cosmos packages** (`#/production-forces`) to run the same seeded graph through one force at a time. Step both packages and read back their positions. The hierarchical repulsion case uses 8,192 slots and follows the spread and settling of the layout through tick 32.
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-lines/packages.test.ts src/experiments/production-forces/packages.test.ts
+LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-lines/packages.test.ts src/experiments/production-forces/packages.test.ts
+```
+
+With both development Storybooks running on ports 6006 and 6007, run `node scripts/check-storybook-links.mjs` to replay **Link Hovering** and **Link Style Playground** on each engine.
+
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.
 

@@ -26,6 +26,16 @@ SwiftShader independently rounds the projected center and corners. Keeping
 both placements in the Lab lets us check these edges with the same application
 and exact RGBA comparison as the original four diameters at both pixel ratios.
 
+Links exposed a different compatibility requirement. WebGL lets a pointer
+select a thin link several pixels beyond its painted edge and inside a dash
+gap. Checking both the canvas pixels and the public click callback preserves
+that behavior when an endpoint moves or a point covers the link.
+
+Running one force at a time also exposed a difference in how a host drives
+the Graph. Holding the right mouse button must repel nearby points during
+a manually scheduled update. Reading the positions after each update lets
+us check the impulse, the release and the pinned point separately.
+
 ## Example
 
 Open **Examples → Get Started → Manual step** in both previews. Click either
@@ -35,3 +45,7 @@ the blue point moves and the link follows.
 In the GPU Lab, **ForceCollision in the Cosmos packages** uses the same
 overlapping circles on both engines. Step either collision case to compare
 every position and pixel in the two builds.
+
+In **Lines in the Cosmos packages**, select Dashed and move the endpoint to
+compare both the stroke and its click target. In **Forces in the Cosmos
+packages**, step Pointer repulsion through the fourth update and release.
