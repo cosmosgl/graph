@@ -1,4 +1,4 @@
-import { COORDINATE_SYSTEM, Layer } from '@deck.gl/core'
+import { Layer } from '@deck.gl/core'
 import type {
   Accessor,
   AccessorContext,
@@ -14,6 +14,7 @@ import type {
 } from '@deck.gl/core'
 import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
 import type { GraphConfig } from '@cosmos.gl/graph'
+import { pickingBlendParameter, positionSourceMethod, requiredDeviceType } from './graph-host.js'
 
 /**
  * Binary styling channels for binary points, keyed by the accessor each one
@@ -293,7 +294,7 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   onGraphCreated: { type: 'function', value: null, optional: true },
   onGraphDataLoaded: { type: 'function', value: null, optional: true },
   // cosmos draws its space coordinates as world coordinates; `modelMatrix` places the space
-  coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+  coordinateSystem: 'cartesian',
 }
 
 /** The slice of a deck gesture event the drag handlers need. */
@@ -518,7 +519,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     keptLinks: readonly LinkDataT[] | null;
     /**
      * `getBounds`' measured box: the last one read back (`null` when nothing finite was
-     * there), the position texture version it was asked at, and whether a read is on its
+     * there), the position version it was asked at, and whether a read is on its
      * way. Unset until the first read lands, and again when a new dataset is loaded. The
      * serial counts the datasets loaded: a read of the previous one that lands after the
      * next is dropped.
@@ -545,9 +546,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   public initializeState (): void {
     const { device, timeline } = this.context
-    if (device.type !== 'webgl') {
+    if (device.type !== requiredDeviceType) {
       throw new Error(
-        `@cosmos.gl/deck-layers requires a WebGL 2 device — cosmos.gl is WebGL-only, got '${device.type}'`
+        `@cosmos.gl/deck-layers requires a '${requiredDeviceType}' device, got '${device.type}'`
       )
     }
 
@@ -637,7 +638,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   public draw (opts: {
     shaderModuleProps?: { picking?: { isActive?: number | boolean } };
-    parameters?: { blendColor?: number[] };
+    parameters?: { blendColor?: number[]; blendConstant?: number[] };
   }): void {
     const { graph, isReady } = this.state
     if (!graph || !isReady) return
@@ -652,7 +653,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       // carries both index spaces — getPickingInfo splits them again
       graph.drawToRenderPass(this.context.renderPass, {
         picking: {
-          alpha: opts.parameters?.blendColor?.[3] ?? 1,
+          alpha: opts.parameters?.[pickingBlendParameter]?.[3] ?? 1,
           linkIndexOffset: graph.graph.pointsNumber ?? 0,
         },
       })
@@ -755,7 +756,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   public getBounds (): [number[], number[]] | null {
     const { state } = this
     const graph = state?.graph
-    const positions = graph?.getPointPositionTexture()
+    const positions = graph?.[positionSourceMethod]()
     if (graph && positions && positions.pointCount > 0) {
       if (positions.version !== state.measuredBoundsVersion && !state.isMeasuringBounds) this._measureBounds(graph, positions.version)
       if (state.measuredBounds !== undefined) return state.measuredBounds ?? this._spaceSquare()
@@ -877,7 +878,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     } else if (graph) graph.destroy()
     this.state.graph = undefined
     this.state.holdsHover = false
-    // Another graph's texture versions would not mean the same box
+    // Another graph's position versions would not mean the same box
     this.state.measuredBounds = undefined
     this.state.measuredBoundsVersion = undefined
     this.state.isMeasuringBounds = false
@@ -885,7 +886,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   /**
    * Starts one asynchronous read of the live positions and keeps its box for `getBounds`,
-   * stamped with the texture version the read was asked at. A read that lands after the
+   * stamped with the position version the read was asked at. A read that lands after the
    * layer let go of the graph is dropped; an empty result (nothing to read, or the point
    * count changed under the copy) leaves the box as it was, and the next call asks again.
    */
