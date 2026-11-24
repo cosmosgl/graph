@@ -39,15 +39,19 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     device.submit()
     return Array.from(await staging.readAsync(0, 4))
   }
-  const draw = (isPicking = false): void => {
+  const draw = (isPicking = false, pixelRatio?: number): void => {
     const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
     try {
-      graph.drawToRenderPass(pass, isPicking ? { picking: { alpha: 7 / 255, linkIndexOffset: 1000 } } : {})
+      graph.drawToRenderPass(pass, {
+        pixelRatio,
+        picking: isPicking ? { alpha: 7 / 255, linkIndexOffset: 1000 } : undefined,
+      })
     } finally { pass.end() }
   }
   try {
     graph.setPointPositions(new Float32Array([32, 64, 96, 64]))
     graph.setLinks(new Float32Array([0, 1]))
+    graph.setPointColors(new Float32Array([1, 0, 0, 1, 0, 1, 0, 1]))
     graph.setLinkStyles(new Float32Array([LinkStyle.Dashed]))
     graph.setViewTransform({ k: 1, x: 0, y: 0 }, [width, height])
     graph.render()
@@ -77,6 +81,18 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     expect(graph.config.focusedPointIndex).toBeUndefined()
     draw(true)
     expect(await pixel(50, 38)).toEqual([233, 3, 0, 7]) // host pick includes the widened host-hover stroke
+
+    // A Retina application can share a graph with a host drawing at one device pixel per CSS pixel.
+    graph.setConfigPartial({ pixelRatio: 2 })
+    draw(false, 1)
+    expect(await pixel(16, 32)).toEqual([255, 0, 0, 255])
+    expect(await pixel(80, 32)).toEqual([0, 255, 0, 255])
+    draw(true, 1)
+    expect(await pixel(16, 32)).toEqual([1, 0, 0, 7])
+    expect(await pixel(80, 32)).toEqual([2, 0, 0, 7])
+    expect(await pixel(50, 32)).toEqual([233, 3, 0, 7])
+    expect(graph.config.pixelRatio).toBe(2)
+
     graph.destroy()
     // The host can keep drawing and reading its own targets after the graph releases its resources.
     draw()

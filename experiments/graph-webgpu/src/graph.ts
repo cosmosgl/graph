@@ -151,7 +151,7 @@ export class Graph {
   /** Record into the host's open pass using the viewport supplied to setViewTransform(). */
   public drawToRenderPass (pass: RenderPass, options?: GraphDrawOptions): void {
     if (!this.hasRendered || this.isDestroyed) return
-    const view = this.view()
+    const view = this.view(options?.pixelRatio)
     if (view.width > 0 && view.height > 0) this.renderer?.drawToRenderPass(pass, view, options)
   }
 
@@ -451,7 +451,7 @@ export class Graph {
     else this.pending.push(operation)
   }
 
-  private view (): GraphView {
+  private view (pixelRatio = this.config.pixelRatio): GraphView {
     const {
       screenSize: [width, height], worldOrigin, transform, maxPointSize, hostHoveredPointIndex, hostHoveredLinkIndex,
     } = this.simulation.store
@@ -459,7 +459,7 @@ export class Graph {
     return {
       width,
       height,
-      pixelRatio: this.config.pixelRatio,
+      pixelRatio,
       scale: k,
       x: x + k * (width / 2 - worldOrigin[0]),
       y: y + k * (height / 2 + worldOrigin[1]),

@@ -52,8 +52,9 @@ try {
   report.chrome = browser.version()
   const cdp = await browser.newBrowserCDPSession()
   report.gpus = (await cdp.send('SystemInfo.getInfo')).gpu.devices.map(d => d.deviceString)
-  for (const owner of ['layer', 'app']) {
-    const page = await browser.newPage({ viewport: { width: 820, height: 640 }, deviceScaleFactor: 1 })
+  const cases = [1, 2].flatMap(deviceScaleFactor => ['layer', 'app'].map(owner => ({ owner, deviceScaleFactor })))
+  for (const { owner, deviceScaleFactor } of cases) {
+    const page = await browser.newPage({ viewport: { width: 820, height: 640 }, deviceScaleFactor })
     page.setDefaultTimeout(25000)
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
@@ -68,9 +69,10 @@ try {
     const info = await page.evaluate(async () => (await window.consumer).adapter)
     assert.equal(info.type, 'webgpu')
     assert.equal(info.fallback, false, 'Expected a native WebGPU adapter')
-    const result = { owner, adapter: info, draws: [] }
+    const result = { owner, deviceScaleFactor, adapter: info, draws: [] }
     for (const [width, height] of [[320, 192], [512, 320]]) {
-      await page.evaluate(async ([w, h]) => (await window.consumer).setSize(w, h), [width, height])
+      // Observe the first frame a visitor sees before any resize or forced redraw.
+      if (width === 512) await page.evaluate(async ([w, h]) => (await window.consumer).setSize(w, h), [width, height])
       const coords = locations(width, height)
       const expectedColors = [...colors]
       if (width === 512) {
@@ -78,7 +80,7 @@ try {
         expectedColors.push(black)
       }
       const pixels = await sample(page, coords)
-      assert.deepEqual(pixels, expectedColors, owner + ' draw at ' + width + '×' + height)
+      assert.deepEqual(pixels, expectedColors, `${owner} draw at ${width}×${height}, display DPR ${deviceScaleFactor}`)
       const picks = await readPicks(page, coords)
       const expected = [['point', 0, 'left'], ['point', 1, 'right'], ['link', 0, 'edge']]
         .map(([kind, index, record]) => ({
@@ -100,7 +102,7 @@ try {
     assert.deepEqual(errors, [], owner + ' browser errors')
     report.cases.push({ ...result, removed, borrowedDeviceReadback })
     await page.close()
-    console.error(owner + ' passed drawing, picking, resize and teardown')
+    console.error(`${owner} passed drawing, picking, resize and teardown at display DPR ${deviceScaleFactor}`)
   }
   console.log(JSON.stringify(report, null, 2))
 } finally {

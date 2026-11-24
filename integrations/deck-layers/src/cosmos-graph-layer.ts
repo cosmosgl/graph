@@ -637,7 +637,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   public draw (opts: {
-    shaderModuleProps?: { picking?: { isActive?: number | boolean } };
+    shaderModuleProps?: { picking?: { isActive?: number | boolean }; project?: { devicePixelRatio?: number } };
     parameters?: { blendColor?: number[]; blendConstant?: number[] };
   }): void {
     const { graph, isReady } = this.state
@@ -647,19 +647,19 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const view = this._viewTransform(graph, viewport)
     if (!view) return
     graph.setViewTransform(view, [viewport.width, viewport.height])
-    if (opts.shaderModuleProps?.picking?.isActive) {
-      // deck's pick pass: cosmos draws its picking colors with the alpha deck uses to tell
-      // layers apart (the pass's blend constant), links offset past the points so one layer
-      // carries both index spaces — getPickingInfo splits them again
-      graph.drawToRenderPass(this.context.renderPass, {
-        picking: {
+    // Deck's color and picking passes each supply their viewport's backing scale.
+    // An app-supplied Graph can have a different pixelRatio on the same device.
+    const drawOptions = {
+      pixelRatio: opts.shaderModuleProps?.project?.devicePixelRatio ?? this._pixelRatio(),
+      // Deck uses alpha to identify the layer. Link IDs follow the point IDs.
+      picking: opts.shaderModuleProps?.picking?.isActive
+        ? {
           alpha: opts.parameters?.[pickingBlendParameter]?.[3] ?? 1,
           linkIndexOffset: graph.graph.pointsNumber ?? 0,
-        },
-      })
-      return
+        }
+        : undefined,
     }
-    graph.drawToRenderPass(this.context.renderPass)
+    graph.drawToRenderPass(this.context.renderPass, drawOptions)
   }
 
   public getPickingInfo ({ info }: GetPickingInfoParams): CosmosGraphPickingInfo {

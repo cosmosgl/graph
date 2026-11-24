@@ -41,6 +41,8 @@ export interface GraphView {
 export interface GraphDrawOptions {
   points?: boolean;
   links?: boolean;
+  /** Backing pixels per CSS pixel in the host viewport. Defaults to the Graph's pixelRatio. */
+  pixelRatio?: number;
   picking?: { alpha: number; linkIndexOffset?: number };
 }
 

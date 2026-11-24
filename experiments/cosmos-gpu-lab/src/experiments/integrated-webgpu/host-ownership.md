@@ -225,6 +225,15 @@ four bytes the app wrote. The first run drew correctly but picked nothing.
 Deck 10 supplied the layer ID in `blendConstant[3]`. Forwarding that value
 to the Graph pick shader restored the point and link hits.
 
+On 25 November the app-supplied graph showed only the link on a Retina
+display. Deck drew into a canvas with one backing pixel per CSS pixel, while
+the Graph used the display ratio of two to shade each point. Deck now passes
+its actual pixel ratio to the Graph on every draw and pick. A repeat on M3
+checked both ownership modes at display ratios 1 and 2 with the canvas ratio
+fixed at 1. Both point centers and the link matched their exact colors on
+first paint and after resize. All picks and teardown checks passed in all
+four cases. The capture is in `captures/packed-deck-retina-m3-20261125/`.
+
 Rebuild both tarballs and the app from the repository root.
 
 ```sh
