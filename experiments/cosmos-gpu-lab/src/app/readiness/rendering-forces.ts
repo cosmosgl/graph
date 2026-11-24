@@ -59,6 +59,19 @@ const packageForce: CaseReadiness = {
   next: 'See the combined case for weighted springs, direct repulsion and collision acting in the same tick.',
 }
 
+const scaledForces: CaseReadiness = {
+  badge: 'Layout and timing checked',
+  tone: 'pass',
+  finding: 'Both packages preserved the eight communities and the moving click targets. M3 frame and click p95 met the declared margins.',
+  area: 'Integration',
+  status: 'Packaged layout and native responsiveness checks passed',
+  evidence: [
+    { tone: 'pass', text: 'The runs checked all 127 pins, the absent slot and every ordered link through tick 100.' },
+    { tone: 'info', text: 'The WebGPU layouts retained deeper overlaps at tick 100. The results give contact depth and residual motion for each engine.' },
+  ],
+  next: 'Compare overlap and settling on additional seeds and larger graphs.',
+}
+
 // Each summary refers to the named case and its recorded evidence. These are
 // editorial assessments, not verdicts from the current browser session.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
@@ -91,6 +104,14 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'production-forces/attractors': packageForce,
   'production-forces/clusters': packageForce,
   'production-forces/repulsion': packageForce,
+  'production-forces/dense': {
+    ...scaledForces,
+    finding: 'RMS position error peaked at 0.22% of the WebGL radius. Native frame p95 fell from 33.65 to 18.70 ms.',
+  },
+  'production-forces/hubs': {
+    ...scaledForces,
+    finding: 'The movable hub had 1,024 incident links. RMS error peaked at 0.44% of the WebGL radius. Native frame p95 fell from 33.40 to 18.65 ms.',
+  },
   'production-forces/center': {
     ...packageForce,
     badge: 'Within 0.00025 units',
@@ -107,7 +128,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'The fixture preserved the pin and hole. Both layouts slowed to less than 5% of their first-tick motion.' },
       { tone: 'info', text: 'The results include one native timing run with repeated WebGL controls.' },
     ],
-    next: 'Check convergence on dense communities and hubs with multiple forces active.',
+    next: 'Open Dense communities and Hub to compare three active forces through tick 100.',
   },
   'production-forces/combined': {
     badge: 'Positions and picks match',
@@ -119,7 +140,7 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'Removing each force in turn changed the WebGL trajectory. The pinned and absent slots stayed fixed with all three active.' },
       { tone: 'pass', text: 'On M3 and SwiftShader, eight single steps reproduced the batch result, including paint and click IDs at all three probes.' },
     ],
-    next: 'Replay on a dense community and a hub graph, then measure native frame times and picking latency.',
+    next: 'Open Dense communities and Hub for the 8,192-slot results and native frame and click timings.',
   },
   'production-points/dpr-1': packagePoints,
   'production-points/dpr-2': packagePoints,

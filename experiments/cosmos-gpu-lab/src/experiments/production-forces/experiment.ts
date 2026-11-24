@@ -32,8 +32,17 @@ function forceCase (id: ForceCase): ExperimentCase {
         : 'How do both graphs settle around the same movable hub?',
       acceptance: 'Preserve pins, absent slots and click IDs. Compare community retention, spring lengths and overlap through tick 100.',
       tryIt: 'Step once, then click the gold link between communities or its lilac endpoint. Each preview shows the ID returned by its Graph.',
-      evidence: [{ label: 'Dense and hub comparison method', page: 'scale-method' }, { label: 'Package force measurements', page: 'results' }],
-      recorded: null,
+      evidence: [{ label: 'Dense and hub comparison method', page: 'scale-method' }],
+      recorded: {
+        date: '2026-11-24',
+        environment: 'Chrome on native Apple M3',
+        scope: '8,192 slots, nine layout checkpoints and two timed comparison pairs',
+        conclusion: id === 'dense'
+          ? 'RMS position error peaked at 0.22% of the WebGL radius. Frame and click p95 were within the M3 margins.'
+          : 'RMS position error peaked at 0.44% of the WebGL radius. The hub retained more overlap on WebGPU. Both timing checks passed.',
+        limits: 'One seed per topology. Moving click timings cover the isolated pin and background.',
+        evidence: [{ label: 'Package force measurements', page: 'results' }, { label: 'M3 frame and click timings', page: 'scale-timing' }],
+      },
     }
   }
   return {
@@ -81,6 +90,12 @@ export const experiment = defineExperiment({
       id: 'scale-method',
       title: 'Dense and hub comparison method',
       load: async (): Promise<string> => (await import('./scale-method.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'scale-timing',
+      title: 'M3 frame and click timings',
+      load: async (): Promise<string> => (await import('./scale-timing.md?raw')).default,
     },
     { kind: 'markdown', id: 'results', title: 'Package force measurements', load: async (): Promise<string> => (await import('./results.md?raw')).default },
   ],

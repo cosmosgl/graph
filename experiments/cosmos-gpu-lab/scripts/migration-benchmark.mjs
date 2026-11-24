@@ -1,12 +1,11 @@
-import { execFileSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
+import { captureBenchmarkSource } from './benchmark-source.mjs'
 import { calibrate, compare, formatComparison } from './migration-results.mjs'
 
 const lab = fileURLToPath(new URL('../', import.meta.url))
@@ -29,24 +28,7 @@ const scope = values.smoke ? 'smoke' : steadyOnly ? 'steady-only' : 'full'
 const suffix = scope === 'full' ? '' : `-${scope}`
 const capture = join(lab, 'captures', `migration-${fixture}-${points}-${stamp}${suffix}`)
 await mkdir(capture, { recursive: true })
-const git = args => execFileSync('git', args, { cwd: repo })
-const archive = join(capture, 'source.tar.gz')
-// Compare the NUL-delimited paths without losing bytes in filenames.
-const deleted = new Set(git(['ls-files', '-z', '--deleted']).toString('latin1').split('\0'))
-const files = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--deduplicate'])
-  .toString('latin1').split('\0').filter(path => !deleted.has(path))
-execFileSync('tar', ['-czf', archive, '--null', '-T', '-'], {
-  cwd: repo, input: Buffer.from(`${files.join('\0')}\0`, 'latin1'),
-})
-const sha = async path => createHash('sha256').update(await readFile(path)).digest('hex')
-const version = async root => JSON.parse(await readFile(join(root, 'node_modules/@luma.gl/core/package.json'), 'utf8')).version
-const source = {
-  revision: git(['rev-parse', 'HEAD']).toString().trim(),
-  snapshot: relative(repo, archive),
-  snapshotSha256: await sha(archive),
-  productionSha256: await sha(join(repo, 'dist/index.min.js')),
-  luma: { webgl: await version(repo), webgpu: await version(lab) },
-}
+const source = await captureBenchmarkSource(repo, lab, capture)
 const save = async (name, data) => await writeFile(join(capture, `${name}.json`), `${JSON.stringify(data, null, 2)}\n`)
 await save('source', source)
 console.log(`Capturing ${fixture} at ${points.toLocaleString()} points in ${relative(repo, capture)}`)

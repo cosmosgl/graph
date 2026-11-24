@@ -34,10 +34,10 @@ function samples(runs, measure) {
 const validRun = run => run.status === 'complete' && run.result?.quality?.freeMoved > 0 &&
   ['nonfinite', 'flagErrors', 'fixedMoved'].every(key => run.result.quality[key] === 0)
 
-export function calibrate(controls) {
+export function calibrate(controls, labels) {
   const ready = controls.length >= 2 && controls.every(validRun) && new Set(controls.map(run => run.result.input)).size === 1
   const refresh = ready ? average(controls.map(run => run.result.refreshMs)) : null
-  return Object.fromEntries(measures.map(([label, category, measure]) => {
+  return Object.fromEntries(measures.filter(([label]) => !labels || labels.includes(label)).map(([label, category, measure]) => {
     const values = samples(controls, measure)
     if (!ready || values.length !== controls.length) return [label, { margin: null, reason: 'No repeated complete WebGL control' }]
     const baseline = average(values)
@@ -60,7 +60,7 @@ export function compare(pairs, calibration) {
   const comparable = pairs.length >= 2 && runs.every(validRun) && new Set(runs.map(run => run.result.input)).size === 1 &&
     new Set(runs.map(run => run.result.browser)).size === 1
   const picksMatch = matchingPicks(runs)
-  return measures.map(([label, category, measure]) => {
+  return measures.filter(([label]) => label in calibration).map(([label, category, measure]) => {
     const left = samples(webgl, measure)
     const right = samples(webgpu, measure)
     const gl = left.length ? average(left) : null

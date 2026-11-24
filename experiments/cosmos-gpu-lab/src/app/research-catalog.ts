@@ -305,13 +305,13 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-forces': entry('production-forces', {
       reviewed: '2026-11-24',
-      conclusion: 'Six isolated forces matched exactly. With springs, repulsion and collision together, both the coordinates and the moved link ID matched.',
+      conclusion: 'Both 8,192-slot layouts retained their communities. The moved link and endpoint returned the expected IDs. Native frame and click p95 met the M3 margins.',
       variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
-      comparison: 'Seeded positions, fixed step counts, pinned and absent slots, and approximate repulsion convergence',
+      comparison: 'Fixed-tick layouts, local overlap and public picks, plus matched moving-frame intervals and trusted-click feedback on M3',
       method: 'method',
       evidence: 'results',
-      next: 'Replay the combined forces on dense communities and hub graphs and measure native frame times and picking latency.',
-      reproduce: 'Choose the combined case, run to tick 8 and click the golden link in both previews.',
+      next: 'Check residual overlap on more seeds and larger hub graphs. Measure moving selection and label feedback through the packaged API.',
+      reproduce: 'Choose Dense communities or Hub. Step once and click the gold link in both previews, then select a later checkpoint.',
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Per-force measurements in the two built packages.' }],
     }),
     'production-points': entry('production-points', {

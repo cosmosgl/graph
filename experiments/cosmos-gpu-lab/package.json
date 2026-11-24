@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:gpu": "vitest run --config vitest.config.ts",
+    "benchmark:packaged-forces": "node scripts/packaged-force-benchmark.mjs",
     "benchmark:migration": "node scripts/migration-benchmark.mjs",
     "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit",
     "lint": "eslint --cache ./src --ext .ts --ignore-path ../../.gitignore"

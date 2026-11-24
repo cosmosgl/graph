@@ -41,3 +41,28 @@ Open `#/production-forces?section=try-combined`. Rebuild both packages before st
 The initial independent native WebGL trajectory and its repeat are in `captures/combined-forces-20261124/webgl-reference-first.json`. They also identify the midpoint probes at tick 0 and tick 8. Focused paired runs for the same graph use `captures/combined-forces-20261124/native/` and `swiftshader/`. The source for the controls and public caller is in this directory's `fixture.ts`, `frame.ts` and `packages.test.ts`. Frame coordinates are relative to the individual canvas. To verify them with an actual mouse, center the canvas in view and account for its displayed scale.
 
 The focused run used the WebGL and final WebGPU correctness bundles in the table above. Their hashes and the force fixture source hashes are in `combined-forces-20261124/manifest.json`. The native reference process reported Chrome 158.0.8127.37. Both Vitest runs recorded a Chrome 158 user agent, and checked the adapters at runtime. The real mouse replays are in `captures/motion-mixed-20261124/ui/combined-{1200,1000,390}.json`.
+
+## Dense communities and the movable hub
+
+Run the WebGL reference before examining the candidate whenever you change a scaled fixture. Both built packages use one caller in `fixture.ts`. The public point, link and background probes in `scale-probes.ts` were frozen from two native WebGL replays. The nine checkpoints report all coordinates, per-community quality, pin and topology checks, and the paint and callback at each applicable probe.
+
+```sh
+pnpm run build
+pnpm --filter @cosmos.gl/graph-webgpu build
+LAB_ARTIFACT_RUN=dense-hub-reference pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-forces/scale-packages.test.ts -t 'records two WebGL'
+LAB_ARTIFACT_RUN=dense-hub-native pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-forces/scale-packages.test.ts
+LAB_ARTIFACT_RUN=dense-hub-software LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-forces/scale-packages.test.ts
+LAB_ARTIFACT_RUN=dense-hub-timing pnpm --filter @cosmos.gl/gpu-lab benchmark:packaged-forces
+```
+
+Choose fresh capture names on each rerun. Keep other GPU jobs and builds outside the timed run. To replay the complete packaged regression, pass these six Vitest files to `test:gpu` on each adapter. The force suite has two files.
+
+```sh
+src=src/experiments
+pnpm --filter @cosmos.gl/gpu-lab test:gpu \
+  "$src/production-lines/packages.test.ts" "$src/production-forces/packages.test.ts" \
+  "$src/production-forces/scale-packages.test.ts" "$src/production-points/packages.test.ts" \
+  "$src/production-force-collision/packages.test.ts" "$src/production-graph-api/packages.test.ts"
+```
+
+The original raw runs live in `captures/scale-forces-20261124/`. `native-reference-first/` holds the two controls and three force-off runs per topology. `native-paired-probes/` holds the native layout and paint results. `native-timing/` contains the source archive and hash, bundle hashes and the twelve Chrome session records. Desktop and narrow physical-click and reset replays are in `captures/scaled-forces-20261124/ui/`. [Thresholds and coverage](#/production-forces?section=doc-scale-method) · [Native frame and click results](#/production-forces?section=doc-scale-timing)
