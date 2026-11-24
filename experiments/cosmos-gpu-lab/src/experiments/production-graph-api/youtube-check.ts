@@ -5,10 +5,11 @@ import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import { viewport } from '../viewer-comparison/benchmark/fixture'
 import type { Pair } from '../selection/reference'
 import { arrayHash, type ReleaseOracle, verifyRelease } from './youtube-oracle'
+import { YoutubeQueueProfile, type IsolatedCosts, type FrozenDraw } from './youtube-queue-profile'
 
 const now = (): number => performance.now()
 const nextFrame = (): Promise<void> => new Promise(resolve => requestAnimationFrame(() => resolve()))
-type ReplayMode = 'correctness' | 'timing' | 'drained' | 'blocking'
+type ReplayMode = 'correctness' | 'timing' | 'drained' | 'blocking' | 'profile'
 type TimedRead<T> = { value: T | null; submitMs: number; elapsedMs: number; readyMs: number; error: string | null }
 type ReplaySample = {
   index: number;
@@ -32,6 +33,7 @@ type ReplaySample = {
   tickAtRelease: number;
   tickAfterFeedback: number;
   timings: Record<string, number | null>;
+  profile?: Record<string, number | null>;
 }
 type ReplaySession = {
   info: object;
@@ -39,6 +41,8 @@ type ReplaySession = {
   input: Record<string, string>;
   readonly tick: number;
   result: (expectedIndex: number) => Promise<ReplaySample>;
+  isolatedCosts: () => Promise<IsolatedCosts>;
+  frozenDraw: (tick: number) => Promise<FrozenDraw>;
   destroy: () => void;
 }
 
@@ -72,6 +76,7 @@ function readBlocking<T> (name: string, request: () => T, release: number): Time
 // The native driver opens one real package per page, with the same public Graph calls.
 export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu', mode: ReplayMode): Promise<ReplaySession> {
   if ((mode === 'drained' || mode === 'blocking') && engine !== 'webgl') throw new Error('The synchronous release diagnostic requires WebGL')
+  if (mode === 'profile' && engine !== 'webgpu') throw new Error('The queue profile requires WebGPU')
   const graphHost = document.querySelector<HTMLDivElement>('#graph')!
   const surface = document.querySelector<HTMLDivElement>('#surface')!
   const labelHost = document.querySelector<HTMLDivElement>('#labels')!
@@ -89,6 +94,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
   }
   const GRAPH = await loadGraphPackage(engine)
   let tick = 0
+  let profile: YoutubeQueueProfile | undefined
   let afterDraw: (() => void) | undefined
   const graph = new GRAPH(graphHost, {
     fitViewOnInit: false,
@@ -100,6 +106,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
     pointDefaultSize: 2,
     onSimulationTick (): void {
       tick++
+      profile?.afterStep(tick)
       if (afterDraw) {
         // The graph completes this autonomous frame's draw/submit in the same task.
         queueMicrotask(afterDraw)
@@ -110,6 +117,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
   try {
     await graph.ready
     const device = graph.simulation.device!
+    if (mode === 'profile') profile = new YoutubeQueueProfile(graph, () => tick)
     applyComparisonInput(graph, input)
     graph.render(1, 0)
     graph.setZoomTransformByPointPositions(Float32Array.of(origin, origin), 0, 0.25, 0)
@@ -175,6 +183,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
         }
       }
       const blocking = mode === 'blocking'
+      const beforeQueries = profile?.mark()
       const ids = blocking
         ? readBlocking('selection', () => graph.findPointsInRect(rect), release)
         : readAtRelease('selection', () => graph.findPointsInRectAsync(rect), release)
@@ -191,12 +200,14 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       const selected = selection.value
       let highlightUpdateMs: number | null = null
       let highlightFrame: ReturnType<typeof observeHighlight> | undefined
+      const beforeHighlight = profile?.mark()
       const highlightStart = now()
       if (selected) {
         graph.setConfigPartial({ highlightedPointIndices: selected })
         highlightUpdateMs = now() - highlightStart
         highlightFrame = observeHighlight().catch(error => { errors.push(String(error)); return null })
       }
+      const afterHighlight = profile?.mark()
       feedback.textContent = selected ? `${selected.length} selected` : 'Selection unavailable'
       Object.assign(box.style, {
         left: `${rect[0][0]}px`,
@@ -230,6 +241,17 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
         }
       }
       const ordered = selected?.every((id, i) => !i || selected[i - 1] < id) ?? null
+      let queueProfile: ReplaySample['profile']
+      if (beforeQueries && beforeHighlight && afterHighlight) {
+        queueProfile = {
+          unacknowledgedFramesAtRelease: beforeQueries.pendingFrames,
+          unacknowledgedFramesBeforeHighlight: beforeHighlight.pendingFrames,
+          queueAheadAtReleaseMs: await beforeQueries.completedAt - release,
+          queueAheadBeforeHighlightMs: await beforeHighlight.completedAt - beforeHighlight.submittedAt,
+          throughHighlightWritesMs: await afterHighlight.completedAt - beforeHighlight.submittedAt,
+          highlightedFrameAfterWritesMs: frame ? frame.observed - await afterHighlight.completedAt : null,
+        }
+      }
       return {
         index: sampleIndex,
         from,
@@ -252,6 +274,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
         visible: !hidden,
         tickAtRelease,
         tickAfterFeedback,
+        ...(queueProfile ? { profile: queueProfile } : {}),
         timings: {
           ...(mode === 'drained' ? { drainMs } : {}),
           eventToHandlerMs: release - event.timeStamp,
@@ -291,6 +314,14 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       result (expectedIndex: number): ReturnType<typeof replay> {
         if (!pending || index !== expectedIndex) throw new Error(`Expected release ${expectedIndex}, received ${index}`)
         return pending
+      },
+      isolatedCosts (): Promise<IsolatedCosts> {
+        if (!profile) throw new Error('Isolated costs require the queue profile')
+        return profile.isolatedCosts()
+      },
+      frozenDraw (targetTick: number): Promise<FrozenDraw> {
+        if (!profile) throw new Error('Frozen draws require the queue profile')
+        return profile.frozenDraw(targetTick)
       },
       destroy (): void {
         document.removeEventListener('visibilitychange', visibility)

@@ -12,22 +12,35 @@ import { captureBenchmarkSource, sha256 } from './benchmark-source.mjs'
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const root = resolve(lab, '../..')
 const { values, positionals } = parseArgs({
-  allowPositionals: true, options: { mode: { type: 'string' }, engine: { type: 'string' } },
+  allowPositionals: true,
+  options: { mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' }, 'draw-tick': { type: 'string' } },
 })
 const counts = positionals.length ? positionals.map(Number) : [65536, 1000000]
 const linkCounts = new Map([[65536, 432898], [1000000, 2852734]])
 assert.ok(counts.every(n => linkCounts.has(n)), 'Use the 65536 or 1000000 point YouTube fixture')
-const diagnosticModes = ['drained', 'blocking']
-const diagnostic = diagnosticModes.includes(values.mode)
-assert.ok(!values.mode || ['correctness', 'timing', ...diagnosticModes].includes(values.mode), 'Expected --mode correctness, timing, drained or blocking')
+const diagnosticEngine = new Map([['drained', 'webgl'], ['blocking', 'webgl'], ['profile', 'webgpu']]).get(values.mode)
+assert.ok(!values.mode || diagnosticEngine || ['correctness', 'timing'].includes(values.mode), 'Unknown YouTube replay mode')
 assert.ok(!values.engine || ['webgl', 'webgpu'].includes(values.engine), 'Expected --engine webgl or webgpu')
-assert.ok(!diagnostic || values.engine !== 'webgpu', 'The drained and blocking diagnostics require WebGL')
+assert.ok(!diagnosticEngine || !values.engine || values.engine === diagnosticEngine, `The ${values.mode} diagnostic requires ${diagnosticEngine}`)
 const cpu = cpus()[0]?.model ?? 'unknown'
 assert.match(cpu, /Apple M3/i, 'Requires the native M3 machine')
 const boxes = [
   [[115, 54], [846, 487]], [[421, 221], [499, 292]],
   [[92, 137], [316, 434]], [[847, 475], [665, 202]],
 ]
+const releaseTicks = values['release-ticks']?.split(',').map(Number)
+if (releaseTicks) {
+  assert.ok(positionals.length === 1 && values.engine && ['correctness', 'profile'].includes(values.mode),
+    '--release-ticks requires one point count, --engine, and --mode correctness or profile')
+  assert.ok(releaseTicks.length === boxes.length && releaseTicks.every((tick, i) =>
+    Number.isSafeInteger(tick) && tick >= 4 && (!i || tick > releaseTicks[i - 1])),
+  'Supply four strictly increasing integer release ticks starting at 4 or later')
+}
+const drawTick = values['draw-tick'] === undefined ? null : Number(values['draw-tick'])
+if (drawTick !== null) {
+  assert.ok(values.mode === 'profile' && values.engine === 'webgpu' && releaseTicks, '--draw-tick requires a WebGPU profile with --release-ticks')
+  assert.ok(Number.isSafeInteger(drawTick) && drawTick > releaseTicks.at(-1) + 5, 'Allow at least six ticks after the last release')
+}
 const viewport = { width: 1050, height: 680 }
 const captureRoot = resolve(lab, 'captures')
 await mkdir(captureRoot, { recursive: true })
@@ -102,21 +115,63 @@ function checkSample(sample, index, mode, previousTick) {
   assert.equal(sample.zoom, 0.25)
   assert.ok(Math.abs(sample.center[0] - 480.5) < 0.01 && Math.abs(sample.center[1] - 270.5) < 0.01, 'camera moved during selection')
   assert.ok(sample.tickAtRelease >= 4 && sample.tickAtRelease > previousTick, 'graph did not advance between releases')
+  if (releaseTicks) assert.equal(sample.tickAtRelease, releaseTicks[index], 'native pointerup missed its requested simulation tick')
   const { selectionReadyMs, labelReadyMs, readbackReadyMs } = sample.timings
   assert.ok([selectionReadyMs, labelReadyMs, readbackReadyMs].every(ms => Number.isFinite(ms) && ms >= 0), 'missing readback timestamps')
   assert.ok(readbackReadyMs + 0.01 >= Math.max(selectionReadyMs, labelReadyMs), 'readback phase ended before both reads settled')
   assert.deepEqual(sample.errors, [], 'one or more release stages failed')
   assert.equal(sample.ordered, true)
   assert.equal(sample.labels, 1000)
-  assert.equal(sample.verified, mode !== 'timing')
-  if (mode !== 'timing') {
+  const expectsOracle = mode !== 'timing' && mode !== 'profile'
+  assert.equal(sample.verified, expectsOracle)
+  if (expectsOracle) {
     assert.deepEqual([sample.missing, sample.extra, sample.wrongLabels], [0, 0, 0], 'release snapshot mismatch')
+  }
+  if (mode === 'profile') {
+    for (const key of ['unacknowledgedFramesAtRelease', 'unacknowledgedFramesBeforeHighlight']) {
+      assert.ok(Number.isInteger(sample.profile[key]) && sample.profile[key] >= 0, `missing frame count ${key}`)
+    }
+    for (const key of ['queueAheadAtReleaseMs', 'queueAheadBeforeHighlightMs', 'throughHighlightWritesMs', 'highlightedFrameAfterWritesMs']) {
+      assert.ok(Number.isFinite(sample.profile[key]), `missing queue profile ${key}`)
+    }
   }
   const stages = ['selectionReadMs', 'labelReadMs', 'highlightUpdateMs', 'labelRedrawMs', 'presentationMs', 'highlightFrameMs', 'feedbackWithHighlightMs']
   if (mode === 'drained') stages.push('drainMs')
   for (const key of stages) {
     assert.ok(Number.isFinite(sample.timings[key]) && sample.timings[key] >= 0, `missing ${key}`)
   }
+}
+
+async function captureFrozenCanvas(page, file) {
+  // Snap the crop to an integral origin. Chrome's enclosing screenshot rect otherwise includes
+  // up to an extra CSS pixel above/below a canvas positioned after a fractional-height header.
+  await page.addStyleTag({ content: `
+    #surface { position: fixed !important; top: 0 !important; left: 0 !important; z-index: 10000 }
+    #surface > :not(#graph), #graph > :not(canvas) { visibility: hidden !important }
+  ` })
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  const png = await page.locator('#graph canvas').screenshot({ path: file })
+  // Hash decoded RGBA so encoder/compression changes do not change the color comparison.
+  const image = await page.evaluate(async base64 => {
+    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
+    const { width, height } = bitmap
+    const ctx = new OffscreenCanvas(width, height).getContext('2d')
+    ctx.drawImage(bitmap, 0, 0)
+    bitmap.close()
+    const rgba = ctx.getImageData(0, 0, width, height).data
+    const pixels = new Uint32Array(rgba.buffer)
+    let differentFromCorner = 0
+    const colors = new Set()
+    for (const color of pixels) {
+      if (color !== pixels[0]) differentFromCorner++
+      if (colors.size < 256) colors.add(color)
+    }
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', rgba.buffer))
+    const rgbaSha256 = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
+    return { width, height, differentFromCorner, distinctColorsUpTo256: colors.size, rgbaSha256 }
+  }, png.toString('base64'))
+  return { ...image, pngSha256: await sha256(file) }
 }
 
 async function replay(count, mode, engine, trial) {
@@ -166,18 +221,24 @@ async function replay(count, mode, engine, trial) {
     let previousTick = 3
     for (const [index, [from, to]] of boxes.entries()) {
       const entry = { index, from, to }
+      if (releaseTicks) entry.targetTick = releaseTicks[index]
       run.samples.push(entry)
       watchdog(`drag ${index + 1}`, 90000)
       try {
-        await page.waitForFunction(tick => window.publicYoutube.tick > tick, previousTick, { timeout: 60000 })
+        // For a tick-matched replay perform pointerdown and all moves early; the wait is before pointerup.
+        if (!releaseTicks) await page.waitForFunction(tick => window.publicYoutube.tick > tick, previousTick, { timeout: 60000 })
         await page.mouse.move(bounds.x + from[0], bounds.y + from[1])
         await page.mouse.down()
         await page.mouse.move(bounds.x + to[0], bounds.y + to[1], { steps: 4 })
+        if (releaseTicks) {
+          entry.tickAfterMove = await page.evaluate(() => window.publicYoutube.tick)
+          await page.waitForFunction(tick => window.publicYoutube.tick >= tick, releaseTicks[index], { polling: 5, timeout: 60000 })
+        }
         await page.mouse.up()
         const sample = await page.evaluate(index => window.publicYoutube.result(index), index)
         assert.ok(sample, 'pointerup produced no release sample')
         Object.assign(entry, sample)
-        if (mode !== 'timing') {
+        if (mode !== 'timing' && mode !== 'profile') {
           entry.selectionVerified = sample.missing === null || sample.extra === null ? null :
             sample.ordered && sample.missing === 0 && sample.extra === 0
           entry.labelsVerified = sample.wrongLabels === null ? null : sample.labels === 1000 && sample.wrongLabels === 0
@@ -199,6 +260,25 @@ async function replay(count, mode, engine, trial) {
     if (!run.samples.some(sample => sample.selected > 0)) run.errors.push('no nonempty selection returned')
     await page.locator('#surface').screenshot({ path: resolve(capture, name + '.png'), timeout: 20000 })
     run.screenshot = name + '.png'
+    if (drawTick !== null) {
+      watchdog('frozen draw comparison', 90000)
+      run.frozenDraw = await page.evaluate(tick => window.publicYoutube.frozenDraw(tick), drawTick)
+      assert.equal(run.frozenDraw.tick, drawTick)
+      assert.equal(run.frozenDraw.coordinates, count * 2)
+      const filename = `${name}-tick-${drawTick}-canvas.png`
+      run.frozenDraw.image = { filename, ...await captureFrozenCanvas(page, resolve(capture, filename)) }
+      const image = run.frozenDraw.image
+      assert.deepEqual([image.width, image.height], [1922, 1082], 'frozen graph canvas has an unexpected crop')
+      assert.ok(image.differentFromCorner > 1000 && image.distinctColorsUpTo256 > 2, 'frozen graph canvas looks empty')
+      assert.equal(await page.evaluate(() => window.publicYoutube.tick), drawTick, 'layout moved while capturing canvas')
+    } else if (mode === 'profile') {
+      watchdog('isolated simulation and drawing', 90000)
+      const controls = await page.evaluate(async () => ({
+        isolatedFromTick: window.publicYoutube.tick,
+        isolatedCosts: await window.publicYoutube.isolatedCosts(),
+      }))
+      Object.assign(run, controls)
+    }
     await page.evaluate(() => window.publicYoutube.destroy())
     run.stage = 'complete'
   } catch (error) {
@@ -212,7 +292,7 @@ async function replay(count, mode, engine, trial) {
 }
 try {
   for (const count of counts) {
-    const schedule = diagnostic ? [[values.mode, 1, ['webgl']]] : [
+    const schedule = diagnosticEngine ? [[values.mode, 1, [diagnosticEngine]]] : [
       ['correctness', 1, ['webgl', 'webgpu']],
       ['timing', 1, ['webgl', 'webgpu']],
       ['timing', 2, ['webgpu', 'webgl']],
