@@ -42,6 +42,7 @@ export class Graph {
   private mouseRepulsion?: Pair
   private positionTransition?: PositionTransition
   private frame = 0
+  private isFrameInFlight = false
   private isDestroyed = false
   private hasRendered = false
   private fitTimer?: ReturnType<typeof setTimeout>
@@ -505,8 +506,23 @@ export class Graph {
     if (this.isDestroyed || !this.canvas || !this.config.enableRenderLoop || this.frame) return
     this.frame = requestAnimationFrame(() => {
       this.frame = 0
-      if (this.isDestroyed || this.simulation.device?.isLost) return
+      const device = this.simulation.device
+      if (this.isDestroyed || !device || device.isLost) return
+      // A pointer read joins the same GPU queue. Leave at most one autonomous
+      // simulation and draw ahead of it, even when a frame spans many refreshes.
+      if (this.isFrameInFlight) {
+        this.requestFrame()
+        return
+      }
       this.renderOneFrame()
+      if (this.isDestroyed || device.isLost) return
+      const fence = device.createFence()
+      this.isFrameInFlight = true
+      const release = (): void => {
+        fence.destroy()
+        this.isFrameInFlight = false
+      }
+      fence.signaled.then(release, release)
       if (this.hasRendered && (this.isSimulationRunning || this.transition.isActive || this.mouseRepulsion)) this.requestFrame()
     })
   }

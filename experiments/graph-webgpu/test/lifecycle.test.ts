@@ -69,6 +69,41 @@ describe('WebGPU graph lifecycle', () => {
     } finally { graph.destroy() }
   })
 
+  it('coalesces autonomous draws behind a busy GPU and delivers the requested redraw after a pause', async () => {
+    const host = document.createElement('div')
+    host.style.cssText = 'width:120px;height:80px'
+    document.body.append(host)
+    const tick = vi.fn()
+    const graph = new Graph(host, { enableRenderLoop: false, fitViewOnInit: false, onSimulationTick: tick })
+    let release!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    try {
+      await graph.ready
+      graph.setPointPositions(new Float32Array([20, 20]))
+      graph.render(1, 0)
+      const device = graph.simulation.device!
+      const createFence = device.createFence.bind(device)
+      vi.spyOn(device, 'createFence').mockImplementationOnce(() => {
+        const fence = createFence()
+        // Deterministically delay the completion notification of this real GPU frame.
+        Object.defineProperty(fence, 'signaled', { value: fence.signaled.then(() => held) })
+        return fence
+      })
+      const draw = vi.spyOn(graph, 'renderOneFrame')
+      graph.setConfigPartial({ enableRenderLoop: true })
+      await vi.waitFor(() => expect(tick).toHaveBeenCalledOnce())
+      graph.pause()
+      graph.setHostHoveredPoint(0)
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame)
+      expect(draw).toHaveBeenCalledOnce()
+      graph.step()
+      expect(tick).toHaveBeenCalledTimes(2)
+      release()
+      await vi.waitFor(() => expect(draw).toHaveBeenCalledTimes(2))
+      expect(tick).toHaveBeenCalledTimes(2)
+    } finally { release(); graph.destroy(); host.remove() }
+  })
+
   it('tears down after device loss and renders again on a fresh device', async () => {
     const host = document.createElement('div')
     host.style.cssText = 'width:120px;height:80px'
