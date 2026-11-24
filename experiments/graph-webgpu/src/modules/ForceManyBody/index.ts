@@ -1,12 +1,15 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import type { Kernel } from '@luma.gl/graph'
-import type { GraphConfigInterface } from '@/graph/config'
+import { isRepulsionSampleCount, type GraphConfigInterface } from '@/graph/config'
+import { ALL_PAIRS_MAX_POINTS, MIN_AUTO_SLOTS, getAffordableSlotCount, usesPreciseFarField } from '@/graph/modules/ForceManyBody/settings'
 import type { Store } from '@/graph/modules/Store'
-import { getFinestGridSize } from '@/graph/modules/Shared/cell-slots'
+import { getFinestGridSize, getNearFieldSlotCount } from '@/graph/modules/Shared/cell-slots'
 import { resourceScope } from '../Shared/resource-scope'
-import { kernel, upload, type Decl } from '../Shared/compute'
+import { kernel, upload } from '../Shared/compute'
 import direct from './force-direct.wgsl?raw'
-import hierarchy from './hierarchy.wgsl?raw'
+import { createNearField } from './near-field'
+import { createOccupancyMeasurement } from './occupancy'
+import { createRepulsionGrid } from './repulsion-grid'
 
 const read = 'read-only-storage'; const write = 'storage'; const uniform = 'uniform'
 type Scope = ReturnType<typeof resourceScope>
@@ -15,57 +18,15 @@ export function createRepulsionKernel (device: Device, scope: Scope): Kernel {
   return kernel(device, scope, direct, 'direct', [['positions', read], ['samples', read], ['params', uniform], ['forces', write]])
 }
 
-interface RepulsionTree {
-  encode(pass: ComputePass, positions: Buffer, bounds: Buffer, samples: Buffer, forces: Buffer,
-    alpha: number, strength: number, theta: number, nearLimit: number): void;
-  destroy(): void;
-}
-
-function createTree (device: Device, count: number): RepulsionTree {
-  const scope = resourceScope()
-  const make = (entry: string, decl: Decl[]): Kernel => kernel(device, scope, hierarchy, entry, decl)
-  const s = scope.own
-  try {
-    const width = getFinestGridSize(count); const depth = Math.log2(width)
-    const leafCount = width * width
-    const leaves = s(device.createBuffer({ byteLength: leafCount * 12, usage: Buffer.STORAGE }))
-    const tree = s(device.createBuffer({ byteLength: (leafCount * 4 - 1) / 3 * 16, usage: Buffer.STORAGE }))
-    const settings = s(upload(device, new Uint32Array(8), uniformUsage))
-    const levels = Array.from({ length: depth }, (_, index) => {
-      const nodes = 4 ** (depth - index - 1)
-      return { nodes, level: s(upload(device, new Uint32Array([(nodes - 1) / 3, nodes, 0, 0]), uniformUsage)) }
-    })
-    const clear = make('clearLeaves', [['leaves', write, 2]])
-    const place = make('placePoints', [['positions', read, 0], ['bounds', read, 1], ['leaves', write, 2], ['settings', uniform, 4]])
-    const leaf = make('leafCentroids', [['bounds', read, 1], ['leaves', write, 2], ['tree', write, 3], ['settings', uniform, 4]])
-    const merge = make('mergeLevel', [['tree', write, 3], ['level', uniform, 5]])
-    const repulse = make('repulse', [['positions', read, 0], ['bounds', read, 1], ['tree', write, 3],
-      ['settings', uniform, 4], ['samples', read, 6], ['forces', write, 7]])
-    const words = new Uint32Array([count, width, depth, Math.min(65535, Math.floor(0x7fffffff / count)), 0, 0, 0, 0])
-    const floats = new Float32Array(words.buffer)
-    return {
-      encode (pass: ComputePass, positions: Buffer, bounds: Buffer, samples: Buffer, forces: Buffer,
-        alpha: number, strength: number, theta: number, nearLimit: number): void {
-        floats.set([alpha, strength, Math.max(0.01, theta), nearLimit], 4)
-        settings.write(words)
-        clear.dispatch(pass, { x: Math.ceil(leafCount / 64), bindings: { leaves } })
-        place.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions, bounds, leaves, settings } })
-        leaf.dispatch(pass, { x: Math.ceil(leafCount / 64), bindings: { bounds, leaves, tree, settings } })
-        for (const { nodes, level } of levels) merge.dispatch(pass, { x: Math.ceil(nodes / 64), bindings: { tree, level } })
-        repulse.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions, bounds, tree, settings, samples, forces } })
-      },
-      destroy: scope.destroy,
-    }
-  } catch (error) { scope.destroy(); throw error }
-}
-const uniformUsage = Buffer.UNIFORM
-
 type ReduceBounds = (pass: ComputePass, positions: Buffer, kind: 'bounds') => Buffer
 interface ManyBody {
   readonly nearLimit: number;
   updateSamples(): void;
-  prepare(): void;
-  encode(pass: ComputePass, positions: Buffer, forces: Buffer, params: Buffer, config: GraphConfigInterface, reduce: ReduceBounds): boolean;
+  prepare(config: GraphConfigInterface, measureOccupancy: boolean): void;
+  collectOccupancy(): void;
+  restartOccupancyMeasurement(): void;
+  encode(pass: ComputePass, positions: Buffer, forces: Buffer, params: Buffer, config: GraphConfigInterface,
+    reduce: ReduceBounds, measureOccupancy: boolean): boolean;
   destroy(): void;
 }
 
@@ -73,7 +34,10 @@ export function createManyBody (device: Device, count: number, store: Store, pro
   const groups = Math.ceil(count / 64)
   const width = getFinestGridSize(count)
   let samples: Buffer | undefined
-  let tree: RepulsionTree | undefined
+  const affordable = getAffordableSlotCount(count)
+  let grid: ReturnType<typeof createRepulsionGrid> | undefined
+  let near: ReturnType<typeof createNearField> | undefined
+  let occupancy: ReturnType<typeof createOccupancyMeasurement> | undefined
   return {
     get nearLimit (): number { return store.kickSpan / width },
     updateSamples (): void {
@@ -93,23 +57,47 @@ export function createManyBody (device: Device, count: number, store: Store, pro
       if (samples) samples.write(jitter)
       else samples = upload(device, jitter)
     },
-    prepare (): void {
-      if (count > 4096) tree ??= createTree(device, count)
-    },
-    encode (pass, positions, forces, params, config, reduce): boolean {
-      if (!samples || count < 2) return false
-      if (tree) {
-        tree.encode(pass, positions, reduce(pass, positions, 'bounds'), samples, forces,
-          store.alpha, config.simulationRepulsion, config.simulationRepulsionTheta, store.kickSpan / width)
-      } else {
-        program.dispatch(pass, { x: groups, bindings: { positions, samples, params, forces } })
+    prepare (config, measureOccupancy): void {
+      if (count <= ALL_PAIRS_MAX_POINTS || !config.simulationRepulsion) return
+      grid ??= createRepulsionGrid(device, count)
+      near ??= createNearField(device, count)
+      if (measureOccupancy && !isRepulsionSampleCount(config.simulationRepulsionSamples) && affordable > MIN_AUTO_SLOTS) {
+        occupancy ??= createOccupancyMeasurement(device, width)
       }
+    },
+    collectOccupancy (): void { occupancy?.collect() },
+    restartOccupancyMeasurement (): void { occupancy?.reset() },
+    encode (pass, positions, forces, params, config, reduce, measureOccupancy): boolean {
+      if (!samples || count < 2) return false
+      const strength = config.simulationRepulsion
+      if (count <= ALL_PAIRS_MAX_POINTS) {
+        if (!strength) return false
+        program.dispatch(pass, { x: groups, bindings: { positions, samples, params, forces } })
+        return true
+      }
+
+      // WebGL draws the grid even at zero strength. Consume its three per-tick
+      // samples in order so springs and collision see the same seeded sequence.
+      const offsetX = store.getRandomFloat(0, 1)
+      const offsetY = store.getRandomFloat(0, 1)
+      const hashSeed = store.getRandomFloat(0, 1)
+      if (!strength || !grid || !near) return false
+      grid.encode(pass, positions, reduce(pass, positions, 'bounds'), store.alpha, strength, offsetX, offsetY,
+        usesPreciseFarField(config.simulationRepulsionQuality, count), forces)
+      const configured = config.simulationRepulsionSamples
+      const slotCount = isRepulsionSampleCount(configured)
+        ? configured
+        : Math.min(occupancy?.wanted ?? getNearFieldSlotCount(count), affordable)
+      if (measureOccupancy && !isRepulsionSampleCount(configured)) occupancy?.encode(pass, grid.cells)
+      near.encode(pass, positions, grid, samples, forces, store.alpha, strength, store.kickSpan / width, hashSeed, slotCount)
       return true
     },
     destroy (): void {
       samples?.destroy()
-      tree?.destroy()
-      samples = tree = undefined
+      near?.destroy()
+      grid?.destroy()
+      occupancy?.destroy()
+      samples = near = grid = occupancy = undefined
     },
   }
 }

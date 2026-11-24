@@ -49,6 +49,7 @@ export interface SimulationState {
   positions: [Buffer, Buffer];
   current(): Buffer;
   updateSamples(): void;
+  restartOccupancyMeasurement(): void;
   updateTopology(data: GraphData): void;
   updateSizes(data: GraphData): void;
   updateClusters(data: GraphData): void;
@@ -56,7 +57,7 @@ export interface SimulationState {
   readClusters(): Promise<number[]>;
   readBounds(): Promise<Float32Array>;
   applyPointer(config: GraphConfigInterface, x: number, y: number): void;
-  step(config: GraphConfigInterface): void;
+  step(config: GraphConfigInterface, measureOccupancy: boolean): void;
   releaseForces(): void;
   destroy(): void;
 }
@@ -141,6 +142,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       positions,
       current: (): Buffer => positions[current],
       updateSamples: manyBody.updateSamples,
+      restartOccupancyMeasurement: manyBody.restartOccupancyMeasurement,
       updateTopology: links.updateTopology,
       updateSizes (data: GraphData): void {
         maxSize = 0
@@ -185,12 +187,12 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         run(pass => { result = reduce(pass, positions[current], 'bounds') })
         return asFloats(await result.readAsync())
       },
-      step (cfg: GraphConfigInterface): void {
+      step (cfg: GraphConfigInterface, measureOccupancy: boolean): void {
         const forces = forceBuffer()
         const alpha = store.alpha
         const nearLimit = manyBody.nearLimit
         integrationParams.write(new Float32Array([count, alpha, cfg.simulationRepulsion, nearLimit, cfg.simulationFriction, store.stepGuard, 0, 0]))
-        if (cfg.simulationRepulsion) manyBody.prepare()
+        manyBody.prepare(cfg, measureOccupancy)
         if (cfg.simulationLinkSpring) links.prepare(cfg)
         if (cfg.simulationCollision) {
           collision ??= createCollision(device, count, store)
@@ -206,7 +208,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
             applyCenter(pass, positions[current], forces, centroid, alpha, cfg.simulationCenter)
             integrate(pass)
           }
-          if (cfg.simulationRepulsion && manyBody.encode(pass, positions[current], forces, integrationParams, cfg, reduce)) integrate(pass)
+          if (manyBody.encode(pass, positions[current], forces, integrationParams, cfg, reduce, measureOccupancy)) integrate(pass)
           if (cfg.simulationLinkSpring && sizes) links.encode(pass, () => positions[current], sizes, forces, integrate)
           if (clusters && cfg.simulationCluster) {
             clusters.encode(pass, positions[current], forces, alpha, cfg.simulationCluster)
@@ -225,6 +227,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
             }
           }
         })
+        manyBody.collectOccupancy()
       },
       destroy (): void {
         releaseForces()

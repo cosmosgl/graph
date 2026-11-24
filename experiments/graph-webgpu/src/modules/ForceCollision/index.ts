@@ -7,10 +7,11 @@ import type { Store } from '@/graph/modules/Store'
 import { kernel, upload, type Decl } from '../Shared/compute'
 import type { ForcePass } from '../Shared/force-pass'
 import { resourceScope } from '../Shared/resource-scope'
+import roundedProduct from '../Shared/rounded-product.wgsl?raw'
+import cellSlots from '../Shared/select-cell-slots.wgsl?raw'
 import contacts from './contacts.wgsl?raw'
 import hashBuild from './hashed-build.wgsl?raw'
 import gridSource from './hashed-grid.wgsl?raw'
-import roundedProduct from './rounded-product.wgsl?raw'
 
 const collisionGrid = roundedProduct + gridSource.replace('// @collision-rotations', COLLISION_ROTATIONS.map(([a, b], i) =>
   `const rotation${i === 0 ? 'X' : 'Y'} = vec2u(${a}u, ${b}u);`).join('\n'))
@@ -27,7 +28,7 @@ export function createCollision (device: Device, count: number, store: Store): C
     const force = make(collisionGrid + contacts, hashed ? 'hashed' : 'exact', forceBindings)
     const edge = getFinestGridSize(count); const capacity = getNearFieldSlotCount(count)
     const storage = (words: number): Buffer => own(device.createBuffer({ byteLength: words * 4, usage: Buffer.STORAGE }))
-    const build = collisionGrid + hashBuild
+    const build = [collisionGrid, hashBuild, `const maxCellSlots = ${capacity}u;`, cellSlots].join('\n')
     const hash = hashed
       ? {
         heads: storage(edge * edge),

@@ -42,6 +42,7 @@ export class Graph {
   private mouseRepulsion?: Pair
   private positionTransition?: PositionTransition
   private frame = 0
+  private shouldMeasureNextFrame = false
   private isFrameInFlight = false
   private isDestroyed = false
   private hasRendered = false
@@ -144,7 +145,9 @@ export class Graph {
   public renderOneFrame (): void {
     if (!this.isReady) { this.whenReady(() => this.renderOneFrame()); return }
     if (!this.canvas || this.isDestroyed) return
-    this.runSimulationStep()
+    const measureOccupancy = this.shouldMeasureNextFrame
+    this.shouldMeasureNextFrame = false
+    this.runSimulationStep(false, measureOccupancy)
     this.drawFrame()
   }
 
@@ -437,12 +440,12 @@ export class Graph {
     this.renderer?.draw(this.view())
   }
 
-  private runSimulationStep (forceExecution = false): void {
+  private runSimulationStep (forceExecution = false, measureOccupancy = false): void {
     if (!this.hasRendered) return
     const simulateDuringZoom = this.camera.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
     const blocked = this.transition.isActiveFor(TransitionProperty.Positions) || (this.camera.isRunning && !simulateDuringZoom)
     const pointer = this.config.enableRightClickRepulsion ? this.mouseRepulsion : undefined
-    this.simulation.runSimulationStep(forceExecution, pointer, blocked)
+    this.simulation.runSimulationStep(forceExecution, pointer, blocked, measureOccupancy)
   }
 
   private whenReady (operation: () => void): void {
@@ -514,7 +517,8 @@ export class Graph {
         this.requestFrame()
         return
       }
-      this.renderOneFrame()
+      this.shouldMeasureNextFrame = this.simulation.ownsDevice
+      try { this.renderOneFrame() } finally { this.shouldMeasureNextFrame = false }
       if (this.isDestroyed || device.isLost) return
       const fence = device.createFence()
       this.isFrameInFlight = true

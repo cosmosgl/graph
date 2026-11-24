@@ -121,6 +121,7 @@ export class GraphSimulation {
     const spaceChanged = previous.spaceSize !== this.config.spaceSize
     const enabling = !previous.enableSimulation && this.config.enableSimulation
     if (spaceChanged) this.store.adjustSpaceSize(this.config.spaceSize)
+    if (previous.simulationRepulsionSamples !== this.config.simulationRepulsionSamples) this.state?.restartOccupancyMeasurement()
     if (previous.enableSimulation && !this.config.enableSimulation) {
       this.stop()
       this.state?.releaseForces()
@@ -377,7 +378,7 @@ export class GraphSimulation {
     this.config.onSimulationEnd?.()
   }
 
-  public runSimulationStep (forceExecution = false, pointer?: readonly [number, number], blocked = false): boolean {
+  public runSimulationStep (forceExecution = false, pointer?: readonly [number, number], blocked = false, measureOccupancy = false): boolean {
     if (!this.isReady || !this.state || !this.config.enableSimulation) return false
     // As in WebGL, a held right button applies its kick before the ordinary
     // forces, even when the graph is paused or the camera blocks layout.
@@ -386,7 +387,7 @@ export class GraphSimulation {
       this.version++
     }
     if (!forceExecution && (!this.store.isSimulationRunning || blocked)) return false
-    this.state.step(this.config)
+    this.state.step(this.config, measureOccupancy)
     this.version++
     this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
     if (pointer) this.store.alpha = Math.max(0.1, this.store.alpha)

@@ -1,5 +1,10 @@
+import { luma } from '@luma.gl/core'
+import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it } from 'vitest'
 import { GraphSimulation, type GraphSimulationConfig } from '../src'
+import { createNearField } from '../src/modules/ForceManyBody/near-field'
+import { upload } from '../src/modules/Shared/compute'
+import { resourceScope } from '../src/modules/Shared/resource-scope'
 
 const isolated: GraphSimulationConfig = {
   simulationGravity: 0,
@@ -12,6 +17,47 @@ const isolated: GraphSimulationConfig = {
 }
 
 describe('WebGPU simulation forces', () => {
+  it('resamples dense cells by seed, excludes self and adds exact sparse neighbors to the far force', async () => {
+    const device = await luma.createDevice({ type: 'webgpu', adapters: [webgpuAdapter], waitForPageLoad: false })
+    const scope = resourceScope()
+    const positionsX = [10, 11, 13, 15, 18, 25]
+    const count = positionsX.length
+    try {
+      const buffer = (values: Uint32Array | Float32Array): ReturnType<typeof upload> => scope.own(upload(device, values))
+      const near = scope.own(createNearField(device, count))
+      const positions = buffer(Float32Array.from(positionsX.flatMap(x => [x, 12, 0, 0])))
+      const samples = buffer(new Float32Array(count * 2))
+      // Width 8, cell size 8: four points in cell (1,1), one in (2,1) and one outside the near field.
+      const heads = new Uint32Array(64)
+      heads.set([4, 5, 6], 9)
+      const counts = new Float32Array(64 * 4)
+      for (const cell of [9, 10, 11]) counts[cell * 4 + 2] = cell === 9 ? 4 : 1
+      const grid = {
+        heads: buffer(heads),
+        next: buffer(Uint32Array.of(0, 1, 2, 3, 0, 0)),
+        cells: buffer(counts),
+        box: buffer(Float32Array.of(0, 0, 64, 1 / 64)),
+      }
+      const initial = new Float32Array(count * 4)
+      initial[0] = 0.25
+      const forces = buffer(initial)
+      async function firstForce (seed: number, slots: number): Promise<number> {
+        forces.write(initial)
+        const pass = device.beginComputePass()
+        near.encode(pass, positions, grid, samples, forces, 1, 1, 8, seed, slots)
+        pass.end()
+        device.submit()
+        const bytes = await forces.readAsync()
+        return new DataView(bytes.buffer, bytes.byteOffset).getFloat32(0, true)
+      }
+      // The reference's lowbias32 order selects IDs 1,3 at seed 1/8, and IDs 0,2 at 1/4.
+      const sparseAndFar = -1 / 8 + initial[0]
+      expect(await firstForce(1 / 8, 2)).toBeCloseTo(sparseAndFar - 3 / 2 * (1 + 1 / 5), 5)
+      expect(await firstForce(1 / 4, 2)).toBeCloseTo(sparseAndFar - 3 * (1 / 3), 5)
+      expect(await firstForce(1 / 4, 4)).toBeCloseTo(sparseAndFar - (1 + 1 / 3 + 1 / 5), 5)
+    } finally { scope.destroy(); device.destroy() }
+  })
+
   it('applies weighted incoming and outgoing springs in sequence and updates weights without resetting positions', async () => {
     const sim = new GraphSimulation({
       ...isolated,
