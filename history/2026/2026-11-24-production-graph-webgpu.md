@@ -44,6 +44,14 @@ Graph now waits for its previous automatic frame to complete before
 submitting another. Hosts can still step or draw explicitly. Replaying
 the same drags at the same simulation ticks preserved every selected ID.
 
+The Deck marker demo could draw from a shared device, but it did not run
+the layer an application imports. Installing both candidate tarballs in a
+clean app exposed a failure that a screenshot alone would miss. The points
+and link drew correctly, yet Deck could not pick any of them. Deck 10 passes
+its picking layer ID in the blend constant. Forwarding that ID let Deck
+return the original records before and after a resize. Removing the layer
+also showed that the app could keep editing a Graph it had supplied.
+
 ## Example
 
 Open **Examples → Get Started → Manual step** in both previews. Click either
