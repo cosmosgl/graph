@@ -38,8 +38,8 @@ function forceCase (id: ForceCase): ExperimentCase {
         environment: 'Chrome on native Apple M3',
         scope: '8,192 slots, nine layout checkpoints and two timed comparison pairs',
         conclusion: id === 'dense'
-          ? 'RMS position error peaked at 0.22% of the WebGL radius. Frame and click p95 were within the M3 margins.'
-          : 'RMS position error peaked at 0.44% of the WebGL radius. The hub retained more overlap on WebGPU. Both timing checks passed.',
+          ? 'RMS position error peaked at 0.22% of the WebGL radius. Both packages picked the point and its vacated link correctly.'
+          : 'RMS position error peaked at 0.44% of the WebGL radius. The hub retained more overlap on WebGPU.',
         limits: 'One seed per topology. Moving click timings cover the isolated pin and background.',
         evidence: [{ label: 'Package force measurements', page: 'results' }, { label: 'M3 frame and click timings', page: 'scale-timing' }],
       },

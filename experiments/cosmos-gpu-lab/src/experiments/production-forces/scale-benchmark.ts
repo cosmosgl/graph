@@ -56,6 +56,7 @@ async function open (engine: Engine, kind: ScaleCase): Promise<void> {
   const refreshMs = percentile(idle, 0.5)
   const observer = observePresentation(health)
   let tick = 0
+  let readyBeforeNotification = 0
   let destroyed = false
   let current: { sample: number; requested: string; xy: [number, number] } | undefined
   const picked: Pick[] = []
@@ -97,7 +98,14 @@ async function open (engine: Engine, kind: ScaleCase): Promise<void> {
           const fence = graph.simulation.device!.createFence()
           let done = false
           fence.signaled.then(() => { done = true }, cause => { error = String(cause) }).finally(() => fence.destroy())
-          observer.submitted(submittedTick, () => done)
+          // WebGL may finish before luma's timer has delivered its Promise. Read
+          // the public fence state at this observation opportunity on both APIs.
+          observer.submitted(submittedTick, () => {
+            if (done) return true
+            if (!fence.isSignaled()) return false
+            readyBeforeNotification++
+            return true
+          })
         } catch (cause) { error = String(cause) }
       })
     },
@@ -152,6 +160,7 @@ async function open (engine: Engine, kind: ScaleCase): Promise<void> {
     idle,
     refreshMs,
     picked,
+    get readyBeforeNotification (): number { return readyBeforeNotification },
     steady: undefined as undefined | ReturnType<typeof windowStats>,
     quality: undefined as undefined | Awaited<ReturnType<typeof quality>>,
   }

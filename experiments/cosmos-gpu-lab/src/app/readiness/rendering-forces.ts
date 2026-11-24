@@ -60,14 +60,15 @@ const packageForce: CaseReadiness = {
 }
 
 const scaledForces: CaseReadiness = {
-  badge: 'Layout and timing checked',
-  tone: 'pass',
-  finding: 'Both packages preserved the eight communities and the moving click targets. M3 frame and click p95 met the declared margins.',
+  badge: 'Layout and picks checked',
+  tone: 'review',
+  finding: 'Both packages preserved the eight communities and the moving click targets.',
   area: 'Integration',
-  status: 'Packaged layout and native responsiveness checks passed',
+  status: 'Packaged layout and picking checks passed',
   evidence: [
     { tone: 'pass', text: 'The runs checked all 127 pins, the absent slot and every ordered link through tick 100.' },
     { tone: 'info', text: 'The WebGPU layouts retained deeper overlaps at tick 100. The results give contact depth and residual motion for each engine.' },
+    { tone: 'warn', text: 'Click feedback passed on M3. WebGL frame p95 varied across controls and repeat trials, leaving relative frame speed unassessed.' },
   ],
   next: 'Compare overlap and settling on additional seeds and larger graphs.',
 }
@@ -106,11 +107,11 @@ export const renderingAndForces: Record<string, CaseReadiness> = {
   'production-forces/repulsion': packageForce,
   'production-forces/dense': {
     ...scaledForces,
-    finding: 'RMS position error peaked at 0.22% of the WebGL radius. Native frame p95 fell from 33.65 to 18.70 ms.',
+    finding: 'RMS position error peaked at 0.22% of the WebGL radius. All eight communities retained the same fraction of their members in both engines.',
   },
   'production-forces/hubs': {
     ...scaledForces,
-    finding: 'The movable hub had 1,024 incident links. RMS error peaked at 0.44% of the WebGL radius. Native frame p95 fell from 33.40 to 18.65 ms.',
+    finding: 'The movable hub had 1,024 incident links. RMS error peaked at 0.44% of the WebGL radius. WebGPU recorded more overlap at tick 100.',
   },
   'production-forces/center': {
     ...packageForce,

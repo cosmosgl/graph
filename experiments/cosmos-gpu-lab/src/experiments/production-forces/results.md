@@ -54,7 +54,7 @@ The measurements include browser scheduling, GPU submission and position transfe
 
 ## Dense communities and the movable hub
 
-At tick 100, WebGPU placed the average point within 0.45% of the reference layout radius by the paired RMS measure. Both topologies preserved all 127 pins, the absent slot and all 8,182 ordered links at every checkpoint. Both retained the same fraction of each community. The table shows the native Apple M3 measurements. Distances are in graph units. [Layout checks and thresholds](#/production-forces?section=doc-scale-method)
+At tick 100, the RMS distance between corresponding points was below 0.45% of the WebGL layout radius on both graphs. Both packages preserved all 127 pins, the absent slot and all 8,182 ordered links. They retained the same fraction of each community at every checkpoint. The table shows the native Apple M3 measurements. Distances are in graph units. [Layout checks and thresholds](#/production-forces?section=doc-scale-method)
 
 | At tick 100 | Dense WebGL | Dense WebGPU | Hub WebGL | Hub WebGPU |
 | --- | ---: | ---: | ---: | ---: |
@@ -68,4 +68,6 @@ The largest paired RMS errors occurred at tick 100. Dense communities reached 7.
 
 The same six clicks identified the isolated pin, the background, the gold link and the lilac endpoint. After one tick, the previous endpoint and part of the link cleared to the background. The point covered its link at its new location. Both packages returned the expected ID and RGBA at each probe. [Dense communities](#/production-forces?section=try-dense) · [Hub](#/production-forces?section=try-hubs)
 
-With one moving Graph on the M3, the 95th-percentile completed-frame interval fell from about 33.5 ms to 18.7 ms on both topologies. All 144 trusted clicks returned the intended pin or background. [M3 frame and click timings](#/production-forces?section=doc-scale-timing)
+SwiftShader passed the same nine layout checkpoints and every painted-color and click-ID probe. Its largest RMS position difference was 0.221% of the WebGL radius for dense communities at tick 100 and 0.404% for the hub at tick 99.
+
+With one moving Graph on the M3, WebGPU's measured frame p95 stayed near 17.6 ms. WebGL control variability left relative frame speed unassessed on both graphs after a repeat. Click feedback met the declared margins in both run orders, and all 288 trusted clicks returned the intended pin or background. [M3 frame and click timings](#/production-forces?section=doc-scale-timing)

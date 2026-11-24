@@ -305,7 +305,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-forces': entry('production-forces', {
       reviewed: '2026-11-24',
-      conclusion: 'Both 8,192-slot layouts retained their communities. The moved link and endpoint returned the expected IDs. Native frame and click p95 met the M3 margins.',
+      conclusion: 'Layout and picks passed. Click p95 met the M3 margins. WebGL control variation left relative frame speed unassessed on both graphs.',
       variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
       comparison: 'Fixed-tick layouts, local overlap and public picks, plus matched moving-frame intervals and trusted-click feedback on M3',
       method: 'method',
