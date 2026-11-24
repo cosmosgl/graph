@@ -177,3 +177,26 @@ it('interpolates point colors and retargets an interrupted update from the displ
     expect(errors).toEqual([])
   } finally { scene.destroy() }
 })
+
+it('applies a highlight to the target style and invalidates a pick from the preceding frame', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { data, view, renderer, framebuffer, readPixel } = scene
+  try {
+    data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1])
+    data.update()
+    renderer.update({ animate: true })
+    const halfway = { ...view, styleProgress: 0.5 }
+    renderer.draw(halfway, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([128, 128, 128, 255])
+
+    const pendingPick = renderer.pick(16, 32, halfway)
+    config.highlightedPointIndices = [2]
+    renderer.updatePointHighlights()
+    expect(await pendingPick).toBeNull()
+    renderer.draw(halfway, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
+    expect(await renderer.pick(16, 32, halfway)).toEqual({ kind: 'point', index: 2 })
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})

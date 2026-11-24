@@ -3,6 +3,7 @@ import type { GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, rgbToBrightness } from '@/graph/helper'
 import type { GraphData } from '@/graph/modules/GraphData'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
+import { PointHighlightMask } from './highlights'
 
 type Rgba = [number, number, number, number]
 const noColor: Rgba = [0, 0, 0, -1]
@@ -37,35 +38,48 @@ export class Points {
 
   public constructor (private readonly device: Device) {}
 
-  public pack (data: GraphData, config: GraphConfigInterface, background: Rgba): { attributes: Float32Array; order: Uint32Array } {
+  public pack (data: GraphData, config: GraphConfigInterface, background: Rgba): {
+    attributes: Float32Array;
+    mask: PointHighlightMask;
+    order: Uint32Array;
+    colors: Float32Array;
+  } {
     const pointCount = data.pointsNumber ?? 0
     const [r, g, b] = background
     const grey = rgbToBrightness(r, g, b) < 0.65 ? 0.2 : 0.8
-    const highlighted = config.highlightedPointIndices && new Set(config.highlightedPointIndices)
+    const mask = new PointHighlightMask(pointCount, config.highlightedPointIndices)
     const outlined = new Set(config.outlinedPointIndices ?? [])
     const greyColor = config.pointGreyoutColor && getRgbaColor(config.pointGreyoutColor)
     const stroke = outlineColor(config.pointDefaultStrokeColor)
     const ring = outlineColor(config.outlinedPointRingColor)
 
     const attributes = new Float32Array(pointCount * pointStride)
-    const order = new Uint32Array(pointCount)
-    let under = 0
-    let over = 0
-    if (highlighted) {
-      for (let i = 0; i < pointCount; i++) if (!highlighted.has(i)) over++
-    }
+    // Resolve both paints once, with the same double-to-Float32 rounding as the
+    // style upload. Uniform point colors share one pair even on million-point graphs.
+    let colors = new Float32Array(8)
+    const pair = new Float32Array(8)
     for (let i = 0; i < pointCount; i++) {
-      const drawIndex = data.pointRenderOrder?.[i] ?? i
-      if (highlighted?.has(drawIndex)) order[over++] = drawIndex
-      else order[under++] = drawIndex
-
       const at = i * pointStride
-      const isGreyed = !!highlighted && !highlighted.has(i)
+      const isGreyed = mask.isGreyed(i)
+      let isUniform = colors.length === 8
       for (let ch = 0; ch < 4; ch++) {
-        let value = data.getResolvedPointColorChannel(i, ch)
-        if (isGreyed && greyColor) value = greyColor[ch] as number
-        else if (isGreyed && ch < 3) value = value * 0.35 + (grey < 0.5 ? grey : Math.max(background[ch] as number, grey)) * 0.65
-        attributes[at + ch] = value
+        const value = data.getResolvedPointColorChannel(i, ch)
+        pair[ch] = value
+        let dim = value
+        if (greyColor) dim = greyColor[ch] as number
+        else if (ch < 3) dim = value * 0.35 + (grey < 0.5 ? grey : Math.max(background[ch] as number, grey)) * 0.65
+        pair[4 + ch] = dim
+        attributes[at + ch] = pair[(isGreyed ? 4 : 0) + ch]!
+        isUniform &&= colors[ch] === pair[ch] && colors[4 + ch] === pair[4 + ch]
+      }
+      if (i === 0) colors.set(pair)
+      else if (!isUniform) {
+        if (colors.length === 8) {
+          const first = colors
+          colors = new Float32Array(pointCount * 8)
+          for (let j = 0; j < i; j++) colors.set(first, j * 8)
+        }
+        colors.set(pair, i * 8)
       }
       const imageIndex = data.pointImageIndices?.[i] ?? -1
       const imageValid = imageIndex >= 0 && imageIndex < (this.images?.length ?? 0) && this.atlasCoords
@@ -85,7 +99,7 @@ export class Points {
         for (let ch = 0; ch < 4; ch++) attributes[at + 20 + ch] = this.atlasCoords[start + ch] as number
       }
     }
-    return { attributes, order }
+    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), colors }
   }
 
   public destroy (): void {

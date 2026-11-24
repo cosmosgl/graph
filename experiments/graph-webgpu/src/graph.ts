@@ -555,6 +555,14 @@ export class Graph {
       this.config.randomSeed = previous.randomSeed
       this.config.attribution = previous.attribution
 
+      const keys = Object.keys(config)
+      if (!reset && this.hasRendered && keys.length === 1 && keys[0] === 'highlightedPointIndices') {
+        // Highlights change paint and picking order. The selection footprint stays valid.
+        this.renderer?.updatePointHighlights()
+        this.requestFrame()
+        return
+      }
+
       const rebuilding = previous.spaceSize !== this.config.spaceSize || (!previous.enableSimulation && this.config.enableSimulation)
       if (rebuilding) {
         this.interruptPositionTransition()

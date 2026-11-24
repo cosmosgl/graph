@@ -8,6 +8,7 @@ import { getRgbaColor } from '../../../src/helper'
 import type { GraphData } from '../../../src/modules/GraphData'
 import { packLinks, linkStride } from './modules/Lines'
 import { Points, pointStride, shadeDirection } from './modules/Points'
+import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import records from './style-records.wgsl?raw'
 import common from './draw-common.wgsl?raw'
@@ -81,6 +82,10 @@ export class GraphRenderer {
   private pointBuffer?: Buffer
   private linkBuffer?: Buffer
   private orderBuffer?: Buffer
+  private readonly highlightPass: PointHighlightPass
+  private highlightMask?: PointHighlightMask
+  private order?: Uint32Array
+  private baseOrder?: Uint32Array
   private previous?: { points: Buffer; links: Buffer; pointCount: number; linkCount: number }
   private interpolation: StyleTransition
   private pointCount = 0
@@ -104,6 +109,7 @@ export class GraphRenderer {
     private positionSource: () => PositionSource | undefined
   ) {
     this.points = new Points(device)
+    this.highlightPass = new PointHighlightPass(device)
     // Native WebGL point sprites use different subpixel rules on these adapters.
     // Specialize the WGSL once for this device, including host draws and picking.
     this.pointSource = [
@@ -140,7 +146,7 @@ export class GraphRenderer {
     this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
     this.focusRing = getRgbaColor(config.focusedPointRingColor)
 
-    const { attributes, order } = this.points.pack(data, config, clearColor)
+    const { attributes, order, mask, colors } = this.points.pack(data, config, clearColor)
     const { edges, hasOnlySolidLinks } = packLinks(data, config)
     const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
     const animate = options.animate && this.pointCount > 0
@@ -168,6 +174,34 @@ export class GraphRenderer {
     this.pointCount = pointCount
     this.linkCount = linkCount
     this.hasOnlySolidLinks = hasOnlySolidLinks
+    this.highlightPass.setColors(colors)
+    this.highlightMask = mask
+    this.order = order
+    this.baseOrder = data.pointRenderOrder
+  }
+
+  public updatePointHighlights (): void {
+    this.revision++
+    // A config update snaps to the target of an active style transition.
+    this.releasePrevious()
+    if (!this.pointBuffer || !this.orderBuffer || !this.highlightMask || !this.order) return
+    const mask = new PointHighlightMask(this.pointCount, this.config.highlightedPointIndices)
+    const changes = mask.changesFrom(this.highlightMask)
+    if (!changes.length) return
+    const normal = this.config.pointOpacity
+    this.highlightPass.apply(this.pointBuffer, changes, normal, this.config.pointGreyoutOpacity ?? normal)
+    if (mask.splitsOrder || this.highlightMask.splitsOrder) {
+      const order = mask.drawOrder(this.baseOrder)
+      let first = 0
+      while (first < order.length && order[first] === this.order[first]) first++
+      if (first < order.length) {
+        let end = order.length
+        while (order[end - 1] === this.order[end - 1]) end--
+        this.orderBuffer.write(order.subarray(first, end), first * Uint32Array.BYTES_PER_ELEMENT)
+        this.order = order
+      }
+    }
+    this.highlightMask = mask
   }
 
   /** Record into a pass opened on the supplied device. The host owns clearing, ending and submitting. */
@@ -237,6 +271,9 @@ export class GraphRenderer {
     this.pickFramebuffer?.destroy()
     this.pickTexture?.destroy()
     this.points.destroy()
+    this.highlightPass.destroy()
+    this.highlightMask = undefined
+    this.order = this.baseOrder = undefined
     this.pointBuffer?.destroy()
     this.linkBuffer?.destroy()
     this.orderBuffer?.destroy()
