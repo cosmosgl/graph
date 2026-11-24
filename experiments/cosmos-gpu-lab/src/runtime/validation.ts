@@ -83,8 +83,8 @@ export const validationContracts: Record<string, ValidationContract> = {
     question: 'How do individual forces and their combination move the same graph when both packages receive the same public calls?',
     reference: 'The built WebGL Graph stepped from identical inputs, with independent checks on direction, pins and absent slots.',
     acceptance: 'Compare coordinates at fixed ticks, preserve pinned and absent slots and measure the approximate repulsion trajectory against the reference.',
-    coverage: 'Eight single-force cases plus weighted springs, direct repulsion and collision together, with drawing and click checks after eight ticks.',
-    limits: 'The combined case covers one eight-slot graph. Dense communities, hubs and interaction timing require larger workloads.',
+    coverage: 'Eight individual forces, a direct eight-slot combined case, and 8,192-slot dense and hub layouts with springs, repulsion and collision through 100 ticks.',
+    limits: 'The scaled checks cover one seed per topology. Native timing uses one moving Graph and trusted clicks on known targets.',
   },
   'production-points': {
     question: 'Do all eight point shapes produce identical pixels in the WebGL and WebGPU Graph packages at pixel ratios 1 and 2?',

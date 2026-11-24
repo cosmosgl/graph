@@ -1,4 +1,5 @@
 import type { Graph, GraphConfig } from '../../../../../dist/index.js'
+import { isScaleCase, scaleConfig, scaleFixture } from './scale-fixture'
 
 export const forces = {
   gravity: 'Gravity',
@@ -10,6 +11,8 @@ export const forces = {
   repulsion: 'All-pairs repulsion',
   hierarchy: 'Hierarchical repulsion',
   combined: 'Springs, repulsion and collision',
+  dense: 'Dense communities',
+  hubs: 'Hub',
 } as const
 
 export type ForceCase = keyof typeof forces
@@ -25,6 +28,8 @@ export const combinedDiameters = [16, 28, 18, 12, 16, 12, 14, 12] as const
 export const combinedLinks = [0, 1, 1, 3, 3, 4, 0, 5, 3, 7] as const
 
 const strength: Record<ForceCase, GraphConfig> = {
+  dense: scaleConfig,
+  hubs: scaleConfig,
   combined: {
     simulationLinkSpring: 0.5,
     simulationLinkDistance: 44,
@@ -77,6 +82,7 @@ export function forceConfig (fixture: ForceCase): GraphConfig {
 }
 
 export function forcePositions (fixture: ForceCase): Float32Array {
+  if (isScaleCase(fixture)) return scaleFixture(fixture).positions
   if (fixture === 'combined') {
     return Float32Array.from([-100, 56, -45, -32, -37, -36, 55, 0, 92, 34, 30, 58, NaN, NaN, 90, -58], v => v + origin)
   }
@@ -95,11 +101,20 @@ export function forcePositions (fixture: ForceCase): Float32Array {
   return xy
 }
 
-export function loadForce (graph: Graph, fixture: ForceCase): void {
+export function loadForce (graph: Graph, fixture: ForceCase, dimensions = viewport): void {
   const xy = forcePositions(fixture)
   graph.setPointPositions(xy, true)
-  graph.setPinnedPoints([0])
-  if (fixture !== 'hierarchy') {
+  if (isScaleCase(fixture)) {
+    const scene = scaleFixture(fixture)
+    graph.setPinnedPoints(scene.pinned)
+    graph.setPointSizes(scene.sizes)
+    graph.setPointColors(scene.colors)
+    graph.setLinks(scene.links)
+    graph.setLinkStrength(scene.weights)
+    graph.setLinkColors(scene.linkColors)
+    graph.setLinkWidths(scene.linkWidths)
+  } else graph.setPinnedPoints([0])
+  if (!isScaleCase(fixture) && fixture !== 'hierarchy') {
     const rgba = Float32Array.from({ length: xy.length * 2 }, (_, i) => (i < 4 ? [0.95, 0.42, 0.28, 1] : [0.47, 0.83, 0.91, 1])[i % 4])
     graph.setPointColors(rgba)
   }
@@ -125,5 +140,7 @@ export function loadForce (graph: Graph, fixture: ForceCase): void {
   }
   graph.render(1, 0)
   graph.pause()
-  graph.setViewTransform({ k: 1, x: 0, y: 0 }, [viewport.width, viewport.height])
+  const { width, height } = dimensions
+  const k = isScaleCase(fixture) ? Math.min(width, height) / 8000 : 1
+  graph.setViewTransform({ k, x: (1 - k) * width / 2, y: (1 - k) * height / 2 }, [width, height])
 }

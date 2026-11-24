@@ -3,7 +3,7 @@ import { absentIndex, combinedDiameters, combinedLinks, combinedPadding } from '
 type PositionStats = { different: number; maxDelta: number; rmsDelta: number; radius: number; cx: number; cy: number }
 
 /** Exclude only the fixture's deliberately absent slot. An unexpected NaN is a failed read. */
-export function positionStats (positions: Float32Array, reference: Float32Array): PositionStats {
+export function positionStats (positions: Float32Array, reference: Float32Array, hole = absentIndex): PositionStats {
   if (positions.length !== reference.length || positions.length % 2) throw new Error('Incompatible position arrays')
   const count = positions.length / 2 - 1
   let sumX = 0
@@ -16,7 +16,7 @@ export function positionStats (positions: Float32Array, reference: Float32Array)
     const y = positions[i + 1]
     const rx = reference[i]
     const ry = reference[i + 1]
-    if (i === 2 * absentIndex) {
+    if (i === 2 * hole) {
       if (![x, y, rx, ry].every(Number.isNaN)) throw new Error('The absent slot gained a position')
       continue
     }
@@ -33,7 +33,7 @@ export function positionStats (positions: Float32Array, reference: Float32Array)
   const cy = sumY / count
   let radiusSquared = 0
   for (let i = 0; i < positions.length; i += 2) {
-    if (i !== 2 * absentIndex) radiusSquared += (positions[i] - cx) ** 2 + (positions[i + 1] - cy) ** 2
+    if (i !== 2 * hole) radiusSquared += (positions[i] - cx) ** 2 + (positions[i + 1] - cy) ** 2
   }
   return { different, maxDelta, rmsDelta: Math.sqrt(squaredError / count), radius: Math.sqrt(radiusSquared / count), cx, cy }
 }

@@ -3,6 +3,7 @@ import { writeArtifact } from '../../testing/artifacts'
 import { combinedMetrics, positionStats } from './compare'
 import { absentIndex, forceCases, forcePositions, origin, type ForceCase } from './fixture'
 import { createForcePreview, type ForceSession } from './frame'
+import { isScaleCase } from './scale-fixture'
 import { createForcesView } from './view'
 
 // Check recognizable motion even if both packages were to agree on the same broken output.
@@ -58,7 +59,7 @@ function checkFirstStep (fixture: ForceCase, initial: Float32Array, xy: Float32A
   }
 }
 
-it.each(forceCases)('compares packaged %s at fixed ticks', async fixture => {
+it.each(forceCases.filter(fixture => !isScaleCase(fixture)))('compares packaged %s at fixed ticks', async fixture => {
   const sessions: ForceSession[] = []
   const initial = forcePositions(fixture)
   const hierarchy = fixture === 'hierarchy'

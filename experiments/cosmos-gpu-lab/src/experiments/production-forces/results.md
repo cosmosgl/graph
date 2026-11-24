@@ -50,4 +50,20 @@ The same public application used one manual step, one paused draw and one awaite
 | WebGPU | 1.5 | 1.8 |
 | WebGL control, repeat | 12.7 | 17.8 |
 
-The measurements include browser scheduling, GPU submission and position transfer. Rendering used a 288 × 192 canvas at pixel ratio 1. Startup, interactive frame rate, software-adapter timing and larger workloads require separate measurements.
+The measurements include browser scheduling, GPU submission and position transfer. Rendering used a 288 × 192 canvas at pixel ratio 1.
+
+## Dense communities and the movable hub
+
+At tick 100, WebGPU placed the average point within 0.45% of the reference layout radius by the paired RMS measure. Both topologies preserved all 127 pins, the absent slot and all 8,182 ordered links at every checkpoint. Both retained the same fraction of each community. The table shows the native Apple M3 measurements. Distances are in graph units. [Layout checks and thresholds](#/production-forces?section=doc-scale-method)
+
+| At tick 100 | Dense WebGL | Dense WebGPU | Hub WebGL | Hub WebGPU |
+| --- | ---: | ---: | ---: | ---: |
+| RMS radius | 3,216.80 | 3,217.31 | 3,225.84 | 3,228.54 |
+| RMS motion during the last step | 0.446 | 0.701 | 0.569 | 1.008 |
+| RMS spring-length error | 25.98 | 26.14 | 26.76 | 27.04 |
+| Overlapping pairs | 13,797 | 13,210 | 15,121 | 16,711 |
+| RMS penetration among overlapping pairs | 0.676 | 0.956 | 0.780 | 1.126 |
+
+The largest paired RMS errors occurred at tick 100. Dense communities reached 7.08 units, or 0.220% of the WebGL radius. The hub reached 14.20 units, or 0.440%. The dense graph's largest source group contained 65 links. In the hub graph, free point 2 was the source of 1,023 links and the endpoint of one more. It moved 58.04 units in WebGL and 51.27 in WebGPU. Overlap depth and residual motion were greater on WebGPU in both layouts. These measurements have no numerical pass threshold.
+
+The same six clicks identified the isolated pin, the background, the gold link and the lilac endpoint. After one tick, the previous endpoint and part of the link cleared to the background. The point covered its link at its new location. Both packages returned the expected ID and RGBA at each probe. [Dense communities](#/production-forces?section=try-dense) · [Hub](#/production-forces?section=try-hubs)
