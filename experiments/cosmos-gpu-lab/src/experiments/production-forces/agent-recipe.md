@@ -28,7 +28,7 @@ Start `pnpm run storybook` and `pnpm run storybook:webgpu` in separate terminals
 node experiments/cosmos-gpu-lab/scripts/lasso-story-replay.mjs
 ```
 
-The driver opens the real story at each preview URL, pauses the running Graph at the requested tick and reads every position. It checks the mesh digest, cluster assignments, simulation seed, camera and native adapter. It writes a source archive, a per-tick JSON report and side-by-side canvas captures at ticks 1, 60 and 240 to a new `captures/lasso-story-*` directory. Open the resulting `comparison.html` to view the frames. Optional positional arguments override the WebGL and WebGPU preview URLs.
+The driver opens the real story at each preview URL and supplies the same mesh and simulation seeds in its own browser pages. Normal visits to either Storybook use fresh random inputs. The driver pauses the running Graph at the requested tick, reads every position and checks the mesh digest, cluster assignments, simulation seed, camera and native adapter. It writes a source archive, a per-tick JSON report and side-by-side canvas captures at ticks 1, 60 and 240 to a new `captures/lasso-story-*` directory. Open the resulting `comparison.html` to view the frames. Optional positional arguments override the WebGL and WebGPU preview URLs.
 
 The checks allow one CSS pixel of RMS position difference after the first step, one CSS pixel of difference in the 90% radius at every checkpoint, and 5% difference in internal motion across ticks 240–248. Internal motion removes each cluster's translation separately for every step. See the results for the observed differences.
 

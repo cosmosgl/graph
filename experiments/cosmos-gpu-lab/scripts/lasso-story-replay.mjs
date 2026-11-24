@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { captureBenchmarkSource } from './benchmark-source.mjs'
+import { expectedLassoMeshHash, installLassoFixture, lassoForceSeed } from './lasso-story-fixture.mjs'
 
 const lab = fileURLToPath(new URL('../', import.meta.url))
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
@@ -19,30 +20,21 @@ await mkdir(capture)
 console.log(capture)
 const source = await captureBenchmarkSource(repo, lab, capture)
 
-// Wrap the development server's story helper to pause after a numbered tick.
-// The running story supplies the real Graph config and its own mesh and force seeds.
 async function replay(browser, base, engine) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1 })
   const errors = []
   page.on('pageerror', e => errors.push(e.message))
   page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()) })
   try {
-    await page.route(/\/src\/stories\/create-cosmos\.ts(?:\?|$)/, async route => {
-      const original = new URL(route.request().url())
-      if (original.searchParams.has('raw') || original.searchParams.has('original')) return route.continue()
-      original.searchParams.set('original', '1')
-      await route.fulfill({
-        contentType: 'text/javascript',
-        body: `import { createCosmos as create } from ${JSON.stringify(original.href)};
-          export function createCosmos(props) {
-            const probe = window.lassoReplay = { tick: 0, target: 1, initial: props.pointPositions, clusters: props.pointClusters };
-            const result = create({ ...props, onSimulationTick(...args) {
-              props.onSimulationTick?.(...args);
-              if (++probe.tick === probe.target) probe.graph.pause();
-            } });
-            probe.graph = result.graph;
-            return result;
-          }`,
+    await installLassoFixture(page)
+    await page.addInitScript(() => {
+      window.lassoReplay = { tick: 0, target: 1 }
+      window.prepareLassoProps = props => ({
+        ...props,
+        onSimulationTick(...args) {
+          props.onSimulationTick?.(...args)
+          if (++window.lassoReplay.tick === window.lassoReplay.target) window.lassoFixture.graph.pause()
+        },
       })
     })
     await page.goto(new URL('/iframe.html?id=examples-interaction--lasso-selection&viewMode=story', base).href)
@@ -53,18 +45,17 @@ async function replay(browser, base, engine) {
     let clusterIds
     for (const tick of ticks) {
       if (tick > 1) {
-        await page.evaluate(target => { window.lassoReplay.target = target; window.lassoReplay.graph.unpause() }, tick)
+        await page.evaluate(target => { window.lassoReplay.target = target; window.lassoFixture.graph.unpause() }, tick)
       }
       await page.waitForFunction(n => window.lassoReplay?.tick >= n, tick, { timeout: 120000 })
       if (errors.length) throw new Error(errors[0])
       const sample = await page.evaluate(async tick => {
-        const probe = window.lassoReplay
-        const { graph } = probe
+        const { graph, initial, clusters } = window.lassoFixture
         const xy = await graph.getPointPositionsAsync()
         return {
-          tick: probe.tick, zoom: graph.getZoomLevel(), seed: graph.config.randomSeed,
-          initial: tick === 1 ? Array.from(probe.initial) : undefined,
-          clusters: tick === 1 ? Array.from(probe.clusters) : undefined,
+          tick: window.lassoReplay.tick, zoom: graph.getZoomLevel(), seed: graph.config.randomSeed,
+          initial: tick === 1 ? Array.from(initial) : undefined,
+          clusters: tick === 1 ? Array.from(clusters) : undefined,
           adapter: tick === 1 ? graph.simulation.device.info : undefined,
           xy: Array.from(xy), center: graph.spaceToScreenPosition([2048, 2048]),
         }
@@ -72,7 +63,7 @@ async function replay(browser, base, engine) {
       assert.equal(sample.tick, tick)
       assert.equal(sample.zoom, 0.4)
       assert.deepEqual(sample.center, [viewport.width / 2, viewport.height / 2])
-      assert.equal(sample.seed, 'lasso-replay')
+      assert.equal(sample.seed, lassoForceSeed)
       assert.equal(sample.xy.length, points * 2)
       assert.ok(sample.xy.every(Number.isFinite))
       if (sample.initial) {
@@ -140,8 +131,7 @@ try {
   const gpu = await replay(browser, candidate, 'WebGPU')
   assert.equal(gl.initialHash, gpu.initialHash)
   assert.deepEqual(gl.clusterIds, gpu.clusterIds)
-  const expectedMesh = 'cb810bbf41e9b84a70d2f398251251faa16748c9b4b1ad5e92f6c216b0f8480a'
-  assert.equal(gl.initialHash, expectedMesh, 'Replay the original 22,500-point mesh')
+  assert.equal(gl.initialHash, expectedLassoMeshHash, 'Replay the original 22,500-point mesh')
   const rows = [0, ...ticks].map(tick => {
     const a = gl.positions.get(tick), b = gpu.positions.get(tick)
     return {

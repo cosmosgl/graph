@@ -42,7 +42,7 @@ These figures are from the earlier WebGPU tree approximation. With the new grid,
 
 ## Lasso Selection in both Storybooks
 
-The 22,500-point story starts its 25 color groups in the same small square. On Apple M3 the old WebGPU force expanded the cloud less on the first tick and left the individual points moving visibly after the groups formed. Both previews now seed the mesh and simulation independently. All initial positions matched. The table gives the radius around the layout center that contains 90% of the points, in graph units.
+The 22,500-point story starts its 25 color groups in a small square. On Apple M3 the old WebGPU force expanded the cloud less on the first tick and left individual points moving visibly after the groups formed. In the Lab replay, fixed seeds for the mesh and simulation give both engines identical starting positions. Opening the story normally generates fresh positions each time. The table gives the radius around the layout center that contains 90% of the points, in graph units.
 
 | Simulation tick | WebGL | Previous WebGPU | WebGPU with the grid |
 | ---: | ---: | ---: | ---: |
