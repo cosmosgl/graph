@@ -272,6 +272,9 @@ importers:
       vite:
         specifier: 'catalog:'
         version: 6.4.3(@types/node@26.6.6)(yaml@2.9.0)
+      vite-plugin-dts:
+        specifier: 'catalog:'
+        version: 4.3.0(@types/node@26.6.6)(rollup@4.62.2)(typescript@5.9.3)(vite@6.4.3(@types/node@26.6.6)(yaml@2.9.0))
 
   integrations/deck-layers:
     devDependencies:

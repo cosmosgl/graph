@@ -3,9 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": { "types": "./src/index.ts", "import": "./dist/index.js" } },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": {
     "build": "vite build --mode es && vite build --mode standalone",
+    "pack:public": "pnpm run build && node pack-public.mjs",
     "lint": "eslint --cache ./src ./test --ext .ts --ignore-path ../../.gitignore",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --config vitest.config.ts"
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/node": "26.6.6",
     "typescript": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
   }
 }
