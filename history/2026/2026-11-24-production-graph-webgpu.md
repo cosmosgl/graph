@@ -36,6 +36,15 @@ the Graph. Holding the right mouse button must repel nearby points during
 a manually scheduled update. Reading the positions after each update lets
 us check the impulse, the release and the pinned point separately.
 
+The 22,500-point Lasso Selection story looked different even before drawing
+a lasso. Giving both previews the same mesh and force seeds exposed a second
+difference. The WebGPU tree grouped nearby points together, so the cloud
+expanded less on the first step and the settled clusters kept shimmering.
+WebGPU now computes nearby pair forces and groups distant cells using the
+WebGL rules. On M3 the first-step radius agreed within 0.005 graph units.
+After subtracting each cluster's translation, its members moved 0.04374
+units per tick on WebGPU and 0.04383 on WebGL over ticks 240–248.
+
 On the moving million-point YouTube graph, rectangle selection and 1,000
 tracked labels shared the GPU queue with simulation and drawing. A pointer
 release could find four or five frames already submitted. Most of the wait
