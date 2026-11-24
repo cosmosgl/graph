@@ -284,12 +284,12 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-graph-api': entry('production-graph-api', {
       reviewed: '2026-11-24',
-      conclusion: 'On M3, the million-point WebGPU highlight setter fell from 211.6 to 7.2 ms. ' +
-        'Selected IDs and 1,000 tracked coordinates matched at both sizes. Million-point feedback still took about one second.',
+      conclusion: 'At the same four early M3 ticks, reducing link drawing cut million-point WebGPU readback from 291 to 247 ms. ' +
+        'Every ordered selection and all 1,000 label coordinates matched at both sizes.',
       variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
       comparison: 'Manual gravity and picking, plus four moving selection rectangles and 1,000 tracked labels on the YouTube graph',
       method: 'method',
-      next: 'Measure how much drawing the moving links contributes to the next highlighted frame on the early million-point layout.',
+      next: 'Measure the remaining wait behind the early million-point frame on graphs with different link colors and point coverage.',
       reproduce: 'Click both endpoints and press Step gravity. The moving YouTube replay runs each package separately on M3.',
       investigations: [{
         page: 'youtube-selection',

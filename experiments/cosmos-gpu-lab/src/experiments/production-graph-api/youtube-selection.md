@@ -1,4 +1,4 @@
-On Apple M3, updating the highlights after a drag on the million-point YouTube graph took **7.2 ms** on WebGPU. The median was **211.6 ms** in the fresh control and **290.7 ms** in the earlier replay. WebGPU returned every expected ID and all 1,000 tracked coordinates at both graph sizes. Completing the highlighted graph frame and giving the labels a paint opportunity still took close to one second from release on the million-point graph.
+On Apple M3, the million-point wait for selected IDs and 1,000 label coordinates rose from **267 to 400 ms** in two ordinary WebGPU replays. Releasing the same four drags at the same simulation ticks gave **167.8 and 167.2 ms** on those builds. Most of the early-layout wait came from a frame already drawing 2.85 million links. Reducing that drawing work cut early readback from **290.5 to 247.1 ms** and release-to-feedback time from **843.5 to 531.3 ms** in fixed-tick timing runs.
 
 ## Workload
 
@@ -8,26 +8,57 @@ In the correctness runs, a full position copy is also requested in the release h
 
 The selection IDs are Cosmos point indices in the prepared graph. The tracked IDs are spaced across the whole index range. Storybook's `CosmosLabels` receives the 1,000 returned coordinates, projects them and lets its label renderer cull overlaps. A correct read therefore covers more points than the number of labels visible at once.
 
+## Why the readback wait changed
+
+The 267.0 and 400.2 ms medians came from eight ordinary releases on each build. Both started at tick 4, but the older build reached tick 14 or 15 by the fourth drag and the newer build reached tick 13. Even at tick 4, readback varied between sessions. Those runs did not record how much of the submitted frame had finished when the pointer was released. Holding the same gestures to ticks 10, 26, 40 and 54 put both builds on the same layouts. The eight-release medians were then within one millisecond of each other.
+
+Four earlier ticks expose the wait during a busy frame. Each cell compares the incremental-highlight control with the optimized renderer. Times are milliseconds in one instrumented session per build. Frame age tells how recently the draw was submitted when the pointer was released. The last column measures the time from observing completion of preceding GPU work until both public queries had returned, including callback scheduling.
+
+| Release tick | Frame age at release | Prior GPU work completed after release | Both reads ready after release | Remaining time |
+| ---: | ---: | ---: | ---: | ---: |
+| 4 | 4.5 → 7.2 | 303.8 → 220.4 | 315.3 → 239.7 | 11.5 → 19.3 |
+| 8 | 3.1 → 23.7 | 329.9 → 235.2 | 332.5 → 242.9 | 2.6 → 7.7 |
+| 12 | 2.4 → 5.7 | 309.9 → 245.1 | 313.4 → 248.9 | 3.5 → 3.8 |
+| 16 | 3.9 → 5.1 | 303.2 → 260.4 | 309.8 → 267.5 | 6.6 → 7.1 |
+
+At those four ticks the original highlight setter build returned both reads in 319, 318, 313 and 300 ms. In a separate run starting at tick 20, a drained queue took a median 28.2 ms to step the layout and 219.7 ms to draw points and links. Drawing points alone took 6.8 ms. These isolated measurements identify link drawing as the largest contributor. The frame-completion markers alone cannot separate simulation and draw on releases where both callbacks arrive together.
+
+### What changed in the draw
+
+An opaque point can completely cover a link on the final canvas. On eligible dense graphs, WebGPU first marks the fully opaque point pixels in the depth buffer, then uses those marks to skip covered link fragments. Translucent edges still blend. When all solid links share an RGB color, the renderer supplies that color once for the draw and preserves each link's own alpha. This work happens on the graph's canvas. The rectangle and label queries use their existing GPU algorithms.
+
+In the uninstrumented timing sessions, each build ran the same four drags twice at the listed ticks. Each cell gives median milliseconds across all eight releases, from the incremental-highlight control to the optimized renderer.
+
+| Points | Release ticks | Both reads ready | Highlight update | Label redraw | Release to feedback |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 65,536 | 10, 26, 40, 54 | 25.4 → 22.8 | 1.2 → 1.1 | 3.8 → 4.7 | 79.3 → 77.6 |
+| 1,000,000 | 4, 8, 12, 16 | 290.5 → 247.1 | 8.4 → 8.6 | 7.9 → 10.7 | 843.5 → 531.3 |
+| 1,000,000 | 10, 26, 40, 54 | 167.2 → 158.7 | 9.1 → 9.1 | 5.8 → 9.1 | 411.7 → 371.9 |
+
+In a separate WebGPU-only replay at ordinary pointer speed, million-point readback measured **241.8 → 244.2 ms**. Release to feedback fell from 874.5 to 730.2 ms. The fixed-tick improvement in readback was clearest on the early layout.
+
+On the million-point graph the frozen frame completed in **147.6 → 137.8 ms** at tick 28 and **110.9 → 97.1 ms** at tick 72 (median of three draws). Both frozen canvases matched the control at every one of their 2,079,604 pixels. At ticks 10, 26, 40 and 54, the original package, the incremental-highlight package and the optimized renderer all returned identical ordered selections and identical Float32 XY coordinates for all 1,000 tracked IDs on every drag at both sizes.
+
 ## Correctness at release
 
-Each cell gives the number of selected points. On every successful release the complete ordered list matched and all 1,000 labels had the exact expected ID and XY coordinates.
+Each cell gives the number of selected points in the latest replay of the WebGL package and WebGPU candidate, where each engine advanced independently. On every successful release the complete ordered list matched and all 1,000 labels had the exact expected ID and XY coordinates.
 
 | Points | Package | Large rectangle | Small rectangle | Off-center | Reverse drag |
 | ---: | --- | ---: | ---: | ---: | ---: |
-| 65,536 | WebGL | 65,536 | 847 | 4,558 | 0 |
+| 65,536 | WebGL | 65,536 | 1,559 | 4,143 | 0 |
 | 65,536 | WebGPU | 65,536 | 13,805 | 695 | 0 |
 | 1,000,000 | WebGL async | Timeout | Timeout | Timeout | Timeout |
-| 1,000,000 | WebGPU | 684,396 | 13,705 | 146,395 | 23,688 |
+| 1,000,000 | WebGPU | 684,396 | 11,131 | 117,598 | 17,774 |
 
-The million-point WebGL release snapshots contained 463,961, 7,174, 87,968 and 9,354 points inside the four rectangles. Both async APIs returned null. In the corresponding WebGPU session, 103–130 labels remained in the overlay after culling.
+The million-point WebGL release snapshots contained 463,961, 5,811, 80,475 and 8,341 points inside the four rectangles. Both async APIs returned null on all four correctness drags and all eight timed releases. In the corresponding WebGPU session, 102–130 labels remained in the overlay after culling.
 
-When the older and newer WebGPU builds released the four drags at the same simulation ticks, the complete ordered ID lists matched across builds at both sizes. The matched ticks were 6, 10, 14 and 18 at 65,536 points, and 10, 26, 40 and 54 at one million. All 1,000 tracked coordinates matched the corresponding release snapshot on every drag.
+In the latest ordinary timing blocks, WebGPU returned both reads in a median 8.0 ms at 65,536 points and 240.6 ms at one million. Median release-to-feedback times were 57.1 and 595.2 ms respectively. Those gestures advanced at their natural speed. The fixed-tick timing table above compares builds at the same layouts.
 
-A separate million-point replay with synchronous WebGL queries returned all expected ordered IDs and all 1,000 label coordinates on every drag. The selection call alone blocked JavaScript for 3.61–6.48 seconds per release.
+A separate million-point replay with synchronous WebGL queries returned all expected ordered IDs and all 1,000 label coordinates on every drag. These calls block JavaScript and run separately from the interactive timings.
 
-## Latency on M3
+## Highlight update on M3
 
-Each value is the median in milliseconds across eight timed releases per package and size. Each package ran alone in visible Chrome 158. The two four-drag blocks reversed package order. Arrows compare the previous WebGPU setter with the new one. WebGL values come from the latest replay.
+The million-point WebGPU highlight setter fell from an earlier 290.7 ms to 7.2 ms. The tables show the fresh comparison of the full style rebuild and the incremental update. Each value is the median in milliseconds across eight timed releases per package and size, with each package running alone in visible Chrome 158. The two four-drag blocks reversed package order. WebGL values come from the incremental-highlight replay.
 
 | Points | Package | Read selected IDs | Read 1,000 labels | Redraw labels |
 | ---: | --- | ---: | ---: | ---: |

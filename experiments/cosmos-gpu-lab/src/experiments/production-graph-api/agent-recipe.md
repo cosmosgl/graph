@@ -31,7 +31,7 @@ Run the profile separately from the correctness and timing sessions.
 node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs 1000000 --mode profile
 ```
 
-The profile replays the same four drags using the real WebGPU package. It puts a public luma fence after every autonomous frame and counts submitted frames whose completion callbacks have yet to arrive. At pointer release it places another fence immediately before issuing the two async queries. It places two more around the highlight setter. The queries and UI updates continue without waiting for these extra fences. Each elapsed interval ends when JavaScript observes the completion signal, so callback scheduling contributes to it. Use the ordinary timing runs for user-facing latency and the separate correctness runs for ordered IDs and tracked XY coordinates.
+The profile replays the same four drags using the real WebGPU package. It places public luma fences after the simulation submission and after the draw submission of the same tick. At pointer release it marks the queue immediately before issuing the two async queries and records the age of the submitted frame. It places two more fences around the highlight setter. The queries and UI updates proceed without waiting for these markers. Each interval ends when JavaScript observes a completion. Both markers can be delivered together even when their GPU submissions took different amounts of time. Use the isolated draws below to separate stage costs.
 
 After the fourth drag the profile pauses simulation, stops the autonomous loop and waits for the queue to drain. It then times three manual simulation ticks, each followed by a separately timed draw of all points and links at those positions. Finally it disables link rendering, waits for that configuration update to finish and times three point-only draws at the last positions. Each operation starts with the previous one complete. These are submission-to-observed-completion times. Record release and final tick counts when comparing sessions because the moving layouts can reach different positions and link lengths.
 
@@ -51,6 +51,24 @@ node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs --engine webgpu
 ```
 
 ## M3 run record
+
+### Compare the same drags across package builds
+
+The `--webgpu-bundle` option runs the current replay harness against an archived standalone package. The working tree can keep the candidate built. The driver's asset digest check verifies the exact distributions in each frozen site. These commands reproduce the early-layout profile and the uninstrumented fixed-tick timing of the package from before the highlight change.
+
+```sh
+replay=experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs
+captures=experiments/cosmos-gpu-lab/captures
+original="$captures/public-graph-youtube-YqmYe1/site/assets/index.min-DD4YIS9x.js"
+node "$replay" 1000000 --engine webgpu --mode profile --release-ticks 4,8,12,16 --draw-tick 72 --webgpu-bundle "$original"
+node "$replay" 1000000 --engine webgpu --mode timing --release-ticks 10,26,40,54 --webgpu-bundle "$original"
+```
+
+For the incremental-highlight control, use `$captures/public-graph-youtube-29mbD2/site/assets/index.min-DdfZte_V.js`. Omit `--webgpu-bundle` to use the locally built candidate. Run the fixed-tick correctness command at both 65,536 and one million points on each build. Compare the corresponding `result.json` files with `node experiments/cosmos-gpu-lab/scripts/compare-public-graph-youtube.mjs BEFORE/result.json AFTER/result.json`. The comparator checks the input and camera, release ticks, ordered ID digests and the exact returned Float32 XY pairs in ascending tracked-ID order. Two fixed-tick profiles with `--draw-tick` can be compared with the same command for position, selection and canvas digests.
+
+In the early profile, read `frameAgeAtReleaseMs` to locate the release within the submitted frame. Read `queueAheadAtReleaseMs` to see how long earlier submissions took to be acknowledged after release. Subtract it from `timings.readbackReadyMs` to measure the remaining time until both queries returned. This difference includes query execution, transfer and JavaScript scheduling. Read `stepDoneAfterReleaseMs` and `drawDoneAfterReleaseMs` to check whether their callbacks could be observed separately.
+
+### Initial package comparison
 
 Chrome 158.0.8127.37 ran each visible session on Apple M3 under Node 24.6.0. The WebGL renderer reported ANGLE Metal on Apple M3. The WebGPU adapter reported Apple Metal 3 and `fallback: false`. The WebGL package SHA-256 was `71f4cc54f0cf4912afead56d0ea865e85cb45078b44b378ae8cdae1360ef1f8d` and the WebGPU package SHA-256 was `44933b5ca508aa04395fc69b45ca088ab0aba4e90e2849def09a458bac66f435`.
 
@@ -118,3 +136,45 @@ Compare the eight `mode: timing` releases per engine and size in `CMOdeh` and `c
 The four ordered ID digests at 65,536 points matched between `N9hawp` and `coS13K` at ticks 6, 10, 14 and 18. At one million points compare `TQXSaU` with `NWVd7Y` at ticks 10, 26, 40 and 54. All four complete ID digests matched. All 1,000 tracked XY pairs matched each corresponding release snapshot. In the tick-72 captures, the 4,705 highlighted IDs had digest `bf492cb35fe0417747127a3f7d8167c4da603912dc8b34ae5a51b9e7338815dc`, the positions had digest `22e7a5a0f82c9f227613f452f7ce32adeb0437f609fc33d32b76348810bb5509` and the raw RGBA canvas had digest `91d6cf2b4105439e6c65603ab00ccbd19b6ba9dcb60d7452023ee54cdda12110` on both builds.
 
 On million-point WebGL all 12 async releases in `coS13K` returned null for both APIs. In the separate `--mode blocking` run (`r351FX`), the four ordered selections contained 463,961, 5,533, 74,713 and 7,814 IDs. All 1,000 tracked XY pairs matched on every drag. For the time spent inside synchronous rectangle selection, read `timings.selectionSubmitMs`.
+
+## M3 investigation of the readback increase
+
+Chrome 158.0.8127.37 ran visible sessions on Apple M3. The native WebGPU adapter reported Apple Metal 3 with fallback disabled. The original highlight package had digest `b1309cbc…` and the incremental-highlight control had digest `5192e217…`. The full digests appear in the preceding run records. Each capture below preserves the browser site with its two actual packages. The capture name is the suffix of `captures/public-graph-youtube-<suffix>/`.
+
+| Workload | Capture | Source archive SHA-256 |
+| --- | --- | --- |
+| Original package, early million-point queue markers and tick-72 canvas | `8obdle` | `fc88cc068476653a702fbf2a586e76bc07f6db0ba174fbc97afda1fe089071c0` |
+| Incremental-highlight control, same queue markers and canvas | `29mbD2` | `4b790e4030818929731398533afe1873ef9d29890cfb6db536073d8199a5ed99` |
+| Original package, later fixed-tick timing | `dHBMGw` | `fbd75bb5fa23883023d595758c5280e3a4e03a138fc3c86c4275942353120ed0` |
+| Incremental-highlight control, same later timing | `EGq1CJ` | `0031c5050b3d9cc06e1a0bf5f34a8963c0dac49c2e0904c3852e8449a04f5aee` |
+| Incremental-highlight control, isolated stage costs after the early drags | `LJAWSA` | `a52efe2c09e7dbe97c0fb1216ee84363bd1520cba91e81c5bdc217cac9ef86c1` |
+| Incremental-highlight control, 65,536-point correctness | `A1Pzmc` | `b746c4fc49bd9158d06d36fb2159a75b9367fe199d1dbff9e4bea58a17967226` |
+| Incremental-highlight control, million-point correctness | `N5WSPy` | `9f58b40c35d158ba533a7f4fc612b21f2d1fa076e31fae4936cd690a274d60e7` |
+
+These control digests identify each release. Each cell shows the first 12 hex characters of the ordered selection digest followed by the tracked XY digest. The comparator checks all 64 characters of both. `e3b0c44298fc…` is the empty selection.
+
+| Release tick | 65,536 points, IDs / XY | One million points, IDs / XY |
+| ---: | --- | --- |
+| 10 | `4a35a59aabf3` / `6a51e3f1200f` | `eb40afe17132` / `1ef3ae077ad8` |
+| 26 | `8855b93d9347` / `d12909ad460e` | `20580a638b90` / `0671fe786823` |
+| 40 | `6ce9344d375c` / `1fbb047a431b` | `5c17cc4d4b96` / `c1e17e8a8560` |
+| 54 | `e3b0c44298fc` / `d2398a083816` | `bf492cb35fe0` / `9a8e18b3e51c` |
+
+The optimized renderer can be rebuilt from revision `069e635a697344bc57c3446aec1f4e363045f2b3`. It used WebGPU distribution SHA-256 `7ce19fe60bf0afe8cb615c0659f7bfe406f81e0001fe186d15ea3835ee598bf9`. Each pair below used the same fixture, engine, camera and gestures. Only the last pair used natural release ticks. Each run records its source archive SHA-256 in `result.json` under `source.snapshotSha256`. The `buFmjy` source archive digest was `0b12e80248204f73fc9513265d962d63d168ecf842575f814b0f9d9b1a850251`.
+
+| Workload | Control capture | Candidate capture |
+| --- | --- | --- |
+| early million-point fixed timing | `OZgbkn` | `5W6IEc` |
+| later million-point fixed timing | `EGq1CJ` | `3c0eA2` |
+| 65,536-point fixed timing | `1xIDqk` | `jZtI1z` |
+| 65,536-point correctness | `A1Pzmc` | `jFVkYI` |
+| million-point correctness | `N5WSPy` | `FQ5NFr` |
+| tick-28 canvas | `Wid9jG` | `e51IVK` |
+| tick-72 canvas | `29mbD2` | `buFmjy` |
+| natural-tick WebGPU-only timing, both sizes | `2sfR3D` | `Kfr0a1` |
+
+Use ticks 4, 8, 12 and 16 for the early timing and both frozen-canvas profiles. The later timing and both correctness pairs use 10, 26, 40 and 54. Compare the correctness and canvas pairs using the command above. The digest prefixes in the preceding table also identify the candidate releases and the original pre-highlight package. Compare original `V8l2bs` with `jFVkYI` at 65,536 points, and original `4sJAl4` with `FQ5NFr` at one million. Both comparisons verified all selection and tracked-coordinate digests. At frozen ticks 28 and 72, all 2,000,000 position coordinates, the last ordered selection, and all 1,922 × 1,082 RGBA pixels matched their controls.
+
+Before combining the changes, the common-RGB-only package in `PJn6qK` (revision `4c7e2695fe732a5f1629a3182a7abe13dce716fa`) drew the tick-72 canvas in 98.6 ms and the opaque-point coverage package in `hLa0Tw` in 101.6 ms. Each is the median of three draws. Both matched the `29mbD2` canvas. The coverage-only distribution was built separately. The `hLa0Tw/depth-only.patch` file (SHA-256 `bdc344e2f860b7e7c166803f172c0aea42d4561750d26aa0d45b6e8909074c3d`) preserves its source change relative to the incremental-highlight control.
+
+The final ordinary matrix `1vPUf1` (source archive SHA-256 `4ff14119f2ff0300b252f3b4df0e774dd55e756d418c878f0261666333c69f2f`) ran all four native drags on both packages and sizes. WebGPU passed both correctness oracles at both sizes. WebGL passed at 65,536 points and returned null for both million-point async queries on all four correctness and eight timing releases. The separate million-point WebGL `--mode blocking` run `a4sZAk` (source archive SHA-256 `0ca4cba7ef4c3130d424cd971340bfa192ec5a5106ba8be0ef3caf25d3d3639a`) returned 463,961, 5,533, 72,761 and 7,611 IDs and all 1,000 expected XY pairs on each release. Its blocking times are retained in the raw capture.
