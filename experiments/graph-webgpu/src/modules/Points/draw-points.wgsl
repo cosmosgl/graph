@@ -83,7 +83,7 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   return out;
 }
 
-@fragment fn pointFragment(input: Sprite) -> @location(0) vec4f {
+fn shadePoint(input: Sprite) -> vec4f {
   let p = currentPoint(input.index);
   let shape = u32(p.metrics.y);
   let radius = max(input.sizes.x, 1.0) * 0.5;
@@ -146,4 +146,13 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
     alpha = composed;
   }
   return vec4f(color,alpha);
+}
+
+@fragment fn pointFragment(input: Sprite) -> @location(0) vec4f {
+  return shadePoint(input);
+}
+
+@fragment fn opaquePointFragment(input: Sprite) -> @location(0) vec4f {
+  if (shadePoint(input).a != 1.0) { discard; }
+  return vec4f(0);
 }

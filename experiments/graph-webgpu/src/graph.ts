@@ -69,7 +69,7 @@ export class Graph {
     this.ready = this.simulation.ready.then(() => {
       if (this.isDestroyed) return
       const device = this.simulation.device!
-      this.renderer = new GraphRenderer(device, this.graph, this.config, () => this.simulation.getPointPositionBuffer())
+      this.renderer = new GraphRenderer(device, this.graph, this.config, () => this.simulation.getPointPositionBuffer(), this.simulation.ownsDevice)
       if (container) {
         const attached = device.canvasContext?.canvas
         if (!(attached instanceof HTMLCanvasElement)) throw new Error('An interactive WebGPU Graph requires an HTML canvas on its device')

@@ -51,6 +51,14 @@ export interface GraphPick {
 
 type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
+type DrawKind = 'point' | 'link' | 'solidLink' | 'uniformRgbLink'
+type CoverageMode = 'none' | 'mark' | 'test'
+type EncodeOptions = {
+  draw?: GraphDrawOptions;
+  uniforms?: Buffer;
+  linkPickPixel?: [number, number];
+  coverLinks?: boolean;
+}
 const layout: ShaderLayout = {
   attributes: [],
   bindings: [
@@ -107,7 +115,8 @@ export class GraphRenderer {
     private device: Device,
     private data: GraphData,
     private config: GraphConfigInterface,
-    private positionSource: () => PositionSource | undefined
+    private positionSource: () => PositionSource | undefined,
+    private readonly ownsCanvas = false
   ) {
     this.points = new Points(device)
     this.highlightPass = new PointHighlightPass(device)
@@ -224,15 +233,23 @@ export class GraphRenderer {
     const uniforms = this.hostUniforms[index] ??= this.device.createBuffer({
       id: 'cosmos-host-view', byteLength: this.uniforms.byteLength, usage: Buffer.UNIFORM | Buffer.COPY_DST,
     })
-    this.encode(pass, framebuffer, view, [0, 0, view.width * view.pixelRatio, view.height * view.pixelRatio],
-      !!options.picking, uniforms, options)
+    this.encode(pass, framebuffer, view, [0, 0, view.width * view.pixelRatio, view.height * view.pixelRatio], { uniforms, draw: options })
   }
 
-  public draw (view: GraphView, framebuffer = this.device.canvasContext?.getCurrentFramebuffer()): void {
+  public draw (view: GraphView, target?: Framebuffer): void {
+    const framebuffer = target ?? this.device.canvasContext?.getCurrentFramebuffer()
     if (!framebuffer || this.isDisposed) return
-    const pass = this.device.beginRenderPass({ framebuffer, clearColor: this.transparentBackground, clearDepth: false, clearStencil: false })
+    // On the owned canvas the existing depth attachment can reject link
+    // fragments hidden by opaque points. Reserve the extra point draw for
+    // dense graphs with at least one link per device pixel.
+    const coverLinks = this.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
+      !!framebuffer.depthStencilAttachment && framebuffer.colorAttachments[0]!.texture.samples === 1 &&
+      this.config.renderLinks && this.linkCount >= framebuffer.width * framebuffer.height && this.canUseSolidLinks(view)
+    const pass = this.device.beginRenderPass({
+      framebuffer, clearColor: this.transparentBackground, clearDepth: coverLinks ? 1 : false, clearStencil: false,
+    })
     try {
-      this.encode(pass, framebuffer, view, [0, 0, framebuffer.width, framebuffer.height], false)
+      this.encode(pass, framebuffer, view, [0, 0, framebuffer.width, framebuffer.height], { coverLinks })
     } finally { pass.end() }
     this.device.submit()
     if ((view.styleProgress ?? 1) >= 1) this.releasePrevious()
@@ -248,7 +265,7 @@ export class GraphRenderer {
     // The WebGL link index is CSS-resolution and uses lower-left coordinates.
     // Integer mouse y lies on a texel boundary and selects the sample above it.
     const linkPixel: [number, number] = [Math.floor(xCss), Math.max(0, Math.ceil(yCss) - 1)]
-    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], true, this.uniforms, {}, linkPixel) } finally { pass.end() }
+    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], { linkPickPixel: linkPixel }) } finally { pass.end() }
     // Each query takes its own snapshot before the next pick can overwrite the one-pixel target.
     const staging = this.device.createBuffer({ id: 'cosmos-pick-read', byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
     try {
@@ -312,11 +329,16 @@ export class GraphRenderer {
     this.previous = undefined
   }
 
-  private kernel (framebuffer: Framebuffer, kind: 'point' | 'link' | 'solidLink' | 'uniformRgbLink', picking: boolean): RenderKernel {
+  private canUseSolidLinks (view: GraphView): boolean {
+    return this.hasOnlySolidLinks && this.config.linkBlending && !this.config.linkColorInterpolateFromEndpoints &&
+      view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
+  }
+
+  private kernel (framebuffer: Framebuffer, kind: DrawKind, picking: boolean, coverage: CoverageMode = 'none'): RenderKernel {
     const color = framebuffer.colorAttachments[0]!.texture.format as TextureFormatColor
     const depth = framebuffer.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined
     const samples = framebuffer.colorAttachments[0]!.texture.samples
-    const key = [kind, color, depth, samples, picking].join('/')
+    const key = [kind, color, depth, samples, picking, coverage].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
       const source = kind === 'point' ? this.pointSource : this.linkSource
@@ -325,16 +347,17 @@ export class GraphRenderer {
         vertexSource: source,
         fragmentSource: source,
         vertexEntryPoint: kind === 'uniformRgbLink' ? 'solidLinkVertex' : `${kind}Vertex`,
-        fragmentEntryPoint: `${kind}Fragment`,
+        fragmentEntryPoint: coverage === 'mark' ? 'opaquePointFragment' : `${kind}Fragment`,
         topology: 'triangle-strip',
         shaderLayout: layout,
         colorAttachmentFormats: [color],
         depthStencilAttachmentFormat: depth,
         parameters: {
-          ...(depth ? { depthWriteEnabled: false, depthCompare: 'always' as const } : {}),
+          ...(depth ? { depthWriteEnabled: coverage === 'mark', depthCompare: coverage === 'test' ? 'less' as const : 'always' as const } : {}),
+          colorMask: coverage === 'mark' ? 0 : 0xf,
           sampleCount: samples,
           cullMode: 'none',
-          blend: !picking,
+          blend: !picking && coverage !== 'mark',
           blendColorOperation: 'add',
           blendColorSrcFactor: 'src-alpha',
           blendColorDstFactor: 'one-minus-src-alpha',
@@ -349,11 +372,12 @@ export class GraphRenderer {
   }
 
   private encode (
-    pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number], picking: boolean,
-    uniforms = this.uniforms, options: GraphDrawOptions = {}, linkPickPixel?: [number, number]
+    pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number],
+    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, coverLinks = false }: EncodeOptions
   ): void {
     const position = this.positionSource()
     if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.linkBuffer || !this.points.atlas) return
+    const picking = !!options.picking || !!linkPickPixel
     const c = this.config
     const segments = c.curvedLinks ? Math.max(1, Math.round(c.curvedLinkSegments)) : 1
     uniforms.write(new Float32Array([
@@ -384,17 +408,22 @@ export class GraphRenderer {
       previousPoints: this.previous?.points ?? this.pointBuffer,
       previousLinks: this.previous?.links ?? this.linkBuffer,
     }
+    const pointCount = Math.min(position.pointCount, this.pointCount)
     if (options.links !== false && c.renderLinks && this.linkCount) {
-      const useSolid = this.hasOnlySolidLinks && !picking && c.linkBlending && !c.linkColorInterpolateFromEndpoints &&
-        view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
+      if (coverLinks) {
+        this.kernel(framebuffer, 'point', false, 'mark').draw(pass, {
+          vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
+        })
+      }
+      const useSolid = !picking && this.canUseSolidLinks(view)
       const kind = useSolid ? (this.uniformLinkRgb ? 'uniformRgbLink' : 'solidLink') : 'link'
-      this.kernel(framebuffer, kind, picking).draw(pass, {
+      this.kernel(framebuffer, kind, picking, coverLinks ? 'test' : 'none').draw(pass, {
         vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.linkCount, bindings,
       })
     }
     if (options.points === false) return
     this.kernel(framebuffer, 'point', picking).draw(pass, {
-      vertexArray: this.vertices, vertexCount: 4, instanceCount: Math.min(position.pointCount, this.pointCount), bindings,
+      vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
     })
   }
 }
