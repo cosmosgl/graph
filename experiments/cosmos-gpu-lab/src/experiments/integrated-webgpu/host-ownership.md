@@ -26,8 +26,8 @@ device and canvas, re-upload the checkpoint, require exact restored positions
 and verify the next gravity step against the CPU reference again.
 
 This lane tests a planned loss signal and manual restart from saved positions.
-Automatic recovery of the full viewer, restoring a complete public graph
-session, and production Deck hosting remain open.
+Restoring a full user session after unexpected device loss remains open.
+The packed Graph and Deck consumer below covers normal host teardown.
 
 ```sh
 LAB_NATIVE_VISIBLE=1 VITE_LAB_HOST_OWNERSHIP=1 LAB_ARTIFACT_RUN=host-ownership-20261119-r1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/integrated-webgpu/host-ownership.test.ts
@@ -148,8 +148,8 @@ The rejected removal order is in `captures/deck-host-m3-70318046/`, with
 source SHA-256 `e604067f8f484864f3d32d1e6386e2acff4489ddc4b437fab4bb878ee7d4b44f`.
 
 Use the pinned alpha.14 pair for this host proof. Production adoption still
-requires a common supported luma version and the full Graph layer, link and
-style draws, overlay styling and unplanned recovery. The installed production
+requires a qualified release dependency family, overlay styling and unplanned
+recovery. The packed consumer below covers the full layer with straight links. The installed production
 Deck layer runs on the luma 9.3 family. Deck's published guide describes v9
 WebGPU as experimental. [Deck WebGPU guide](https://deck.gl/next/docs/developer-guide/webgpu)
 
@@ -184,8 +184,7 @@ source archive SHA-256
 `5d2f9e3642e8f7d2ac5500472e4754c34c0f3687a4fb7e57ae74f09f9570df44`.
 An earlier run in `captures/production-deck-loss-m3-20261120-044550/` checked
 the event before its listener ran. The passing replay waits for both the
-browser event and the luma loss promise. Full Graph and Deck on WebGPU remain
-pending a shared production backend.
+browser event and the luma loss promise.
 
 ### Replay the isolated Deck test
 
@@ -198,3 +197,42 @@ and the absolute archive path in `LAB_SOURCE_SNAPSHOT`.
 ```sh
 LAB_DECK_HOST=1 LAB_NATIVE_VISIBLE=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
 ```
+
+## Packed WebGPU Graph and CosmosGraphLayer
+
+A clean TypeScript app installs local tarballs of `@cosmos.gl/graph` and
+`@cosmos.gl/deck-layers`, both version 3.6.0. The published Deck core
+10.0.0-alpha.1 shares luma core 10.0.0-alpha.14 with both candidates.
+The app builds with strict TypeScript 5.9.3 and Vite 6.4.3.
+`skipLibCheck` is enabled for the upstream declaration files.
+
+On 24 November 2026, visible Chrome 158.0.8127.37 on Apple M3 reported
+Apple WebGPU, `metal-3`, with `fallback: false`. Both ownership modes drew
+the expected red and green point interiors, blue link midpoint and black
+background at 320 × 192 and 512 × 320 CSS pixels at pixel ratio 1.
+Deck's `pickObjectAsync` returned point indices 0 and 1, link index 0,
+and a background miss. After resize the first point's old location was black
+and returned no pick.
+
+| Ownership | Pick payload | After removing the layer |
+| --- | --- | --- |
+| Layer creates Graph and loads object arrays | Original point and link records | Graph became unready and released its position buffer. |
+| Application supplies Graph with typed arrays | Element type and index | Graph remained ready. Moving point 1 to (1090, 1040) returned those coordinates on readback. |
+
+After removal the canvas cleared and Deck returned no hits in either mode.
+After Graph and Deck teardown, a buffer on the borrowed device returned all
+four bytes the app wrote. The first run drew correctly but picked nothing.
+Deck 10 supplied the layer ID in `blendConstant[3]`. Forwarding that value
+to the Graph pick shader restored the point and link hits.
+
+Rebuild both tarballs and the app from the repository root.
+
+```sh
+sh scripts/prepare-packed-webgpu-deck.sh
+```
+
+The script prints the clean app directory, the native Chrome verification
+command and the command to open the app. The browser check emits JSON with the
+adapter, Chrome version, tarball hashes, pixel samples, picks and teardown
+results. The M3 replay is in `captures/packed-deck-m3-20261124/results.json`.
+The fixture at `d0ff27ed` covers one orthographic view and a paused two-point graph.
