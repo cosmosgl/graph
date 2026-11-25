@@ -30,10 +30,15 @@ fn linkRibbon(vertex: u32, index: u32) -> Ribbon {
   if (source >= u32(params.modes.z) || targetIndex >= u32(params.modes.z)) { return out; }
   let a = positions[source];
   let b = positions[targetIndex];
+  if (params.modes.x > 0.0 && (a.w > 0.5 || b.w > 0.5)) { return out; }
+  let sourcePresence = visualPresence(source, a.w);
+  let targetPresence = visualPresence(targetIndex, b.w);
+  let presence = sourcePresence * targetPresence;
+  if (presence <= 0.0) { return out; }
   let delta = b.xy - a.xy;
   let lengthWorld = length(delta);
   let baseWidth = edge.geometry.z * params.link.x;
-  if (a.w > 0.5 || b.w > 0.5 || lengthWorld <= 0.0 || baseWidth <= 0.0 || edge.color.a <= 0.0) { return out; }
+  if (lengthWorld <= 0.0 || baseWidth <= 0.0 || edge.color.a <= 0.0) { return out; }
 
   let zoom = params.camera.z;
   let ratio = params.camera.w;
@@ -103,7 +108,7 @@ fn linkRibbon(vertex: u32, index: u32) -> Ribbon {
   out.position = vec4f(ndc,0,1);
   if (params.modes.x == 2.0) {
     // WebGL's pointer index target has one texel per CSS pixel at every DPR.
-    // Crop its requested texel into the 1×1 target shared with point picking.
+    // The pointer pass reserves a single texel for the link below its point-picking window.
     let pixel = (ndc * vec2f(0.5,-0.5) + 0.5) * params.pointViewport.zw - params.linkPickPixel;
     out.position = vec4f(pixel * vec2f(2,-2) + vec2f(-1,1),0,1);
   }
@@ -111,10 +116,12 @@ fn linkRibbon(vertex: u32, index: u32) -> Ribbon {
   let lengthCss = lengthWorld * zoom;
   let fade = max(params.visibility.z, (lengthCss - params.visibility.y) / (params.visibility.x - params.visibility.y));
   let thin = select(1.0, min(widthWorld / ramp,1.0), blended);
-  out.color = vec4f(edge.color.rgb,edge.color.a * params.link.z * fade * thin);
+  out.color = vec4f(edge.color.rgb,edge.color.a * params.link.z * fade * thin * presence);
   if (params.visibility.w > 0.0) {
-    out.sourceColor = currentPoint(source).color.rgb;
-    out.targetColor = currentPoint(targetIndex).color.rgb;
+    // Like the WebGL endpoint color texture, gradients read the current data.
+    // Only default channels follow the endpoint's presence.
+    out.sourceColor = applyPresence(points[source], sourcePresence).color.rgb;
+    out.targetColor = applyPresence(points[targetIndex], targetPresence).color.rgb;
   }
   return out;
 }

@@ -13,9 +13,14 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (i >= arrayLength(&destinations)) { return; }
   let to = destinations[i];
   var xy = to.xy;
-  if (i < arrayLength(&previous) && progress < 1.0) {
+  if (i < arrayLength(&previous)) {
     let start = previous[i];
-    if (start.w == 0.0 && to.w == 0.0) { xy = mix(start.xy, to.xy, progress); }
+    let finiteSource = (bitcast<u32>(start.x) & 0x7f800000u) != 0x7f800000u;
+    if (to.w != 0.0) {
+      xy = start.xy;
+    } else if (finiteSource && progress < 1.0) {
+      xy = mix(start.xy, to.xy, progress);
+    }
   }
   live[i] = vec4f(xy, live[i].z, to.w);
 }`
@@ -57,6 +62,9 @@ export class PositionTransition {
     })
     this.uniform = device.createBuffer({ byteLength: 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
   }
+
+  /** Borrowed by the renderer for the prior absence of each slot. */
+  public get source (): Buffer | undefined { return this.previous }
 
   public begin (previous: Buffer, live: PointPositionBuffer): void {
     this.clear()

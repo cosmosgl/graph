@@ -1,6 +1,6 @@
 import type { Device, Texture } from '@luma.gl/core'
 import type { GraphConfigInterface } from '@/graph/config'
-import { getRgbaColor, rgbToBrightness } from '@/graph/helper'
+import { getRgbaColor, isNumber, rgbToBrightness } from '@/graph/helper'
 import type { GraphData } from '@/graph/modules/GraphData'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { PointHighlightMask } from './highlights'
@@ -43,6 +43,7 @@ export class Points {
     mask: PointHighlightMask;
     order: Uint32Array;
     colors: Float32Array;
+    greyExitColor: Rgba;
   } {
     const pointCount = data.pointsNumber ?? 0
     const [r, g, b] = background
@@ -50,6 +51,11 @@ export class Points {
     const mask = new PointHighlightMask(pointCount, config.highlightedPointIndices)
     const outlined = new Set(config.outlinedPointIndices ?? [])
     const greyColor = config.pointGreyoutColor && getRgbaColor(config.pointGreyoutColor)
+    const greyExitColor: Rgba = greyColor || [
+      (grey < 0.5 ? grey : Math.max(r, grey)) * 0.65,
+      (grey < 0.5 ? grey : Math.max(g, grey)) * 0.65,
+      (grey < 0.5 ? grey : Math.max(b, grey)) * 0.65, 0,
+    ]
     const stroke = outlineColor(config.pointDefaultStrokeColor)
     const ring = outlineColor(config.outlinedPointRingColor)
 
@@ -62,12 +68,18 @@ export class Points {
       const at = i * pointStride
       const isGreyed = mask.isGreyed(i)
       let isUniform = colors.length === 8
+      // Keep the present values for drawing through an exit. Only default channels
+      // follow presence. An explicit size or color remains visible until the slot is gone.
+      let defaultChannels = 0
       for (let ch = 0; ch < 4; ch++) {
-        const value = data.getResolvedPointColorChannel(i, ch)
+        const raw = data.pointColors?.[i * 4 + ch]
+        const fromDefault = !isNumber(raw)
+        if (fromDefault) defaultChannels |= 1 << ch
+        const value = fromDefault ? data.defaultRgba[ch]! : raw!
         pair[ch] = value
         let dim = value
         if (greyColor) dim = greyColor[ch] as number
-        else if (ch < 3) dim = value * 0.35 + (grey < 0.5 ? grey : Math.max(background[ch] as number, grey)) * 0.65
+        else if (ch < 3) dim = value * 0.35 + greyExitColor[ch]!
         pair[4 + ch] = dim
         attributes[at + ch] = pair[(isGreyed ? 4 : 0) + ch]!
         isUniform &&= colors[ch] === pair[ch] && colors[4 + ch] === pair[4 + ch]
@@ -83,7 +95,12 @@ export class Points {
       }
       const imageIndex = data.pointImageIndices?.[i] ?? -1
       const imageValid = imageIndex >= 0 && imageIndex < (this.images?.length ?? 0) && this.atlasCoords
-      attributes[at + 4] = data.getResolvedPointSize(i)
+      const size = data.pointSizes?.[i]
+      if (isNumber(size)) attributes[at + 4] = size!
+      else {
+        attributes[at + 4] = config.pointDefaultSize
+        defaultChannels |= 16
+      }
       attributes[at + 5] = data.pointShapes?.[i] ?? Number(config.pointDefaultShape)
       const width = data.pointStrokeWidths?.[i]
       attributes[at + 6] = Number.isFinite(width) ? width as number : config.pointDefaultStrokeWidth
@@ -94,12 +111,13 @@ export class Points {
       attributes[at + 16] = isGreyed ? config.pointGreyoutOpacity ?? config.pointOpacity : config.pointOpacity
       attributes[at + 17] = Number(isGreyed)
       attributes[at + 18] = grey
+      attributes[at + 19] = defaultChannels
       if (imageValid && this.atlasCoords) {
         const start = imageIndex * 4
         for (let ch = 0; ch < 4; ch++) attributes[at + 20 + ch] = this.atlasCoords[start + ch] as number
       }
     }
-    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), colors }
+    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), colors, greyExitColor }
   }
 
   public destroy (): void {

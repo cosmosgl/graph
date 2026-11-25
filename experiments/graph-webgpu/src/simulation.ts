@@ -9,6 +9,7 @@ import { positionScales, unpackPositions, writePosition } from './simulation-dat
 import { asFloats, createPrograms, createState, type Programs, type SimulationState } from './simulation-kernels'
 
 /** Borrowed storage on the simulation device: four float32s per slot, [worldX, worldY, pinned, absent].
+ * An absent slot may keep its last finite XY during a visual exit. Use its absence flag for membership.
  * A tick or edit changes the version and can replace the buffer. Do not destroy or write it. */
 export interface PointPositionBuffer {
   device: Device;

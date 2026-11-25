@@ -26,7 +26,8 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
   let i = invocation.x + invocation.y * u32(state.groupsX) * 64u;
   if (i >= u32(state.toCount)) { return; }
   if (i < u32(state.fromCount)) { result[i] = interpolate${kind}(prior[i],next[i],state.time,state.animateMetric); }
-  else { result[i] = enter${kind}(next[i],state.time); }
+  // A new index starts with its target style at both ends of the transition.
+  else { result[i] = next[i]; }
 }`
 }
 

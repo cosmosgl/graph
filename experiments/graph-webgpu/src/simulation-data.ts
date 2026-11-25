@@ -29,8 +29,10 @@ export function positionScales (xy: Float32Array, store: Store): {
 
 export function writePosition (packed: Float32Array, at: number, x: number, y: number, pinned: boolean, edge: number): void {
   const absent = Number.isNaN(x) || Number.isNaN(y)
-  packed[at] = absent ? 0 : toFiniteCoordinate(x, edge)
-  packed[at + 1] = absent ? 0 : toFiniteCoordinate(y, edge)
+  // A snapped absence has no prior location. An animated exit can retain its
+  // last finite location for restoration; the fourth lane excludes both from queries and forces.
+  packed[at] = absent ? NaN : toFiniteCoordinate(x, edge)
+  packed[at + 1] = absent ? NaN : toFiniteCoordinate(y, edge)
   packed[at + 2] = Number(pinned)
   packed[at + 3] = Number(absent)
 }

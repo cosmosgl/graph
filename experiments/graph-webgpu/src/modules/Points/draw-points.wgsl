@@ -9,6 +9,7 @@ struct Sprite {
   @location(6) @interpolate(flat) center: vec2f,
   @location(7) @interpolate(flat) originAndGradient: vec4f,
   @location(8) @interpolate(flat) slope: vec4f,
+  @location(9) @interpolate(flat) color: vec4f,
 }
 
 // Subpixel ties round upward in WebGL's lower-left window coordinates.
@@ -20,14 +21,18 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
 @vertex fn pointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
   var out: Sprite;
   let i = pointOrder[instance];
-  let p = currentPoint(i);
   let position = positions[i];
+  out.position = vec4f(2,2,2,1);
+  if (position.w > 0.5 && params.modes.x > 0.0) { return out; }
+  let presence = visualPresence(i, position.w);
+  if (presence <= 0.0) { return out; }
+  let p = currentPoint(i, presence);
   let factor = params.point.x * params.camera.w * sizeZoom(params.point.y);
   out.sizes = clamp(p.metrics.xw * factor, vec2f(0), vec2f(params.transition.w * params.camera.w));
   let diameter = max(out.sizes.x, out.sizes.y);
   out.index = i;
-  out.position = vec4f(2,2,2,1);
-  if (position.w > 0.5 || diameter <= 0.0) { return out; }
+  if (diameter <= 0.0) { return out; }
+  out.color = p.color;
   out.stroke = p.stroke;
   if (out.stroke.a < 0.0 && p.metrics.z > 0.0) {
     out.stroke = vec4f(effectShade(p.color.rgb, params.shades.x, params.shades.y), 1);
@@ -84,13 +89,13 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
 }
 
 fn shadePoint(input: Sprite) -> vec4f {
-  let p = currentPoint(input.index);
+  let p = currentPoint(input.index, 1.0);
   let shape = u32(p.metrics.y);
   let radius = max(input.sizes.x, 1.0) * 0.5;
   var uv = input.spriteUV;
   if (swiftShaderPointRaster) {
     // SwiftShader samples the nominal diameter at the fragment's device-pixel
-    // center. A pick pass has a 1×1 target with its own origin in the full canvas.
+    // center relative to the full canvas.
     let pixel = input.position.xy + params.region.xy;
     let inverseDiameter = 1.0 / (2.0 * input.spriteRadius);
     uv = (pixel - input.center) * inverseDiameter * vec2f(1, -1) + 0.5;
@@ -114,8 +119,8 @@ fn shadePoint(input: Sprite) -> vec4f {
   }
   var coverage = 1.0 - smoothstep(-0.5,0.5,distance);
   if (shape == 8u || input.sizes.x <= 0.0) { coverage = 0.0; }
-  var color = p.color.rgb;
-  var alpha = coverage * p.color.a * min(1.0,input.sizes.x * input.sizes.x);
+  var color = input.color.rgb;
+  var alpha = coverage * input.color.a * min(1.0,input.sizes.x * input.sizes.x);
   let strokeWidth = clamp(p.metrics.z * params.camera.w,0.0,radius * inradius(shape) * 0.5);
   if (strokeWidth > 0.0) {
     let band = abs(distance + strokeWidth * 0.5) - strokeWidth * 0.5;

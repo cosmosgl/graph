@@ -508,6 +508,7 @@ export class Graph {
       maxPointSize,
       pointProjection: { origin: worldOrigin, transform: [transform[0], transform[4], transform[6], transform[7]] },
       styleProgress: this.transition.progress,
+      previousPositions: this.positionTransition?.source,
     }
   }
 

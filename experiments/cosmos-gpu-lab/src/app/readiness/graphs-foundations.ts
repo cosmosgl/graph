@@ -5,6 +5,19 @@ import type { CaseReadiness } from './types'
 // live verdict or an approval of the production engine.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
+  'production-graph-api/sparse-transition': {
+    badge: 'Frames and picks match',
+    tone: 'pass',
+    finding: 'Both packages faded the removed point and its link, then restored the same slot at its new location.',
+    area: 'Integration',
+    status: 'Verified on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: '18 canvases matched pixel for pixel' },
+      { tone: 'pass', text: '82 click results matched, including clicks near the returning point' },
+      { tone: 'pass', text: 'Both surviving slots kept their coordinates and IDs' },
+    ],
+    next: 'Check hover changes when the pointer stays still as a point moves past it.',
+  },
   'combined-layout/layout-comparison': {
     badge: 'Costly gravity',
     tone: 'review',

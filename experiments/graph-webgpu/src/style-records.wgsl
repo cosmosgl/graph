@@ -3,7 +3,7 @@ struct Point {
   metrics: vec4f,          // size, shape ID, stroke width, image size
   stroke: vec4f,
   ring: vec4f,             // negative alpha when there is no outline
-  effects: vec4f,           // opacity, greyed flag, brightness of grey mix, reserved
+  effects: vec4f,           // opacity, greyed flag, brightness of grey mix, default-channel mask (RGBA, size)
   uv: vec4f,               // atlas bounds, negative for a missing image
 }
 struct Link {
@@ -22,19 +22,9 @@ fn interpolatePoint(previous: Point, next: Point, time: f32, animateSize: f32) -
   p.effects.x = mix(previous.effects.x,next.effects.x,time);
   return p;
 }
-fn enterPoint(next: Point, time: f32) -> Point {
-  var p = next;
-  p.color.a *= time;
-  return p;
-}
 fn interpolateLink(previous: Link, next: Link, time: f32, animateWidth: f32) -> Link {
   var edge = next;
   edge.color = mix(previous.color,next.color,time);
   if (animateWidth > 0.0) { edge.geometry.z = mix(previous.geometry.z,next.geometry.z,time); }
-  return edge;
-}
-fn enterLink(next: Link, time: f32) -> Link {
-  var edge = next;
-  edge.color.a *= time;
   return edge;
 }

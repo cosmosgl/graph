@@ -166,6 +166,88 @@ describe('WebGPU Graph', () => {
     } finally { cleanup() }
   })
 
+  it('excludes a fading point from selection, tracking and collision until its slot is restored', async () => {
+    const { graph, cleanup } = mountedGraph({ simulationGravity: 0, simulationCollision: 1 })
+    try {
+      await graph.ready
+      const present = Float32Array.of(2000, 2048, 2004, 2048, 2140, 2048)
+      graph.setPinnedPoints([])
+      graph.setPointPositions(present)
+      graph.render(1, 0)
+      graph.trackPointPositionsByIndices([0, 1, 2])
+      const select = (): Promise<number[] | null> => graph.findPointsInRectAsync([[0, 0], [320, 200]])
+      expect(await select()).toEqual([0, 1, 2])
+      let now = performance.now()
+      const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+      try {
+        const missing = present.slice()
+        missing[3] = NaN // Either missing coordinate removes the whole slot.
+        graph.setPointPositions(missing)
+        graph.render(1, 1000)
+        now += 500
+        graph.renderOneFrame()
+        expect(await select()).toEqual([0, 2])
+        expect([...(await graph.getTrackedPointPositionsMapAsync())!]).toEqual([[0, [2000, 2048]], [2, [2140, 2048]]])
+        const removed = Float32Array.of(2000, 2048, NaN, NaN, 2140, 2048)
+        expect(await graph.getPointPositionsAsync()).toEqual(removed)
+
+        now += 500
+        graph.renderOneFrame()
+        graph.step()
+        expect(await graph.getPointPositionsAsync()).toEqual(removed)
+
+        graph.setPointPositions(present)
+        graph.render(1, 1000)
+        expect(await select()).toEqual([0, 1, 2])
+        expect((await graph.getTrackedPointPositionsMapAsync())?.get(1)).toEqual([2004, 2048])
+        now += 1000
+        graph.renderOneFrame()
+        graph.step()
+        // The same two overlapping slots collide as soon as both are live again.
+        const after = await graph.getPointPositionsAsync()
+        expect(after[0]).toBeLessThan(present[0]!)
+        expect(after[2]).toBeGreaterThan(present[2]!)
+        expect(after.slice(4)).toEqual(present.slice(4))
+      } finally { clock.mockRestore() }
+    } finally { cleanup() }
+  })
+
+  it('keeps explicit size and color channels while fading default color channels in a sparse slot', async () => {
+    const { host, graph, cleanup } = mountedGraph({ backgroundColor: '#000', pointDefaultColor: '#f00', enableSimulation: false })
+    try {
+      await graph.ready
+      graph.setLinks(new Float32Array())
+      graph.setPointSizes(Float32Array.of(24, NaN, NaN))
+      graph.setPointColors(Float32Array.of(NaN, 0.25, 0, 1, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN))
+      graph.render(undefined, 0)
+      const canvas = host.querySelector('canvas')!
+      const copy = document.createElement('canvas')
+      copy.width = canvas.width
+      copy.height = canvas.height
+      const context = copy.getContext('2d', { willReadFrequently: true })!
+      const [x, y] = graph.spaceToScreenPosition([2000, 2048])
+      // Eight pixels from the center is inside the explicit size and outside a half-sized point.
+      const sample = (): number[] => {
+        graph.renderOneFrame()
+        context.drawImage(canvas, 0, 0)
+        return Array.from(context.getImageData(x + 8, y, 1, 1).data)
+      }
+      let now = performance.now()
+      const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+      try {
+        expect(sample()).toEqual([255, 64, 0, 255])
+        const missing = positions()
+        missing[0] = NaN
+        graph.setPointPositions(missing)
+        graph.render(undefined, 1000)
+        now += 500
+        expect(sample()).toEqual([128, 64, 0, 255])
+        now += 500
+        expect(sample()).toEqual([0, 0, 0, 255])
+      } finally { clock.mockRestore() }
+    } finally { cleanup() }
+  })
+
   it('runs standalone on a borrowed device and leaves the host usable', async () => {
     const host = new GraphSimulation(config)
     let simulation: GraphSimulation | undefined

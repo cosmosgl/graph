@@ -6,6 +6,8 @@ import { RenderKernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '../../../src/config'
 import { getRgbaColor } from '../../../src/helper'
 import type { GraphData } from '../../../src/modules/GraphData'
+import { PICKING_WINDOW_SIZE } from '../../../src/modules/Points/picking-constants'
+import { getPickingBufferSize, getPickingWindow, resolveNearestPickedPoint, type PickingWindow } from '../../../src/modules/Points/picking-utils'
 import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
 import { Points, pointStride, shadeDirection } from './modules/Points'
@@ -17,6 +19,7 @@ import common from './draw-common.wgsl?raw'
 import applePointCoordinates from './modules/Points/apple-point-coordinates.wgsl?raw'
 import shapes from './modules/Points/point-shapes.wgsl?raw'
 import points from './modules/Points/draw-points.wgsl?raw'
+import pickWindow from './modules/Points/pick-window.wgsl?raw'
 import links from './modules/Lines/draw-links.wgsl?raw'
 
 export interface GraphView {
@@ -31,6 +34,8 @@ export interface GraphView {
   hoveredLink?: number;
   /** Eased interpolation factor supplied by the Graph animation clock. */
   styleProgress?: number;
+  /** Retained position-transition source. Absent destination slots may still be visible here. */
+  previousPositions?: Buffer;
   /** Point and link width cap in CSS pixels, shared with screen-space queries. */
   maxPointSize?: number;
   /** Shared Zoom projection from normalized world positions to clip space. */
@@ -55,7 +60,7 @@ export interface GraphPick {
 
 type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
-type DrawKind = 'point' | 'link' | 'solidLink' | 'uniformRgbLink'
+type DrawKind = 'point' | 'pointerPoint' | 'link' | 'solidLink' | 'uniformRgbLink'
 type CoverageMode = 'none' | 'mark' | 'test'
 type PreviousStyles = {
   points?: Buffer; links: Buffer;
@@ -90,13 +95,33 @@ const layout: ShaderLayout = {
     { name: 'atlasSampler', type: 'sampler', samplerType: 'filtering', group: 0, location: 6 },
     { name: 'previousPoints', type: 'read-only-storage', group: 0, location: 7 },
     { name: 'previousLinks', type: 'read-only-storage', group: 0, location: 8 },
+    { name: 'previousPositions', type: 'read-only-storage', group: 0, location: 9 },
   ],
 }
 
 const pointShader = [records, common, shapes, applePointCoordinates, points].join('\n')
 const linkShader = [records, common, links].join('\n')
+const pointerShader = [`const pickWindowSize = ${PICKING_WINDOW_SIZE}.0;`, records, common, pickWindow].join('\n')
 const noColor: Rgba = [0, 0, 0, -1]
 const transparent: Rgba = [0, 0, 0, 0]
+const pickBytesPerRow = 256 // WebGPU aligns rows in a texture-to-buffer copy.
+
+/** The first nine rows encode the point window. The last row holds the link directly under the pointer. */
+function readPointerPick (bytes: Uint8Array, window: PickingWindow): GraphPick | null {
+  const unpackIndex = (offset: number): number => (bytes[offset]! | bytes[offset + 1]! << 8 | bytes[offset + 2]! << 16) - 1
+  const pixels = new Float32Array(PICKING_WINDOW_SIZE ** 2 * 4)
+  for (let y = 0; y < PICKING_WINDOW_SIZE; y++) {
+    // The shared nearest-sample rule scans bottom-up; texture copies read top-down.
+    const row = (PICKING_WINDOW_SIZE - 1 - y) * pickBytesPerRow
+    for (let x = 0; x < PICKING_WINDOW_SIZE; x++) {
+      pixels[4 * (y * PICKING_WINDOW_SIZE + x)] = unpackIndex(row + 4 * x)
+    }
+  }
+  const point = resolveNearestPickedPoint(pixels, window.centerX - window.x, window.centerY - window.y)
+  if (point) return { kind: 'point', index: point.index }
+  const linkIndex = unpackIndex(PICKING_WINDOW_SIZE * pickBytesPerRow)
+  return linkIndex < 0 ? null : { kind: 'link', index: linkIndex }
+}
 
 export class GraphRenderer {
   private uniforms!: Buffer
@@ -120,6 +145,7 @@ export class GraphRenderer {
   private revision = 0
   private isDisposed = false
   private transparentBackground: Rgba = transparent
+  private greyExitColor: Rgba = transparent
   private hoverColor: Rgba = noColor
   private hoverRing: Rgba = transparent
   private focusRing: Rgba = transparent
@@ -148,10 +174,14 @@ export class GraphRenderer {
     this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 18 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 19 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
-      this.pickTexture = device.createTexture({ id: 'cosmos-pick', width: 1, height: 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
-      this.pickFramebuffer = device.createFramebuffer({ colorAttachments: [this.pickTexture] })
+      this.pickTexture = device.createTexture({
+        id: 'cosmos-pick', width: PICKING_WINDOW_SIZE, height: PICKING_WINDOW_SIZE + 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC,
+      })
+      this.pickFramebuffer = device.createFramebuffer({
+        colorAttachments: [this.pickTexture], width: this.pickTexture.width, height: this.pickTexture.height,
+      })
     } catch (e) {
       this.destroy()
       throw e
@@ -259,25 +289,26 @@ export class GraphRenderer {
   public async pick (xCss: number, yCss: number, view: GraphView): Promise<GraphPick | null> {
     if (this.isDisposed || !this.pointCount || xCss < 0 || yCss < 0 || xCss >= view.width || yCss >= view.height) return null
     const revision = this.revision
-    const x = Math.floor(xCss * view.pixelRatio)
-    const y = Math.floor(yCss * view.pixelRatio)
+    const { width, height } = getPickingBufferSize(view.width, view.height)
+    const window = getPickingWindow(width, height, xCss, view.height - yCss, view.width, view.height)
     const framebuffer = this.pickFramebuffer
     const pass = this.device.beginRenderPass({ framebuffer, clearColor: transparent, clearDepth: false, clearStencil: false })
     // The WebGL link index is CSS-resolution and uses lower-left coordinates.
     // Integer mouse y lies on a texel boundary and selects the sample above it.
     const linkPixel: [number, number] = [Math.floor(xCss), Math.max(0, Math.ceil(yCss) - 1)]
-    try { this.encode(pass, framebuffer, view, [x, y, 1, 1], { linkPickPixel: linkPixel }) } finally { pass.end() }
-    // Each query takes its own snapshot before the next pick can overwrite the one-pixel target.
-    const staging = this.device.createBuffer({ id: 'cosmos-pick-read', byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
+    try { this.encode(pass, framebuffer, view, [window.x, window.y, width, height], { linkPickPixel: linkPixel }) } finally { pass.end() }
+    // Take one snapshot of both passes before another query can overwrite the target.
+    const staging = this.device.createBuffer({
+      id: 'cosmos-pick-read', byteLength: pickBytesPerRow * framebuffer.height, usage: Buffer.COPY_DST | Buffer.COPY_SRC,
+    })
     try {
       this.device.commandEncoder.copyTextureToBuffer({
-        sourceTexture: this.pickTexture, destinationBuffer: staging, width: 1, height: 1, bytesPerRow: 256,
+        sourceTexture: this.pickTexture, destinationBuffer: staging, width: framebuffer.width, height: framebuffer.height, bytesPerRow: pickBytesPerRow,
       })
       this.device.submit()
-      const bytes = await staging.readAsync(0, 4)
+      const bytes = await staging.readAsync()
       if (this.isDisposed || revision !== this.revision) return null
-      const id = (bytes[0] ?? 0) + (bytes[1] ?? 0) * 256 + (bytes[2] ?? 0) * 65536
-      return id ? { kind: bytes[3] === 255 ? 'point' : 'link', index: id - 1 } : null
+      return readPointerPick(bytes, window)
     } finally { staging.destroy() }
   }
 
@@ -312,8 +343,8 @@ export class GraphRenderer {
     const pointCount = data.pointsNumber ?? 0
     const background = getRgbaColor(config.backgroundColor)
     const clearColor = background[3] > 0 ? background : transparent
-    const { attributes, order, mask, colors } = this.points.pack(data, config, clearColor)
-    const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => attributes[i * pointStride + 4]!) : 0
+    const { attributes, order, mask, colors, greyExitColor } = this.points.pack(data, config, clearColor)
+    const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => data.getResolvedPointSize(i)) : 0
     const oldPointTarget = previous?.points === this.pointBuffer ? undefined : this.pointBuffer
     let pointBuffer: Buffer | undefined
     let orderBuffer: Buffer | undefined
@@ -334,6 +365,7 @@ export class GraphRenderer {
     this.pointCount = pointCount
     const [r, g, b, a] = clearColor
     this.transparentBackground = [r * a, g * a, b * a, a]
+    this.greyExitColor = greyExitColor
     this.hoverColor = config.hoveredLinkColor ? getRgbaColor(config.hoveredLinkColor) : noColor
     this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
     this.focusRing = getRgbaColor(config.focusedPointRingColor)
@@ -396,7 +428,7 @@ export class GraphRenderer {
     const key = [kind, color, depth, samples, picking, coverage].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
-      const source = kind === 'point' ? this.pointSource : this.linkSource
+      const source = kind === 'point' ? this.pointSource : kind === 'pointerPoint' ? pointerShader : this.linkSource
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
         vertexSource: source,
@@ -451,7 +483,8 @@ export class GraphRenderer {
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),
       ...(linkPickPixel ?? [0, 0]), Number(this.previous?.animatePointSizes ?? false), Number(this.previous?.animateLinkWidths ?? false),
-      ...(this.lines.uniformRgb ?? [0, 0, 0]), 0,
+      ...(this.lines.uniformRgb ?? [0, 0, 0]), view.previousPositions ? view.styleProgress ?? 1 : 1,
+      ...this.greyExitColor,
     ]))
     const bindings = {
       params: uniforms,
@@ -462,9 +495,11 @@ export class GraphRenderer {
       atlas: this.points.atlas,
       previousPoints: this.previous?.points ?? this.pointBuffer,
       previousLinks: this.previous?.links ?? this.lines.buffer,
+      previousPositions: view.previousPositions ?? position.buffer,
     }
     const pointCount = Math.min(position.pointCount, this.pointCount)
     if (options.links !== false && c.renderLinks && this.lines.count) {
+      if (linkPickPixel) pass.setParameters({ viewport: [0, PICKING_WINDOW_SIZE, 1, 1] })
       if (coverLinks) {
         this.kernel(framebuffer, 'point', false, 'mark').draw(pass, {
           vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
@@ -477,7 +512,8 @@ export class GraphRenderer {
       })
     }
     if (options.points === false) return
-    this.kernel(framebuffer, 'point', picking).draw(pass, {
+    if (linkPickPixel) pass.setParameters({ viewport: [0, 0, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE] })
+    this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking).draw(pass, {
       vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
     })
   }

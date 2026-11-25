@@ -1,4 +1,4 @@
-// Physical-pixel transforms are shared by color passes and a 1×1 pick pass.
+// The canvas and host passes use the graph projection. Link picking crops it to one CSS texel.
 struct Params {
   camera: vec4f,           // CSS translation, scale, DPR
   region: vec4f,           // top-left and size of the target in backing pixels
@@ -14,11 +14,13 @@ struct Params {
   focusRing: vec4f,
   transition: vec4f,       // eased progress, source point count, source link count, max size (CSS)
   shades: vec4f,           // stroke direction, stroke contrast, ring direction, ring contrast
-  pointViewport: vec4f,    // world origin and full CSS viewport, including during 1×1 picking
+  pointViewport: vec4f,    // world origin and full CSS viewport
   pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
   linkPickPixel: vec2f,    // top-left texel of WebGL's CSS-resolution pointer index pass
   animateSizes: vec2f,     // point size and link width channels queued for this cycle
   uniformLinkRgb: vec3f,  // shared solid-link color; opacity and width still vary per link
+  positionProgress: f32,
+  greyExitColor: vec4f,   // greyed version of the transparent black exit default
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -30,18 +32,36 @@ struct Params {
 @group(0) @binding(6) var atlasSampler: sampler;
 @group(0) @binding(7) var<storage, read> previousPoints: array<Point>;
 @group(0) @binding(8) var<storage, read> previousLinks: array<Link>;
+@group(0) @binding(9) var<storage, read> previousPositions: array<vec4f>;
 
-fn currentPoint(i: u32) -> Point {
-  let next = points[i];
-  if (params.transition.x >= 1.0) { return next; }
-  if (i >= u32(params.transition.y)) { return enterPoint(next,params.transition.x); }
-  return interpolatePoint(previousPoints[i],next,params.transition.x,params.animateSizes.x);
+// Forces, queries and picking use current absence. Only drawing blends the two states.
+fn visualPresence(i: u32, absent: f32) -> f32 {
+  if (params.positionProgress < 1.0 && i < arrayLength(&previousPositions)) {
+    return 1.0 - mix(previousPositions[i].w, absent, params.positionProgress);
+  }
+  return 1.0 - absent;
+}
+
+fn applyPresence(style: Point, presence: f32) -> Point {
+  if (presence == 1.0) { return style; }
+  var p = style;
+  let defaults = u32(p.effects.w);
+  if ((defaults & 16u) != 0u) { p.metrics.x *= presence; }
+  let exitColor = select(vec4f(0), params.greyExitColor, p.effects.y > 0.0);
+  let usesDefault = (vec4u(defaults) & vec4u(1, 2, 4, 8)) != vec4u(0);
+  p.color = select(p.color, mix(exitColor, p.color, presence), usesDefault);
+  return p;
+}
+
+fn currentPoint(i: u32, presence: f32) -> Point {
+  let next = applyPresence(points[i], presence);
+  if (params.transition.x >= 1.0 || i >= u32(params.transition.y)) { return next; }
+  return interpolatePoint(applyPresence(previousPoints[i], presence),next,params.transition.x,params.animateSizes.x);
 }
 
 fn currentLink(i: u32) -> Link {
   let next = links[i];
-  if (params.transition.x >= 1.0) { return next; }
-  if (i >= u32(params.transition.z)) { return enterLink(next,params.transition.x); }
+  if (params.transition.x >= 1.0 || i >= u32(params.transition.z)) { return next; }
   return interpolateLink(previousLinks[i],next,params.transition.x,params.animateSizes.y);
 }
 

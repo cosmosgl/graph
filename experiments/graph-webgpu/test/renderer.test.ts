@@ -98,6 +98,39 @@ it('draws live GPU positions, preserves overlap order and picks a curved stroke 
   } finally { scene.destroy() }
 })
 
+it('uses the nearest occupied circle sample for pointer picks before considering the link under the cursor', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { view, data, renderer, positions } = scene
+  try {
+    config.curvedLinks = false
+    data.inputPointSizes = Float32Array.of(16, 4, 16)
+    data.update()
+    renderer.update()
+    for (const pixelRatio of [1, 2]) {
+      const camera = { ...view, pixelRatio }
+      // Both overlapping points end at x=24. Their pick window still reaches the link at x=30.
+      expect(await renderer.pick(30, 32, camera)).toEqual({ kind: 'point', index: 2 })
+      expect(await renderer.pick(38, 32, camera)).toEqual({ kind: 'link', index: 0 })
+    }
+    data.inputPointRenderOrder = [0]
+    data.updatePointRenderOrder()
+    renderer.update()
+    expect(await renderer.pick(30, 32, view)).toEqual({ kind: 'point', index: 0 })
+
+    // Two tiny points compete in one window. Nearer samples win, then the lower-left scan order breaks ties.
+    positions.write(Float32Array.of(60, 37, 0, 0, 60, 27, 0, 0, 0, 0, 0, 1))
+    data.inputPointSizes = Float32Array.of(1, 1, 1)
+    data.inputPointColors = new Float32Array(12) // Pointer circles follow the target size, even with transparent paint.
+    data.update()
+    renderer.update()
+    expect(await renderer.pick(60, 30, view)).toEqual({ kind: 'point', index: 0 })
+    expect(await renderer.pick(60, 32, view)).toEqual({ kind: 'point', index: 1 })
+    expect(await renderer.pick(60, 34, view)).toEqual({ kind: 'point', index: 1 })
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
 it('keeps the displayed scene usable when replacing the image atlas fails', async () => {
   const config = createDefaultConfig()
   const scene = await createScene(config)

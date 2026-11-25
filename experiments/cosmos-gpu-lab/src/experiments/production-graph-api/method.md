@@ -20,6 +20,10 @@ Open [Remove and restore a point](#/production-graph-api?section=try-sparse-tran
 
 The replay samples the start, midpoint and end of each one-second transition. The last two frames repeat removal and restoration with duration zero. Changing the pixel ratio reruns both packages. The browser test uses the same replay, compares every RGBA pixel and checks that the surviving points keep their coordinates and click IDs.
 
+On M3, the original WebGPU removal differed from WebGL at 630 pixels halfway through the fade at 1× and 2,506 pixels at 2×. After the fix, all nine canvases at each ratio matched exactly. At the midpoint the outgoing point was 12 CSS pixels wide, the link was half as bright, and both clicks returned background. Halfway through restoration the center had moved 16 CSS pixels. A click at its destination, another 16 pixels away, already returned point 1 in both packages.
+
+The unchanged **Add & Remove Points** story also exercises grow and fade, opacity, recolor and instant edits. On M3 the changing point’s interior matched at all 28 checkpoints at each ratio. Across the full story canvas, 17–25 pixels at 1× and 32–41 at 2× differed by one channel level. The initial frames already differed at 25 and 41 pixels respectively. A separate paired regression checks a newly appended point and link with explicit styles, including the story’s two-stage addition.
+
 ### Moving YouTube graph
 
 The paired M3 replay uses both built packages and reports readback, highlight updates and label redraw separately. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
