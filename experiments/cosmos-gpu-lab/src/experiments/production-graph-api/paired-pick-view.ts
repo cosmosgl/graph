@@ -2,18 +2,20 @@ import { comparePixels } from '../../runtime/compare-pixels'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { Engine } from './frame'
 
-type PickFrame<K extends string> = {
+type PickFrame<K extends string, R> = {
   key: string;
   title: string;
   pixels: ImageData;
   picks: Record<K, string>;
   detail?: string;
+  results?: R;
 }
 
-export function createPairedPickView<K extends string> (host: HTMLElement, settings: {
+export function createPairedPickView<K extends string, R> (host: HTMLElement, settings: {
   probes: Record<K, string>;
   initial?: string;
-  run(engine: Engine, ratio: 1 | 2): Promise<PickFrame<K>[]>;
+  run(engine: Engine, ratio: 1 | 2): Promise<PickFrame<K, R>[]>;
+  renderResults?(results: readonly (R | undefined)[]): HTMLElement;
 }): ExperimentInstance {
   host.innerHTML = `<div class="controls">
     <label>Pixel ratio <select data-ratio><option value="1">1×</option><option value="2">2×</option></select></label>
@@ -28,6 +30,8 @@ export function createPairedPickView<K extends string> (host: HTMLElement, setti
   const replayButton = host.querySelector<HTMLButtonElement>('[data-replay]')!
   const status = host.querySelector<HTMLElement>('[role="status"]')!
   const rows = host.querySelector('tbody')!
+  const frameResults = document.createElement('div')
+  if (settings.renderResults) rows.closest('table')!.before(frameResults)
   const panels = host.querySelector('.viewer-comparison-panels')!
   const lanes = (['webgl', 'webgpu'] as const).map(engine => {
     const panel = document.createElement('section')
@@ -39,7 +43,7 @@ export function createPairedPickView<K extends string> (host: HTMLElement, setti
     const message = document.createElement('p')
     panel.append(title, canvas, message)
     panels.append(panel)
-    return { engine, canvas, message, samples: [] as PickFrame<K>[] }
+    return { engine, canvas, message, samples: [] as PickFrame<K, R>[] }
   })
   let disposed = false
 
@@ -56,6 +60,7 @@ export function createPairedPickView<K extends string> (host: HTMLElement, setti
       lanes[i]!.message.textContent = sample.detail ?? ''
     }
     rows.replaceChildren()
+    if (settings.renderResults) frameResults.replaceChildren(settings.renderResults(samples.map(sample => sample?.results)))
     for (const key of Object.keys(settings.probes) as K[]) {
       const row = rows.insertRow()
       const heading = document.createElement('th')
@@ -73,6 +78,7 @@ export function createPairedPickView<K extends string> (host: HTMLElement, setti
     const selected = frame.value
     ratio.disabled = frame.disabled = replayButton.disabled = true
     rows.replaceChildren()
+    frameResults.replaceChildren()
     status.textContent = 'Capturing frames and click results from both packages…'
     for (const lane of lanes) {
       lane.canvas.hidden = true

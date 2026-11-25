@@ -6,9 +6,9 @@ import type { CaseReadiness } from './types'
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'production-graph-api/point-style-updates': {
-    badge: 'Edge picks follow point size',
+    badge: 'Area selection matches',
     tone: 'pass',
-    finding: 'The WebGPU hit stayed with the displayed point through an interruption. Resizing and recoloring preserved resident link records.',
+    finding: 'Both packages use the target diameter for rectangles and the point center for lassos. WebGPU clicks follow the displayed diameter.',
     area: 'Integration',
     status: 'Eight frames checked on M3 at 1× and 2×',
     evidence: [
@@ -16,8 +16,9 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'Zero link-record uploads in all four WebGPU edits on the 8,192-link control' },
       { tone: 'pass', text: 'At 24 CSS px the inner probe hit point 0 and the outer probe missed, both before and after the restart' },
       { tone: 'info', text: 'WebGL reported its last hit throughout the active size transition' },
+      { tone: 'pass', text: 'All 128 paired area results matched. The rectangle added point 0 as soon as the larger target was set.' },
     ],
-    next: 'Check rectangle and lasso selection during size transitions.',
+    next: 'Repeat the interrupted-size comparison on another supported adapter.',
   },
   'production-graph-api/headless-trackers': {
     badge: 'Both trackers match',
@@ -42,7 +43,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: '82 click results matched, including clicks near the returning point' },
       { tone: 'pass', text: 'Both surviving slots kept their coordinates and IDs' },
     ],
-    next: 'Check area selection while point sizes change.',
+    next: 'Check area selection of the removed slot during its fade and after restoration.',
   },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',

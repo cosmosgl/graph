@@ -5,17 +5,19 @@ import type { Engine } from './frame'
 export type PointStyleSample = {
   phase: string;
   pixels: ImageData;
+  requestedSize: number;
   size: number;
   pointSpan: number;
   pointRgb: number[];
   linkRgb: number[];
   picks: { center: string; edge: string; outerEdge: string; link: string; control: string };
+  selections: { offset: number; rectangle: number[]; lasso: number[] }[];
 }
 
 const width = 224
 const height = 160
 
-/** Replay point-only setters on the same fixed graph using each package's public draw and click paths. */
+/** Replay point-only setters using each package's public draw, click and area-selection paths. */
 export async function runPointStyleUpdates (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: PointStyleSample[] }> {
   const frame = document.createElement('iframe')
   frame.title = `${engine} point styles`
@@ -105,7 +107,27 @@ export async function runPointStyleUpdates (engine: Engine, ratio: 1 | 2): Promi
           link: await click(112, 48),
           control: await click(48, 112),
         }
-        samples.push({ phase, pixels, size: graph.getPointRadiusByIndex(0)!, pointSpan, pointRgb: rgb(48, 48), linkRgb: rgb(112, 48), picks })
+        const selections: PointStyleSample['selections'] = []
+        // Both regions contain point 2. Their top edges straddle point 0's center
+        // and the radii reached during shrinking (12 px) and regrowth (16 px).
+        for (const offset of [-8, 10, 14, 18]) {
+          const top = 48 + offset
+          const rectangle = await graph.findPointsInRectAsync([[36, top], [60, 120]])
+          const lasso = await graph.findPointsInPolygonAsync([[36, top], [60, top], [68, 120], [28, 120]])
+          if (rectangle === null || lasso === null) throw new Error(`${engine} could not read area selection at ${offset} px during ${phase}`)
+          selections.push({ offset, rectangle, lasso })
+        }
+        samples.push({
+          phase,
+          pixels,
+          requestedSize: sizes[0]!,
+          size: graph.getPointRadiusByIndex(0)!,
+          pointSpan,
+          pointRgb: rgb(48, 48),
+          linkRgb: rgb(112, 48),
+          picks,
+          selections,
+        })
       }
       await sample('Initial')
       setColor(0, 0, 1); graph.render(undefined, 0)

@@ -8,7 +8,7 @@ async function digest (image: ImageData): Promise<string> {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-it.each([1, 2] as const)('draws and picks point-only color and size edits around an interruption at %i×', async ratio => {
+it.each([1, 2] as const)('draws, picks and selects point-only color and size edits around an interruption at %i×', async ratio => {
   const gl = await runPointStyleUpdates('webgl', ratio)
   const gpu = await runPointStyleUpdates('webgpu', ratio)
   const rows = await Promise.all(gl.samples.map(async ({ pixels, ...webgl }, i) => {
@@ -36,12 +36,14 @@ it.each([1, 2] as const)('draws and picks point-only color and size edits around
     webgpu: [red, blue, blue, blue, purple, purple, [191, 128, 191], white],
   }
   const expectedSizes = { webgl: [8, 8, 40, 40, 24, 8, 24, 40], webgpu: [8, 8, 40, 40, 24, 24, 32, 40] }
+  const requestedSizes = [8, 8, 40, 8, 8, 40, 40, 40]
   expect(rows).toHaveLength(8)
   for (const [i, row] of rows.entries()) {
     expect(row.webgpu.phase).toBe(row.webgl.phase)
     for (const engine of ['webgl', 'webgpu'] as const) {
       const sample = row[engine]
       const label = `${engine} · ${sample.phase}`
+      expect.soft(sample.requestedSize, label).toBe(requestedSizes[i])
       expect.soft(sample.size, label).toBe(expectedSizes[engine][i])
       expect.soft(sample.pointSpan, label).toBe(sample.size * ratio)
       expect.soft(sample.pointRgb, label).toEqual(expectedColors[engine][i])
@@ -56,6 +58,13 @@ it.each([1, 2] as const)('draws and picks point-only color and size edits around
       expect.soft(sample.picks, label).toEqual(held
         ? { center: 'Point 2', edge: 'Point 2', outerEdge: 'Point 2', link: 'Point 2', control: 'Point 2' }
         : { center: 'Point 0', edge, outerEdge, link: 'Link 0', control: 'Point 2' })
+      // Rectangles intersect the requested footprint. Lassos include centers only.
+      // Point 2 is inside every query and points 1 and 3 are always outside.
+      expect.soft(sample.selections, label).toEqual([-8, 10, 14, 18].map(offset => ({
+        offset,
+        rectangle: offset <= requestedSizes[i]! / 2 ? [0, 2] : [2],
+        lasso: offset < 0 ? [0, 2] : [2],
+      })))
       // The gradient reads its current endpoint colors even while the point paint interpolates.
       const endpoint = [red, blue, blue, red, red, white, white, white][i]!
       const green = [0, 255, 0]

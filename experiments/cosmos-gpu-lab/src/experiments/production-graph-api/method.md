@@ -48,6 +48,16 @@ The two edge probes are 20 and 22 CSS pixels below point 0’s center. The stand
 
 WebGL holds its last hit throughout a size transition. Here, point 2 was the last control clicked before the animation. The old WebGPU build missed both edge probes just before the restart, then hit both as soon as it received the larger target. Fixing the pointer changed eight edge-click results across both ratios. All 32 package frame captures kept their previous RGBA hashes.
 
+At the same checkpoints, the replay queries a rectangle and a trapezoidal lasso. Each extends down to include point 2. Their top edges start 10, 14 or 18 CSS pixels below point 0’s center. Both packages returned these exact ordered IDs at both pixel ratios.
+
+| Checkpoint | Painted diameter, WebGL / WebGPU | Target diameter | Rectangle at all three offsets | Lasso at all three offsets |
+| --- | --- | --- | --- | --- |
+| Just before interruption | 24 / 24 px | 8 px | `[2]` | `[2]` |
+| First frame after interruption | 8 / 24 px | 40 px | `[0, 2]` | `[2]` |
+| Halfway through regrowth | 24 / 32 px | 40 px | `[0, 2]` | `[2]` |
+
+The rectangle expands its bounds by half the target diameter. At 10 px it can miss a point whose paint reaches into the rectangle. When the target grows, it can select the point before the paint reaches 18 px. The lasso checks the center. Moving the top edge 8 px above the center gave `[0, 2]` for both tools at every checkpoint. All 128 paired results matched across eight checkpoints, four offsets, two tools and two pixel ratios.
+
 Across packages, five of eight M3 frames matched every RGBA byte at each pixel ratio. Halfway through shrinking, 16 pixels at 1× and 32 at 2× differed by one channel level. The other two frames show the different restart sizes and colors. The endpoint gradient and the control link matched throughout. The regrowth midpoint also exercises a 32-pixel circle at a tile boundary. [Tile-origin control](#/production-points?section=doc-results)
 
 On the 4,096-point, 8,192-link WebGPU fixture, each of the four point edits previously uploaded 262,144 bytes of link records and 16,384 bytes of point draw order. Immediate color, immediate size, animated color and size, and interrupted color and size now upload zero bytes to either buffer. Color-only point data used 81,928 bytes, size-only used 49,160, and combined edits used 131,080. A restarted point transition also uploaded 32 bytes of interpolation parameters.

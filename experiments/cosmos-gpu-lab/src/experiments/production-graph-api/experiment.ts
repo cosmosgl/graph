@@ -43,9 +43,10 @@ export const experiment = defineExperiment({
     title: 'Change only point colors and sizes',
     kind: 'compare',
     question: 'What happens to a point and its link when a color or size change interrupts a transition?',
-    description: 'Compare the drawn frames and click IDs as point colors and sizes change. The link takes its color from its endpoints.',
-    reference: 'Both standalone Graph packages receive the same edits, clicks and transition times.',
-    acceptance: 'WebGPU picks at the displayed point size, including the first frame after a restart. WebGL reports its last hit during size transitions.',
+    description: 'Compare the drawn point, its endpoint-colored link, clicks and selected IDs as the point shrinks and regrows.',
+    reference: 'Both Graph packages receive the same edits, clicks, rectangles and lasso paths at the same transition times.',
+    acceptance: 'WebGPU clicks follow the displayed size. WebGL holds its last hit during the transition. ' +
+      'Both packages must return the expected rectangle and lasso IDs at each checkpoint.',
     recorded: null,
   }, {
     id: 'headless-trackers',
