@@ -3,9 +3,9 @@
 precision highp float;
 #endif
 
-uniform sampler2D positionsTexture;
-uniform sampler2D polygonPathTexture; // Texture containing polygon path points
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D polygonPathTexture; // Texture containing polygon path points
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform findPointsInPolygonUniforms {
@@ -29,7 +29,7 @@ uniform mat3 transformationMatrix;
 out vec4 fragColor;
 
 // Get a point from the polygon path texture at a specific index
-vec2 getPolygonPoint(sampler2D pathTexture, int index, int pathLength) {
+vec2 getPolygonPoint(highp sampler2D pathTexture, int index, int pathLength) {
   if (index >= pathLength) return vec2(0.0);
 
   // The path is written row-major into a square texture. Ask the texture how wide it
@@ -43,7 +43,7 @@ vec2 getPolygonPoint(sampler2D pathTexture, int index, int pathLength) {
 }
 
 // Point-in-polygon algorithm using ray casting
-bool pointInPolygon(vec2 point, sampler2D pathTexture, int pathLength) {
+bool pointInPolygon(vec2 point, highp sampler2D pathTexture, int pathLength) {
   bool inside = false;
   
   for (int i = 0; i < 2048; i++) {

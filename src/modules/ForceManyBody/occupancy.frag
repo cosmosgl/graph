@@ -14,7 +14,7 @@ precision highp int;
 // defined from index.ts at the marker above, and its doublings. One pass over 512² cells into 16² blocks is
 // 1024 fetches per fragment, well under a tenth of a millisecond.
 
-uniform sampler2D levelTexture;
+uniform highp sampler2D levelTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform occupancyUniforms {

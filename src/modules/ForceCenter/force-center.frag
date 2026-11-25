@@ -1,8 +1,8 @@
 #version 300 es
 precision highp float;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D centermassTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D centermassTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCenterUniforms {

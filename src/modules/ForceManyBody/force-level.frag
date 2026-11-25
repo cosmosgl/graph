@@ -15,8 +15,8 @@ precision highp float;
 // tick so the boundaries where that split changes never stay on one line
 // (ForceManyBody's class doc).
 
-uniform sampler2D positionsTexture;
-uniform sampler2D levelTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D levelTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceLevelPreciseUniforms {

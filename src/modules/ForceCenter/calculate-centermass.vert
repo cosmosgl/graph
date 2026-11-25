@@ -1,8 +1,8 @@
 #version 300 es
 precision highp float;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D exitTexture;
 
 in vec2 pointIndices;
 

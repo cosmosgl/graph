@@ -21,9 +21,9 @@ precision highp int;
 // breaks clumps apart. The point itself is excluded from both the sample and
 // the count.
 
-uniform sampler2D positionsTexture;
-uniform sampler2D levelTexture;
-uniform sampler2D randomValues;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D levelTexture;
+uniform highp sampler2D randomValues;
 // The near-field slots live in two array textures (one layer per depth-peeling
 // pass), so the slot count is a runtime uniform instead of a hard-wired list
 // of sampler2Ds: even slots in one array, odd slots in the other, slot s at

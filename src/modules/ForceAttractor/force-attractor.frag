@@ -1,10 +1,10 @@
 #version 300 es
 precision highp float;
 
-uniform sampler2D positionsTexture;
+uniform highp sampler2D positionsTexture;
 // Per point: (targetX, targetY, strength, hasTarget). `hasTarget` is 0 for a point
 // without an attractor, so the pass writes zero velocity for it.
-uniform sampler2D attractorTexture;
+uniform highp sampler2D attractorTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceAttractorUniforms {

@@ -1,7 +1,7 @@
 #version 300 es
 precision highp float;
 
-uniform sampler2D positionsTexture;
+uniform highp sampler2D positionsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceGravityUniforms {

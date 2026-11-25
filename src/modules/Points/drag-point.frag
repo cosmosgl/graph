@@ -3,7 +3,7 @@
 precision highp float;
 #endif
 
-uniform sampler2D positionsTexture;
+uniform highp sampler2D positionsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform dragPointUniforms {

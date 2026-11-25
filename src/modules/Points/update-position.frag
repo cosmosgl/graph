@@ -1,12 +1,14 @@
 #version 300 es
 #ifdef GL_ES
 precision highp float;
+// isFiniteVector reads the exponent bits of a 32-bit float.
+precision highp int;
 #endif
 
-uniform sampler2D positionsTexture;
-uniform sampler2D velocity;
-uniform sampler2D pinnedStatusTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D velocity;
+uniform highp sampler2D pinnedStatusTexture;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform updatePositionUniforms {

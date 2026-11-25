@@ -23,9 +23,9 @@ precision highp int;
 // deep pile unwinds over a few passes instead of flinging apart.
 // `collisionStrength` is the relaxation factor (1 = full projection per pass).
 
-uniform sampler2D positionsTexture;
-uniform sampler2D sizeTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D sizeTexture;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCollisionAllPairsUniforms {

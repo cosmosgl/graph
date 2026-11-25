@@ -9,7 +9,7 @@ precision highp int;
 // one, so the final pass's single fragment reads a handful of texels instead of
 // every partial box in sequence.
 
-uniform sampler2D partialsTexture;
+uniform highp sampler2D partialsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform reduceBoundsBlocksUniforms {

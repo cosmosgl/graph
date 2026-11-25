@@ -7,8 +7,8 @@ in vec2 pointA;
 in vec2 pointB;
 in float linkIndices;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillSampledLinksUniforms {

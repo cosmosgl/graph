@@ -12,10 +12,10 @@ in float arrow;
 in float linkIndices;
 in float linkStyle;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D linkStatus;
-uniform sampler2D exitTexture;
-uniform sampler2D pointColorsTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D linkStatus;
+uniform highp sampler2D exitTexture;
+uniform highp sampler2D pointColorsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
