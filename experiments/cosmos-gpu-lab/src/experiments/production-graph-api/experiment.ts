@@ -3,7 +3,7 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare manual stepping, point removal, moving selection and tracked labels through the two built Cosmos packages.',
+  summary: 'Compare manual stepping, point removal, hover, moving selection and tracked labels through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
@@ -29,10 +29,21 @@ export const experiment = defineExperiment({
     reference: 'Identical position edits and clicks in the workspace WebGL Graph.',
     acceptance: 'The point and its link follow the reference fade and click behavior. The other two points keep their positions and IDs.',
     recorded: null,
+  }, {
+    id: 'stationary-hover',
+    title: 'Hover under a stationary pointer',
+    kind: 'compare',
+    question: 'Which point gets the hover ring when the graph moves under a parked pointer?',
+    description: 'Move points and zoom the camera with a fixed cursor. Inspect the rendered ring and the callbacks in each package.',
+    reference: 'The WebGL Graph receives the same point updates, camera changes and pointer events.',
+    acceptance: 'Both packages report the same point IDs and callback order. The ring follows the hovered point and clears when the pointer leaves.',
+    recorded: null,
   }],
-  create: async (host, caseId) => caseId === 'sparse-transition'
-    ? (await import('./sparse-view')).createSparseView(host)
-    : (await import('./view')).createPackageView(host),
+  create: async (host, caseId) => {
+    if (caseId === 'sparse-transition') return (await import('./sparse-view')).createSparseView(host)
+    if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
+    return (await import('./view')).createPackageView(host)
+  },
   pages: [{
     kind: 'markdown',
     id: 'method',

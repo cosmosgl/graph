@@ -16,7 +16,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: '82 click results matched, including clicks near the returning point' },
       { tone: 'pass', text: 'Both surviving slots kept their coordinates and IDs' },
     ],
-    next: 'Check hover changes when the pointer stays still as a point moves past it.',
+    next: 'Check area selection while point sizes change.',
+  },
+  'production-graph-api/stationary-hover': {
+    badge: 'Hover matches',
+    tone: 'pass',
+    finding: 'Each package moved the ring to the point beneath the parked cursor and cleared it when the point or cursor left.',
+    area: 'Integration',
+    status: 'Verified on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All nine canvases at each pixel ratio matched every RGBA byte' },
+      { tone: 'pass', text: 'Seven hover callbacks in the same order from one mouse movement' },
+    ],
+    next: 'Check hover ownership when moving curves, translucent images and points overlap.',
   },
   'combined-layout/layout-comparison': {
     badge: 'Costly gravity',

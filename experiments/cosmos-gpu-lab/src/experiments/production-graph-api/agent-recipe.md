@@ -6,6 +6,20 @@ For the separate sparse point replay, build both distributions as shown below, t
 LAB_ARTIFACT_RUN=sparse-removal-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
 ```
 
+## Stationary hover
+
+Build both standalone Graph distributions from the repository root. Run the native Chrome comparison with a fresh capture name each time.
+
+```sh
+pnpm run build
+pnpm --filter @cosmos.gl/graph-webgpu build
+LAB_ARTIFACT_RUN=stationary-hover-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/stationary-hover.test.ts src/experiments/production-graph-api/sparse-transition.test.ts
+```
+
+The two hover JSON files record the runtime adapter, callback history, mouse-move count, ring coverage around the cursor and RGBA differences for each paired frame. The WebGL control and candidate each run in their own frame at 192 × 128 CSS pixels. The replay sends one pointer move, then uses position setters and the public zoom method. The candidate's input suite separately delays a real GPU pick and drives one gravity step.
+
+The original M3 run is in `captures/stationary-hover-baseline-28481d58`. The verified build is in `captures/stationary-hover-release-kwpH3R`. The neighboring `stationary-hover-kwpH3R/provenance.json` identifies both standalone builds and the source archive (SHA-256 `4b306871085e5d94049629dc8be43f68644787e6dd5e10bb75f629f8c53997e9`).
+
 ## Moving YouTube selection and labels
 
 Run from the repository root with native Chrome available. To prepare the fixture once, place the original SNAP archive at `experiments/cosmos-gpu-lab/captures/fixtures/com-youtube.ungraph.txt.gz` and run the first command below. The driver checks the prepared fixture's known digest and verifies that the frozen site contains it and both locally built standalone distributions. [YouTube fixture and source archive](../million-graph/production-envelope.md#workloads)

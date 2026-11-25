@@ -1,0 +1,16 @@
+.stationary-hover-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(192px, 100%), 1fr));
+  gap: var(--space-4);
+  max-width: 440px;
+}
+.stationary-hover-panels section { min-width: 0; }
+.stationary-hover-panels h3 { margin: 0 0 var(--space-2); font-size: var(--type-subsection); }
+.stationary-hover-panels p { margin: .35rem 0; font-size: var(--type-meta); }
+.stationary-hover-surface { position: relative; width: fit-content; max-width: 100%; }
+.stationary-hover-surface[data-loading] { visibility: hidden; }
+.stationary-hover-surface canvas { display: block; max-width: 100%; height: auto; }
+.stationary-hover-surface::before,
+.stationary-hover-surface::after { content: ''; position: absolute; background: white; pointer-events: none; }
+.stationary-hover-surface::before { left: var(--pointer-x); top: 0; width: 1px; height: 6px; }
+.stationary-hover-surface::after { left: 0; top: var(--pointer-y); width: 6px; height: 1px; }

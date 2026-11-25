@@ -24,6 +24,14 @@ On M3, the original WebGPU removal differed from WebGL at 630 pixels halfway thr
 
 The unchanged **Add & Remove Points** story also exercises grow and fade, opacity, recolor and instant edits. On M3 the changing point’s interior matched at all 28 checkpoints at each ratio. Across the full story canvas, 17–25 pixels at 1× and 32–41 at 2× differed by one channel level. The initial frames already differed at 25 and 41 pixels respectively. A separate paired regression checks a newly appended point and link with explicit styles, including the story’s two-stage addition.
 
+### Hover under a stationary cursor
+
+Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.
+
+WebGL reports `over 0` when point 0 arrives. Holding the same point produces no further event. A direct handoff to point 1 reports `over 1`, and moving it away reports `out 1`. Across all nine checkpoints the application receives exactly one mouse-move callback. A separate WebGPU regression holds a real GPU pick while points change, then checks the latest point, a gravity step and a pointer that leaves before a read finishes.
+
+On M3, the original candidate missed all seven hover callbacks at each pixel ratio. Refreshing the pick recovered the callbacks, but the ring still appeared wider and brighter. WebGL draws hover and focus over the point sprites and gives the hover ring 70% opacity. With that drawing rule, both packages matched every RGBA byte in all nine paired frames at 1× and all nine at 2×.
+
 ### Moving YouTube graph
 
 The paired M3 replay uses both built packages and reports readback, highlight updates and label redraw separately. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
