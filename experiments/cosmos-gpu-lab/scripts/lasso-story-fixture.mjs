@@ -36,3 +36,20 @@ export async function installLassoFixture(page) {
     })
   })
 }
+
+// Serve the frozen package as a classic script. All Graph imports in the story,
+// including helpers that only use enums, must share its luma instance.
+export async function installLassoPackage(page, bundle) {
+  const scriptUrl = '/__lab_lasso_' + bundle.sha256 + '.js'
+  await page.route('**' + scriptUrl, route => route.fulfill({ path: bundle.file, contentType: 'text/javascript' }))
+  await page.route(/^https?:\/\/[^/]+\/(?:experiments\/graph-webgpu\/)?src\/index\.ts(?:\?|$)/, async route => {
+    if (new URL(route.request().url()).searchParams.has('raw')) return route.fallback()
+    await route.fulfill({ contentType: 'text/javascript', body: `
+      await (window.lassoPackageReady ??= new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.onload = resolve; script.onerror = () => reject(new Error('Standalone package failed to load'));
+        script.src = ${JSON.stringify(scriptUrl)}; document.head.append(script);
+      }));
+      export const { Graph, GraphSimulation, PointShape, LinkStyle, getRgbaColor, defaultConfigValues } = window.Cosmos;` })
+  })
+}

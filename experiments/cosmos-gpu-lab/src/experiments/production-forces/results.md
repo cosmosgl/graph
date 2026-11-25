@@ -72,6 +72,27 @@ Startup was more expensive on all three builds. The first manual simulation step
 
 One foreground graph ran at a time in Chrome 158 at 680 × 536 and DPR 1. Each expansion and settled row pools 72 samples. The manual timer starts before the Graph call and stops when the browser observes GPU completion. The empty-fence median was 0.6 ms on WebGL and 0.1 ms on corrected WebGPU. Each combined frame has one completion wait. The automatic interval measures the story's simulation callbacks. The driver `scripts/lasso-story-timing.mjs` seeds the inputs only in its own benchmark pages.
 
+### Where the first WebGPU step spends time
+
+The earlier 7.4 to 14.4 ms increase reproduced at **7.1 to 12.1 ms** across five fresh M3 graphs per build. The old tree spent 0.33 ms building its grid and 0.39 ms traversing it. The shimmer-corrected force spent 0.52 ms constructing the grid, 0.46 ms sampling and applying near-field repulsion, and 0.66 ms applying far-field repulsion. Most of the increase came before those dispatches could complete on their first use.
+
+Preparing just the corrected grid's six construction pipelines before starting the timer brought the first step from 12.1 to **8.3 ms**. Preparing just the near-field pipelines brought it to 9.8 ms, and just the far-field pipeline to 11.0 ms. The three controls share shader modules and driver caches, so their savings overlap.
+
+The optimized force uses six repulsion pipelines in place of nine. Each occupied leaf now picks its near-field samples while reading its point list and clears its accumulators for the next tick. The final centroid division reuses the grid merge pipeline. At 22,500 points and 16 samples, the near-field slot buffer fell from 16 MiB to 1.37 MiB. The grid still fits its bounding box in a separate single-invocation pass. Combining that pass with the grid clear caused coordinate drift starting at tick 3 on M3.
+
+| First step in ms, median of nine fresh graphs per build | Shimmer-corrected WebGPU | Optimized WebGPU |
+| --- | ---: | ---: |
+| Step through GPU queue completion, normal compute pass | 13.2 | 11.3 |
+| GPU grid construction, including bounds | 0.52 | 0.33 |
+| GPU near-field repulsion | 0.46 | 0.13 |
+| GPU far-field repulsion | 0.85 | 0.59 |
+
+The first row uses a separate plain trial. The other rows use GPU timestamp queries on phase boundaries. Selecting the nearby sample IDs is now part of the leaf pass and is included in grid construction. The near-field row now times applying the selected pair forces. The far-field shader computes the same force as before. Its measured duration varied between runs.
+
+The independent three-block timing run used ordinary package calls and one foreground graph at a time. Its first-step medians were **23.4 ms on WebGL**, **12.2 ms on the previous grid** and **11.1 ms on the optimized grid**. Across 72 settled samples per engine, step and draw together took 5.0 ms, 1.8 ms and 1.5 ms respectively. The tree's earlier 7.4 ms first step used a different near-field approximation.
+
+The automatic Storybook replay returned the same float32 positions for every one of the 22,500 IDs in the previous and optimized WebGPU packages at all 13 checkpoints through tick 248. Their captured images at ticks 1, 60 and 240 were byte-identical. The first-step 90% radius was 3,265.6381 on WebGL and 3,265.6425 on WebGPU. Across ticks 240–248 the RMS movement per tick within the 25 color groups was 0.04383 on WebGL and 0.04374 on both WebGPU builds. The shared Storybook still generates a fresh layout when opened normally.
+
 ## Native runtime at 8,192 slots
 
 The following timings are from the earlier WebGPU tree approximation. The same public application used one manual step, one paused draw and one awaited full position readback per sample. Visible Chrome ran a single Graph at a time on the M3. Each trial used a fresh graph, four warm-up updates and 24 timed updates at ticks 5 through 28.

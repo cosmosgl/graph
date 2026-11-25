@@ -52,6 +52,41 @@ For the corrected WebGPU package a separate trial switches off repulsion after t
 
 The reported run is `captures/lasso-timing-mGOTOJ/`. To reproduce it locally, pass the archived `webgl.js`, `webgpu.js` and `before.js` to `--webgl-bundle`, `--webgpu-bundle` and `--before-bundle`, respectively. The corresponding position-parity replay from the restored story sources is in `captures/lasso-story-2026-11-24T20-08-31-054Z/`.
 
+### Attribute the first WebGPU step
+
+Run the WebGPU Storybook on a native M3 with the foreground GPU free. From the repository root, reproduce the five-block comparison with the two WebGPU bundles saved by the original timing run.
+
+```sh
+captures=experiments/cosmos-gpu-lab/captures
+node experiments/cosmos-gpu-lab/scripts/lasso-first-step.mjs \
+  --bundle "$captures/lasso-timing-mGOTOJ/webgpu.js" \
+  --before-bundle "$captures/lasso-timing-mGOTOJ/before.js" --rounds 5
+```
+
+Use `--url` for another Storybook port. Each trial opens a fresh 680 × 536 page at DPR 1, loads one standalone bundle, pauses the seeded 22,500-point graph and completes the initial draw before starting. The driver times `graph.step()` through JavaScript return and GPU queue completion. Full XY snapshots after both steps must match the same bundle's control byte for byte. Each block alternates the package order and rotates the order of the controls. The discovery pages in block 0 supply kernel descriptors and are excluded from the reported medians.
+
+The timestamp run adds native compute-pass boundaries between grid construction (including bounds), distant-cell forces and nearby-point sampling. It preserves dispatch order and records the entries in each interval. Chrome quantizes timestamps, and splitting the pass can affect scheduling. Use the plain run for total latency. GPU timestamps cover shader execution. The JavaScript durations on native resource and pipeline calls cover synchronous API work. Pipeline readiness can extend beyond the return of a native call.
+
+The preparation controls recreate the exact modules and pipelines for one phase or all phases on the trial's own device. They await `createComputePipelineAsync` before tick 1 and reuse the prepared objects during the real step. `prepareMs` records what happened before the timer. Compare the remaining first-step time with the plain control. Shared shader modules and driver caches can benefit more than one phase, so individual savings overlap. The control identifies a startup cost, and the ordinary three-package timing run checks whether a production change actually removes it.
+
+The five-block pre-optimization capture is `captures/lasso-first-step-KRtyxI/`. It includes the source archive, bundle digests, Chrome version, reported adapter, resource calls, timestamp intervals, queue-complete times and position hashes. The archived `candidate.js` is the original shimmer-corrected grid and `reference.js` is its predecessor's tree. Pass those paths to the two bundle options above to reproduce that run.
+
+To repeat the optimization comparison, start the same two Storybooks and run each command separately. The older grid has a first-step radius of 3,265.6425. The profiler and timing driver archive each package they load.
+
+```sh
+captures=experiments/cosmos-gpu-lab/captures
+before="$captures/lasso-first-step-KRtyxI/candidate.js"
+gpu=experiments/graph-webgpu/dist/index.min.js
+node experiments/cosmos-gpu-lab/scripts/lasso-first-step.mjs \
+  --bundle "$gpu" --before-bundle "$before" --rounds 9 --timestamps-only
+node experiments/cosmos-gpu-lab/scripts/lasso-story-timing.mjs \
+  --webgpu-bundle "$gpu" --before-bundle "$before" --before-radius 3265.6425 --before-revision 76606a02
+node experiments/cosmos-gpu-lab/scripts/lasso-story-replay.mjs \
+  --webgl-bundle dist/index.min.js --webgpu-bundle "$gpu" --before-webgpu "$before" --exact-before
+```
+
+Pass the two preview URLs as positional arguments to the replay when using other ports. The nine-block profile is in `captures/lasso-first-step-PzCQda/`, the ordinary timing run in `captures/lasso-timing-auysD4/`, and the replay with side-by-side screenshots in `captures/lasso-story-2026-11-25T06-12-37-481Z/`. The replay compares each point ID and the RMS motion within each color group against the archived control. Each local capture includes a source archive.
+
 ### Earlier packaged force runs
 
 The local capture root is `experiments/cosmos-gpu-lab/captures/package-forces-20261124/`. Final correctness records are under `final-44933b5c-native/` and `final-44933b5c-swiftshader/`. The original miss is in `baseline-native.json`. It ran on the baseline WebGPU bundle with SHA-256 `9d1b715dd6686f741caf344c514385f8202e1d216ca8ebfebb259fc641a82b85`.

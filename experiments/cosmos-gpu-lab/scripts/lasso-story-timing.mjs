@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { captureBenchmarkSource, sha256 } from './benchmark-source.mjs'
-import { expectedLassoMeshHash, installLassoFixture, lassoForceSeed, lassoMeshSeed } from './lasso-story-fixture.mjs'
+import { expectedLassoMeshHash, installLassoFixture, installLassoPackage, lassoForceSeed, lassoMeshSeed } from './lasso-story-fixture.mjs'
 
 const lab = fileURLToPath(new URL('../', import.meta.url))
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
@@ -15,8 +15,11 @@ const { values } = parseArgs({ options: {
   'webgpu-url': { type: 'string', default: 'http://127.0.0.1:6007' },
   'webgl-bundle': { type: 'string', default: join(repo, 'dist/index.min.js') },
   'webgpu-bundle': { type: 'string', default: join(repo, 'experiments/graph-webgpu/dist/index.min.js') },
-  'before-bundle': { type: 'string' }, 'before-revision': { type: 'string' }, smoke: { type: 'boolean' },
+  'before-bundle': { type: 'string' }, 'before-revision': { type: 'string' },
+  'before-radius': { type: 'string', default: '2859.6797' }, smoke: { type: 'boolean' },
 } })
+const beforeRadius = Number(values['before-radius'])
+assert.ok(Number.isFinite(beforeRadius) && beforeRadius > 0, '--before-radius must be a positive finite first-step radius')
 const captureRoot = join(lab, 'captures')
 await mkdir(captureRoot, { recursive: true })
 const capture = await mkdtemp(join(captureRoot, 'lasso-timing-'))
@@ -43,7 +46,8 @@ try {
   const devices = (await cdp.send('SystemInfo.getInfo')).gpu.devices.map(d => d.deviceString)
   assert.ok(devices.some(d => /Apple M3/.test(d)), 'Run on the native M3')
   await save('manifest', {
-    source, chrome: browser.version(), devices, bundles, beforeRevision: values['before-revision'], viewport, dpr: 1,
+    source, chrome: browser.version(), devices, bundles, beforeRevision: values['before-revision'],
+    beforeFirstRadius: values['before-bundle'] ? beforeRadius : undefined, viewport, dpr: 1,
     meshSeed: lassoMeshSeed, forceSeed: lassoForceSeed, expectedLassoMeshHash, samples, settled, orders,
     smoke: !!values.smoke, command: process.argv.slice(2),
   })
@@ -56,23 +60,7 @@ try {
     const timer = setTimeout(() => page.close().catch(() => {}), 120000)
     try {
       await installLassoFixture(page)
-      const scriptUrl = '/__lab_lasso_' + bundles[lane].sha256 + '.js'
-      await page.route('**' + scriptUrl, route => route.fulfill({ path: bundles[lane].file, contentType: 'text/javascript' }))
-      // Every story import resolves to the same standalone package, including
-      // helpers that only import an enum or color converter. Loading a second
-      // copy of luma through any of these helpers would invalidate the run.
-      let loadedPackage = false
-      await page.route(/^https?:\/\/[^/]+\/(?:experiments\/graph-webgpu\/)?src\/index\.ts(?:\?|$)/, async route => {
-        if (new URL(route.request().url()).searchParams.has('raw')) return route.fallback()
-        loadedPackage = true
-        await route.fulfill({ contentType: 'text/javascript', body: `
-          await (window.lassoPackageReady ??= new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.onload = resolve; script.onerror = () => reject(new Error('Standalone package failed to load'));
-            script.src = ${JSON.stringify(scriptUrl)}; document.head.append(script);
-          }));
-          export const { Graph, GraphSimulation, PointShape, LinkStyle, getRgbaColor, defaultConfigValues } = window.Cosmos;` })
-      })
+      await installLassoPackage(page, bundles[lane])
       await page.addInitScript(({ mode, lastTick }) => {
         const bench = window.lassoTiming = { tick: 0, times: [], hidden: false }
         document.addEventListener('visibilitychange', () => { bench.hidden ||= document.hidden })
@@ -97,7 +85,6 @@ try {
       }
       const record = await page.evaluate(measureGraph, { mode, samples, settled })
       assert.deepEqual(errors, [])
-      assert.ok(loadedPackage, 'Story did not request the package facade')
       assert.equal(record.initialHash, expectedLassoMeshHash)
       assert.equal(record.seed, lassoForceSeed)
       assert.equal(record.zoom, 0.4)
@@ -109,7 +96,7 @@ try {
       if (lane !== 'webgl') assert.equal(record.adapter.fallback, false)
       assert.equal(record.hidden, false)
       if (mode !== 'auto') {
-        const expectedFirstRadius = { webgl: 3265.6381, webgpu: 3265.6425, before: 2859.6797 }[lane]
+        const expectedFirstRadius = { webgl: 3265.6381, webgpu: 3265.6425, before: beforeRadius }[lane]
         assert.ok(Math.abs(record.positions[1].radius90 - expectedFirstRadius) < 0.1, 'Unexpected first expansion')
       }
       const entry = { lane, mode, block, ...record }
