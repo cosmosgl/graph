@@ -29,7 +29,7 @@ The first milestone is a developer opening the same story twice and getting the 
 
 Use the WebGL module as the starting point. Follow its folder, name, responsibility and coding style wherever they fit. For a stateful force, prefer the corresponding class and make it easy to find where it prepares data, applies one step and releases resources. Preserve when configuration changes take effect and which positions the next force reads.
 
-Keep a WebGPU-specific design when it has a concrete benefit. For example, a force can accept the current compute pass and position buffer explicitly so the simulation can schedule several forces in order and submit their work together. Either a class or a factory can own the persistent buffers.
+The WebGPU `ForceCollision` and `ForceManyBody` classes own their force-specific buffers. Their `encode` methods receive the current compute pass and position buffer from the simulation. This lets the simulation apply each force to the latest positions and record the force and integration work for a tick in one command buffer.
 
 When the implementations deliberately differ, record what WebGL does, what WebGPU does, why, and what an application can observe. Put the example and its check in the feature's Lab results and link it from the inventory. Changes that require application edits also belong in the public migration notes. [Collision grid sizing](#/production-force-collision?section=doc-results-collision-grid-sizing)
 

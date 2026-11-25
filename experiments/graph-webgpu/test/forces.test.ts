@@ -181,8 +181,12 @@ describe('WebGPU simulation forces', () => {
       expect(xy[8]).not.toBe(input[8])
       expect(xy.subarray(0, 2 * last).every(Number.isFinite)).toBe(true)
       expect(xy[2 * last]).toBeNaN()
+      sim.setConfig({ simulationRepulsionSamples: 2 })
       sim.setPointPosition(0, -10000, -10000)
       sim.step()
+      const next = await sim.getPointPositionsAsync()
+      expect(Number.isFinite(next[8])).toBe(true)
+      expect(next[8]).not.toBe(xy[8])
       expect((await sim.getBoundsAsync())?.slice(0, 2)).toEqual([-10000, -10000])
     } finally { sim.destroy() }
   })

@@ -5,10 +5,10 @@ import type { GraphData } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
 import { createAttractors } from './modules/ForceAttractor'
 import { createCenter, createCenterKernel, createCentroidKernel } from './modules/ForceCenter'
-import { createCollision } from './modules/ForceCollision'
+import { ForceCollision } from './modules/ForceCollision'
 import { createGravity, createGravityKernel } from './modules/ForceGravity'
 import { createLinkForce, createSpringKernel } from './modules/ForceLink'
-import { createManyBody, createRepulsionKernel } from './modules/ForceManyBody'
+import { ForceManyBody, createRepulsionKernel } from './modules/ForceManyBody'
 import { createPointerForce } from './modules/ForceMouse'
 import { createClusters } from './modules/Clusters'
 import { resourceScope } from './modules/Shared/resource-scope'
@@ -99,14 +99,14 @@ export function createState (device: Device, packed: Float32Array, store: Store,
     const integrationParams = own(upload(device, new Float32Array(8), uniformUsage))
     const collisionIntegrator = own(upload(device, new Float32Array(8), uniformUsage))
     const links = createLinkForce(device, scope, count, store, programs.spring)
-    const manyBody = createManyBody(device, count, store, programs.repulsion)
+    const manyBody = new ForceManyBody(device, count, store, programs.repulsion)
     let forces: Buffer | undefined
     let sizes: Buffer | undefined
     let maxSize = 0
     let attractors: ReturnType<typeof createAttractors>
     let clusters: ReturnType<typeof createClusters>
     let pointer: ReturnType<typeof createPointerForce> | undefined
-    let collision: ReturnType<typeof createCollision> | undefined
+    let collision: ForceCollision | undefined
     let current: 0 | 1 = 0
     const run = (encode: (pass: ComputePass) => void): void => {
       const encoder = device.createCommandEncoder()
@@ -141,8 +141,8 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       count,
       positions,
       current: (): Buffer => positions[current],
-      updateSamples: manyBody.updateSamples,
-      restartOccupancyMeasurement: manyBody.restartOccupancyMeasurement,
+      updateSamples: () => manyBody.updateSamples(),
+      restartOccupancyMeasurement: () => manyBody.restartOccupancyMeasurement(),
       updateTopology: links.updateTopology,
       updateSizes (data: GraphData): void {
         // Size collision cells from resolved diameters so an unused default preserves the neighbor samples.
@@ -196,7 +196,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         manyBody.prepare(cfg, measureOccupancy)
         if (cfg.simulationLinkSpring) links.prepare(cfg)
         if (cfg.simulationCollision) {
-          collision ??= createCollision(device, count, store)
+          collision ??= new ForceCollision(device, count, store)
           collisionIntegrator.write(new Float32Array([count, alpha, 0, 0, 1, store.stepGuard, 0, 0]))
         }
         run(pass => {
