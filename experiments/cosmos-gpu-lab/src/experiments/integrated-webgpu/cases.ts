@@ -63,7 +63,7 @@ export const cases: ExperimentCase[] = [
       date: '2026-11-19',
       environment: 'Apple M3, visible Chrome 157, luma 10.0.0-alpha.15.',
       scope: 'A 32-point chain, one planned device loss and a manual checkpoint restart.',
-      limits: 'Automatic viewer recovery, unplanned loss, full public graph state and production embedding remain open.',
+      limits: 'This prototype tests a manual restart. The linked host evidence covers GPU-process loss and recovery in the packed Deck app.',
       evidence: [{ label: 'Shared-device and recovery evidence', page: 'host-ownership' }],
     },
   },

@@ -73,15 +73,15 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'integrated-webgpu/shared-device-recovery': {
     badge: 'Manual recovery passed',
     tone: 'pass',
-    finding: 'Manual recovery restored saved positions; automatic recovery is untested.',
+    finding: 'The prototype restored saved positions. The packed Deck app also restored its camera and selection on M3.',
     area: 'Integration',
-    status: 'Automatic recovery untested',
+    status: 'Host checkpoint recovery verified on M3',
     evidence: [
       { tone: 'pass', text: 'Host survived layout cleanup' },
       { tone: 'pass', text: 'Saved positions restored' },
-      { tone: 'unknown', text: 'Automatic recovery untested' },
+      { tone: 'pass', text: 'Both Deck ownership modes recovered' },
     ],
-    next: 'Test unplanned loss and complete host state',
+    next: 'Measure recovery with a larger checkpoint on more adapters',
   },
   'selection/shape-selection': {
     badge: 'Isolated checks passed',

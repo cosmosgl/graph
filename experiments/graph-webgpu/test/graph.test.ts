@@ -1,3 +1,6 @@
+import { Buffer, type Device, luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/core/webgl'
+import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation, type GraphConfig } from '../src'
 
@@ -26,6 +29,15 @@ function mountedGraph (overrides?: GraphConfig): { host: HTMLDivElement; graph: 
   graph.render(1, 0)
   graph.pause()
   return { host, graph, cleanup: (): void => { graph.destroy(); host.remove() } }
+}
+
+async function expectBorrowedDeviceUsable (device: Device): Promise<void> {
+  const buffer = device.createBuffer({ byteLength: 4, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
+  try {
+    const bytes = new Uint8Array([1, 2, 3, 4])
+    buffer.write(bytes)
+    expect(await buffer.readAsync()).toEqual(bytes)
+  } finally { buffer.destroy() }
 }
 
 describe('WebGPU Graph', () => {
@@ -150,7 +162,68 @@ describe('WebGPU Graph', () => {
     } finally { cleanup() }
   })
 
-  it('propagates initialization failures and releases an early destroy', async () => {
+  it('rejects queued work when the browser cannot provide a WebGPU adapter', async () => {
+    const { gpu } = navigator as Navigator & { gpu: { requestAdapter(): Promise<unknown> } }
+    const request = vi.spyOn(gpu, 'requestAdapter').mockResolvedValueOnce(null)
+    const host = document.createElement('div')
+    const tick = vi.fn()
+    const graph = new Graph(host, { ...config, onSimulationTick: tick })
+    try {
+      graph.setPointPositions(positions())
+      graph.render(1, 0)
+      graph.step()
+      await expect(graph.ready).rejects.toThrow(/webgpu adapter/i)
+      expect(request).toHaveBeenCalledOnce()
+      expect(graph.isReady).toBe(false)
+      expect(graph.getPointPositionBuffer()).toBeUndefined()
+      expect(tick).not.toHaveBeenCalled()
+      expect(host.childElementCount).toBe(0)
+    } finally { request.mockRestore(); graph.destroy() }
+  })
+
+  it('rejects a borrowed WebGL2 device and returns it usable to its owner', async () => {
+    const device = await luma.createDevice({
+      type: 'webgl', adapters: [webgl2Adapter], createCanvasContext: { canvas: document.createElement('canvas') }, waitForPageLoad: false,
+    })
+    const host = document.createElement('div')
+    const graph = new Graph(host, config, Promise.resolve(device))
+    try {
+      graph.render()
+      await expect(graph.ready).rejects.toThrow(/requires a WebGPU device/)
+      expect(host.childElementCount).toBe(0)
+      await expectBorrowedDeviceUsable(device)
+    } finally { graph.destroy(); device.destroy() }
+  })
+
+  it('releases partial renderer allocations when a borrowed device has no canvas for an interactive Graph', async () => {
+    const device = await luma.createDevice({ type: 'webgpu', adapters: [webgpuAdapter], waitForPageLoad: false, createCanvasContext: undefined })
+    const buffers = vi.spyOn(device, 'createBuffer')
+    const textures = vi.spyOn(device, 'createTexture')
+    const vertices = vi.spyOn(device, 'createVertexArray')
+    const framebuffers = vi.spyOn(device, 'createFramebuffer')
+    const allocations = [buffers, textures, vertices, framebuffers]
+    const host = document.createElement('div')
+    const graph = new Graph(host, config, Promise.resolve(device))
+    try {
+      graph.setPointPositions(positions())
+      graph.render()
+      await expect(graph.ready).rejects.toThrow(/requires an HTML canvas/)
+      expect(host.childElementCount).toBe(0)
+      expect(graph.simulation.isReady).toBe(false)
+      expect(graph.getPointPositionBuffer()).toBeUndefined()
+      for (const created of allocations) {
+        expect(created).toHaveBeenCalled()
+        for (const result of created.mock.results) expect(result.value.destroyed).toBe(true)
+      }
+      await expectBorrowedDeviceUsable(device)
+    } finally {
+      for (const created of allocations) created.mockRestore()
+      graph.destroy()
+      device.destroy()
+    }
+  })
+
+  it('propagates a rejected host device promise and releases an early destroy', async () => {
     const host = document.createElement('div')
     const graph = new Graph(host, config, Promise.reject(new Error('WebGPU device unavailable')))
     await expect(graph.ready).rejects.toThrow('WebGPU device unavailable')

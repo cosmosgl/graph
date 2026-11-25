@@ -26,8 +26,8 @@ device and canvas, re-upload the checkpoint, require exact restored positions
 and verify the next gravity step against the CPU reference again.
 
 This lane tests a planned loss signal and manual restart from saved positions.
-Restoring a full user session after unexpected device loss remains open.
-The packed Graph and Deck consumer below covers normal host teardown.
+The packed Graph and Deck consumer below also exercises a moving session after
+Chrome loses its GPU process.
 
 ```sh
 LAB_NATIVE_VISIBLE=1 VITE_LAB_HOST_OWNERSHIP=1 LAB_ARTIFACT_RUN=host-ownership-20261119-r1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/integrated-webgpu/host-ownership.test.ts
@@ -245,3 +245,31 @@ command and the command to open the app. The browser check emits JSON with the
 adapter, Chrome version, tarball hashes, pixel samples, picks and teardown
 results. The M3 replay is in `captures/packed-deck-m3-20261124/results.json`.
 The fixture at `d0ff27ed` covers one orthographic view and a paused two-point graph.
+
+### Recovering a moving Deck session
+
+On M3, the packed app restored a moving two-point graph from its last completed
+checkpoint. The host had moved one endpoint, pinned and selected the other,
+changed the spring strength, and panned, zoomed and resized the view. The
+verifier then stopped the GPU process in its own Chrome instance. The host
+received a device-loss notification with reason `unknown` and rebuilt Deck and
+the graph on a fresh native device in the same page.
+
+Both layer-owned and app-supplied graphs restored the exact saved coordinates,
+camera, viewport, pin and highlighted point. On the first restored draw, the
+selected pin was red, the other point yellow and the link blue. Deck picked
+both points and the link and returned no hit on the background. On the first
+resumed tick the simulation reported exactly the same cooling value as the
+uninterrupted session at that tick. The free point moved while the pin stayed
+fixed. Paint and picking passed again after resize, and the replacement device
+remained usable after teardown.
+
+The application retains the graph records and reads the checkpoint before loss.
+Motion resumes at that snapshot, so the interval between checkpoints determines
+how much recent motion can be lost. The test covers Chrome GPU-process loss on
+M3 with two points and one link. The cost of checkpointing a large graph and
+the recovery behavior on other browsers and adapters remain open.
+
+The same packed-app verifier runs the four normal ownership and display-ratio
+cases and both recovery cases. The M3 run is in
+`captures/packed-deck-recovery-m3-N6YbONc6/results.json`.

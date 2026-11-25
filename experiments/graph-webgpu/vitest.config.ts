@@ -4,7 +4,9 @@ import { sharedSource } from './vite.config'
 
 export default defineConfig({
   resolve: { alias: { '@/graph': sharedSource } },
-  optimizeDeps: { include: ['@luma.gl/core', '@luma.gl/core/webgpu', '@luma.gl/graph', 'd3-selection', 'd3-transition', 'd3-zoom', 'd3-drag'] },
+  optimizeDeps: {
+    include: ['@luma.gl/core', '@luma.gl/core/webgl', '@luma.gl/core/webgpu', '@luma.gl/graph', 'd3-selection', 'd3-transition', 'd3-zoom', 'd3-drag'],
+  },
   test: {
     include: ['test/**/*.test.ts'],
     browser: {
