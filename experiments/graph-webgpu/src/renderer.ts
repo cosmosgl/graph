@@ -6,7 +6,8 @@ import { RenderKernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '../../../src/config'
 import { getRgbaColor } from '../../../src/helper'
 import type { GraphData } from '../../../src/modules/GraphData'
-import { packLinks, linkStride, type LinkRgb } from './modules/Lines'
+import { Lines } from './modules/Lines'
+import { updateStyleBuffer } from './modules/Shared/style-buffer'
 import { Points, pointStride, shadeDirection } from './modules/Points'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
@@ -56,12 +57,20 @@ type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
 type DrawKind = 'point' | 'link' | 'solidLink' | 'uniformRgbLink'
 type CoverageMode = 'none' | 'mark' | 'test'
+type PreviousStyles = {
+  points?: Buffer; links: Buffer;
+  pointCount: number; linkCount: number;
+  pointSizes: SizeValues; linkWidths: SizeValues;
+  animatePointSizes: boolean; animateLinkWidths: boolean;
+}
+
 type StyleUpdate = {
   animate?: boolean;
   previousProgress?: number;
   animatePointSizes?: boolean;
   animateLinkWidths?: boolean;
   continueTransition?: boolean;
+  linkWidthsOnly?: boolean;
 }
 type EncodeOptions = {
   draw?: GraphDrawOptions;
@@ -98,26 +107,16 @@ export class GraphRenderer {
   private readonly linkSource: string
   private readonly pointSource: string
   private pointBuffer?: Buffer
-  private linkBuffer?: Buffer
+  private readonly lines: Lines
   private orderBuffer?: Buffer
   private readonly highlightPass: PointHighlightPass
   private highlightMask?: PointHighlightMask
   private order?: Uint32Array
   private baseOrder?: Uint32Array
   private pointSizes: SizeValues = 0
-  private linkWidths: SizeValues = 0
-  private previous?: {
-    points: Buffer; links: Buffer;
-    pointCount: number; linkCount: number;
-    pointSizes: SizeValues; linkWidths: SizeValues;
-    animatePointSizes: boolean; animateLinkWidths: boolean;
-  }
-
+  private previous?: PreviousStyles
   private interpolation: StyleTransition
   private pointCount = 0
-  private linkCount = 0
-  private hasOnlySolidLinks = false
-  private uniformLinkRgb?: LinkRgb
   private revision = 0
   private isDisposed = false
   private transparentBackground: Rgba = transparent
@@ -137,6 +136,7 @@ export class GraphRenderer {
     private readonly options: { ownsCanvas?: boolean; trackSizes?: boolean } = {}
   ) {
     this.points = new Points(device)
+    this.lines = new Lines(device, !!options.trackSizes)
     this.highlightPass = new PointHighlightPass(device)
     // Native WebGL point sprites use different subpixel rules on these adapters.
     // Specialize the WGSL once for this device, including host draws and picking.
@@ -160,81 +160,26 @@ export class GraphRenderer {
 
   /** Upload changed channels after the data model has resolved the pending setters. */
   public update (options: StyleUpdate = {}): void {
-    const data = this.data
-    const config = this.config
     this.revision++
-    this.points.updateAtlas(data.inputImageData)
-    const pointCount = data.pointsNumber ?? 0
-    const linkCount = data.linksNumber ?? 0
-    const background = getRgbaColor(config.backgroundColor)
-    const clearColor = background[3] > 0 ? background : transparent
-    const [r, g, b, a] = clearColor
-    this.transparentBackground = [r * a, g * a, b * a, a]
-    this.hoverColor = config.hoveredLinkColor ? getRgbaColor(config.hoveredLinkColor) : noColor
-    this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
-    this.focusRing = getRgbaColor(config.focusedPointRingColor)
-
-    const { attributes, order, mask, colors } = this.points.pack(data, config, clearColor)
-    const { edges, hasOnlySolidLinks, uniformRgb } = packLinks(data, config)
-    const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
-    const animate = options.animate && this.pointCount > 0
-    if (animate && this.pointBuffer && this.linkBuffer) {
-      // Keep the last target on the GPU. When interrupted, bake the actual displayed styles so
-      // the next interpolation starts at the current appearance rather than the previous target.
-      let fromPoints = this.pointBuffer
-      let fromLinks = this.linkBuffer
-      let pointSizes = this.pointSizes
-      let linkWidths = this.linkWidths
-      const animatePointSizes = options.animatePointSizes ?? true
-      const animateLinkWidths = options.animateLinkWidths ?? true
-      if (this.previous && progress < 1) {
-        const previous = this.previous
-        if (this.options.trackSizes && animatePointSizes && previous.animatePointSizes) {
-          pointSizes = captureSizes(this.pointCount, index => this.getPointSize(index, progress))
-        }
-        if (this.options.trackSizes && animateLinkWidths && previous.animateLinkWidths) {
-          linkWidths = captureSizes(this.linkCount, index => this.getLinkWidth(index, progress))
-        }
-        fromPoints = this.interpolation.freeze(
-          'Point', previous.points, this.pointBuffer, progress, previous.pointCount, this.pointCount, previous.animatePointSizes
-        )
-        try {
-          fromLinks = this.interpolation.freeze(
-            'Link', previous.links, this.linkBuffer, progress, previous.linkCount, this.linkCount, previous.animateLinkWidths
-          )
-        } catch (e) { fromPoints.destroy(); throw e }
+    const widthsOnly = !!options.linkWidthsOnly && !!this.lines.buffer &&
+      this.lines.count === (this.data.linksNumber ?? 0) && this.pointCount === (this.data.pointsNumber ?? 0)
+    const previous = this.capturePrevious(options, widthsOnly)
+    try {
+      if (widthsOnly) {
+        const snapshot = this.lines.updateWidths(this.data, !!previous && previous.links === this.lines.buffer)
+        if (snapshot && previous) previous.links = snapshot
+      } else {
+        this.updateAllStyles(previous)
       }
-      this.releasePrevious()
-      this.previous = {
-        points: fromPoints,
-        links: fromLinks,
-        pointCount: this.pointCount,
-        linkCount: this.linkCount,
-        pointSizes,
-        linkWidths,
-        animatePointSizes,
-        animateLinkWidths,
-      }
-      if (fromPoints === this.pointBuffer) this.pointBuffer = undefined
-      if (fromLinks === this.linkBuffer) this.linkBuffer = undefined
-    } else if (!options.continueTransition) {
-      this.releasePrevious()
+    } catch (error) {
+      if (previous?.points !== this.pointBuffer) previous?.points?.destroy()
+      if (previous?.links !== this.lines.buffer) previous?.links.destroy()
+      throw error
     }
-    this.pointBuffer = this.storage(this.pointBuffer, attributes, 'cosmos-point-style', pointStride * 4)
-    this.orderBuffer = this.storage(this.orderBuffer, order, 'cosmos-point-order', 4)
-    this.linkBuffer = this.storage(this.linkBuffer, edges, 'cosmos-link-style', linkStride * 4)
-    if (this.options.trackSizes) {
-      this.pointSizes = captureSizes(pointCount, i => attributes[i * pointStride + 4]!)
-      this.linkWidths = captureSizes(linkCount, i => edges[i * linkStride + 2]!)
+    if (previous || !options.continueTransition) {
+      this.releasePrevious()
+      this.previous = previous
     }
-    this.pointCount = pointCount
-    this.linkCount = linkCount
-    this.hasOnlySolidLinks = hasOnlySolidLinks
-    this.uniformLinkRgb = uniformRgb
-    this.highlightPass.setColors(colors)
-    this.highlightMask = mask
-    this.order = order
-    this.baseOrder = data.pointRenderOrder
   }
 
   public getPointSize (index: number, progress: number): number {
@@ -244,7 +189,7 @@ export class GraphRenderer {
 
   public getLinkWidth (index: number, progress: number): number {
     const source = this.previous?.animateLinkWidths ? this.previous.linkWidths : undefined
-    return displayedSize(index, progress, this.linkWidths, source, this.previous?.linkCount)
+    return displayedSize(index, progress, this.lines.widths, source, this.previous?.linkCount)
   }
 
   public updatePointHighlights (): void {
@@ -300,7 +245,7 @@ export class GraphRenderer {
     // dense graphs with at least one link per device pixel.
     const coverLinks = !!this.options.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
       !!framebuffer.depthStencilAttachment && framebuffer.colorAttachments[0]!.texture.samples === 1 &&
-      this.config.renderLinks && this.linkCount >= framebuffer.width * framebuffer.height && this.canUseSolidLinks(view)
+      this.config.renderLinks && this.lines.count >= framebuffer.width * framebuffer.height && this.canUseSolidLinks(view)
     const pass = this.device.beginRenderPass({
       framebuffer, clearColor: this.transparentBackground, clearDepth: coverLinks ? 1 : false, clearStencil: false,
     })
@@ -350,9 +295,9 @@ export class GraphRenderer {
     this.highlightMask = undefined
     this.order = this.baseOrder = undefined
     this.pointBuffer?.destroy()
-    this.linkBuffer?.destroy()
+    this.lines.destroy()
     this.orderBuffer?.destroy()
-    this.pointSizes = this.linkWidths = 0
+    this.pointSizes = 0
     this.hostUniforms.forEach(buffer => buffer.destroy())
     this.hostUniforms.length = 0
     this.hostEncoder = undefined
@@ -360,34 +305,87 @@ export class GraphRenderer {
     this.vertices?.destroy()
   }
 
-  private storage (old: Buffer | undefined, values: Float32Array | Uint32Array, id: string, minBytes: number): Buffer {
-    const bytes = Math.max(minBytes, values.byteLength)
-    if (bytes > this.device.limits.maxStorageBufferBindingSize) {
-      throw new Error(`${id} requires ${bytes} bytes of storage (device limit ${this.device.limits.maxStorageBufferBindingSize})`)
-    }
-    if (old && old.byteLength >= bytes) {
-      if (values.length) old.write(values)
-      return old
-    }
-    const next = this.device.createBuffer({ id, byteLength: bytes, usage: Buffer.STORAGE | Buffer.COPY_DST })
+  private updateAllStyles (previous?: PreviousStyles): void {
+    const data = this.data
+    const config = this.config
+    this.points.updateAtlas(data.inputImageData)
+    const pointCount = data.pointsNumber ?? 0
+    const background = getRgbaColor(config.backgroundColor)
+    const clearColor = background[3] > 0 ? background : transparent
+    const { attributes, order, mask, colors } = this.points.pack(data, config, clearColor)
+    const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => attributes[i * pointStride + 4]!) : 0
+    const oldPointTarget = previous?.points === this.pointBuffer ? undefined : this.pointBuffer
+    let pointBuffer: Buffer | undefined
+    let orderBuffer: Buffer | undefined
     try {
-      if (values.length) next.write(values)
-    } catch (e) {
-      next.destroy()
-      throw e
+      pointBuffer = updateStyleBuffer(this.device, oldPointTarget, attributes, 'cosmos-point-style', pointStride * 4)
+      orderBuffer = updateStyleBuffer(this.device, this.orderBuffer, order, 'cosmos-point-order', 4)
+      this.lines.update(data, config, !!previous && previous.links === this.lines.buffer)
+    } catch (error) {
+      if (pointBuffer !== this.pointBuffer) pointBuffer?.destroy()
+      if (orderBuffer !== this.orderBuffer) orderBuffer?.destroy()
+      throw error
     }
-    old?.destroy()
-    return next
+    if (oldPointTarget !== pointBuffer) oldPointTarget?.destroy()
+    if (this.orderBuffer !== orderBuffer) this.orderBuffer?.destroy()
+    this.pointBuffer = pointBuffer
+    this.orderBuffer = orderBuffer
+    this.pointSizes = pointSizes
+    this.pointCount = pointCount
+    const [r, g, b, a] = clearColor
+    this.transparentBackground = [r * a, g * a, b * a, a]
+    this.hoverColor = config.hoveredLinkColor ? getRgbaColor(config.hoveredLinkColor) : noColor
+    this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
+    this.focusRing = getRgbaColor(config.focusedPointRingColor)
+    this.highlightPass.setColors(colors)
+    this.highlightMask = mask
+    this.order = order
+    this.baseOrder = data.pointRenderOrder
+  }
+
+  /** Retain or freeze the displayed styles once, before an interrupting update changes their targets. */
+  private capturePrevious (options: StyleUpdate, widthsOnly: boolean): PreviousStyles | undefined {
+    if (!options.animate || !this.pointCount || !this.pointBuffer || !this.lines.buffer) return undefined
+    let points = widthsOnly ? undefined : this.pointBuffer
+    let links = this.lines.buffer
+    let pointSizes = this.pointSizes
+    let linkWidths = this.lines.widths
+    const animatePointSizes = options.animatePointSizes ?? true
+    const animateLinkWidths = options.animateLinkWidths ?? true
+    const progress = Math.max(0, Math.min(1, options.previousProgress ?? 1))
+    const previous = this.previous
+    if (previous && progress < 1) {
+      if (this.options.trackSizes && animatePointSizes && previous.animatePointSizes) {
+        pointSizes = captureSizes(this.pointCount, i => this.getPointSize(i, progress))
+      }
+      if (this.options.trackSizes && animateLinkWidths && previous.animateLinkWidths) {
+        linkWidths = captureSizes(this.lines.count, i => this.getLinkWidth(i, progress))
+      }
+      if (previous.points) {
+        points = this.interpolation.freeze(
+          'Point', previous.points, this.pointBuffer, progress, previous.pointCount, this.pointCount, previous.animatePointSizes
+        )
+      }
+      try {
+        links = this.interpolation.freeze(
+          'Link', previous.links, this.lines.buffer, progress, previous.linkCount, this.lines.count, previous.animateLinkWidths
+        )
+      } catch (error) {
+        if (points !== this.pointBuffer) points?.destroy()
+        throw error
+      }
+    }
+    return { points, links, pointCount: this.pointCount, linkCount: this.lines.count, pointSizes, linkWidths, animatePointSizes, animateLinkWidths }
   }
 
   private releasePrevious (): void {
-    this.previous?.points.destroy()
+    this.previous?.points?.destroy()
     this.previous?.links.destroy()
     this.previous = undefined
   }
 
   private canUseSolidLinks (view: GraphView): boolean {
-    return this.hasOnlySolidLinks && this.config.linkBlending && !this.config.linkColorInterpolateFromEndpoints &&
+    return this.lines.hasOnlySolidLinks && this.config.linkBlending && !this.config.linkColorInterpolateFromEndpoints &&
       view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
   }
 
@@ -433,7 +431,7 @@ export class GraphRenderer {
     { uniforms = this.uniforms, draw: options = {}, linkPickPixel, coverLinks = false }: EncodeOptions
   ): void {
     const position = this.positionSource()
-    if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.linkBuffer || !this.points.atlas) return
+    if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.lines.buffer || !this.points.atlas) return
     const picking = !!options.picking || !!linkPickPixel
     const c = this.config
     const segments = c.curvedLinks ? Math.max(1, Math.round(c.curvedLinkSegments)) : 1
@@ -453,29 +451,29 @@ export class GraphRenderer {
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),
       ...(linkPickPixel ?? [0, 0]), Number(this.previous?.animatePointSizes ?? false), Number(this.previous?.animateLinkWidths ?? false),
-      ...(this.uniformLinkRgb ?? [0, 0, 0]), 0,
+      ...(this.lines.uniformRgb ?? [0, 0, 0]), 0,
     ]))
     const bindings = {
       params: uniforms,
       positions: position.buffer,
       points: this.pointBuffer,
-      links: this.linkBuffer,
+      links: this.lines.buffer,
       pointOrder: this.orderBuffer,
       atlas: this.points.atlas,
       previousPoints: this.previous?.points ?? this.pointBuffer,
-      previousLinks: this.previous?.links ?? this.linkBuffer,
+      previousLinks: this.previous?.links ?? this.lines.buffer,
     }
     const pointCount = Math.min(position.pointCount, this.pointCount)
-    if (options.links !== false && c.renderLinks && this.linkCount) {
+    if (options.links !== false && c.renderLinks && this.lines.count) {
       if (coverLinks) {
         this.kernel(framebuffer, 'point', false, 'mark').draw(pass, {
           vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
         })
       }
       const useSolid = !picking && this.canUseSolidLinks(view)
-      const kind = useSolid ? (this.uniformLinkRgb ? 'uniformRgbLink' : 'solidLink') : 'link'
+      const kind = useSolid ? (this.lines.uniformRgb ? 'uniformRgbLink' : 'solidLink') : 'link'
       this.kernel(framebuffer, kind, picking, coverLinks ? 'test' : 'none').draw(pass, {
-        vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.linkCount, bindings,
+        vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.lines.count, bindings,
       })
     }
     if (options.points === false) return

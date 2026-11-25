@@ -45,6 +45,7 @@ export class Graph {
   private shouldMeasureNextFrame = false
   private isFrameInFlight = false
   private isDestroyed = false
+  private hasPendingStyleData = false
   private hasRendered = false
   private fitTimer?: ReturnType<typeof setTimeout>
   private fitRequest = 0
@@ -63,6 +64,7 @@ export class Graph {
     this.simulation = new GraphSimulation(undefined, devicePromise, this.config, canvas, {
       onDeviceLost: (): void => this.destroy(),
       onPositionEdit: (id, record): void => this.positionTransition?.edit(id, record),
+      onDataApplied: (): void => { this.hasPendingStyleData = true },
     })
     this.graph = this.simulation.data
     this.camera = new Zoom(this.simulation.store, this.config)
@@ -112,9 +114,12 @@ export class Graph {
         if (this.positionTransition?.write(oldSource, 1)) this.simulation.markPositionsChanged()
       }
       const from = animate && newPositions && oldSource ? copyPositions(oldSource) : undefined
+      let linkWidthsOnly = false
       try {
-        this.simulation.applyData(alpha)
+        linkWidthsOnly = this.hasRendered && linkWidths && !this.hasPendingStyleData && this.simulation.applyLinkWidthUpdate(alpha)
+        if (!linkWidthsOnly) this.simulation.applyData(alpha)
         this.renderer?.update({
+          linkWidthsOnly,
           animate,
           previousProgress: this.transition.progress,
           animatePointSizes: pointSizes,
@@ -134,10 +139,13 @@ export class Graph {
         from?.destroy()
         throw error
       }
+      this.hasPendingStyleData = false
       this.transition.start()
-      this.labels?.invalidate()
-      this.clusterVersion = -1
-      this.area?.invalidateSizes()
+      if (!linkWidthsOnly) {
+        this.labels?.invalidate()
+        this.clusterVersion = -1
+        this.area?.invalidateSizes()
+      }
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
       this.drawFrame()
@@ -206,7 +214,7 @@ export class Graph {
   }
 
   public setPointPositions (positions: Float32Array, dontRescale?: boolean): void {
-    this.whenReady(() => {
+    this.queueStyleData(() => {
       this.invalidateQueries()
       this.simulation.setPointPositions(positions, dontRescale)
       this.transition.queue(TransitionProperty.Positions)
@@ -214,7 +222,7 @@ export class Graph {
   }
 
   public setLinks (links: Float32Array): void {
-    this.whenReady(() => { this.invalidateQueries(); this.simulation.setLinks(links) })
+    this.queueStyleData(() => { this.invalidateQueries(); this.simulation.setLinks(links) })
   }
 
   public setPointPosition (id: number, x: number, y: number): void { this.setPointPositionsByIndices([id], [x, y]) }
@@ -231,7 +239,7 @@ export class Graph {
   public setPinnedPoint (id: number, pinned: boolean): void { this.whenReady(() => this.simulation.setPinnedPoint(id, pinned)) }
   public isPointPinned (id: number): boolean { return this.simulation.isPointPinned(id) }
   public setPointSizes (sizes: Float32Array): void {
-    this.whenReady(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) })
+    this.queueStyleData(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) })
   }
 
   public setLinkStrength (weights: Float32Array): void { this.whenReady(() => this.simulation.setLinkStrength(weights)) }
@@ -255,18 +263,18 @@ export class Graph {
   }
 
   public setPointColors (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) })
+    this.queueStyleData(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) })
   }
 
-  public setPointShapes (value: Float32Array): void { this.whenReady(() => { this.graph.inputPointShapes = value }) }
-  public setPointRenderOrder (value: ArrayLike<number> | null): void { this.whenReady(() => { this.graph.inputPointRenderOrder = value ?? undefined }) }
-  public setPointRingColors (value: Float32Array): void { this.whenReady(() => { this.graph.inputPointRingColors = value }) }
+  public setPointShapes (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointShapes = value }) }
+  public setPointRenderOrder (value: ArrayLike<number> | null): void { this.queueStyleData(() => { this.graph.inputPointRenderOrder = value ?? undefined }) }
+  public setPointRingColors (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointRingColors = value }) }
   public setPointStrokeColors (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputPointStrokeColors = value; this.transition.queue(TransitionProperty.PointStrokeColors) })
+    this.queueStyleData(() => { this.graph.inputPointStrokeColors = value; this.transition.queue(TransitionProperty.PointStrokeColors) })
   }
 
   public setPointStrokeWidths (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputPointStrokeWidths = value; this.transition.queue(TransitionProperty.PointStrokeWidths) })
+    this.queueStyleData(() => { this.graph.inputPointStrokeWidths = value; this.transition.queue(TransitionProperty.PointStrokeWidths) })
   }
 
   public setLinkWidths (value: Float32Array): void {
@@ -274,14 +282,14 @@ export class Graph {
   }
 
   public setLinkColors (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputLinkColors = value; this.transition.queue(TransitionProperty.LinkColors) })
+    this.queueStyleData(() => { this.graph.inputLinkColors = value; this.transition.queue(TransitionProperty.LinkColors) })
   }
 
-  public setImageData (value: ImageData[]): void { this.whenReady(() => { this.graph.inputImageData = value }) }
-  public setPointImageIndices (value: Float32Array): void { this.whenReady(() => { this.graph.inputPointImageIndices = value }) }
-  public setPointImageSizes (value: Float32Array): void { this.whenReady(() => { this.graph.inputPointImageSizes = value }) }
-  public setLinkStyles (value: Float32Array): void { this.whenReady(() => { this.graph.inputLinkStyles = value }) }
-  public setLinkArrows (value: boolean[]): void { this.whenReady(() => { this.graph.linkArrowsBoolean = value }) }
+  public setImageData (value: ImageData[]): void { this.queueStyleData(() => { this.graph.inputImageData = value }) }
+  public setPointImageIndices (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointImageIndices = value }) }
+  public setPointImageSizes (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointImageSizes = value }) }
+  public setLinkStyles (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputLinkStyles = value }) }
+  public setLinkArrows (value: boolean[]): void { this.queueStyleData(() => { this.graph.linkArrowsBoolean = value }) }
 
   public getPointPositionBuffer (): PointPositionBuffer | undefined { return this.simulation.getPointPositionBuffer() }
   public getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> { return this.simulation.getPointPositionsAsync(out) }
@@ -468,6 +476,13 @@ export class Graph {
     const blocked = this.transition.isActiveFor(TransitionProperty.Positions) || (this.camera.isRunning && !simulateDuringZoom)
     const pointer = this.config.enableRightClickRepulsion ? this.mouseRepulsion : undefined
     this.simulation.runSimulationStep(forceExecution, pointer, blocked, measureOccupancy)
+  }
+
+  private queueStyleData (setter: () => void): void {
+    this.whenReady(() => {
+      this.hasPendingStyleData = true
+      setter()
+    })
   }
 
   private whenReady (operation: () => void): void {

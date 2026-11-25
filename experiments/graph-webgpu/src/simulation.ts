@@ -38,6 +38,7 @@ function watchLoss (device: Device, listener: () => void): () => void {
 interface SimulationHost {
   onDeviceLost(): void;
   onPositionEdit(index: number, record: Float32Array): void;
+  onDataApplied?(): void;
 }
 
 export class GraphSimulation {
@@ -235,6 +236,15 @@ export class GraphSimulation {
     }
   }
 
+  /** @internal A width edit affects drawing only. Any simulation setter queued alongside it still needs a full data update. */
+  public applyLinkWidthUpdate (alpha?: number): boolean {
+    if (this.isPositionsDirty || this.isSizesDirty || this.isTopologyDirty || this.isClustersDirty ||
+      this.isAttractorsDirty || this.shouldRefreshSamples) return false
+    this.data.updateLinkWidth()
+    if (alpha !== undefined) this.store.alpha = alpha
+    return true
+  }
+
   public applyData (alpha?: number): void {
     if (this.defer(() => this.applyData(alpha))) return
     this.data.update()
@@ -274,6 +284,7 @@ export class GraphSimulation {
     this.isClustersDirty = this.isAttractorsDirty = false
     this.shouldSkipRescale = false
     if (alpha !== undefined) this.store.alpha = alpha
+    this.host?.onDataApplied?.()
   }
 
   public getPointPositionBuffer (): PointPositionBuffer | undefined {

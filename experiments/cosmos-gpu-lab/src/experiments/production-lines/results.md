@@ -20,6 +20,12 @@ A click two CSS pixels from the center of the horizontal stroke shows why the pi
 
 The curve and patterned-stroke comparisons exercise individual features on opaque links with antialiasing. The zoom case uses a 1.25× camera scale. The tests also move the endpoint back in the moving case and check that each package reproduces its original image and click targets.
 
+## Changing only link widths
+
+On M3, changing 8,192 link widths in a graph with 4,096 points used to upload 393,216 bytes of point styles, 16,384 bytes of point draw order and 262,144 bytes of link records. The WebGPU Lines module now uploads 32,768 bytes of widths and patches the existing link records on the GPU. Point-style and draw-order uploads were zero for an immediate edit, an animated edit and a second edit that interrupted the animation. The interrupted edit also uploaded 32 bytes of transition parameters. These are CPU-to-GPU byte counts for the edit. An animation can also copy or interpolate its source on the GPU.
+
+The packaged four-link comparison widens a horizontal stroke from 2 to 12 CSS pixels and restores it to 2. At pixel ratios 1 and 2, both packages paint the same canvas at all three widths. A click five CSS pixels off the centerline changes from background to link 0 and back to background. The point covering the link remains the foreground pick.
+
 ## Endpoint rounding beyond the four-link fixture
 
 A separate SwiftShader sweep placed 30 vertical links in alternating directions near 1/16-device-pixel rounding ties. The solid case originally differed at 120 pixels at 1×. After the cap correction it matched exactly at both ratios. Styling those same links exposed further differences.

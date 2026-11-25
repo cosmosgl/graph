@@ -41,6 +41,83 @@ async function expectBorrowedDeviceUsable (device: Device): Promise<void> {
 }
 
 describe('WebGPU Graph', () => {
+  it('uploads only the link-width channel when a width edit is the only pending setter', async () => {
+    const { graph, cleanup } = mountedGraph()
+    try {
+      await graph.ready
+      const device = graph.simulation.device!
+      const allocations = vi.spyOn(device, 'createBuffer')
+      const prototype: Buffer = Object.getPrototypeOf(graph.getPointPositionBuffer()!.buffer)
+      const writes = vi.spyOn(prototype, 'write')
+      function uploadedBytes (id: string): number {
+        let bytes = 0
+        for (const [props] of allocations.mock.calls) {
+          if ('id' in props && props.id === id) bytes += props.data?.byteLength ?? 0
+        }
+        for (const [i, [data]] of writes.mock.calls.entries()) {
+          const buffer = writes.mock.contexts[i]
+          if (buffer instanceof Buffer && buffer.id === id) bytes += data.byteLength
+        }
+        return bytes
+      }
+      try {
+        // Establish that the spies observe the normal point-style and draw-order uploads.
+        graph.render(undefined, 0)
+        expect(uploadedBytes('cosmos-point-style')).toBeGreaterThan(0)
+        expect(uploadedBytes('cosmos-point-order')).toBeGreaterThan(0)
+        for (const [width, duration] of [[4, 0], [12, 1000], [2, 1000]] as const) {
+          writes.mockClear()
+          allocations.mockClear()
+          graph.setLinkWidths(Float32Array.of(width))
+          graph.render(undefined, duration)
+          expect(uploadedBytes('cosmos-point-style')).toBe(0)
+          expect(uploadedBytes('cosmos-point-order')).toBe(0)
+          expect(uploadedBytes('cosmos-link-widths') + uploadedBytes('cosmos-link-style')).toBe(Float32Array.BYTES_PER_ELEMENT)
+        }
+      } finally { writes.mockRestore(); allocations.mockRestore() }
+    } finally { cleanup() }
+  })
+
+  it('applies queued point and simulation edits alongside a link-width setter', async () => {
+    const onLinkClick = vi.fn()
+    const onBackgroundClick = vi.fn()
+    const { host, graph, cleanup } = mountedGraph({ onLinkClick, onBackgroundClick })
+    try {
+      await graph.ready
+      const shapes = Float32Array.of(0, 0, 0)
+      graph.setPointShapes(shapes)
+      graph.render(undefined, 0)
+      shapes[0] = 1
+      graph.setLinkWidths(Float32Array.of(4))
+      graph.setPointShapes(shapes)
+      graph.render(undefined, 0)
+      expect(graph.graph.pointShapes?.[0]).toBe(1)
+      expect(graph.getLinkWidthByIndex(0)).toBe(4)
+
+      // The composed simulation can stage topology without going through Graph.setLinks.
+      graph.simulation.setLinks(Float32Array.of(0, 1, 1, 0))
+      graph.setLinkWidths(Float32Array.of(8, 16))
+      graph.render(undefined, 0)
+      expect(graph.getLinkWidths()).toEqual(Float32Array.of(8, 16))
+      const canvas = host.querySelector('canvas')!
+      const { left, top } = canvas.getBoundingClientRect()
+      const [x, y] = graph.spaceToScreenPosition([2048, 2048])
+      const clickMidpoint = (): void => {
+        canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: left + x, clientY: top + y }))
+      }
+      clickMidpoint()
+      await vi.waitFor(() => expect(onLinkClick).toHaveBeenCalledOnce())
+
+      // Direct applyData clears the simulation's pending flags. Its new endpoints must still reach the drawing buffers.
+      graph.simulation.setLinks(Float32Array.of(0, 0, 1, 1))
+      graph.simulation.applyData()
+      graph.setLinkWidths(Float32Array.of(16, 8))
+      graph.render(undefined, 0)
+      clickMidpoint()
+      await vi.waitFor(() => expect(onBackgroundClick).toHaveBeenCalledOnce())
+    } finally { cleanup() }
+  })
+
   it('honors queued public calls, steps resident positions, snaps sparse edits and preserves the point index space', async () => {
     const { host, graph, cleanup } = mountedGraph()
     try {

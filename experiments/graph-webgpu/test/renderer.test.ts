@@ -185,6 +185,63 @@ it('interpolates point colors and retargets an interrupted update from the displ
   } finally { scene.destroy() }
 })
 
+it('matches full uploads when width edits interrupt a mixed point and link transition', async () => {
+  const optimized = await createScene()
+  const reference = await createScene()
+  const scenes = [optimized, reference]
+  const readbacks = scenes.map(({ device, framebuffer }) => device.createBuffer({
+    byteLength: framebuffer.width * framebuffer.height * 4, usage: Buffer.COPY_DST | Buffer.COPY_SRC,
+  }))
+  async function compareFrame (styleProgress: number): Promise<Uint8Array> {
+    const captures = await Promise.all(scenes.map(async ({ renderer, framebuffer, device, view }, i) => {
+      const drawView = { ...view, styleProgress }
+      renderer.draw(drawView, framebuffer)
+      device.commandEncoder.copyTextureToBuffer({
+        sourceTexture: framebuffer.colorAttachments[0]!.texture,
+        destinationBuffer: readbacks[i]!,
+        width: framebuffer.width,
+        height: framebuffer.height,
+        bytesPerRow: framebuffer.width * 4,
+      })
+      device.submit()
+      return { pixels: (await readbacks[i]!.readAsync()).slice(), pick: await renderer.pick(48, 21, drawView) }
+    }))
+    expect(captures[0]!.pixels.findIndex((v, i) => v !== captures[1]!.pixels[i])).toBe(-1)
+    expect(captures[0]!.pick).toEqual(captures[1]!.pick)
+    return captures[0]!.pixels
+  }
+  try {
+    for (const { data, renderer } of scenes) {
+      data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1])
+      data.inputLinkColors = Float32Array.of(0, 0, 1, 1)
+      data.inputLinkWidths = Float32Array.of(14)
+      data.update()
+      renderer.update({ animate: true })
+    }
+    const halfway = await compareFrame(0.5)
+    for (const scene of scenes) {
+      scene.data.inputLinkWidths = Float32Array.of(NaN) // Reset this link to its configured default.
+      scene.data.updateLinkWidth()
+      scene.renderer.update({ animate: true, previousProgress: 0.5, linkWidthsOnly: scene === optimized })
+    }
+    expect((await compareFrame(0)).findIndex((v, i) => v !== halfway[i])).toBe(-1)
+    await compareFrame(0.5)
+    // Interrupt the narrow update with a mixed one before the link width reaches its target.
+    for (const { data, renderer } of scenes) {
+      data.inputPointSizes = Float32Array.of(30, 30, 30)
+      data.inputLinkWidths = Float32Array.of(2)
+      data.update()
+      renderer.update({ animate: true, previousProgress: 0.5 })
+    }
+    await compareFrame(0)
+    await compareFrame(1)
+    expect(scenes.flatMap(scene => scene.errors)).toEqual([])
+  } finally {
+    readbacks.forEach(buffer => buffer.destroy())
+    scenes.forEach(scene => scene.destroy())
+  }
+})
+
 it('applies a highlight to the target style and invalidates a pick from the preceding frame', async () => {
   const config = createDefaultConfig()
   const scene = await createScene(config)

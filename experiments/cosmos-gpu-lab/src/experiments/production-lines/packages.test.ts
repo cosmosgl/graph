@@ -3,7 +3,7 @@ import { comparePixels } from '../../runtime/compare-pixels'
 import { writeArtifact } from '../../testing/artifacts'
 import { compareLines } from './compare'
 import { findMotionFlashes, inspectMotionPaint, motionCase, motionPixelIndices, phaseSteps, type MotionStyle } from './motion'
-import { background, exactLineCases, lineCases, type LineCase } from './fixture'
+import { background, exactLineCases, lineCases, type LineCase, type Probe } from './fixture'
 import { mountLinePreview, type LineSession, type LineSnapshot } from './frame'
 
 function pixel (image: ImageData, ratio: number, x: number, y: number): number[] {
@@ -95,6 +95,30 @@ async function frameDigest (image: ImageData): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', image.data))
   return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
 }
+
+it.each([1, 2] as const)('repaints and picks a width-only update in both packages at %i×', async ratio => {
+  const host = document.createElement('div')
+  document.body.append(host)
+  const sessions: LineSession[] = []
+  try {
+    for (const engine of ['webgl', 'webgpu'] as const) sessions.push(await mountLinePreview(host, engine, ratio, 'straight'))
+    for (const width of [2, 12, 2]) {
+      const probes: Probe[] = [
+        { label: 'Widened stroke', xy: [46, 33], expected: width === 12 ? 'Link 0' : 'Background' },
+        { label: 'Foreground point', xy: [120, 28], expected: 'Point 8' },
+      ]
+      const [gl, gpu] = await Promise.all(sessions.map(session => session.measureWidths(Float32Array.of(width, 3.25, 1.5, 0.75), probes)))
+      expect(comparePixels(gl.pixels, gpu.pixels).differingPixels).toBe(0)
+      for (const snapshot of [gl, gpu]) {
+        expect(pixel(snapshot.pixels, ratio, 46, 32).slice(0, 3)).toEqual(width === 12 ? [103, 186, 224] : background)
+        expect(snapshot.picks.map(pick => pick.actual)).toEqual(probes.map(probe => probe.expected))
+      }
+    }
+  } finally {
+    for (const session of sessions) session.destroy()
+    host.remove()
+  }
+})
 
 for (const ratio of [1, 2] as const) {
   it.each<MotionStyle>(['dashed', 'solid'])(`replays %s cap motion forward and backward at ${ratio}×`, async style => {

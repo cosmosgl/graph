@@ -9,6 +9,7 @@ export type LineSnapshot = { pixels: ImageData; picks: PickResult[] }
 export type LineSession = {
   deviceInfo: DeviceInfo;
   measure(state: boolean | number, withPicks?: boolean): Promise<LineSnapshot>;
+  measureWidths(widths: Float32Array, probes: Probe[]): Promise<LineSnapshot>;
   destroy(): void;
 }
 
@@ -106,9 +107,24 @@ export async function mountLinePreview (
       }).finally(() => { onPick = undefined })
       return { ...probe, actual }
     }
+    async function capture (probes: Probe[]): Promise<LineSnapshot> {
+      graph.renderOneFrame()
+      if (canvas.width !== copy.width || canvas.height !== copy.height) throw new Error(`Unexpected ${engine} drawing buffer dimensions`)
+      ctx.globalCompositeOperation = 'copy'
+      ctx.drawImage(canvas, 0, 0)
+      const pixels = ctx.getImageData(0, 0, copy.width, copy.height)
+      const picks: PickResult[] = []
+      for (const probe of probes) picks.push(await click(probe))
+      return { pixels, picks }
+    }
     return {
       deviceInfo,
       destroy: dispose,
+      measureWidths (widths, probes): Promise<LineSnapshot> {
+        graph.setLinkWidths(widths)
+        graph.render(undefined, 0)
+        return capture(probes)
+      },
       async measure (state, withPicks = true): Promise<LineSnapshot> {
         let probes: Probe[]
         if (scene === motionCase && typeof state === 'number') {
@@ -119,15 +135,9 @@ export async function mountLinePreview (
           probes = lineProbes(scene, state)
         } else throw new Error('Expected a phase for the motion sweep or an endpoint choice for a static fixture')
         if (scene === 'hover') await hover(probes[0]!.xy)
-        graph.renderOneFrame()
-        if (canvas.width !== copy.width || canvas.height !== copy.height) throw new Error(`Unexpected ${engine} drawing buffer dimensions`)
-        ctx.globalCompositeOperation = 'copy'
-        ctx.drawImage(canvas, 0, 0)
-        const pixels = ctx.getImageData(0, 0, copy.width, copy.height)
-        const picks: PickResult[] = []
-        for (const probe of probes) picks.push(await click(probe))
+        const snapshot = await capture(probes)
         if (scene === 'hover') { await hover(probes[0]!.xy); graph.renderOneFrame() }
-        return { pixels, picks }
+        return snapshot
       },
     }
   } catch (error) { dispose(); throw error }
