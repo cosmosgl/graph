@@ -32,7 +32,7 @@ it('updates highlight colors and pick order on resident point and link buffers',
   const imageIndices = new Float32Array(pointCount).fill(-1)
   imageIndices[96] = 0
   const imageSizes = new Float32Array(pointCount)
-  imageSizes[96] = 12
+  imageSizes[96] = NaN // The icon inherits point 96's diameter.
   function scene (): Graph {
     const graph = new Graph(null, {
       enableSimulation: false,
@@ -113,6 +113,38 @@ it('updates highlight colors and pick order on resident point and link buffers',
         expect(pick[overlap]).toBe(front + 1)
       }
     }
+
+    // Recolor a greyed point and resize the icon through the narrow path. Revealing it must use the new paint.
+    const paint = colors.slice()
+    paint.set([0.25, NaN, 0.5, 1], 0)
+    const sizes = new Float32Array(pointCount).fill(16)
+    sizes[64] = NaN
+    sizes[96] = 26
+    for (const current of [graph, reference]) {
+      current.setConfigPartial({ highlightedPointIndices: [31] })
+      current.setPointColors(paint)
+      current.setPointSizes(sizes)
+      if (current === reference) current.setPointRenderOrder([0]) // Force a full upload with the same order.
+      current.render(undefined, 0)
+    }
+    for (const ids of [[31], [0]]) {
+      for (const current of [graph, reference]) current.setConfigPartial({ highlightedPointIndices: ids })
+      reference.render(undefined, 0)
+      for (const picking of [false, true]) {
+        const full = await capture(reference, picking)
+        expect((await capture(graph, picking)).findIndex((v, i) => v !== full[i])).toBe(-1)
+      }
+    }
+
+    const beforeDefaults = await capture(graph)
+    for (const current of [graph, reference]) current.setConfigPartial({ pointDefaultColor: '#00ff00', pointDefaultSize: 28 })
+    reference.render(undefined, 0)
+    const afterDefaults = await capture(graph)
+    const fullDefaults = await capture(reference)
+    expect(afterDefaults.findIndex((v, i) => v !== beforeDefaults[i])).toBeGreaterThanOrEqual(0)
+    expect(afterDefaults.findIndex((v, i) => v !== fullDefaults[i])).toBe(-1)
+    const defaultPicks = await capture(reference, true)
+    expect((await capture(graph, true)).findIndex((v, i) => v !== defaultPicks[i])).toBe(-1)
 
     // Changing highlight membership must use the displayed style and order until render commits pending data.
     graph.setPointColors(new Float32Array(pointCount * 4).fill(1))

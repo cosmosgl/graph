@@ -218,7 +218,7 @@ it('interpolates point colors and retargets an interrupted update from the displ
   } finally { scene.destroy() }
 })
 
-it('matches full uploads when width edits interrupt a mixed point and link transition', async () => {
+it.each(['link widths', 'point colors and sizes'])('matches full uploads when %s interrupt a mixed point and link transition', async edit => {
   const optimized = await createScene()
   const reference = await createScene()
   const scenes = [optimized, reference]
@@ -253,13 +253,28 @@ it('matches full uploads when width edits interrupt a mixed point and link trans
     }
     const halfway = await compareFrame(0.5)
     for (const scene of scenes) {
-      scene.data.inputLinkWidths = Float32Array.of(NaN) // Reset this link to its configured default.
-      scene.data.updateLinkWidth()
-      scene.renderer.update({ animate: true, previousProgress: 0.5, linkWidthsOnly: scene === optimized })
+      if (edit === 'link widths') {
+        scene.data.inputLinkWidths = Float32Array.of(NaN) // Reset this link to its configured default.
+        scene.data.updateLinkWidth()
+        scene.renderer.update({ animate: true, previousProgress: 0.5, linkWidthsOnly: scene === optimized })
+      } else {
+        scene.data.inputPointSizes = Float32Array.of(6, NaN, 26)
+        scene.data.inputPointColors = Float32Array.of(0, 1, 1, 1, 1, 0, 1, 1, 0, NaN, 1, 0.75)
+        scene.data.update()
+        scene.renderer.update({
+          pointChannels: scene === optimized ? { colors: true, sizes: true } : undefined,
+          animate: true,
+          previousProgress: 0.5,
+          animatePointSizes: true,
+          animateLinkWidths: false,
+        })
+      }
     }
-    expect((await compareFrame(0)).findIndex((v, i) => v !== halfway[i])).toBe(-1)
+    const interrupted = await compareFrame(0)
+    // An unqueued link width snaps to its target. When width itself animates, every pixel stays continuous.
+    if (edit === 'link widths') expect(interrupted.findIndex((v, i) => v !== halfway[i])).toBe(-1)
     await compareFrame(0.5)
-    // Interrupt the narrow update with a mixed one before the link width reaches its target.
+    // Interrupt the narrow update again with a mixed one before the styles reach their targets.
     for (const { data, renderer } of scenes) {
       data.inputPointSizes = Float32Array.of(30, 30, 30)
       data.inputLinkWidths = Float32Array.of(2)

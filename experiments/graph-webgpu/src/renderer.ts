@@ -11,7 +11,7 @@ import { getPickingBufferSize, getPickingWindow, resolveNearestPickedPoint, type
 import { focusedPointRingOpacity, hoveredPointRingOpacity } from '../../../src/variables'
 import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
-import { Points, pointStride, shadeDirection } from './modules/Points'
+import { Points, pointStride, shadeDirection, type PointChannels } from './modules/Points'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import { captureSizes, displayedSize, type SizeValues } from './size-transition'
@@ -66,7 +66,7 @@ type PositionSource = { buffer: Buffer; pointCount: number }
 type DrawKind = 'point' | 'pointRing' | 'pointerPoint' | 'link' | 'solidLink' | 'uniformRgbLink'
 type CoverageMode = 'none' | 'mark' | 'test'
 type PreviousStyles = {
-  points?: Buffer; links: Buffer;
+  points?: Buffer; links?: Buffer;
   pointCount: number; linkCount: number;
   pointSizes: SizeValues; linkWidths: SizeValues;
   animatePointSizes: boolean; animateLinkWidths: boolean;
@@ -79,6 +79,7 @@ type StyleUpdate = {
   animateLinkWidths?: boolean;
   continueTransition?: boolean;
   linkWidthsOnly?: boolean;
+  pointChannels?: PointChannels;
 }
 type EncodeOptions = {
   draw?: GraphDrawOptions;
@@ -195,11 +196,20 @@ export class GraphRenderer {
   /** Upload changed channels after the data model has resolved the pending setters. */
   public update (options: StyleUpdate = {}): void {
     this.revision++
-    const widthsOnly = !!options.linkWidthsOnly && !!this.lines.buffer &&
-      this.lines.count === (this.data.linksNumber ?? 0) && this.pointCount === (this.data.pointsNumber ?? 0)
-    const previous = this.capturePrevious(options, widthsOnly)
+    const sameCounts = this.lines.count === (this.data.linksNumber ?? 0) && this.pointCount === (this.data.pointsNumber ?? 0)
+    const widthsOnly = !!options.linkWidthsOnly && !!this.lines.buffer && sameCounts
+    const pointChannels = this.pointCount && this.pointBuffer && this.highlightMask && sameCounts ? options.pointChannels : undefined
+    const previous = this.capturePrevious(options, widthsOnly, !!pointChannels)
     try {
-      if (widthsOnly) {
+      if (pointChannels) {
+        const sizes = pointChannels.sizes && this.options.trackSizes ? captureSizes(this.pointCount, i => this.data.getResolvedPointSize(i)) : this.pointSizes
+        const result = this.points.updateStyles(
+          this.pointBuffer!, this.data, this.config, this.highlightMask!, this.greyExitColor, pointChannels, previous?.points === this.pointBuffer
+        )
+        if (result.previous && previous) previous.points = result.previous
+        if (result.colors) this.highlightPass.setColors(result.colors)
+        this.pointSizes = sizes
+      } else if (widthsOnly) {
         const snapshot = this.lines.updateWidths(this.data, !!previous && previous.links === this.lines.buffer)
         if (snapshot && previous) previous.links = snapshot
       } else {
@@ -207,7 +217,7 @@ export class GraphRenderer {
       }
     } catch (error) {
       if (previous?.points !== this.pointBuffer) previous?.points?.destroy()
-      if (previous?.links !== this.lines.buffer) previous?.links.destroy()
+      if (previous?.links !== this.lines.buffer) previous?.links?.destroy()
       throw error
     }
     if (previous || !options.continueTransition) {
@@ -383,10 +393,10 @@ export class GraphRenderer {
   }
 
   /** Retain or freeze the displayed styles once, before an interrupting update changes their targets. */
-  private capturePrevious (options: StyleUpdate, widthsOnly: boolean): PreviousStyles | undefined {
+  private capturePrevious (options: StyleUpdate, widthsOnly: boolean, pointsOnly: boolean): PreviousStyles | undefined {
     if (!options.animate || !this.pointCount || !this.pointBuffer || !this.lines.buffer) return undefined
     let points = widthsOnly ? undefined : this.pointBuffer
-    let links = this.lines.buffer
+    let links = pointsOnly ? undefined : this.lines.buffer
     let pointSizes = this.pointSizes
     let linkWidths = this.lines.widths
     const animatePointSizes = options.animatePointSizes ?? true
@@ -406,9 +416,11 @@ export class GraphRenderer {
         )
       }
       try {
-        links = this.interpolation.freeze(
-          'Link', previous.links, this.lines.buffer, progress, previous.linkCount, this.lines.count, previous.animateLinkWidths
-        )
+        if (previous.links) {
+          links = this.interpolation.freeze(
+            'Link', previous.links, this.lines.buffer, progress, previous.linkCount, this.lines.count, previous.animateLinkWidths
+          )
+        }
       } catch (error) {
         if (points !== this.pointBuffer) points?.destroy()
         throw error
@@ -419,7 +431,7 @@ export class GraphRenderer {
 
   private releasePrevious (): void {
     this.previous?.points?.destroy()
-    this.previous?.links.destroy()
+    this.previous?.links?.destroy()
     this.previous = undefined
   }
 
@@ -484,8 +496,8 @@ export class GraphRenderer {
       c.hoveredLinkWidthIncrease, c.focusedLinkWidthIncrease, c.linkDashLength, c.linkDashGap,
       linkPickPixel ? 2 : +picking, c.linkArrowsSizeScale, position.pointCount, options.picking?.alpha ?? 0.5,
       ...this.hoverColor, ...this.hoverRing, ...this.focusRing,
-      this.previous ? Math.max(0, Math.min(1, view.styleProgress ?? 1)) : 1, this.previous?.pointCount ?? 0,
-      this.previous?.linkCount ?? 0, view.maxPointSize ?? 64,
+      this.previous ? Math.max(0, Math.min(1, view.styleProgress ?? 1)) : 1, this.previous?.points ? this.previous.pointCount : 0,
+      this.previous?.links ? this.previous.linkCount : 0, view.maxPointSize ?? 64,
       shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),

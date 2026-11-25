@@ -113,6 +113,10 @@ export class GraphSimulation {
   public get progress (): number { return this.store.simulationProgress }
   public get isSimulationRunning (): boolean { return this.isReady && this.store.isSimulationRunning }
 
+  private get hasPendingLayoutUpdate (): boolean {
+    return this.isPositionsDirty || this.isTopologyDirty || this.isClustersDirty || this.isAttractorsDirty || this.shouldRefreshSamples
+  }
+
   public setConfig (config: GraphSimulationConfig): void {
     if (this.isDestroyed) return
     validateConfig(config)
@@ -120,6 +124,8 @@ export class GraphSimulation {
     const previous = { ...this.config }
     applyConfig(this.config, config, true)
     this.applyConfigChanges(previous)
+    // A host can edit the simulation directly. Its next Graph.render() must also refresh the drawn size and image fallback.
+    if (previous.pointDefaultSize !== this.config.pointDefaultSize) this.host?.onDataApplied?.()
   }
 
   /** Synchronize a partial standalone update or a Graph update of the shared config. */
@@ -241,10 +247,23 @@ export class GraphSimulation {
     }
   }
 
+  /** @internal Apply point paint and footprints without walking link data. A direct simulation setter can still require a full update. */
+  public applyPointStyleUpdate (colors: boolean, sizes: boolean, alpha?: number): boolean {
+    if (this.hasPendingLayoutUpdate || (this.isSizesDirty && !sizes)) return false
+    if (colors) this.data.updatePointColor()
+    if (sizes) {
+      this.data.updatePointSize()
+      this.data.updatePointImageSizes()
+      if (this.config.enableSimulation) this.state?.updateSizes(this.data)
+      this.isSizesDirty = false
+    }
+    if (alpha !== undefined) this.store.alpha = alpha
+    return true
+  }
+
   /** @internal A width edit affects drawing only. Any simulation setter queued alongside it still needs a full data update. */
   public applyLinkWidthUpdate (alpha?: number): boolean {
-    if (this.isPositionsDirty || this.isSizesDirty || this.isTopologyDirty || this.isClustersDirty ||
-      this.isAttractorsDirty || this.shouldRefreshSamples) return false
+    if (this.hasPendingLayoutUpdate || this.isSizesDirty) return false
     this.data.updateLinkWidth()
     if (alpha !== undefined) this.store.alpha = alpha
     return true

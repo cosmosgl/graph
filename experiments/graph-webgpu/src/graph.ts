@@ -47,7 +47,7 @@ export class Graph {
   private shouldMeasureNextFrame = false
   private isFrameInFlight = false
   private isDestroyed = false
-  private hasPendingStyleData = false
+  private shouldUpdateAllStyles = false
   private hasRendered = false
   private fitTimer?: ReturnType<typeof setTimeout>
   private fitRequest = 0
@@ -65,7 +65,7 @@ export class Graph {
     this.simulation = new GraphSimulation(undefined, devicePromise, this.config, canvas, {
       onDeviceLost: (): void => this.destroy(),
       onPositionEdit: (id, record): void => this.positionTransition?.edit(id, record),
-      onDataApplied: (): void => { this.hasPendingStyleData = true },
+      onDataApplied: (): void => { this.shouldUpdateAllStyles = true },
     })
     this.graph = this.simulation.data
     this.camera = new Zoom(this.simulation.store, this.config)
@@ -108,6 +108,7 @@ export class Graph {
       this.transition.setDurationOverride(this.canvas && this.hasRendered ? transitionDuration : 0)
       const animate = this.transition.duration > 0 && this.transition.isPending
       const newPositions = this.transition.isPendingFor(TransitionProperty.Positions)
+      const pointColors = this.transition.isPendingFor(TransitionProperty.PointColors)
       const pointSizes = this.transition.isPendingFor(TransitionProperty.PointSizes)
       const linkWidths = this.transition.isPendingFor(TransitionProperty.LinkWidths)
       const oldSource = this.getPointPositionBuffer()
@@ -115,11 +116,18 @@ export class Graph {
         if (this.positionTransition?.write(oldSource, 1)) this.simulation.markPositionsChanged()
       }
       const from = animate && newPositions && oldSource ? copyPositions(oldSource) : undefined
+      const partial = this.hasRendered && !this.shouldUpdateAllStyles
+      let pointStylesOnly = false
       let linkWidthsOnly = false
       try {
-        linkWidthsOnly = this.hasRendered && linkWidths && !this.hasPendingStyleData && this.simulation.applyLinkWidthUpdate(alpha)
-        if (!linkWidthsOnly) this.simulation.applyData(alpha)
+        if (partial && (pointColors || pointSizes) && !linkWidths) {
+          pointStylesOnly = this.simulation.applyPointStyleUpdate(pointColors, pointSizes, alpha)
+        } else if (partial && linkWidths && !pointColors && !pointSizes) {
+          linkWidthsOnly = this.simulation.applyLinkWidthUpdate(alpha)
+        }
+        if (!pointStylesOnly && !linkWidthsOnly) this.simulation.applyData(alpha)
         this.renderer?.update({
+          pointChannels: pointStylesOnly ? { colors: pointColors, sizes: pointSizes } : undefined,
           linkWidthsOnly,
           animate,
           previousProgress: this.transition.progress,
@@ -140,13 +148,13 @@ export class Graph {
         from?.destroy()
         throw error
       }
-      this.hasPendingStyleData = false
+      this.shouldUpdateAllStyles = false
       this.transition.start()
-      if (!linkWidthsOnly) {
+      if (!linkWidthsOnly && !pointStylesOnly) {
         this.labels?.invalidate()
         this.clusterVersion = -1
-        this.area?.invalidateSizes()
       }
+      if (!linkWidthsOnly && (!pointStylesOnly || pointSizes)) this.area?.invalidateSizes()
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
       this.hasHoverSceneChanged = true
@@ -243,7 +251,7 @@ export class Graph {
   public setPinnedPoint (id: number, pinned: boolean): void { this.whenReady(() => this.simulation.setPinnedPoint(id, pinned)) }
   public isPointPinned (id: number): boolean { return this.simulation.isPointPinned(id) }
   public setPointSizes (sizes: Float32Array): void {
-    this.queueStyleData(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) })
+    this.whenReady(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) })
   }
 
   public setLinkStrength (weights: Float32Array): void { this.whenReady(() => this.simulation.setLinkStrength(weights)) }
@@ -267,7 +275,7 @@ export class Graph {
   }
 
   public setPointColors (value: Float32Array): void {
-    this.queueStyleData(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) })
+    this.whenReady(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) })
   }
 
   public setPointShapes (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointShapes = value }) }
@@ -470,7 +478,7 @@ export class Graph {
 
   private queueStyleData (setter: () => void): void {
     this.whenReady(() => {
-      this.hasPendingStyleData = true
+      this.shouldUpdateAllStyles = true
       setter()
     })
   }
@@ -614,8 +622,11 @@ export class Graph {
       if (previous.linkDefaultColor !== this.config.linkDefaultColor) this.graph.invalidateLinkDefaultColor()
       if (previous.linkDefaultStyle !== this.config.linkDefaultStyle) this.graph.updateLinkStyles()
       if (previous.linkDefaultArrows !== this.config.linkDefaultArrows) this.graph.updateArrows()
-      this.renderer?.update()
-      this.area?.invalidateSizes()
+      const defaultsOnly = !reset && this.hasRendered && !this.shouldUpdateAllStyles && keys.length > 0 &&
+        keys.every(key => key === 'pointDefaultColor' || key === 'pointDefaultSize')
+      const pointChannels = defaultsOnly ? { colors: keys.includes('pointDefaultColor'), sizes: keys.includes('pointDefaultSize') } : undefined
+      this.renderer?.update({ pointChannels })
+      if (!pointChannels || pointChannels.sizes) this.area?.invalidateSizes()
       if (previous.pixelRatio !== this.config.pixelRatio) this.resize()
       if (!this.config.enableRenderLoop && this.frame) {
         cancelAnimationFrame(this.frame)

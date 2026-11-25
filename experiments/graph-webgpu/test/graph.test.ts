@@ -3,6 +3,8 @@ import { webgl2Adapter } from '@luma.gl/core/webgl'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation, type GraphConfig } from '../src'
+import { Lines } from '../src/modules/Lines'
+import { StyleTransition } from '../src/style-transition'
 
 const config: GraphConfig = {
   enableRenderLoop: false,
@@ -41,6 +43,127 @@ async function expectBorrowedDeviceUsable (device: Device): Promise<void> {
 }
 
 describe('WebGPU Graph', () => {
+  it('retains the link buffer through color-only, size-only and interrupted point edits', async () => {
+    const { graph, cleanup } = mountedGraph()
+    try {
+      await graph.ready
+      const update = vi.spyOn(Lines.prototype, 'update')
+      const freeze = vi.spyOn(StyleTransition.prototype, 'freeze')
+      let clock = performance.now()
+      vi.spyOn(performance, 'now').mockImplementation(() => clock)
+      // A full render observes the real link target that subsequent edits must preserve.
+      graph.render(undefined, 0)
+      const lines = update.mock.contexts[0] as Lines
+      const target = lines.buffer!
+      const device = graph.simulation.device!
+      const encoderPrototype: typeof device.commandEncoder = Object.getPrototypeOf(device.commandEncoder)
+      const copies = vi.spyOn(encoderPrototype, 'copyBufferToBuffer')
+      const allocations = vi.spyOn(device, 'createBuffer')
+      const writes = vi.spyOn(target, 'write')
+      update.mockClear()
+      const colors = Float32Array.of(1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1)
+      graph.setPointColors(colors)
+      graph.render(undefined, 0)
+      expect(graph.getPointColors()).toEqual(colors)
+      const sizes = Float32Array.of(8, NaN, NaN)
+      graph.setPointSizes(sizes)
+      graph.render(undefined, 0)
+      expect(graph.getPointSizes()).toEqual(Float32Array.of(8, 12, 0))
+
+      // Reused caller arrays must still be resolved when a setter runs again.
+      colors.set([0, 1, 0, 1])
+      sizes[0] = 24
+      graph.setPointColors(colors)
+      graph.setPointSizes(sizes)
+      graph.render(undefined, 1000)
+      clock += 500
+      graph.renderOneFrame()
+      expect(graph.getPointRadiusByIndex(0)).toBe(16)
+      sizes[0] = 32
+      graph.setPointSizes(sizes)
+      graph.render(undefined, 1000)
+      expect(graph.getPointRadiusByIndex(0)).toBe(16)
+      clock += 1000
+      graph.renderOneFrame()
+      expect(graph.getPointRadiusByIndex(0)).toBe(32)
+      expect(graph.getPointColors()).toEqual(colors)
+      expect(lines.buffer === target).toBe(true)
+      expect(target.destroyed).toBe(false)
+      expect(writes).not.toHaveBeenCalled()
+      expect(update).not.toHaveBeenCalled()
+      expect(allocations.mock.results.some(result => result.type === 'return' && result.value.id === target.id)).toBe(false)
+      expect(copies.mock.calls.some(([copy]) => copy.sourceBuffer === target || copy.destinationBuffer === target)).toBe(false)
+      expect(freeze.mock.calls.some(([kind]) => kind === 'Link')).toBe(false)
+
+      // A direct simulation edit can change link topology alongside the next point setter.
+      graph.simulation.setLinks(Float32Array.of(1, 0, 0, 1))
+      graph.setPointColors(colors)
+      graph.render(undefined, 0)
+      expect(lines.count).toBe(2)
+    } finally { vi.restoreAllMocks(); cleanup() }
+  })
+
+  it('updates default point channels immediately and keeps unrelated staged channels until render', async () => {
+    const { graph, cleanup } = mountedGraph()
+    try {
+      await graph.ready
+      graph.setPointSizes(Float32Array.of(8, NaN, NaN))
+      graph.render(undefined, 0)
+      const original = graph.getPointColors()
+      const rebuildLinks = vi.spyOn(Lines.prototype, 'update')
+      const colors = Float32Array.of(NaN, 0.25, NaN, 1, 1, 0, 1, 1, NaN, NaN, NaN, NaN)
+      graph.setPointColors(colors)
+      graph.setConfigPartial({ pointDefaultSize: 18 })
+      expect(graph.getPointSizes()).toEqual(Float32Array.of(8, 18, 0))
+      expect(graph.getPointColors()).toEqual(original)
+      graph.render(undefined, 0)
+
+      graph.setPointSizes(Float32Array.of(6, NaN, NaN))
+      graph.setConfigPartial({ pointDefaultColor: '#00ffff' })
+      expect(graph.getPointColors()).toEqual(Float32Array.of(0, 0.25, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0))
+      expect(graph.getPointSizes()).toEqual(Float32Array.of(8, 18, 0))
+      graph.render(undefined, 0)
+      graph.setConfigPartial({ pointDefaultColor: '#ff0000', pointDefaultSize: 22 })
+      expect(graph.getPointColors()).toEqual(Float32Array.of(1, 0.25, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0))
+      expect(graph.getPointSizes()).toEqual(Float32Array.of(6, 22, 0))
+      expect(rebuildLinks).not.toHaveBeenCalled()
+
+      // A full config reset can also change link defaults even if the replacement only names point options.
+      graph.setConfigPartial({ linkDefaultWidth: 17 })
+      rebuildLinks.mockClear()
+      graph.setConfig({ pointDefaultSize: 14, pointDefaultColor: '#00ff00' })
+      expect(graph.getLinkWidthByIndex(0)).not.toBe(17)
+      expect(rebuildLinks).toHaveBeenCalledOnce()
+    } finally { vi.restoreAllMocks(); cleanup() }
+  })
+
+  it('updates collision radii through both Graph and simulation size setters', async () => {
+    const { graph, cleanup } = mountedGraph({ simulationGravity: 0, simulationFriction: 0, simulationCollision: 1 })
+    try {
+      await graph.ready
+      // Point 0 is pinned at x=2000. At six units of separation, four-unit diameters cannot touch.
+      graph.setPointPosition(1, 2006, 2048)
+      graph.setPointSizes(Float32Array.of(4, 4, 0))
+      graph.render(1, 0)
+      graph.step()
+      expect((await graph.getPointPositionsAsync())[2]).toBe(2006)
+
+      // Two equal radii split the overlap correction. Only the unpinned point moves.
+      graph.setPointSizes(Float32Array.of(NaN, NaN, 0))
+      graph.render(1, 0)
+      graph.setConfigPartial({ pointDefaultSize: 10 })
+      graph.step()
+      expect((await graph.getPointPositionsAsync())[2]).toBe(2008)
+
+      graph.simulation.setPointSizes(Float32Array.of(20, 20, 0))
+      graph.setPointColors(new Float32Array(12).fill(1))
+      graph.render(1, 0)
+      expect(graph.getPointRadiusByIndex(1)).toBe(20)
+      graph.step()
+      expect((await graph.getPointPositionsAsync())[2]).toBe(2014)
+    } finally { cleanup() }
+  })
+
   it('uploads only the link-width channel when a width edit is the only pending setter', async () => {
     const { graph, cleanup } = mountedGraph()
     try {
