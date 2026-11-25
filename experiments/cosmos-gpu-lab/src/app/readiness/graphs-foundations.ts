@@ -5,6 +5,18 @@ import type { CaseReadiness } from './types'
 // live verdict or an approval of the production engine.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
+  'production-graph-api/headless-trackers': {
+    badge: 'Both trackers match',
+    tone: 'pass',
+    finding: 'B kept following its own points when A changed groups and after A was destroyed.',
+    area: 'Integration',
+    status: 'Six checkpoints verified on M3',
+    evidence: [
+      { tone: 'pass', text: 'Both packages matched the full simulation positions, including missing and repeated slots' },
+      { tone: 'pass', text: 'A discarded each invalidated read while B returned its request-time positions' },
+    ],
+    next: 'Repeat the packaged headless replay on other supported adapters.',
+  },
   'production-graph-api/sparse-transition': {
     badge: 'Frames and picks match',
     tone: 'pass',
@@ -125,13 +137,13 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'integrated-webgpu/tracked-positions': {
     badge: 'Positions matched',
     tone: 'pass',
-    finding: 'Tracked snapshots matched, including live label caches; production APIs remain open.',
+    finding: 'Tracked snapshots and live label caches matched in the prototype.',
     area: 'Integration',
-    status: 'Production API open',
+    status: 'Prototype and packaged tracker checks passed on M3',
     evidence: [
       { tone: 'pass', text: 'Eight snapshot requests matched' },
       { tone: 'pass', text: 'Live label caches matched' },
-      { tone: 'unknown', text: 'Production tracker contract open' },
+      { tone: 'pass', text: 'The separate two-tracker case verified headless lifetimes in both real packages' },
     ],
     next: 'Validate production callers and label latency',
   },

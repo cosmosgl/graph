@@ -6,6 +6,16 @@ For the separate sparse point replay, build both distributions as shown below, t
 LAB_ARTIFACT_RUN=sparse-removal-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
 ```
 
+## Independent headless trackers
+
+Build both standalone packages and run the tracker regression from the repository root. Use a new capture name each time.
+
+```sh
+LAB_ARTIFACT_RUN=headless-trackers-02 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/headless-trackers.test.ts
+```
+
+The two JSON files contain the adapter, full positions, tracker maps, cached maps, ordered arrays and results of reads in flight. The M3 baseline in `captures/headless-trackers-baseline-a28c25d3` completed the WebGL replay. Its WebGPU package had no `trackPoints()` method. In `captures/headless-trackers-m3-release` the ANGLE Metal Apple M3 control and the Apple Metal 3 WebGPU adapter (fallback disabled) agreed through simulation teardown. The neighboring `provenance.json` identifies the code, both bundles, browser and luma versions for the run.
+
 ## Stationary hover
 
 Build both standalone Graph distributions from the repository root. Run the native Chrome comparison with a fresh capture name each time.

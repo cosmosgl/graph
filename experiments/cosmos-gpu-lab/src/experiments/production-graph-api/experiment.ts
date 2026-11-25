@@ -3,13 +3,13 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare manual stepping, point removal, hover, moving selection and tracked labels through the two built Cosmos packages.',
+  summary: 'Compare manual stepping, point removal, hover, selection and point tracking through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
   showRecordedSummary: false,
   howItWorks: {
-    summary: 'The panes run the same application with the built WebGL and WebGPU Graph packages.',
+    summary: 'Each comparison runs the same application with the built WebGL and WebGPU packages.',
   },
   cases: [{
     id: 'manual-step',
@@ -38,10 +38,20 @@ export const experiment = defineExperiment({
     reference: 'The WebGL Graph receives the same point updates, camera changes and pointer events.',
     acceptance: 'Both packages report the same point IDs and callback order. The ring follows the hovered point and clears when the pointer leaves.',
     recorded: null,
+  }, {
+    id: 'headless-trackers',
+    title: 'Two headless point trackers',
+    kind: 'compare',
+    question: 'Does one tracker keep reporting the right positions when another changes or is destroyed?',
+    description: 'Follow two groups in a headless simulation. Change the points in one group, destroy its tracker, then step the survivor.',
+    reference: 'Each tracker is checked against a full position read from its own simulation at the same checkpoint.',
+    acceptance: 'Both packages report the requested point IDs and coordinates. The surviving tracker continues to follow its own group.',
+    recorded: null,
   }],
   create: async (host, caseId) => {
     if (caseId === 'sparse-transition') return (await import('./sparse-view')).createSparseView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
+    if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     return (await import('./view')).createPackageView(host)
   },
   pages: [{

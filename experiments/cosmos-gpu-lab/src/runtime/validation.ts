@@ -66,12 +66,13 @@ export const validationContracts: Record<string, ValidationContract> = {
       'larger viewer workloads, full API and full migration are not approved.',
   },
   'production-graph-api': {
-    question: 'Do the built packages agree on what is drawn and picked as points move, disappear and return?',
+    question: 'Do the built packages draw, pick and track the same points as they move, disappear and return?',
     reference: 'Known IDs, the WebGL canvas during position edits, and each engine’s full YouTube position snapshot at release.',
     acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position in the removal replay. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
+      'Match each headless tracker to the full position read, including the surviving group after the other is destroyed. ' +
       'Return exact ordered IDs and coordinates for 1,000 labels per YouTube drag.',
-    coverage: 'Manual gravity and clicks, point removal and stationary hover at 1× and 2×, and four moving rectangles at two YouTube sizes on M3.',
+    coverage: 'Manual gravity and clicks, removal and hover at 1× and 2×, two headless trackers, and four moving rectangles at two YouTube sizes on M3.',
     limits: 'The YouTube replay uses a fixed camera, two-pixel points and one native GPU. The two running simulations can reach different layouts at release.',
   },
   'production-lines': {

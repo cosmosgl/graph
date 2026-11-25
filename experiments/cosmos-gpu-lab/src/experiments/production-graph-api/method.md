@@ -32,6 +32,23 @@ WebGL reports `over 0` when point 0 arrives. Holding the same point produces no 
 
 On M3, the original candidate missed all seven hover callbacks at each pixel ratio. Refreshing the pick recovered the callbacks, but the ring still appeared wider and brighter. WebGL draws hover and focus over the point sprites and gives the hover ring 70% opacity. With that drawing rule, both packages matched every RGBA byte in all nine paired frames at 1× and all nine at 2×.
 
+### Two headless point trackers
+
+Open [Two headless point trackers](#/production-graph-api?section=try-headless-trackers). Each package creates a `GraphSimulation` and two trackers before the device or data is ready. A and B both follow point 1. When A changes its indices, its old request resolves to `null`. B's pending request still returns point 1 at the coordinate it had when the request began.
+
+```ts
+const a = simulation.trackPoints([3, 1, 0])
+const b = simulation.trackPoints([1, 4, 5])
+// After supplying data and stepping the simulation:
+a.setIndices([2, 1, 2, 6])
+a.destroy()
+const positions = await b.positionsAsync?.()
+```
+
+Choose **Destroy A and step B** to see point 1 move from x = 2140 to x ≈ 2130.8 in the surviving tracker. Both real packages matched every ID and float32 coordinate at all six M3 checkpoints. The test also checks the read against the full simulation positions. Duplicate indices occupy separate slots in the ordered array, and absent points leave a pair of `NaN` values.
+
+Use `await tracker.positionsAsync()` when a label needs positions from a particular tick. WebGPU's synchronous `positions()` and `positionsArray()` return the latest completed copy and start a read when newer positions are available.
+
 ### Moving YouTube graph
 
 The paired M3 replay uses both built packages and reports readback, highlight updates and label redraw separately. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)

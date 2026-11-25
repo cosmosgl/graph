@@ -1,6 +1,7 @@
-import type { Graph } from '../../../../../dist/index.js'
+import type { Graph, GraphSimulation } from '../../../../../dist/index.js'
 
-type StandaloneWindow = Window & Partial<Record<'Cosmos', Pick<typeof import('../../../../../dist/index.js'), 'Graph'>>>
+type CosmosPackage = Pick<typeof import('../../../../../dist/index.js'), 'Graph' | 'GraphSimulation'>
+type StandaloneWindow = Window & Partial<Record<'Cosmos', CosmosPackage>>
 
 // Optional at Lab build time: other experiments can run before either package has been built.
 const bundles = import.meta.glob<string>([
@@ -8,7 +9,7 @@ const bundles = import.meta.glob<string>([
   '../../../../graph-webgpu/dist/index.min.js',
 ], { query: '?url', eager: true, import: 'default' })
 
-export async function loadGraphPackage (engine: 'webgl' | 'webgpu', frame: Document = document): Promise<typeof Graph> {
+async function loadPackage (engine: 'webgl' | 'webgpu', frame: Document): Promise<CosmosPackage> {
   const production = engine === 'webgl'
   const url = bundles[production ? '../../../../../dist/index.min.js' : '../../../../graph-webgpu/dist/index.min.js']
   const command = production ? 'pnpm run build' : 'pnpm --filter @cosmos.gl/graph-webgpu build'
@@ -21,8 +22,20 @@ export async function loadGraphPackage (engine: 'webgl' | 'webgpu', frame: Docum
     frame.head.append(script)
   })
   const cosmos = (frame.defaultView as StandaloneWindow).Cosmos
-  if (!cosmos?.Graph) throw new Error(`The ${engine} package did not expose a Graph constructor`)
+  if (!cosmos) throw new Error(`The ${engine} package did not expose Cosmos`)
+  return cosmos
+}
+
+export async function loadGraphPackage (engine: 'webgl' | 'webgpu', frame: Document = document): Promise<typeof Graph> {
+  const cosmos = await loadPackage(engine, frame)
+  if (!cosmos.Graph) throw new Error(`The ${engine} package did not expose a Graph constructor`)
   return cosmos.Graph
+}
+
+export async function loadGraphSimulationPackage (engine: 'webgl' | 'webgpu', frame: Document): Promise<typeof GraphSimulation> {
+  const cosmos = await loadPackage(engine, frame)
+  if (!cosmos.GraphSimulation) throw new Error(`The ${engine} package did not expose a GraphSimulation constructor`)
+  return cosmos.GraphSimulation
 }
 
 // Keep the standalone production luma v9 bundle out of the Lab's v10 dependency graph.
