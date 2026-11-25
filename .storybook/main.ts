@@ -40,14 +40,14 @@ const config: StorybookConfig = {
   previewBody: (body) => `${body}<small id="cosmos-preview-build" data-engine="${engine}"
     style="position:fixed;bottom:4px;left:6px;z-index:10000;pointer-events:none;color:#f5f5f5;background:#242424;padding:2px 5px;font:11px/1.35 monospace"
     >${engine} · ${revision}</small>`,
-  viteFinal: (base) => mergeConfig(base, {
-    cacheDir: resolve(__dirname, '../node_modules/.cache', `storybook-vite-${engine.toLowerCase()}`),
+  viteFinal: (base, { configDir }) => mergeConfig(base, {
+    cacheDir: resolve(configDir, '../node_modules/.cache', `storybook-vite-${engine.toLowerCase()}`),
     server: { watch: { ignored: ['**/storybook-static*/**'] } },
     resolve: {
       // Scope this to the public entry. Both builds import story code through @/graph/stories.
       alias: webgpu ? [{
         find: /^@cosmos\.gl\/graph$/,
-        replacement: resolve(__dirname, '../experiments/graph-webgpu/src/index.ts'),
+        replacement: resolve(configDir, '../experiments/graph-webgpu/src/index.ts'),
       }] : [],
     },
   }),
