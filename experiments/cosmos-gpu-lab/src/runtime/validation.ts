@@ -70,7 +70,7 @@ export const validationContracts: Record<string, ValidationContract> = {
     reference: 'Known IDs, the WebGL canvas during position edits, and each engine’s full YouTube position snapshot at release.',
     acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position in the removal replay. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
-      'Preserve each package’s point colors, sizes, endpoint gradients and click IDs through an interrupted style transition. ' +
+      'Check point colors, sizes and endpoint gradients through an interruption. WebGPU edge clicks must follow the displayed diameter. ' +
       'Match each headless tracker to the full position read, including the surviving group after the other is destroyed. ' +
       'Return exact ordered IDs and coordinates for 1,000 labels per YouTube drag.',
     coverage: 'Manual gravity and clicks, removal and hover at 1× and 2×, two headless trackers, and four moving rectangles at two YouTube sizes on M3.',

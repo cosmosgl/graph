@@ -4,7 +4,14 @@ import { runPointStyleUpdates } from './point-style-updates'
 
 export function createPointStyleView (host: HTMLElement): ExperimentInstance {
   return createPairedPickView(host, {
-    probes: { center: 'Point 0 center', edge: '20 CSS px below point 0', link: 'Link 0 midpoint', control: 'Point 2 center' },
+    initial: 'Interrupt with a larger white point',
+    probes: {
+      center: 'Point 0 center',
+      edge: '20 CSS px below point 0',
+      outerEdge: '22 CSS px below point 0',
+      link: 'Link 0 midpoint',
+      control: 'Point 2 center',
+    },
     run: async (engine, ratio) => (await runPointStyleUpdates(engine, ratio)).samples.map(sample => ({
       key: sample.phase,
       title: sample.phase,

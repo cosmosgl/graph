@@ -9,7 +9,7 @@ export type PointStyleSample = {
   pointSpan: number;
   pointRgb: number[];
   linkRgb: number[];
-  picks: { center: string; edge: string; link: string; control: string };
+  picks: { center: string; edge: string; outerEdge: string; link: string; control: string };
 }
 
 const width = 224
@@ -98,7 +98,13 @@ export async function runPointStyleUpdates (engine: Engine, ratio: 1 | 2): Promi
           const at = 4 * (y * copy.width + 48 * ratio)
           if (Math.max(pixels.data[at]!, pixels.data[at + 1]!, pixels.data[at + 2]!) > 32) pointSpan++
         }
-        const picks = { center: await click(48, 48), edge: await click(48, 68), link: await click(112, 48), control: await click(48, 112) }
+        const picks = {
+          center: await click(48, 48),
+          edge: await click(48, 68),
+          outerEdge: await click(48, 70),
+          link: await click(112, 48),
+          control: await click(48, 112),
+        }
         samples.push({ phase, pixels, size: graph.getPointRadiusByIndex(0)!, pointSpan, pointRgb: rgb(48, 48), linkRgb: rgb(112, 48), picks })
       }
       await sample('Initial')

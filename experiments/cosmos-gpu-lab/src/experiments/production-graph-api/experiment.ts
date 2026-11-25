@@ -45,7 +45,7 @@ export const experiment = defineExperiment({
     question: 'What happens to a point and its link when a color or size change interrupts a transition?',
     description: 'Compare the drawn frames and click IDs as point colors and sizes change. The link takes its color from its endpoints.',
     reference: 'Both standalone Graph packages receive the same edits, clicks and transition times.',
-    acceptance: 'Each package preserves its drawing and click results across the edit, including how it handles an interrupted transition.',
+    acceptance: 'WebGPU picks at the displayed point size, including the first frame after a restart. WebGL reports its last hit during size transitions.',
     recorded: null,
   }, {
     id: 'headless-trackers',

@@ -39,8 +39,6 @@ it.each([1, 2] as const)('draws and picks point-only color and size edits around
   expect(rows).toHaveLength(8)
   for (const [i, row] of rows.entries()) {
     expect(row.webgpu.phase).toBe(row.webgl.phase)
-    // The edge is 20 CSS pixels from the edited point's center.
-    const edge = [2, 5, 6, 7].includes(i) ? 'Point 0' : 'Background'
     for (const engine of ['webgl', 'webgpu'] as const) {
       const sample = row[engine]
       const label = `${engine} · ${sample.phase}`
@@ -48,11 +46,16 @@ it.each([1, 2] as const)('draws and picks point-only color and size edits around
       expect.soft(sample.pointSpan, label).toBe(sample.size * ratio)
       expect.soft(sample.pointRgb, label).toEqual(expectedColors[engine][i])
       // WebGL suspends pointer updates during size transitions and reuses the last hit (the control point).
-      // The existing WebGPU pointer path picks the target size throughout the transition.
       const held = engine === 'webgl' && i >= 3 && i <= 6
+      // The nearest pick-buffer samples under the 20 and 22 CSS-pixel probes
+      // sit 11 and 13 CSS pixels below the center, respectively, at both ratios.
+      // A displayed diameter of 24 reaches only the first; 32 reaches both.
+      const diameter = expectedSizes[engine][i]!
+      const edge = diameter >= 24 ? 'Point 0' : 'Background'
+      const outerEdge = diameter >= 32 ? 'Point 0' : 'Background'
       expect.soft(sample.picks, label).toEqual(held
-        ? { center: 'Point 2', edge: 'Point 2', link: 'Point 2', control: 'Point 2' }
-        : { center: 'Point 0', edge, link: 'Link 0', control: 'Point 2' })
+        ? { center: 'Point 2', edge: 'Point 2', outerEdge: 'Point 2', link: 'Point 2', control: 'Point 2' }
+        : { center: 'Point 0', edge, outerEdge, link: 'Link 0', control: 'Point 2' })
       // The gradient reads its current endpoint colors even while the point paint interpolates.
       const endpoint = [red, blue, blue, red, red, white, white, white][i]!
       const green = [0, 255, 0]

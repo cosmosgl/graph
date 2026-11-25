@@ -6,17 +6,18 @@ import type { CaseReadiness } from './types'
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'production-graph-api/point-style-updates': {
-    badge: 'Point edits isolated',
-    tone: 'review',
-    finding: 'Recoloring or resizing points preserved the resident WebGPU link records. The packages differ in how an interrupted point appears and picks.',
+    badge: 'Edge picks follow point size',
+    tone: 'pass',
+    finding: 'The WebGPU hit stayed with the displayed point through an interruption. Resizing and recoloring preserved resident link records.',
     area: 'Integration',
     status: 'Eight frames checked on M3 at 1× and 2×',
     evidence: [
       { tone: 'pass', text: 'Immediate edits and the settled frame matched every pixel and click ID' },
       { tone: 'pass', text: 'Zero link-record uploads in all four WebGPU edits on the 8,192-link control' },
-      { tone: 'warn', text: 'During size transitions WebGL holds the last hit. WebGPU picks using the target size.' },
+      { tone: 'pass', text: 'At 24 CSS px the inner probe hit point 0 and the outer probe missed, both before and after the restart' },
+      { tone: 'info', text: 'WebGL reported its last hit throughout the active size transition' },
     ],
-    next: 'Decide which pointer behavior applications should receive during a size transition.',
+    next: 'Check rectangle and lasso selection during size transitions.',
   },
   'production-graph-api/headless-trackers': {
     badge: 'Both trackers match',

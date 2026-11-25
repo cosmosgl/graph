@@ -20,6 +20,8 @@ The 4,096-point / 8,192-link capture in `captures/point-styles-uploads-zF7J7b` i
 
 The M3 control uses the WebGPU package from `6b56fb87`. The per-frame hashes and probes are in `captures/point-style-visual-control-6b56fb87` and `captures/point-style-visual-m3-corrected/before-after.json`. Chrome 158.0.8127.37 reported ANGLE Metal on Apple M3 for WebGL and Apple Metal 3 with fallback disabled for WebGPU. Run `production-points/tile-origin.test.ts` alongside the replay to isolate the 32-pixel circle independently of the edit.
 
+For displayed-size pointer picking, `captures/displayed-pick-control-b615b882` contains the target-size baseline. The same test records clicks 20 and 22 CSS pixels below the center immediately before and after interruption. `captures/displayed-pick-fixed-m3/before-after.json` compares the five click results, painted diameters, colors and full-frame hashes at all eight checkpoints per ratio. In the clean replay, `captures/displayed-pick-release/provenance.json` identifies the two standalone bundles and the tested revision.
+
 ## Independent headless trackers
 
 Build both standalone packages and run the tracker regression from the repository root. Use a new capture name each time.

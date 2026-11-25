@@ -36,11 +36,19 @@ On M3, the original candidate missed all seven hover callbacks at each pixel rat
 
 Open [Change only point colors and sizes](#/production-graph-api?section=try-point-style-updates). The upper link blends its two endpoint colors. Recolor point 0 from red to blue and the midpoint changes from yellow-green to blue-green, even though the link record stays the same. The lower link and its points serve as controls.
 
-Both packages receive the same edits to the same reused arrays. The replay reads the canvas at eight checkpoints, measures the drawn diameter and clicks four locations per frame. Choose **Interrupt with a larger white point** to see the existing difference in how the next transition starts. Halfway from 40 to 8 CSS pixels the point is 24 pixels wide. WebGL restarts at its old 8-pixel target. WebGPU continues from the displayed 24 pixels.
+Both packages receive the same edits to the same reused arrays. The replay reads the canvas at eight checkpoints, measures the drawn diameter and clicks five locations per frame. Choose **Interrupt with a larger white point** to see how the next transition starts. Halfway from 40 to 8 CSS pixels the point is 24 pixels wide. WebGL restarts at its old 8-pixel target. WebGPU continues from the displayed 24 pixels.
 
-During a size transition WebGL suspends pointer picking and reports the last hovered item. In this replay that is point 2. WebGPU runs a new pick using the target footprint. At rest the same probes select the edited point, background or link in both packages.
+The two edge probes are 20 and 22 CSS pixels below point 0’s center. The standalone pointer searches a 9×9 window in a half-resolution pick buffer, so a click can hit just outside the painted circle. WebGPU uses the diameter from the last drawn frame. On M3, the following IDs were the same at 1× and 2×.
 
-On M3, five of eight frames matched every RGBA byte at each pixel ratio. Halfway through shrinking, 16 pixels at 1× and 32 at 2× differed by one channel level. The other two frames show the different restart sizes and colors. The endpoint gradient and the control link matched throughout. Comparing against the earlier WebGPU build, every click and size reading stayed the same. The two regrowth midpoint images changed because the 32-pixel circle now draws round at a tile boundary. [Tile-origin control](#/production-points?section=doc-results)
+| Checkpoint | WebGPU displayed diameter | WebGPU at 20 px | WebGPU at 22 px | WebGL at 20 / 22 px |
+| --- | ---: | --- | --- | --- |
+| Just before interruption | 24 px | Point 0 | Background | Point 2 / Point 2 |
+| First frame after interruption | 24 px | Point 0 | Background | Point 2 / Point 2 |
+| Halfway through regrowth | 32 px | Point 0 | Point 0 | Point 2 / Point 2 |
+
+WebGL holds its last hit throughout a size transition. Here, point 2 was the last control clicked before the animation. The old WebGPU build missed both edge probes just before the restart, then hit both as soon as it received the larger target. Fixing the pointer changed eight edge-click results across both ratios. All 32 package frame captures kept their previous RGBA hashes.
+
+Across packages, five of eight M3 frames matched every RGBA byte at each pixel ratio. Halfway through shrinking, 16 pixels at 1× and 32 at 2× differed by one channel level. The other two frames show the different restart sizes and colors. The endpoint gradient and the control link matched throughout. The regrowth midpoint also exercises a 32-pixel circle at a tile boundary. [Tile-origin control](#/production-points?section=doc-results)
 
 On the 4,096-point, 8,192-link WebGPU fixture, each of the four point edits previously uploaded 262,144 bytes of link records and 16,384 bytes of point draw order. Immediate color, immediate size, animated color and size, and interrupted color and size now upload zero bytes to either buffer. Color-only point data used 81,928 bytes, size-only used 49,160, and combined edits used 131,080. A restarted point transition also uploaded 32 bytes of interpolation parameters.
 
