@@ -1,7 +1,9 @@
 import { luma } from '@luma.gl/core'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it } from 'vitest'
+import { getFinestGridSize } from '@/graph/modules/Shared/cell-slots'
 import { GraphSimulation, type GraphSimulationConfig } from '../src'
+import { createRepulsionGrid } from '../src/modules/ForceManyBody/repulsion-grid'
 import { createNearField } from '../src/modules/ForceManyBody/near-field'
 import { upload } from '../src/modules/Shared/compute'
 import { resourceScope } from '../src/modules/Shared/resource-scope'
@@ -17,44 +19,45 @@ const isolated: GraphSimulationConfig = {
 }
 
 describe('WebGPU simulation forces', () => {
-  it('resamples dense cells by seed, excludes self and adds exact sparse neighbors to the far force', async () => {
+  it.each([6, 512 ** 2 + 1])('resamples dense cells, excludes self and adds sparse neighbors to the far force at %i slots', async count => {
     const device = await luma.createDevice({ type: 'webgpu', adapters: [webgpuAdapter], waitForPageLoad: false })
     const scope = resourceScope()
-    const positionsX = [10, 11, 13, 15, 18, 25]
-    const count = positionsX.length
     try {
       const buffer = (values: Uint32Array | Float32Array): ReturnType<typeof upload> => scope.own(upload(device, values))
+      const grid = scope.own(createRepulsionGrid(device, count))
       const near = scope.own(createNearField(device, count))
-      const positions = buffer(Float32Array.from(positionsX.flatMap(x => [x, 12, 0, 0])))
+      // Bounds grow by 8/7, giving eight-unit cells on either grid. Four points share
+      // cell (1,1), the highest ID is in (2,1), and point 4 is in the far field.
+      const extent = 7 * getFinestGridSize(count)
+      const bounds = buffer(Float32Array.of(0, 0, extent, extent))
+      const points = new Float32Array(count * 4).fill(1) // Start with every slot absent.
+      for (const [id, x] of [10, 11, 13, 15, 25].entries()) points.set([x, 12, 0, 0], 4 * id)
+      points.set([18, 12, 1, 0], 4 * (count - 1))
+      const positions = buffer(points)
       const samples = buffer(new Float32Array(count * 2))
-      // Width 8, cell size 8: four points in cell (1,1), one in (2,1) and one outside the near field.
-      const heads = new Uint32Array(64)
-      heads.set([4, 5, 6], 9)
-      const counts = new Float32Array(64 * 4)
-      for (const cell of [9, 10, 11]) counts[cell * 4 + 2] = cell === 9 ? 4 : 1
-      const grid = {
-        heads: buffer(heads),
-        next: buffer(Uint32Array.of(0, 1, 2, 3, 0, 0)),
-        cells: buffer(counts),
-        box: buffer(Float32Array.of(0, 0, 64, 1 / 64)),
-      }
-      const initial = new Float32Array(count * 4)
-      initial[0] = 0.25
-      const forces = buffer(initial)
-      async function firstForce (seed: number, slots: number): Promise<number> {
-        forces.write(initial)
+      const forces = buffer(new Float32Array(count * 4))
+      async function firstForce (seed: number, slotCount: number): Promise<number> {
         const pass = device.beginComputePass()
-        near.encode(pass, positions, grid, samples, forces, 1, 1, 8, seed, slots)
+        const slots = grid.encode(pass, positions, bounds, 1, 1, 0, 0, true, forces, seed, slotCount)
+        near.encode(pass, positions, grid, slots, samples, forces, 1, 1, 8, slotCount)
         pass.end()
         device.submit()
-        const bytes = await forces.readAsync()
+        const bytes = await forces.readAsync(0, 4)
         return new DataView(bytes.buffer, bytes.byteOffset).getFloat32(0, true)
       }
       // The reference's lowbias32 order selects IDs 1,3 at seed 1/8, and IDs 0,2 at 1/4.
-      const sparseAndFar = -1 / 8 + initial[0]
+      const sparseAndFar = -1 / 8 - 1 / 15
       expect(await firstForce(1 / 8, 2)).toBeCloseTo(sparseAndFar - 3 / 2 * (1 + 1 / 5), 5)
       expect(await firstForce(1 / 4, 2)).toBeCloseTo(sparseAndFar - 3 * (1 / 3), 5)
       expect(await firstForce(1 / 4, 4)).toBeCloseTo(sparseAndFar - (1 + 1 / 3 + 1 / 5), 5)
+
+      // Empty the neighboring cells, then bring one pinned neighbor back into the
+      // probe's own cell. A list or sum left over from an earlier tick changes its force.
+      points.fill(1, 4)
+      positions.write(points)
+      expect(await firstForce(1 / 4, 2)).toBe(0)
+      positions.write(Float32Array.of(11.25, 12, 1, 0), 16 * (count - 1))
+      expect(await firstForce(1 / 4, 2)).toBeCloseTo(-1 / 1.25, 6)
     } finally { scope.destroy(); device.destroy() }
   })
 

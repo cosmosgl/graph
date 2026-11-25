@@ -82,14 +82,14 @@ export function createManyBody (device: Device, count: number, store: Store, pro
       const offsetY = store.getRandomFloat(0, 1)
       const hashSeed = store.getRandomFloat(0, 1)
       if (!strength || !grid || !near) return false
-      grid.encode(pass, positions, reduce(pass, positions, 'bounds'), store.alpha, strength, offsetX, offsetY,
-        usesPreciseFarField(config.simulationRepulsionQuality, count), forces)
       const configured = config.simulationRepulsionSamples
       const slotCount = isRepulsionSampleCount(configured)
         ? configured
         : Math.min(occupancy?.wanted ?? getNearFieldSlotCount(count), affordable)
+      const slots = grid.encode(pass, positions, reduce(pass, positions, 'bounds'), store.alpha, strength, offsetX, offsetY,
+        usesPreciseFarField(config.simulationRepulsionQuality, count), forces, hashSeed, slotCount)
       if (measureOccupancy && !isRepulsionSampleCount(configured)) occupancy?.encode(pass, grid.cells)
-      near.encode(pass, positions, grid, samples, forces, store.alpha, strength, store.kickSpan / width, hashSeed, slotCount)
+      near.encode(pass, positions, grid, slots, samples, forces, store.alpha, strength, store.kickSpan / width, slotCount)
       return true
     },
     destroy (): void {

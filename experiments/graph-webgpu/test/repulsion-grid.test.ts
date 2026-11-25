@@ -24,7 +24,7 @@ it('refines the correct far cells for each quality and leaves adjacent finest ce
       const encoder = scope.own(device.createCommandEncoder())
       const pass = encoder.beginComputePass({})
       try {
-        grid.encode(pass, positions, bounds, 1, 1, 0, 0, precise, forces)
+        grid.encode(pass, positions, bounds, 1, 1, 0, 0, precise, forces, 0.25, 2)
       } finally { pass.end() }
       device.submit(encoder.finish())
       const bytes = await forces.readAsync(0, 16)
