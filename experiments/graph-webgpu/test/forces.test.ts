@@ -130,6 +130,39 @@ describe('WebGPU simulation forces', () => {
     } finally { sim.destroy() }
   })
 
+  it('sizes the sampled collision grid from resolved diameters', async () => {
+    const count = 4097 // First point count that uses sampled cells.
+    const positions = new Float32Array(count * 2)
+    for (let i = 0; i < count - 2; i++) {
+      positions[2 * i] = 2048 + (i % 64) * 1.25
+      positions[2 * i + 1] = 2048 + Math.floor(i / 64) * 1.25
+    }
+    // This pair is isolated from the lattice. Only a larger diameter brings it into contact.
+    positions.set([2500, 2500, 2505, 2500], 2 * (count - 2))
+    const sizes = new Float32Array(count).fill(2)
+    const device = await luma.createDevice({ type: 'webgpu', adapters: [webgpuAdapter], waitForPageLoad: false })
+    async function firstStep (pointDefaultSize: number): Promise<Float32Array> {
+      const sim = new GraphSimulation({ ...isolated, simulationCollision: 1, pointDefaultSize }, Promise.resolve(device))
+      try {
+        sim.setPointPositions(positions)
+        sim.setPointSizes(sizes)
+        sim.applyData(1)
+        await sim.ready
+        sim.step()
+        return await sim.getPointPositionsAsync()
+      } finally { sim.destroy() }
+    }
+    try {
+      const explicit = await firstStep(2)
+      expect(await firstStep(20)).toEqual(explicit)
+      expect(explicit[2 * (count - 2)]).toBe(2500)
+
+      sizes[count - 1] = NaN // Resolve this point's diameter from the default.
+      const fallback = await firstStep(20)
+      expect(fallback[2 * (count - 2)]).toBe(2499)
+    } finally { device.destroy() }
+  })
+
   it('rebuilds large-graph repulsion from moving world bounds and preserves pins and absent slots', async () => {
     const sim = new GraphSimulation({ ...isolated, simulationRepulsion: 1 })
     try {

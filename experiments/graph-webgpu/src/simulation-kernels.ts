@@ -145,6 +145,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       restartOccupancyMeasurement: manyBody.restartOccupancyMeasurement,
       updateTopology: links.updateTopology,
       updateSizes (data: GraphData): void {
+        // Size collision cells from resolved diameters so an unused default preserves the neighbor samples.
         maxSize = 0
         const values = Float32Array.from({ length: count }, (_, i) => {
           const size = data.getResolvedPointSize(i)
