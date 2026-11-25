@@ -16,6 +16,8 @@ The pointer case exposed a missing update. With the internal loop disabled, WebG
 
 On M3, changing cluster membership, targets and per-point strengths during a run produced identical positions and centroids in both packages at all eight checkpoints, including disabling, re-enabling and clearing the forces. After converting clusters, attractors, gravity, center and mouse repulsion to classes, the WebGPU position buffers also matched the frozen WebGPU build bit-for-bit at ticks 0, 1, 4 and 8 for each force.
 
+SwiftShader also reproduced the frozen WebGPU buffers and centroids exactly. After re-enabling the edited forces, WebGL and WebGPU differed by 0.000244140625 graph units in one point's x coordinate and one cluster centroid coordinate. That is one float32 step at the measured coordinate. Clearing the forces preserved the point position on each engine.
+
 ## Springs, repulsion and collision
 
 WebGL uses one `ForceLink` instance for incoming links and one for outgoing links. WebGPU keeps both neighbor lists in one `ForceLink` because both use the same compute kernel and are rebuilt together when links or weights change. It still integrates the incoming correction before the outgoing pass reads the new positions.

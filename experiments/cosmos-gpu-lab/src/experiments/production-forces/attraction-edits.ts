@@ -1,12 +1,13 @@
 import type { Engine } from '../production-graph-api/frame'
 import { origin } from './fixture'
-import { createForcePreview } from './frame'
+import { createForcePreview, type ForceSession } from './frame'
 
 type Phase = 'initial' | 'first' | 'edited' | 'pulled' | 'reweighted' | 'disabled' | 'resumed' | 'cleared'
 type Snapshot = { xy: Float32Array; centroids: readonly number[] }
+type EditRun = { device: ForceSession['device']; phases: Record<Phase, Snapshot> }
 
 /** Observe both forces and their public centroid readback as a running graph's inputs change. */
-export async function replayAttractionEdits (engine: Engine): Promise<Record<Phase, Snapshot>> {
+export async function replayAttractionEdits (engine: Engine): Promise<EditRun> {
   const session = await createForcePreview(document.body, engine, 'clusters')
   const { graph } = session
   async function snapshot (step = false): Promise<Snapshot> {
@@ -51,6 +52,6 @@ export async function replayAttractionEdits (engine: Engine): Promise<Record<Pha
     graph.render(1, 0)
     graph.pause()
     const cleared = await snapshot(true)
-    return { initial, first, edited, pulled, reweighted, disabled, resumed, cleared }
+    return { device: session.device, phases: { initial, first, edited, pulled, reweighted, disabled, resumed, cleared } }
   } finally { session.destroy() }
 }

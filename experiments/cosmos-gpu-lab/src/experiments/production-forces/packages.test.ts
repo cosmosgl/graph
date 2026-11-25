@@ -160,12 +160,18 @@ it('preserves the active spring topology through weight edits, link replacement 
 })
 
 it('updates cluster centroids and point attractions after live edits and simulation restart', async () => {
-  const gl = await replayAttractionEdits('webgl')
-  const gpu = await replayAttractionEdits('webgpu')
+  const { phases: gl } = await replayAttractionEdits('webgl')
+  const { phases: gpu, device } = await replayAttractionEdits('webgpu')
   for (const [phase, reference] of Object.entries(gl)) {
     const actual = gpu[phase as keyof typeof gpu]
-    expect([...actual.xy], phase).toEqual([...reference.xy])
-    expect([...actual.centroids], phase).toEqual([...reference.centroids])
+    // SwiftShader's WebGL control rounds one resumed x coordinate one float32 step higher at 2,120.
+    const threshold = device.gpuArchitecture === 'swiftshader' && (phase === 'resumed' || phase === 'cleared') ? 2 ** -12 : 0
+    expect(positionStats(actual.xy, reference.xy).maxDelta, phase).toBeLessThanOrEqual(threshold)
+    expect(actual.centroids.length, phase).toBe(reference.centroids.length)
+    reference.centroids.forEach((value, i) => {
+      if (Number.isNaN(value)) expect(actual.centroids[i], phase).toBeNaN()
+      else expect(Math.abs(actual.centroids[i] - value), phase).toBeLessThanOrEqual(threshold)
+    })
     expect([...actual.xy.slice(0, 2)]).toEqual([origin - 50, origin + 30]) // pin
     expect([...actual.xy.slice(12, 14)]).toEqual([NaN, NaN]) // absent
   }
