@@ -11,7 +11,9 @@ struct PickSprite {
   let i = pointOrder[instance];
   let live = positions[i];
   if (live.w > 0.5) { return out; }
-  let style = points[i];
+  // Use the size from the displayed frame, including the frozen source after
+  // an interruption. A live slot keeps its pick footprint during a presence fade.
+  let style = currentPoint(i, 1.0);
   let size = max(style.metrics.x, style.metrics.w);
   let cssDiameter = min(size * params.point.x * sizeZoom(params.point.y), params.transition.w);
   if (cssDiameter <= 0.0) { return out; }

@@ -121,12 +121,50 @@ it('uses the nearest occupied circle sample for pointer picks before considering
     // Two tiny points compete in one window. Nearer samples win, then the lower-left scan order breaks ties.
     positions.write(Float32Array.of(60, 37, 0, 0, 60, 27, 0, 0, 0, 0, 0, 1))
     data.inputPointSizes = Float32Array.of(1, 1, 1)
-    data.inputPointColors = new Float32Array(12) // Pointer circles follow the target size, even with transparent paint.
+    data.inputPointColors = new Float32Array(12) // Pointer circles remain pickable even with transparent paint.
     data.update()
     renderer.update()
     expect(await renderer.pick(60, 30, view)).toEqual({ kind: 'point', index: 0 })
     expect(await renderer.pick(60, 32, view)).toEqual({ kind: 'point', index: 1 })
     expect(await renderer.pick(60, 34, view)).toEqual({ kind: 'point', index: 1 })
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('picks the point visible at an overlap as its diameter shrinks and regrows after an interruption', async () => {
+  const scene = await createScene()
+  const { data, device, framebuffer, renderer, view, readPixel } = scene
+  // Red point 0 and yellow point 2 share a center. An exposed part of the red point must pick as 0.
+  const resize = (front: number, animate = false, previousProgress = 1): void => {
+    data.inputPointSizes = Float32Array.of(48, 8, front)
+    data.update()
+    renderer.update({ animate, animatePointSizes: true, pointChannels: { colors: false, sizes: true }, previousProgress })
+  }
+  const probes = [30, 34] // 14 and 18 CSS pixels to the right of the common center.
+  async function check (progress: number, expected: [number, number]): Promise<void> {
+    const current = { ...view, styleProgress: progress }
+    renderer.draw(current, framebuffer)
+    for (const [i, x] of probes.entries()) {
+      const color = expected[i] === 2 ? [255, 255, 0, 255] : [255, 0, 0, 255]
+      expect(await readPixel(x * view.pixelRatio, 32 * view.pixelRatio)).toEqual(color)
+      expect(await renderer.pick(x, 32, current)).toEqual({ kind: 'point', index: expected[i] })
+    }
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, current, { links: false, picking: { alpha: 7 / 255 } })
+    pass.end()
+    for (const [i, x] of probes.entries()) {
+      expect(await readPixel(x * view.pixelRatio, 32 * view.pixelRatio)).toEqual([expected[i]! + 1, 0, 0, 7])
+    }
+  }
+  try {
+    resize(40)
+    resize(8, true)
+    await check(0, [2, 2]) // Displayed diameter 40, target 8.
+    await check(0.5, [0, 0]) // Displayed diameter 24.
+    resize(40, true, 0.5)
+    await check(0, [0, 0]) // First frame after interruption still displays 24.
+    await check(0.5, [2, 0]) // Diameter 32 covers the inner probe.
+    await check(1, [2, 2])
     expect(scene.errors).toEqual([])
   } finally { scene.destroy() }
 })
