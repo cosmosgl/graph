@@ -8,6 +8,8 @@ The **WebGPU migration** page (`#/roadmap`) shows the current decision, next pri
 production switch. Each **Feature coverage** row shows the WebGL behavior, the WebGPU evidence and the remaining
 checks. The links at the top jump to the coverage, parked investigations or future ideas.
 
+For contributors porting an engine module, the audit maps its WebGL and WebGPU owners and records the differences found through the public API. [Engine architecture audit](../graph-webgpu/architecture-audit.md)
+
 **Viewer Comparison** links to the matched migration benchmark. Build the
 production bundle with `pnpm run build`, then use
 `pnpm --filter @cosmos.gl/gpu-lab benchmark:migration --fixture karate`
