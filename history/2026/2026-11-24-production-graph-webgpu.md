@@ -39,6 +39,14 @@ without reading pixels back. When a second edit arrives mid-animation,
 WebGPU starts at the displayed size. WebGL jumps to its previous target.
 The paired replay checks the label and painted geometry in both cases.
 
+The pointer used the new target size as soon as an edit arrived. A click
+could therefore change from background to point 0 while the point on
+screen was still 24 pixels wide. WebGPU now picks using the size from
+the last drawn frame, with the usual pointer tolerance. In the M3
+replay, clicks 20 and 22 CSS pixels below the center returned point 0
+and background on both sides of the interruption. WebGL held its last
+hit, point 2, until the size transition finished.
+
 Recoloring a point can change a link’s gradient because the shader reads
 the endpoint colors when it draws. The link record itself stays the same.
 Previously each point edit uploaded 256 KiB of links on the 8,192-link
