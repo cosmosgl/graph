@@ -4,6 +4,7 @@ import { applyConfig, createDefaultConfig, validateConfig, type GraphConfigInter
 import { isPointAbsent } from '../../../src/helper'
 import { GraphData } from '../../../src/modules/GraphData'
 import { ALPHA_MIN, Store } from '../../../src/modules/Store'
+import { PointTrackerImpl, type PointTracker } from './modules/Points/point-tracker'
 import { upload } from './modules/Shared/compute'
 import { positionScales, unpackPositions, writePosition } from './simulation-data'
 import { asFloats, createPrograms, createState, type Programs, type SimulationState } from './simulation-kernels'
@@ -56,6 +57,9 @@ export class GraphSimulation {
   private forgetLoss?: () => void
   private programs?: Programs
   private state?: SimulationState
+  private readonly trackers = new Set<PointTrackerImpl>()
+  /** Applied membership, including when a caller mutates and resubmits the same input array. */
+  private absentSlots?: Uint8Array
   private countGeneration = 0
   private version = 0
   private isPositionsDirty = false
@@ -253,6 +257,7 @@ export class GraphSimulation {
     const count = this.data.targetPointsNumber
     const resize = count !== (next?.count ?? 0)
     const reset = this.isPositionsDirty || resize
+    let absent: Uint8Array | undefined
     try {
       if (reset) {
         const xy = this.data.pointPositions ?? new Float32Array()
@@ -264,6 +269,10 @@ export class GraphSimulation {
           const x = xy[i * 2]!; const y = xy[i * 2 + 1]!
           writePosition(packed, i * 4, scales.x ? scales.x(x) : x, scales.y ? scales.y(y) : y,
             this.pinned.has(i), this.store.infiniteInputEdge)
+          if (packed[4 * i + 3]) {
+            absent ??= new Uint8Array(Math.ceil(count / 8))
+            absent[i >>> 3]! |= 1 << (i & 7)
+          }
         }
         if (resize) next = count ? createState(this.device!, packed, this.store, this.programs!) : undefined
         else if (next) for (const pos of next.positions) pos.write(packed)
@@ -280,6 +289,14 @@ export class GraphSimulation {
       throw error
     }
     if (resize) { this.state?.destroy(); this.state = next; this.countGeneration++ }
+    if (reset) {
+      const previous = this.absentSlots
+      this.absentSlots = absent
+      if (resize || previous?.length !== absent?.length || absent?.some((byte, i) => byte !== previous?.[i])) {
+        const present = (id: number): boolean => id < count && !((absent?.[id >>> 3] ?? 0) & (1 << (id & 7)))
+        for (const tracker of this.trackers) tracker.pointListChanged(present)
+      }
+    }
     if (reset || this.isClustersDirty) this.version++
     this.isPositionsDirty = this.shouldRefreshSamples = this.isTopologyDirty = this.isSizesDirty = false
     this.isClustersDirty = this.isAttractorsDirty = false
@@ -292,6 +309,17 @@ export class GraphSimulation {
     if (!this.isReady || !this.state || !this.device || this.device.isLost) return undefined
     const { count } = this.state
     return { device: this.device, buffer: this.state.current(), count, pointCount: count, version: this.version }
+  }
+
+  /**
+   * Follow point indices independently of other consumers. May be called before data or device initialization.
+   * Await `positionsAsync()` for a fresh GPU snapshot. Synchronous reads use the last completed snapshot.
+   */
+  public trackPoints (indices: readonly number[]): PointTracker {
+    const tracker = new PointTrackerImpl(indices, this, () => { this.trackers.delete(tracker) })
+    if (this.isDestroyed) tracker.destroy()
+    else this.trackers.add(tracker)
+    return tracker
   }
 
   public async getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> {
@@ -422,6 +450,8 @@ export class GraphSimulation {
     this.host = undefined
     this.isReady = false
     this.beforeReady = []
+    for (const tracker of this.trackers) tracker.destroy()
+    this.absentSlots = undefined
     this.state?.destroy()
     this.state = undefined
     this.programs?.destroy()

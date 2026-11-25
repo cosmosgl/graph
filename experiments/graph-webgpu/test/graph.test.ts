@@ -278,10 +278,15 @@ describe('WebGPU Graph', () => {
       await vi.waitFor(() => expect([...graph.getSampledPointPositionsMap()]).toEqual([[0, [2000, 2048]]]))
       await vi.waitFor(() => expect(graph.getSampledLinks().indices).toEqual([0]))
       expect(graph.getSampledLinks().positions).toEqual([2048, 2048])
+      const independent = graph.simulation.trackPoints([1])
       graph.trackPointPositionsByIndices([1, 2])
       await vi.waitFor(() => expect([...graph.getTrackedPointPositionsMap()]).toEqual([[1, [2096, 2048]]]))
       graph.setPointPosition(1, 2100, 2050)
       await vi.waitFor(() => expect(graph.getTrackedPointPositionsMap().get(1)).toEqual([2100, 2050]))
+      graph.trackPointPositionsByIndices([0])
+      expect((await independent.positionsAsync())?.get(1)).toEqual([2100, 2050])
+      independent.destroy()
+      expect([...(await graph.getTrackedPointPositionsMapAsync())!]).toEqual([[0, [2000, 2048]]])
     } finally { cleanup() }
   })
 

@@ -14,6 +14,7 @@ import { GraphSimulation, type PointPositionBuffer } from './simulation'
 import { GraphRenderer, type GraphDrawOptions, type GraphView } from './renderer'
 import { bindPressPicking } from './press-picking'
 import { AreaSelection, type Area, type Pair } from './modules/Points/area-selection'
+import type { PointTracker } from './modules/Points/point-tracker'
 import { PositionTransition, copyPositions } from './position-transition'
 import { LabelSampling } from './label-sampling'
 
@@ -39,8 +40,7 @@ export class Graph {
   private clusterPositions: readonly number[] = []
   private clusterRead?: Promise<void>
   private clusterVersion = -1
-  private trackedRead?: Promise<void>
-  private trackedVersion = -1
+  private tracker?: PointTracker
   private mouseRepulsion?: Pair
   private positionTransition?: PositionTransition
   private frame = 0
@@ -58,9 +58,6 @@ export class Graph {
   private hoveredPoint?: number
   private hoveredLink?: number
   private dragged?: { index: number; pinned: boolean; offset: Pair }
-  private trackedIds: number[] = []
-  private trackedRevision = 0
-  private tracked = new Map<number, Pair>()
 
   public constructor (private readonly container: HTMLDivElement | null | undefined, config?: GraphConfig, devicePromise?: Promise<Device>) {
     if (config) applyConfig(this.config, config)
@@ -236,7 +233,7 @@ export class Graph {
   public setPointPositionsByIndices (ids: number[], positions: number[] | Float32Array): void {
     this.whenReady(() => {
       this.revision++
-      this.tracked.clear()
+      this.tracker?.setIndices(this.tracker.indices)
       this.simulation.setPointPositionsByIndices(ids, positions)
       this.requestFrame()
     })
@@ -379,48 +376,29 @@ export class Graph {
 
   public findPointsInRectAsync (rect: [Pair, Pair]): Promise<number[] | null> { return this.selectArea({ rect }) }
   public findPointsInPolygonAsync (polygon: Pair[]): Promise<number[] | null> { return this.selectArea({ polygon }) }
+  /** Set the indices followed by this Graph's tracker. Other simulation trackers keep their own sets. */
   public trackPointPositionsByIndices (ids: number[]): void {
-    this.trackedIds = [...ids]
-    this.trackedRevision++
-    this.trackedVersion = -1
-    this.tracked.clear()
+    if (this.isDestroyed) return
+    if (this.tracker) this.tracker.setIndices(ids ?? [])
+    else this.tracker = this.simulation.trackPoints(ids ?? [])
   }
 
+  /** Capture the tracked positions now. A data replacement or disposal can invalidate the result. */
   public async getTrackedPointPositionsMapAsync (): Promise<ReadonlyMap<number, Pair> | null> {
-    const ids = this.trackedIds
-    const token = ++this.trackedRevision
+    if (this.isDestroyed) return null
+    if (!this.tracker) return new Map()
     const revision = this.revision
-    const version = this.getPointPositionBuffer()?.version ?? -1
-    let xy: Float32Array
-    try { xy = await this.simulation.getPointPositionsByIndicesAsync(ids) } catch (error) {
-      if (this.isDestroyed || revision !== this.revision || this.simulation.device?.isLost) return null
-      throw error
-    }
-    if (this.isDestroyed || this.revision !== revision || this.trackedIds !== ids) return null
-    const result = new Map<number, Pair>()
-    ids.forEach((id, i) => {
-      const x = xy[i * 2]
-      const y = xy[i * 2 + 1]
-      if (x !== undefined && y !== undefined && Number.isFinite(x) && Number.isFinite(y)) result.set(id, [x, y])
-    })
-    if (token === this.trackedRevision) { this.tracked = result; this.trackedVersion = version }
-    return result
+    const positions = await this.tracker.positionsAsync()
+    return revision === this.revision && !this.isDestroyed ? positions : null
   }
 
   /** The last completed gather. Use getTrackedPointPositionsMapAsync for a fresh snapshot. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public getTrackedPointPositionsMap (_options?: PositionsReadOptions): ReadonlyMap<number, Pair> {
-    const version = this.getPointPositionBuffer()?.version
-    if (this.trackedIds.length && version !== undefined && version !== this.trackedVersion && !this.trackedRead) {
-      this.trackedRead = this.getTrackedPointPositionsMapAsync().then(() => {}).catch(error => this.reportReadError(error))
-        .finally(() => { this.trackedRead = undefined })
-    }
-    return this.tracked
+  public getTrackedPointPositionsMap (options?: PositionsReadOptions): ReadonlyMap<number, Pair> {
+    return this.tracker?.positions(options) ?? new Map()
   }
 
   public getTrackedPointPositionsArray (): number[] {
-    const points = this.getTrackedPointPositionsMap()
-    return this.trackedIds.flatMap(id => points.get(id) ?? [NaN, NaN])
+    return this.tracker?.positionsArray() ?? []
   }
 
   /** The WebGPU sample is always non-blocking. The first request schedules a GPU copy. */
@@ -464,6 +442,7 @@ export class Graph {
     this.renderer?.destroy()
     if (this.simulation.ownsDevice) this.canvas?.remove()
     this.simulation.destroy()
+    this.tracker = undefined
     this.attribution?.remove()
   }
 
@@ -591,8 +570,7 @@ export class Graph {
   private invalidateQueries (): void {
     this.revision++
     this.fitRequest++
-    this.tracked.clear()
-    this.trackedVersion = -1
+    this.tracker?.setIndices(this.tracker.indices)
     this.clusterVersion = -1
     this.clusterPositions = []
     this.labels?.invalidate()

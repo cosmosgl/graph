@@ -1,6 +1,7 @@
 export { Graph } from './graph'
 export { GraphSimulation } from './simulation'
 export type { PointPositionBuffer } from './simulation'
+export type { PointTracker } from './modules/Points/point-tracker'
 export type { GraphDrawOptions } from './renderer'
 export type { PositionsReadOptions } from '@/graph/simulation'
 export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface, PointStrokeShade, RepulsionQuality } from '@/graph/config'
