@@ -74,9 +74,8 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     graph.setHostHoveredLink(0)
     graph.setConfigPartial({ linkDashLength: 32 })
     draw()
-    const ring = await pixel(16, 41)
-    expect(ring[0]).toBeGreaterThan(100)
-    expect(ring[1]).toBe(0)
+    // Sample the antialiased red ring at the same device pixel as the WebGL control.
+    expect(await pixel(16, 41)).toEqual([95, 0, 0, 95])
     expect((await pixel(32, 35))[1]).toBe(255)
     expect(graph.config.focusedPointIndex).toBeUndefined()
     draw(true)
@@ -92,6 +91,18 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     expect(await pixel(80, 32)).toEqual([2, 0, 0, 7])
     expect(await pixel(50, 32)).toEqual([233, 3, 0, 7])
     expect(graph.config.pixelRatio).toBe(2)
+
+    // Put the green point directly under the red host-hover ring. The overlay
+    // must paint over the green fill, while the host pick still returns point 1.
+    graph.setPointPosition(1, 32, 55)
+    graph.setHostHoveredPoint(undefined)
+    draw(false, 1)
+    expect(await pixel(16, 41)).toEqual([0, 255, 0, 255])
+    graph.setHostHoveredPoint(0)
+    draw(false, 1)
+    expect(await pixel(16, 41)).toEqual([95, 160, 0, 255])
+    draw(true, 1)
+    expect(await pixel(16, 41)).toEqual([2, 0, 0, 7])
 
     graph.destroy()
     // The host can keep drawing and reading its own targets after the graph releases its resources.

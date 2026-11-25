@@ -1,5 +1,89 @@
 import { expect, it, vi } from 'vitest'
 import { Graph } from '../src'
+import { GraphRenderer } from '../src/renderer'
+
+it('coalesces stationary hover reads and drops superseded hits while the graph moves', async () => {
+  const host = document.createElement('div')
+  host.style.cssText = 'width:200px;height:120px'
+  document.body.append(host)
+  const entered = vi.fn()
+  const left = vi.fn()
+  const graph = new Graph(host, {
+    enableRenderLoop: false,
+    fitViewOnInit: false,
+    rescalePositions: false,
+    spaceSize: 200,
+    pixelRatio: 1,
+    pointDefaultSize: 12,
+    simulationGravity: 5,
+    simulationFriction: 1,
+    simulationCenter: 0,
+    simulationRepulsion: 0,
+    onPointMouseOver: entered,
+    onPointMouseOut: left,
+  })
+  graph.setPointPositions(Float32Array.of(40, 100, 160, 100), true)
+  graph.render(1, 0)
+  graph.pause()
+  const realPick = GraphRenderer.prototype.pick
+  const picks = vi.spyOn(GraphRenderer.prototype, 'pick')
+  // Hold the notification from the real GPU read so several scene changes land before its answer.
+  let release!: () => void
+  const held = new Promise<void>(resolve => { release = resolve })
+  picks.mockImplementationOnce(async function (this: GraphRenderer, ...args) {
+    const result = await realPick.apply(this, args)
+    await held
+    return result
+  })
+  try {
+    await graph.ready
+    const canvas = host.querySelector('canvas')!
+    const { left: x, top: y } = canvas.getBoundingClientRect()
+    canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: x + 40, clientY: y + 60, bubbles: true, view: window }))
+    await vi.waitFor(() => expect(picks).toHaveBeenCalledOnce())
+    graph.setPointPosition(0, 160, 100)
+    for (const nextX of [100, 70, 40]) {
+      graph.setPointPosition(1, nextX, 100)
+      graph.renderOneFrame()
+    }
+    expect(picks).toHaveBeenCalledOnce()
+    release()
+    await vi.waitFor(() => expect(entered.mock.calls.map(([id]) => id)).toEqual([1]))
+    expect(picks).toHaveBeenCalledTimes(2)
+    expect(left).not.toHaveBeenCalled()
+    // Drawing identical frames must not spend more GPU reads on a parked cursor.
+    for (let i = 0; i < 4; i++) graph.renderOneFrame()
+    expect(picks).toHaveBeenCalledTimes(2)
+
+    graph.step()
+    graph.renderOneFrame()
+    expect((await graph.getPointPositionsAsync())[2]).toBeGreaterThan(55)
+    await vi.waitFor(() => expect(left).toHaveBeenCalledOnce())
+    // Leaving before the next hit is delivered must not restore the ring or re-enter point 1.
+    const beforeReturn = picks.mock.calls.length
+    const started = new Promise<void>(resolve => {
+      picks.mockImplementationOnce(function (this: GraphRenderer, ...args) {
+        const read = realPick.apply(this, args)
+        resolve()
+        return read
+      })
+    })
+    graph.setPointPosition(1, 40, 100)
+    graph.renderOneFrame()
+    await started
+    canvas.dispatchEvent(new MouseEvent('mouseleave'))
+    expect(await picks.mock.results[beforeReturn]!.value).toEqual({ kind: 'point', index: 1 })
+    await graph.getPointPositionsAsync()
+    await new Promise(requestAnimationFrame)
+    expect(entered).toHaveBeenCalledOnce()
+    expect(left).toHaveBeenCalledOnce()
+  } finally {
+    release()
+    picks.mockRestore()
+    graph.destroy()
+    host.remove()
+  }
+})
 
 it('resolves the pressed point, buffers early movement, preserves grab offset and pans the background', async () => {
   const host = document.createElement('div')

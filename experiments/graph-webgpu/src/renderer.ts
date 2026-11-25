@@ -8,6 +8,7 @@ import { getRgbaColor } from '../../../src/helper'
 import type { GraphData } from '../../../src/modules/GraphData'
 import { PICKING_WINDOW_SIZE } from '../../../src/modules/Points/picking-constants'
 import { getPickingBufferSize, getPickingWindow, resolveNearestPickedPoint, type PickingWindow } from '../../../src/modules/Points/picking-utils'
+import { focusedPointRingOpacity, hoveredPointRingOpacity } from '../../../src/variables'
 import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
 import { Points, pointStride, shadeDirection } from './modules/Points'
@@ -19,6 +20,7 @@ import common from './draw-common.wgsl?raw'
 import applePointCoordinates from './modules/Points/apple-point-coordinates.wgsl?raw'
 import shapes from './modules/Points/point-shapes.wgsl?raw'
 import points from './modules/Points/draw-points.wgsl?raw'
+import pointRings from './modules/Points/draw-highlighted.wgsl?raw'
 import pickWindow from './modules/Points/pick-window.wgsl?raw'
 import links from './modules/Lines/draw-links.wgsl?raw'
 
@@ -31,6 +33,7 @@ export interface GraphView {
   x: number;
   y: number;
   hoveredPoint?: number;
+  hostHoveredPoint?: number;
   hoveredLink?: number;
   /** Eased interpolation factor supplied by the Graph animation clock. */
   styleProgress?: number;
@@ -60,7 +63,7 @@ export interface GraphPick {
 
 type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
-type DrawKind = 'point' | 'pointerPoint' | 'link' | 'solidLink' | 'uniformRgbLink'
+type DrawKind = 'point' | 'pointRing' | 'pointerPoint' | 'link' | 'solidLink' | 'uniformRgbLink'
 type CoverageMode = 'none' | 'mark' | 'test'
 type PreviousStyles = {
   points?: Buffer; links: Buffer;
@@ -100,6 +103,7 @@ const layout: ShaderLayout = {
 }
 
 const pointShader = [records, common, shapes, applePointCoordinates, points].join('\n')
+const pointRingShader = [records, common, pointRings].join('\n')
 const linkShader = [records, common, links].join('\n')
 const pointerShader = [`const pickWindowSize = ${PICKING_WINDOW_SIZE}.0;`, records, common, pickWindow].join('\n')
 const noColor: Rgba = [0, 0, 0, -1]
@@ -174,7 +178,7 @@ export class GraphRenderer {
     this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 19 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 20 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
       this.pickTexture = device.createTexture({
         id: 'cosmos-pick', width: PICKING_WINDOW_SIZE, height: PICKING_WINDOW_SIZE + 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC,
@@ -367,8 +371,11 @@ export class GraphRenderer {
     this.transparentBackground = [r * a, g * a, b * a, a]
     this.greyExitColor = greyExitColor
     this.hoverColor = config.hoveredLinkColor ? getRgbaColor(config.hoveredLinkColor) : noColor
-    this.hoverRing = getRgbaColor(config.hoveredPointRingColor)
-    this.focusRing = getRgbaColor(config.focusedPointRingColor)
+    // The reference stores the configured RGB with a fixed interface opacity.
+    const [hr, hg, hb] = getRgbaColor(config.hoveredPointRingColor)
+    const [fr, fg, fb] = getRgbaColor(config.focusedPointRingColor)
+    this.hoverRing = [hr, hg, hb, hoveredPointRingOpacity]
+    this.focusRing = [fr, fg, fb, focusedPointRingOpacity]
     this.highlightPass.setColors(colors)
     this.highlightMask = mask
     this.order = order
@@ -428,7 +435,7 @@ export class GraphRenderer {
     const key = [kind, color, depth, samples, picking, coverage].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
-      const source = kind === 'point' ? this.pointSource : kind === 'pointerPoint' ? pointerShader : this.linkSource
+      const source = kind === 'point' ? this.pointSource : kind === 'pointerPoint' ? pointerShader : kind === 'pointRing' ? pointRingShader : this.linkSource
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
         vertexSource: source,
@@ -485,6 +492,7 @@ export class GraphRenderer {
       ...(linkPickPixel ?? [0, 0]), Number(this.previous?.animatePointSizes ?? false), Number(this.previous?.animateLinkWidths ?? false),
       ...(this.lines.uniformRgb ?? [0, 0, 0]), view.previousPositions ? view.styleProgress ?? 1 : 1,
       ...this.greyExitColor,
+      c.pointOpacity, c.pointGreyoutOpacity ?? -1, c.pointGreyoutColor ? 1 : 0, view.hostHoveredPoint ?? -1,
     ]))
     const bindings = {
       params: uniforms,
@@ -516,5 +524,10 @@ export class GraphRenderer {
     this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking).draw(pass, {
       vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
     })
+    if (!picking && (view.hoveredPoint !== undefined || view.hostHoveredPoint !== undefined || c.focusedPointIndex !== undefined)) {
+      this.kernel(framebuffer, 'pointRing', false).draw(pass, {
+        vertexArray: this.vertices, vertexCount: 4, instanceCount: 3, bindings,
+      })
+    }
   }
 }

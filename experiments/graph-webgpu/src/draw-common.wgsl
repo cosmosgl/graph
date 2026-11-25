@@ -21,6 +21,7 @@ struct Params {
   uniformLinkRgb: vec3f,  // shared solid-link color; opacity and width still vary per link
   positionProgress: f32,
   greyExitColor: vec4f,   // greyed version of the transparent black exit default
+  pointRings: vec4f,      // universal opacity, grey opacity (-1 for default), explicit grey color, host-hovered index
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

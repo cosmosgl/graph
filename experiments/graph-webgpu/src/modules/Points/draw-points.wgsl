@@ -40,8 +40,6 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   out.ring = p.ring;
   // -2 selects the per-fill OKLab shade, -1 disables the outline.
   if (p.ring.a < -1.5) { out.ring = vec4f(effectShade(p.color.rgb, params.shades.z, params.shades.w), 1); }
-  if (f32(i) == params.selected.x) { out.ring = params.hoverRing; }
-  if (f32(i) == params.selected.y) { out.ring = params.focusRing; }
   let coreRadius = max(1.0, diameter) * 0.5;
   let outlined = p.ring.a != -1.0 || out.ring.a > 0.0;
   out.spriteRadius = min(select(coreRadius, coreRadius * 1.3 + 1.0, outlined), params.transition.w * params.camera.w * 0.5);

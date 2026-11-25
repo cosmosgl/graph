@@ -17,6 +17,8 @@ import { AreaSelection, type Area, type Pair } from './modules/Points/area-selec
 import { PositionTransition, copyPositions } from './position-transition'
 import { LabelSampling } from './label-sampling'
 
+type PointerHit = { point?: number; link?: number; position?: Pair }
+
 export class Graph {
   public readonly config = createDefaultConfig()
   public readonly simulation: GraphSimulation
@@ -51,6 +53,8 @@ export class Graph {
   private fitRequest = 0
   private revision = 0
   private hoverRequest = 0
+  private hasHoverSceneChanged = false
+  private refreshHoverAfterDraw?: (sceneChanged: boolean) => void
   private hoveredPoint?: number
   private hoveredLink?: number
   private dragged?: { index: number; pinned: boolean; offset: Pair }
@@ -148,6 +152,9 @@ export class Graph {
       }
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
+      this.hasHoverSceneChanged = true
+      this.hoverRequest++
+      if (!this.hasRendered) this.clearHover()
       this.drawFrame()
       if (isFirst && this.canvas && this.config.fitViewOnInit && this.config.initialZoomLevel === undefined) {
         this.fitTimer = setTimeout(() => {
@@ -449,6 +456,7 @@ export class Graph {
     clearTimeout(this.fitTimer)
     this.observer?.disconnect()
     this.listeners.abort()
+    this.refreshHoverAfterDraw = undefined
     if (this.canvas) select(this.canvas).interrupt().on('.zoom', null).on('.drag', null)
     this.area?.destroy()
     this.labels?.destroy()
@@ -461,6 +469,8 @@ export class Graph {
 
   private drawFrame (): void {
     if (!this.canvas || this.isDestroyed) return
+    const refreshHover = this.hasHoverSceneChanged || this.transition.isActive
+    this.hasHoverSceneChanged = false
     if (this.transition.isActive) {
       const positions = this.transition.isActiveFor(TransitionProperty.Positions)
       this.transition.step()
@@ -468,6 +478,7 @@ export class Graph {
       if (positions && live && this.positionTransition?.write(live, this.transition.progress)) this.simulation.markPositionsChanged()
     }
     this.renderer?.draw(this.view())
+    this.refreshHoverAfterDraw?.(refreshHover)
   }
 
   private runSimulationStep (forceExecution = false, measureOccupancy = false): void {
@@ -503,7 +514,8 @@ export class Graph {
       scale: k,
       x: x + k * (width / 2 - worldOrigin[0]),
       y: y + k * (height / 2 + worldOrigin[1]),
-      hoveredPoint: hostHoveredPointIndex ?? (this.config.renderHoveredPointRing ? this.hoveredPoint : undefined),
+      hoveredPoint: this.config.renderHoveredPointRing ? this.hoveredPoint : undefined,
+      hostHoveredPoint: hostHoveredPointIndex,
       hoveredLink: hostHoveredLinkIndex ?? this.hoveredLink,
       maxPointSize,
       pointProjection: { origin: worldOrigin, transform: [transform[0], transform[4], transform[6], transform[7]] },
@@ -584,7 +596,9 @@ export class Graph {
     this.clusterVersion = -1
     this.clusterPositions = []
     this.labels?.invalidate()
-    this.clearHover()
+    // A setter queues data. Keep the displayed hover until render applies it and
+    // the next pick identifies what now occupies the same screen location.
+    this.hoverRequest++
   }
 
   private updateConfig (config: GraphConfig, reset: boolean): void {
@@ -597,6 +611,8 @@ export class Graph {
       this.config.randomSeed = previous.randomSeed
       this.config.attribution = previous.attribution
 
+      this.hasHoverSceneChanged = true
+      this.hoverRequest++
       const keys = Object.keys(config)
       if (!reset && this.hasRendered && keys.length === 1 && keys[0] === 'highlightedPointIndices') {
         // Highlights change paint and picking order. The selection footprint stays valid.
@@ -686,16 +702,10 @@ export class Graph {
 
   private clearHover (event?: MouseEvent): void {
     this.hoverRequest++
-    if (this.hoveredPoint !== undefined) this.config.onPointMouseOut?.(event)
-    if (this.hoveredLink !== undefined) this.config.onLinkMouseOut?.(event)
-    this.hoveredPoint = this.hoveredLink = undefined
-    this.simulation.store.hoveredPoint = undefined
-    if (this.canvas) this.canvas.style.cursor = ''
+    this.applyHover({}, event)
   }
 
-  private async pickAt (clientX: number, clientY: number): Promise<{
-    point?: number; link?: number; position?: Pair;
-  } | null> {
+  private async pickAt (clientX: number, clientY: number): Promise<PointerHit | null> {
     const canvas = this.canvas
     if (!this.renderer || !canvas || !this.hasRendered || this.isDestroyed) return null
     const revision = this.revision
@@ -718,28 +728,32 @@ export class Graph {
     return { point, link, position }
   }
 
-  private async hit (event: MouseEvent, action: 'hover' | 'click' | 'context'): Promise<void> {
-    const token = this.hoverRequest
+  private applyHover ({ point, link, position }: PointerHit, event?: MouseEvent): void {
+    const prevPoint = this.hoveredPoint
+    const prevLink = this.hoveredLink
+    this.hoveredPoint = point
+    this.hoveredLink = link
+    this.simulation.store.hoveredPoint = point !== undefined && position ? { index: point, position } : undefined
+    this.simulation.store.hoveredLinkIndex = link
+    if (point === prevPoint && link === prevLink) return
+    if (this.canvas) this.canvas.style.cursor = point !== undefined ? this.config.hoveredPointCursor : link !== undefined ? this.config.hoveredLinkCursor : ''
+    // Like WebGL, moving directly between two points (or two links) reports
+    // the new index. Switching between a point and a link sends out before over.
+    if (prevPoint !== undefined && point === undefined) this.config.onPointMouseOut?.(event)
+    if (prevLink !== undefined && link === undefined) this.config.onLinkMouseOut?.(event)
+    if (point !== undefined && position && prevPoint !== point) {
+      this.config.onPointMouseOver?.(point, position, event,
+        !!this.config.highlightedPointIndices?.includes(point), !!this.config.outlinedPointIndices?.includes(point))
+    }
+    if (link !== undefined && prevLink !== link) this.config.onLinkMouseOver?.(link)
+    this.requestFrame()
+  }
+
+  private async hit (event: MouseEvent, action: 'click' | 'context'): Promise<void> {
     const hit = await this.pickAt(event.clientX, event.clientY)
-    const canvas = this.canvas
-    if (!canvas || !hit || (action === 'hover' && token !== this.hoverRequest)) return
+    if (!hit) return
     const { point, link, position } = hit
-    if (action === 'hover') {
-      const prevPoint = this.hoveredPoint
-      const prevLink = this.hoveredLink
-      if (prevPoint !== point && prevPoint !== undefined) this.config.onPointMouseOut?.(event)
-      if (prevLink !== link && prevLink !== undefined) this.config.onLinkMouseOut?.(event)
-      this.hoveredPoint = point
-      this.hoveredLink = link
-      this.simulation.store.hoveredPoint = point !== undefined && position ? { index: point, position } : undefined
-      if (point !== undefined && position && prevPoint !== point) {
-        this.config.onPointMouseOver?.(point, position, event, !!this.config.highlightedPointIndices?.includes(point), !!this.config.outlinedPointIndices?.includes(point))
-      }
-      if (link !== undefined && prevLink !== link) this.config.onLinkMouseOver?.(link)
-      canvas.style.cursor = point !== undefined ? this.config.hoveredPointCursor : link !== undefined ? this.config.hoveredLinkCursor : ''
-      this.config.onMouseMove?.(point, position, event)
-      if (point !== prevPoint || link !== prevLink) this.requestFrame()
-    } else if (action === 'click') {
+    if (action === 'click') {
       this.config.onClick?.(point, position, event)
       if (point !== undefined && position) this.config.onPointClick?.(point, position, event)
       else if (link !== undefined) this.config.onLinkClick?.(link, event)
@@ -754,24 +768,34 @@ export class Graph {
 
   private bindInput (canvas: HTMLCanvasElement): void {
     const options = { signal: this.listeners.signal }
-    const dispatch = (event: MouseEvent, action: 'hover' | 'click' | 'context'): void => {
-      this.hit(event, action).catch(error => { if (!this.isDestroyed && !this.simulation.device?.isLost) console.error(error) })
+    const dispatch = (event: MouseEvent, action: 'click' | 'context'): void => {
+      this.hit(event, action).catch(error => this.reportReadError(error))
     }
-    // One pick in flight. A newer pointer sample replaces the waiting sample.
+    let cursor: MouseEvent | undefined
+    let pointerEvent: MouseEvent | undefined
+    let positionVersion: number | undefined
     let picking = false
-    let latest: MouseEvent | undefined
-    const hover = async (event: MouseEvent): Promise<void> => {
-      this.hoverRequest++
-      latest = event
-      if (picking) return
+    let needsPick = false
+    // A moving layout can draw again before the readback completes. Keep one
+    // read in flight and sample the latest scene once when it finishes.
+    const refreshHover = (): void => {
+      if (!cursor || this.drag.isActive || isPressPending() || this.isDestroyed) return
+      positionVersion = this.getPointPositionBuffer()?.version
+      if (picking) { needsPick = true; return }
       picking = true
-      try {
-        while (latest && !this.isDestroyed) {
-          const current = latest
-          latest = undefined
-          await this.hit(current, 'hover')
-        }
-      } finally { picking = false }
+      needsPick = false
+      const token = this.hoverRequest
+      const event = pointerEvent
+      pointerEvent = undefined
+      this.pickAt(cursor.clientX, cursor.clientY).then(hit => {
+        if (hit && token === this.hoverRequest) this.applyHover(hit, event)
+      }).catch(error => this.reportReadError(error)).finally(() => {
+        picking = false
+        if (needsPick) refreshHover()
+      })
+    }
+    this.refreshHoverAfterDraw = (sceneChanged): void => {
+      if (cursor && (sceneChanged || positionVersion !== this.getPointPositionBuffer()?.version)) refreshHover()
     }
     const updateMouseRepulsion = (event: MouseEvent): void => {
       if (event.buttons & 2 && this.config.enableRightClickRepulsion) {
@@ -782,16 +806,27 @@ export class Graph {
     }
     canvas.addEventListener('mousedown', updateMouseRepulsion, options)
     window.addEventListener('mouseup', () => { this.mouseRepulsion = undefined }, options)
-    window.addEventListener('blur', () => { this.mouseRepulsion = undefined; this.simulation.store.isSpaceKeyPressed = false }, options)
+    const leave = (event?: MouseEvent): void => {
+      cursor = pointerEvent = undefined
+      needsPick = false
+      this.mouseRepulsion = undefined
+      this.clearHover(event)
+    }
+    window.addEventListener('blur', () => { leave(); this.simulation.store.isSpaceKeyPressed = false }, options)
     window.addEventListener('keydown', event => { if (event.code === 'Space') this.simulation.store.isSpaceKeyPressed = true }, options)
     window.addEventListener('keyup', event => { if (event.code === 'Space') this.simulation.store.isSpaceKeyPressed = false }, options)
     canvas.addEventListener('mousemove', event => {
       updateMouseRepulsion(event)
+      cursor = event
+      this.hoverRequest++
+      const hovered = this.simulation.store.hoveredPoint
+      this.config.onMouseMove?.(hovered?.index, hovered?.position, event)
       if (!this.drag.isActive && !isPressPending()) {
-        hover(event).catch(error => { if (!this.isDestroyed && !this.simulation.device?.isLost) console.error(error) })
+        pointerEvent = event
+        refreshHover()
       }
     }, options)
-    canvas.addEventListener('mouseleave', event => { latest = undefined; this.mouseRepulsion = undefined; this.clearHover(event); this.requestFrame() }, options)
+    canvas.addEventListener('mouseleave', leave, options)
     canvas.addEventListener('click', event => dispatch(event, 'click'), options)
     canvas.addEventListener('contextmenu', event => {
       if (this.config.enableRightClickRepulsion) event.preventDefault()
@@ -814,11 +849,19 @@ export class Graph {
         const [x, y] = this.screenToSpacePosition([event.x, event.y])
         this.setPointPosition(this.dragged.index, x + this.dragged.offset[0], y + this.dragged.offset[1])
       }
-    }).on('end.webgpu', () => {
+    }).on('end.webgpu', event => {
       if (this.dragged) this.setPinnedPoint(this.dragged.index, this.dragged.pinned)
       this.dragged = undefined
+      if (cursor && event.sourceEvent && 'clientX' in event.sourceEvent) cursor = event.sourceEvent
+      this.hasHoverSceneChanged = true
+      this.requestFrame()
     })
-    this.camera.behavior.on('zoom.webgpu', () => this.requestFrame())
+    this.camera.behavior.on('zoom.webgpu', event => {
+      if (cursor && event.sourceEvent && 'clientX' in event.sourceEvent) cursor = event.sourceEvent
+      this.hasHoverSceneChanged = true
+      this.hoverRequest++
+      this.requestFrame()
+    })
     const node = select<HTMLCanvasElement, undefined>(canvas)
     node.call(behavior).call(this.camera.behavior)
     const isPressPending = bindPressPicking(node, {
@@ -827,7 +870,8 @@ export class Graph {
         !this.simulation.store.isSpaceKeyPressed && !this.transition.isActiveFor(TransitionProperty.Positions) &&
         !this.transition.isActiveFor(TransitionProperty.PointSizes),
       pick: async (clientX, clientY) => {
-        latest = undefined
+        pointerEvent = undefined
+        needsPick = false
         this.hoverRequest++
         const hit = await this.pickAt(clientX, clientY)
         if (!hit) return null
