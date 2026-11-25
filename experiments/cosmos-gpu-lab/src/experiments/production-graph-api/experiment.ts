@@ -30,6 +30,15 @@ export const experiment = defineExperiment({
     acceptance: 'Check the exact rectangle and lasso IDs at the old, intermediate and new positions. The two surviving points keep their coordinates and IDs.',
     recorded: null,
   }, {
+    id: 'interrupted-removal',
+    title: 'Restore a point halfway through its fade',
+    kind: 'compare',
+    question: 'What happens to point 1 and its link when the point returns before its removal fade finishes?',
+    description: 'Restore point 1 at a new position 500 ms into its one-second fade. Compare the frames and IDs on both sides of the interruption.',
+    reference: 'Both Graph packages receive the same position edits, frozen clock, clicks, rectangles and lassos.',
+    acceptance: 'Compare the drawn point and link with the click, rectangle and lasso IDs at the old and new positions throughout restoration.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -60,6 +69,7 @@ export const experiment = defineExperiment({
   }],
   create: async (host, caseId) => {
     if (caseId === 'sparse-transition') return (await import('./sparse-view')).createSparseView(host)
+    if (caseId === 'interrupted-removal') return (await import('./sparse-view')).createSparseView(host, 'interrupted')
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

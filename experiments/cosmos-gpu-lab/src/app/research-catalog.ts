@@ -287,11 +287,11 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       conclusion: 'At the same four early M3 ticks, reducing link drawing cut million-point WebGPU readback from 291 to 247 ms. ' +
         'Every ordered selection and all 1,000 label coordinates matched at both sizes.',
       variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
-      comparison: 'Gravity, picking, hover, rectangle and lasso selection during removal, restoration and size edits, ' +
+      comparison: 'Gravity, picking, hover, area selection during completed and interrupted removals and size edits, ' +
         'headless trackers and four moving selections with 1,000 YouTube labels',
       method: 'method',
       next: 'Measure the remaining wait behind the early million-point frame on graphs with different link colors and point coverage.',
-      reproduce: 'Choose a removal or point-style checkpoint and pixel ratio to compare IDs. The YouTube replay runs each package separately.',
+      reproduce: 'Choose a checkpoint before or after restoring a fading point. Compare both packages at either pixel ratio.',
       investigations: [{
         page: 'youtube-selection',
         state: 'Current evidence',

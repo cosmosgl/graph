@@ -35,6 +35,25 @@ On M3, the original WebGPU removal differed from WebGL at 630 pixels halfway thr
 
 The unchanged **Add & Remove Points** story also exercises grow and fade, opacity, recolor and instant edits. On M3 the changing point’s interior matched at all 28 checkpoints at each ratio. Across the full story canvas, 17–25 pixels at 1× and 32–41 at 2× differed by one channel level. The initial frames already differed at 25 and 41 pixels respectively. A separate paired regression checks a newly appended point and link with explicit styles, including the story’s two-stage addition.
 
+### Restore a point halfway through removal
+
+The replay restores point 1 at x = 80 exactly 500 ms into its one-second removal at x = 48. The next frame uses the same clock time. Before the edit, both packages still paint a 12 CSS px point at the old center and the link’s green channel is 128/255. Immediately after the edit, the point and link disappear. The new fade starts from the slot’s previous absent state, and its center starts travelling from x = 48. [Compare the frames on either side of the edit](#/production-graph-api?section=try-interrupted-removal)
+
+Each endpoint has a click probe, a 4 × 4 CSS px rectangle and a diamond lasso of the same width and height. In the table, each area cell gives the rectangle result first and the lasso result second. These IDs agreed on M3 at 1× and 2×.
+
+| Frame | Old click | New click | Old rectangle / lasso | New rectangle / lasso |
+| --- | --- | --- | --- | --- |
+| Just before restoration | Background | Background | `[] / []` | `[] / []` |
+| First restoration frame | Point 1 | Background | `[1] / [1]` | `[] / []` |
+| 16 ms into restoration | Point 1 | Link 0 | `[1] / [1]` | `[] / []` |
+| 250 ms | Point 1 | Link 0 | `[1] / []` | `[] / []` |
+| 500 ms | Point 1 | Point 1 | `[] / []` | `[] / []` |
+| 522 ms | Point 1 | Point 1 | `[] / []` | `[1] / []` |
+| 750 ms | Background | Point 1 | `[] / []` | `[1] / [1]` |
+| 1,000 ms | Background | Point 1 | `[] / []` | `[1] / [1]` |
+
+At 16 ms, the link runs beneath the new position and its green channel still rounds to zero there. At 500 ms, the painted point is 12 CSS px wide at x = 64. The click search window at either endpoint can reach point 1. Only the midpoint’s small rectangle and lasso select it. At the destination, the rectangle first returns `[1]` at 522 ms and the lasso at 750 ms. Each was empty one millisecond earlier. At 1,000 ms, the point is 24 CSS px wide at x = 80 and the link is fully bright. All 26 frame pairs matched pixel for pixel.
+
 ### Hover under a stationary cursor
 
 Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.

@@ -1,7 +1,7 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createPairedPickView } from './paired-pick-view'
 import { createSelectionTable } from './selection-table'
-import { runSparseTransition, type SparseSample } from './sparse-transition'
+import { runSparseTransition, type SparseSample, type SparseScenario } from './sparse-transition'
 
 const phases = new Map([
   ['initial', 'Before removal'],
@@ -28,24 +28,34 @@ function selectionTable (samples: readonly (SparseSample['selections'] | undefin
 }
 
 function describePoint (bounds: SparseSample['pointBounds'], ratio: number): string {
-  if (!bounds) return 'Point 1 has no visible pixels.'
+  if (!bounds) return 'Point 1 has no visible pixels'
   const center = (bounds[0]! + bounds[2]!) / (2 * ratio)
   const width = (bounds[2]! - bounds[0]!) / ratio
   return `Point 1 painted center x = ${center} CSS px · width ${width} CSS px`
 }
 
-export function createSparseView (host: HTMLElement): ExperimentInstance {
+export function createSparseView (host: HTMLElement, scenario: SparseScenario = 'complete'): ExperimentInstance {
+  const locations: Record<string, string> = scenario === 'interrupted'
+    ? { old: 'Old center (48, 96)', destination: 'New center (80, 96)' }
+    : { point: 'Edited point' }
   return createPairedPickView(host, {
-    probes: { point: 'Edited point', link: 'Incident link', anchor: 'Other endpoint', control: 'Isolated point' },
-    initial: 'remove-500',
-    run: async (engine, ratio) => (await runSparseTransition(engine, ratio)).samples.map(sample => ({
-      key: `${sample.phase}-${sample.time}`,
-      title: sample.phase === 'remove' || sample.phase === 'restore' ? `${phases.get(sample.phase)} · ${sample.time} ms` : phases.get(sample.phase)!,
-      pixels: sample.pixels,
-      picks: sample.picks,
-      results: sample.selections,
-      detail: describePoint(sample.pointBounds, ratio),
-    })),
+    probes: { ...locations, link: 'Incident link', anchor: 'Other endpoint', control: 'Isolated point' },
+    initial: scenario === 'interrupted' ? 'restore-0' : 'remove-500',
+    run: async (engine, ratio) => (await runSparseTransition(engine, ratio, scenario)).samples.map(sample => {
+      const { phase, time, sites } = sample
+      let title = phase === 'remove' || phase === 'restore' ? `${phases.get(phase)} · ${time} ms` : phases.get(phase)!
+      const picks: Record<string, string> = { ...sample.picks }
+      let detail = describePoint(sample.pointBounds, ratio)
+      if (sites) {
+        if (phase === 'remove' && time === 500) title += ' · Before interruption'
+        if (phase === 'restore' && time === 0) title += ' · After interruption'
+        picks.old = sites.old.pick
+        picks.destination = sites.destination.pick
+        detail += ` · RGB at old center (${sites.old.rgb.join(', ')}), new center (${sites.destination.rgb.join(', ')})` +
+          ` and link (${sample.linkRgb.join(', ')})`
+      }
+      return { key: `${phase}-${time}`, title, pixels: sample.pixels, picks, results: sample.selections, detail }
+    }),
     renderResults: selectionTable,
   })
 }

@@ -8,6 +8,8 @@ LAB_ARTIFACT_RUN=sparse-area-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/ex
 
 The M3 replay is in `captures/sparse-area-m3-release`. Its `provenance.json` records the clean revision, bundle hashes and adapters. In `package-sparse-transition-{1,2}x.json`, each package’s `selections` lists the old position, midpoint, destination and whole-graph control. Inspect restoration at 521/522 and 749/750/751 ms to reproduce the destination crossings.
 
+The same test also runs the interrupted-removal case. It sends the restoration edit on the frozen 500 ms removal frame and gives the return its own 1,000 ms transition. In `captures/interrupted-removal-m3-release/package-sparse-interruption-{1,2}x.json`, compare `remove` at 500 ms with `restore` at 0 ms. Each package’s `sites.old` and `sites.destination` record the actual click and pixel color. The `selections` field records the ordered ID lists. The run’s `provenance.json` identifies the adapter, clean revision and both bundle hashes.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

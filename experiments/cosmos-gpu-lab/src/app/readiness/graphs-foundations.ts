@@ -45,6 +45,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Repeat the same destination boundary checks on another supported adapter.',
   },
+  'production-graph-api/interrupted-removal': {
+    badge: 'Interrupted fade matches',
+    tone: 'pass',
+    finding: 'The half-faded point and link disappeared on the restart frame. Point 1 was immediately selectable at its old center.',
+    area: 'Integration',
+    status: '13 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: '26 paired frames matched pixel for pixel, including both sides of the same 500 ms interruption' },
+      { tone: 'pass', text: 'All 52 endpoint clicks and all 208 rectangle and lasso results agreed' },
+      { tone: 'info', text: 'Halfway back, both endpoint clicks reached point 1. Only the midpoint’s small rectangle and lasso selected it.' },
+    ],
+    next: 'Repeat the interrupted removal on another supported adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

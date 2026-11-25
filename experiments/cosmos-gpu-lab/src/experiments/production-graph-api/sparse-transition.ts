@@ -4,6 +4,8 @@ import type { Engine } from './frame'
 
 type Phase = 'initial' | 'remove' | 'restore' | 'snap-remove' | 'snap-restore'
 type Point = [number, number]
+export type SparseScenario = 'complete' | 'interrupted'
+type Site = { pick: string; rgb: number[] }
 const anchor: Point = [192, 96]
 const original: Point = [48, 96]
 const restored: Point = [80, 96]
@@ -33,6 +35,7 @@ export type SparseSample = {
   time: number;
   pixels: ImageData;
   picks: { point: string; link: string; anchor: string; control: string };
+  sites?: { old: Site; destination: Site };
   midpointPicks?: string[];
   selections: { region: Region; rectangle: number[]; lasso: number[] }[];
   survivors: number[];
@@ -47,7 +50,9 @@ function positions (slot: Point): Float32Array {
 }
 
 /** Both packages see the same positions, pointer events, selection geometry and iframe clock. */
-export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: SparseSample[] }> {
+export async function runSparseTransition (
+  engine: Engine, ratio: 1 | 2, scenario: SparseScenario = 'complete'
+): Promise<{ deviceInfo: DeviceInfo; samples: SparseSample[] }> {
   const frame = document.createElement('iframe')
   frame.title = `${engine} sparse point replay`
   frame.tabIndex = -1
@@ -138,6 +143,13 @@ export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promis
         }
         const xy = await graph.getPointPositionsAsync()
         const picks = { point: await click(point), link: await click(linkProbe), anchor: await click(anchor), control: await click(control) }
+        let sites: SparseSample['sites']
+        if (scenario === 'interrupted') {
+          sites = {
+            old: { pick: point === original ? picks.point : await click(original), rgb: rgb(original) },
+            destination: { pick: point === restored ? picks.point : await click(restored), rgb: rgb(restored) },
+          }
+        }
         let midpointPicks: string[] | undefined
         if (phase === 'restore' && time === 500) {
           // The frozen slot moves from x=48 to x=80. Sample both sides of the center
@@ -158,6 +170,7 @@ export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promis
           time,
           pixels,
           picks,
+          sites,
           midpointPicks,
           selections,
           survivors: [xy[0]!, xy[1]!, xy[4]!, xy[5]!],
@@ -167,23 +180,26 @@ export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promis
           linkRgb: rgb(linkProbe),
         })
       }
-      const edit = async (phase: Phase, target: Point, probe: Point, duration: number): Promise<void> => {
+      const edit = async (phase: Phase, target: Point, probe: Point, duration: number, times: number[]): Promise<void> => {
         graph.setPointPositions(positions(target))
         graph.render(undefined, duration)
         const start = now
-        // The returning center reaches x=66 (rectangle footprint) and x=78
-        // (lasso vertex) under the default cubic-in-out easing.
-        const times = phase === 'restore' ? [0, 500, 521, 522, 749, 750, 751, 1000] : duration ? [0, 500, 1000] : [0]
         for (const time of times) {
           now = start + time
           await sample(phase, time, probe)
         }
       }
       await sample('initial', 0, original)
-      await edit('remove', [NaN, NaN], original, 1000)
-      await edit('restore', restored, restored, 1000)
-      await edit('snap-remove', [NaN, NaN], restored, 0)
-      await edit('snap-restore', original, original, 0)
+      const interrupted = scenario === 'interrupted'
+      await edit('remove', [NaN, NaN], original, 1000, interrupted ? [0, 500] : [0, 500, 1000])
+      // The final removal sample and first restoration sample share a clock instant.
+      // Both runs bracket destination entry for the rectangle and diamond lasso.
+      const restoreTimes = [500, 521, 522, 749, 750, 751, 1000]
+      await edit('restore', restored, restored, 1000, [...(interrupted ? [0, 16, 250] : [0]), ...restoreTimes])
+      if (!interrupted) {
+        await edit('snap-remove', [NaN, NaN], restored, 0, [0])
+        await edit('snap-restore', original, original, 0, [0])
+      }
       return { deviceInfo, samples }
     } finally { graph.destroy() }
   } finally { frame.remove() }
