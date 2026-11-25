@@ -1,5 +1,13 @@
 # Replay moving selection and labels on Apple M3
 
+For the separate sparse point replay, build both distributions as shown below, then run the following from the repository root. The test records the reported adapters, full-frame difference counts, click IDs and surviving coordinates under `captures/$LAB_ARTIFACT_RUN`. Use a new capture directory for each run.
+
+```sh
+LAB_ARTIFACT_RUN=sparse-removal-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
+```
+
+## Moving YouTube selection and labels
+
 Run from the repository root with native Chrome available. To prepare the fixture once, place the original SNAP archive at `experiments/cosmos-gpu-lab/captures/fixtures/com-youtube.ungraph.txt.gz` and run the first command below. The driver checks the prepared fixture's known digest and verifies that the frozen site contains it and both locally built standalone distributions. [YouTube fixture and source archive](../million-graph/production-envelope.md#workloads)
 
 ```sh

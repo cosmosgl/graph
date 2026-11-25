@@ -66,10 +66,11 @@ export const validationContracts: Record<string, ValidationContract> = {
       'larger viewer workloads, full API and full migration are not approved.',
   },
   'production-graph-api': {
-    question: 'Can the same public Graph caller step, pick and select moving points with both built packages?',
-    reference: 'Known IDs on the small graph. On YouTube, each engine supplies its own full position snapshot at release for the rectangle and label checks.',
-    acceptance: 'Keep point 0 pinned, move point 1 inward and preserve absent point 2. Return exact ordered IDs and coordinates for 1,000 labels per drag.',
-    coverage: 'Manual gravity and clicks, plus four moving rectangles at two YouTube sizes with readback, highlight and label redraw timings on M3.',
+    question: 'Do the built packages agree on what is drawn and picked as points move, disappear and return?',
+    reference: 'Known IDs, the WebGL canvas during position edits, and each engine’s full YouTube position snapshot at release.',
+    acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position in the removal replay. ' +
+      'Return exact ordered IDs and coordinates for 1,000 labels per YouTube drag.',
+    coverage: 'Manual gravity and clicks, a three-point removal and restoration at 1× and 2×, and four moving rectangles at two YouTube sizes on M3.',
     limits: 'The YouTube replay uses a fixed camera, two-pixel points and one native GPU. The two running simulations can reach different layouts at release.',
   },
   'production-lines': {

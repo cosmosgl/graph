@@ -3,13 +3,13 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare manual stepping, moving selection and tracked labels through the two built Cosmos packages.',
+  summary: 'Compare manual stepping, point removal, moving selection and tracked labels through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
   showRecordedSummary: false,
   howItWorks: {
-    summary: 'Click a point in either graph to see its ID. Step gravity to pull the blue endpoint toward the center. The red endpoint stays pinned.',
+    summary: 'The panes run the same application with the built WebGL and WebGPU Graph packages.',
   },
   cases: [{
     id: 'manual-step',
@@ -20,8 +20,19 @@ export const experiment = defineExperiment({
     reference: 'The WebGL package and the fixed positions and IDs used in the Manual step Storybook example.',
     acceptance: 'Point 0 stays pinned, point 1 moves toward the center and point 2 stays absent. Clicking a visible point reports its ID.',
     recorded: null,
+  }, {
+    id: 'sparse-transition',
+    title: 'Remove and restore a point',
+    kind: 'compare',
+    question: 'What can you see and pick while a point and its link disappear and return?',
+    description: 'Replace one position with NaN, then restore its original index. Choose a frame to inspect the drawing and click targets.',
+    reference: 'Identical position edits and clicks in the workspace WebGL Graph.',
+    acceptance: 'The point and its link follow the reference fade and click behavior. The other two points keep their positions and IDs.',
+    recorded: null,
   }],
-  create: async host => (await import('./view')).createPackageView(host),
+  create: async (host, caseId) => caseId === 'sparse-transition'
+    ? (await import('./sparse-view')).createSparseView(host)
+    : (await import('./view')).createPackageView(host),
   pages: [{
     kind: 'markdown',
     id: 'method',

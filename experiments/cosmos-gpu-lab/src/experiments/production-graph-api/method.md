@@ -14,6 +14,12 @@ Open `#/production-graph-api`. Click the red point in each pane and check for po
 
 This small case exercises pre-initialization setters, NaN absence, linking, pinning, public async reads and picking. The panes share the GPU, so use the separate matched runs to measure performance.
 
+### Remove and restore a point
+
+Open [Remove and restore a point](#/production-graph-api?section=try-sparse-transition) and choose a frame. Both packages start with three points. The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Each pane shows the captured canvas, and the table shows what each package returned for clicks on the edited point, its link and both surviving points.
+
+The replay samples the start, midpoint and end of each one-second transition. The last two frames repeat removal and restoration with duration zero. Changing the pixel ratio reruns both packages. The browser test uses the same replay, compares every RGBA pixel and checks that the surviving points keep their coordinates and click IDs.
+
 ### Moving YouTube graph
 
 The paired M3 replay uses both built packages and reports readback, highlight updates and label redraw separately. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
