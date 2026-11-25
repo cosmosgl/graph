@@ -21,6 +21,7 @@ layout(std140) uniform findPointsInPolygonUniforms {
   float maxPointSize;
   vec2 polygonBounds0;
   vec2 polygonBounds1;
+  float centerOnly;
 } findPointsInPolygon;
 
 #define worldOrigin findPointsInPolygon.worldOrigin
@@ -33,9 +34,11 @@ layout(std140) uniform findPointsInPolygonUniforms {
 #define maxPointSize findPointsInPolygon.maxPointSize
 #define polygonBounds0 findPointsInPolygon.polygonBounds0
 #define polygonBounds1 findPointsInPolygon.polygonBounds1
+#define centerOnly findPointsInPolygon.centerOnly
 #else
 uniform vec2 polygonBounds0;
 uniform vec2 polygonBounds1;
+uniform float centerOnly;
 uniform float sizeScale;
 uniform float ratio;
 uniform float scalePointsOnZoom;
@@ -51,15 +54,17 @@ out vec4 fragColor;
 // Separating-axis test for a segment and an axis-aligned square.
 // Includes endpoints, tangency and zero-length segments.
 bool segmentTouchesSquare(vec2 a, vec2 b, vec2 center, float halfSize) {
-  vec2 midpoint = 0.5 * (a + b) - center;
-  vec2 halfEdge = 0.5 * (b - a);
-  vec2 extent = abs(halfEdge);
-  if (any(greaterThan(abs(midpoint), vec2(halfSize) + extent))) return false;
-  return abs(midpoint.x * halfEdge.y - midpoint.y * halfEdge.x) <= halfSize * (extent.x + extent.y);
+  // Work relative to the center so even a very narrow edge preserves its endpoints.
+  vec2 start = a - center;
+  vec2 end = b - center;
+  if (any(greaterThan(min(start, end), vec2(halfSize))) ||
+      any(lessThan(max(start, end), vec2(-halfSize)))) return false;
+  vec2 edge = abs(b - a);
+  return abs(start.x * end.y - start.y * end.x) <= halfSize * (edge.x + edge.y);
 }
 
-// Footprint overlap: edge intersection or centre containment by ray casting.
-bool pointInPolygon(vec2 point, float radius, bool square, highp sampler2D pathTexture, int pathLength) {
+// Edge intersection or center containment by ray casting.
+bool overlapsPolygon(vec2 point, float extent, bool square, highp sampler2D pathTexture, int pathLength) {
   bool inside = false;
   int width = textureSize(pathTexture, 0).x;
   ivec2 texel = ivec2(0);
@@ -78,14 +83,14 @@ bool pointInPolygon(vec2 point, float radius, bool square, highp sampler2D pathT
     
     // A circle touches an edge when its centre is within its radius of
     // the nearest point on that segment. Repeated vertices are valid.
-    vec2 edge = pj - pi;
     if (square) {
-      if (segmentTouchesSquare(pi, pj, point, radius * SQUARE_HALF_SIZE)) return true;
+      if (segmentTouchesSquare(pi, pj, point, extent)) return true;
     } else {
+      vec2 edge = pj - pi;
       float lengthSquared = dot(edge, edge);
       float t = lengthSquared > 0.0 ? clamp(dot(point - pi, edge) / lengthSquared, 0.0, 1.0) : 0.0;
       vec2 delta = point - (pi + t * edge);
-      if (dot(delta, delta) <= radius * radius) return true;
+      if (dot(delta, delta) <= extent * extent) return true;
     }
 
     if (((pi.y > point.y) != (pj.y > point.y)) &&
@@ -123,7 +128,12 @@ void main() {
     fragColor = vec4(0.0);
     return;
   }
-  float radius = 0.5 * max(pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize), 1.0) / ratio;
+  // A square with zero half-width tests whether the center lies on an edge.
+  bool center = centerOnly > 0.5;
+  bool square = center || footprint.g > 0.5;
+  float radius = center ? 0.0
+    : 0.5 * max(pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize), 1.0) / ratio;
+  float extent = square ? radius * SQUARE_HALF_SIZE : radius;
 
   // Convert to screen coordinates for polygon check
   vec2 screenPos = (final.xy + 1.0) * screenSize / 2.0;
@@ -132,12 +142,10 @@ void main() {
   
   // Only points whose footprints reach the polygon's bounds need to scan
   // its edges. Strict comparisons preserve tangency at the bounds.
-  float extent = footprint.g > 0.5 ? radius * SQUARE_HALF_SIZE : radius;
   if (any(lessThan(screenPos + extent, polygonBounds0)) ||
       any(greaterThan(screenPos - extent, polygonBounds1))) return;
 
-  // Select points whose centre is inside or whose footprint touches an edge.
-  if (pointInPolygon(screenPos, radius, footprint.g > 0.5, polygonPathTexture, polygonPathLength)) {
+  if (overlapsPolygon(screenPos, extent, square, polygonPathTexture, polygonPathLength)) {
     fragColor.r = 1.0;
   }
 }

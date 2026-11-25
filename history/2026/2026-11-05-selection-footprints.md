@@ -1,18 +1,26 @@
-# Consistent overlap selection
+# Consistent area selection
 
 **PR:** [#296](https://github.com/cosmosgl/graph/pull/296)
 
 Rectangle selection included points whose centres lay outside its outline,
-while the lasso selected by centre alone. Both tools now select a point when
-its selection footprint touches or overlaps the area. This makes large
-points respond consistently when either outline reaches them.
+while the lasso selected by centre alone. Both tools now use the same
+`pointSelectionMode`. The default, `'touch'`, selects a point when its
+footprint touches or overlaps the area. Use `'center'` for precise selection
+in crowded layouts. It requires the point's centre to be inside the area
+or on its boundary.
+
+```ts
+graph.setConfigPartial({ pointSelectionMode: 'center' })
+```
 
 ## Selection contract
 
-Both queries use resolved target sizes, the current zoom, the one-device-pixel
-floor and the hardware size cap. Untextured circles and squares use their
-base shape geometry; other shapes and points with images use a circular
-approximation. Squares share their geometry constant with the draw shader.
+Both modes exclude points with a zero resolved target footprint. In
+`'touch'`, both queries size the footprint using the current zoom, the
+one-device-pixel floor and the hardware size cap. Untextured circles and
+squares use their base shape geometry. Other shapes and points with images
+use a circular approximation. Squares share their geometry constant with
+the draw shader.
 
 Rectangle overlap uses the nearest point on the rectangle, avoiding the
 extra corner region introduced by padding each axis independently. The
@@ -23,11 +31,10 @@ Lasso overlap combines even-odd centre containment with circle-segment or
 square-segment intersection. Repeated vertices are valid zero-length edges.
 The scan checks the complete path rather than silently stopping at 2,048
 edges. Explicit high-precision integers keep long path lengths and loop
-counters from overflowing on GPUs with 16-bit mediump integers. Paths still require at least three vertices, but may be degenerate:
-collinear paths select footprints touching their segments, and coincident
-vertices select footprints touching that location. This extends the former
-centre-only polygon behavior and matches overlap selection for zero-area
-rectangles.
+counters from overflowing on GPUs with 16-bit mediump integers. Paths
+still require at least three vertices. For collinear paths or coincident
+vertices, the configured mode matches footprints or centres touching the
+resulting segments or location. Zero-area rectangles follow the same rule.
 
 Selection uses target sizes during size transitions and excludes outline
 rings. `PointShape.None` without an image retains its circular selection
@@ -46,8 +53,9 @@ and adding or removing an image cannot leave stale selection geometry.
 The lasso scan uses three optimizations together:
 
 - Bounds calculated from uploaded float32 coordinates reject disjoint
-  footprints before edge scanning. The bounds expand by the point's circle
-  radius or square half-width; strict comparisons retain tangency.
+  footprints before edge scanning. In touch mode the bounds expand by the
+  point's circle radius or square half-width. Strict comparisons retain
+  boundary contact in both modes.
 - Each existing RGBA path texel stores both segment endpoints. One fetch
   supplies an edge without reconstructing an endpoint and introducing new
   rounding.
@@ -64,7 +72,8 @@ complete geometry.
 `Examples / Interaction / Area Selection`, implemented in
 `src/stories/interaction/area-selection/index.ts`, lets you draw and move
 rectangles or freehand lassos around different-size points, zoom, switch
-pixel ratios and choose edge-case presets.
+pixel ratios and choose edge-case presets. The selection rule control
+reapplies either mode to the area already on screen.
 
 View updates query the displayed drag preview. Preset explanations clear
 after manual interaction. Preset and resize resets use the interactive zoom
@@ -80,7 +89,9 @@ cover shape-only updates, the circular footprint of textured squares,
 image-index removal, sub-pixel footprints at both pixel ratios, and complete
 scans through 32,771 vertices. Size expectations account for the reported
 hardware cap instead of requiring a minimum point size from the device.
-Story checks cover noncollinear freehand outlines, drag/zoom previews, preset and resize zoom continuity,
+The mode-switch regression checks interior points, centres on the boundary
+and footprint tangency through both queries. Story checks cover noncollinear
+freehand outlines, drag/zoom previews, preset and resize zoom continuity,
 resized point placement, caption clearing and moving degenerate rectangles.
 
 The comparisons below show untouched main on the left and overlap selection
@@ -105,8 +116,9 @@ two runs per version in before/after/after/before order. The tables report
 pooled median milliseconds for 100,000 mixed circle/square points on
 Chromium/ANGLE SwiftShader, a software renderer.
 
-**Latest measured implementation:** bounds rejection, packed endpoints,
-row-major cursor and complete-path scanning. Its paired comparison isolated
+The measured touch implementation predates the configurable modes and uses
+bounds rejection, packed endpoints, a row-major cursor and complete-path
+scanning. Its paired comparison isolated
 removal of the fixed 2,048-edge scan limit. Counts and selected-index hashes
 matched in all 72 workloads, whose paths were below that limit.
 

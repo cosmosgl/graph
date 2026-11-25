@@ -39,6 +39,7 @@ export const defaultConfigValues = {
   hoveredPointRingColor: 'white',
   focusedPointRingColor: 'white',
   focusedPointIndex: undefined,
+  pointSelectionMode: 'touch',
   highlightedPointIndices: undefined,
   outlinedPointIndices: undefined,
   outlinedPointRingColor: 'white',
