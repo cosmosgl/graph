@@ -17,8 +17,8 @@ to replay it on the M3. The benchmark page lists large fixtures and the
 declared method, and its results link to each workload.
 
 Home features core interactive concepts by topic, with related demos linked beneath the cards.
-Benchmarks, migration checks and earlier milestones appear in a separate study directory. The header links to the catalog, migration page and learning guide;
-other references appear above the catalog.
+Benchmarks, migration checks and earlier milestones appear in a separate study directory. The header links to the catalog and migration page.
+Other references appear above the catalog.
 Focus the search field on the right of the header to see three suggested experiments. Type to find
 experiments, recorded evidence, guides and references. Quick jump shows the top four matches.
 Experiment mini cards carry the same readiness badge as their related links. The × clears the query and restores the suggestions.
@@ -161,7 +161,7 @@ When splitting an experiment, check each resulting page, including the original.
 2. Open the demo and locate every control, chart and measurement mentioned in its summary, explanation and method.
 3. Update this README’s **Experiments** list and follow incoming links to confirm that each experiment ID
    and section link still leads to the intended content.
-4. Link the new page from the relevant concept in **Learn** or the corresponding migration requirement in **Feature coverage**.
+4. Link the new page from the corresponding migration requirement in **Feature coverage**.
 
 An experiment should contain:
 
@@ -247,8 +247,6 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
   CPU gates, duplicate-baseline controls and normal-frame GPU timing expose gains and blocked cases.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
-Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.
-These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
 
 ## Interactive documentation
 
@@ -354,15 +352,8 @@ Use `?section=try-<case>` to select a live case. The demo loads paused, and sect
 a case preserve the run. Agent-recipe links lead to recorded findings. Static-document tables update
 independently of live tables.
 
-The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
-`src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as
-`invocations` or `pingPong`. The page passes an explicit example registry to the Markdown renderer;
-unregistered fences remain ordinary code blocks. Markdown HTML stays disabled.
-
-Keep explanations in Markdown and behavior in the example module. Models use local DOM listeners,
-without timers or global listeners, so removing the page releases them. Add explicit lifecycle cleanup
-before introducing animations, observers or GPU resources. Chapter links support direct opening
-(`#/learn/8`); in-page chapter jumps preserve example state.
+An `example` fence embeds a view registered by the page, such as the feature coverage table on
+the migration roadmap. Unregistered fences render as ordinary code blocks.
 
 ## WebGPU migration checks
 

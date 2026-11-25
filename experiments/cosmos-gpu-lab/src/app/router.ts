@@ -1,7 +1,6 @@
 export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
-  | { kind: 'learn'; sectionId?: string }
   | { kind: 'roadmap'; section?: string }
   | { kind: 'validation-workflow' }
   | { kind: 'numerical-research' }
@@ -25,7 +24,11 @@ export function readRoute (): AppRoute {
     .filter(Boolean)
 
   if (segments.length === 0) return { kind: 'home' }
-  if (segments[0] === 'learn') return { kind: 'learn', sectionId: segments[1] }
+  // Keep bookmarks to the retired guide and its numbered chapters useful.
+  if (segments[0] === 'learn') {
+    window.history.replaceState(window.history.state, '', '#/?section=experiment-catalog')
+    return { kind: 'home' }
+  }
   if (segments[0] === 'roadmap') return { kind: 'roadmap', section: currentSection() ?? undefined }
   if (segments[0] === 'architecture') return { kind: 'architecture' }
   if (segments[0] === 'validation-workflow') return { kind: 'validation-workflow' }

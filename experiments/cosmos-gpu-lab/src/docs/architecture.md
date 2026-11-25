@@ -84,8 +84,8 @@ The coverage list and notes are visible on load. Old feature-inventory URLs focu
 section. Detailed measurements remain in the linked experiments.
 
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
-rail, with a visible short contents list above the article on smaller screens. The learning guide and
-vocabulary retain their own navigation. Live experiments share expanded configuration, visualization,
+rail, with a visible short contents list above the article on smaller screens. The vocabulary has
+its own term navigation. Live experiments share expanded configuration, visualization,
 results and diagnostics regions. The visualization comes first on
 narrow screens. Wide screens place the two beside
 each other. A session summary reports actual checks, failures and unchecked scope. Arithmetic, cooling and validation settings stay in Configuration;

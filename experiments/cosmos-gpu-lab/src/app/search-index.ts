@@ -26,7 +26,7 @@ export type SearchEntry = {
 export type SearchResult = SearchEntry & { snippet: string; score: number }
 export type SearchIndex = { entries: SearchEntry[]; unavailable: number }
 type Token = ReturnType<MarkdownIt['parse']>[number]
-type Heading = { index: number; level: number; title: string; articleSlug: string; documentSlug?: string; chapter?: number }
+type Heading = { index: number; level: number; title: string; articleSlug: string; documentSlug?: string }
 
 const markdown = new MarkdownIt({ html: false, linkify: true, typographer: true })
 const instructionHeading = /\bagents?\b|\breproduc(?:e|tion)\b|\b(?:replay|test|run) (?:instructions|commands|steps)\b/i
@@ -66,10 +66,8 @@ function headingsFor (tokens: Token[]): Heading[] {
     while (used.has(slug)) slug = `${stem}-${suffix++}`
     used.add(slug); heading.articleSlug = slug
   }
-  const documentUsed = new Set<string>(); let chapter = 0
+  const documentUsed = new Set<string>()
   for (const heading of headings) {
-    if (heading.level === 2) chapter++
-    heading.chapter = chapter || undefined
     if (heading.level !== 2 && heading.level !== 3) continue
     const stem = headingSlug(heading.title); let slug = stem; let suffix = 2
     while (documentUsed.has(slug)) slug = `${stem}-${suffix++}`
@@ -80,7 +78,7 @@ function headingsFor (tokens: Token[]): Heading[] {
 
 type DocumentOptions = {
   key: string; title: string; kind: string; context: string; baseHref: string;
-  mode: 'article' | 'document' | 'learn' | 'vocabulary';
+  mode: 'article' | 'document' | 'vocabulary';
   experimentId?: string; caseId?: string; pageId?: string;
 }
 
@@ -92,7 +90,7 @@ export function indexMarkdown (source: string, options: DocumentOptions): Search
   const entries: SearchEntry[] = []
   let current: SearchEntry | undefined; let excludedLevel: number | undefined
   let tableHeader = false; let tableCell = -1; let tableColumns: Set<number> | undefined
-  let lastDocumentSlug: string | undefined; let lastChapter: number | undefined; let lastVocabulary: string | undefined
+  let lastDocumentSlug: string | undefined; let lastVocabulary: string | undefined
   const start = (heading?: Heading): void => {
     let href = options.baseHref
     if (heading && heading.level >= 2) {
@@ -101,9 +99,6 @@ export function indexMarkdown (source: string, options: DocumentOptions): Search
       } else if (options.mode === 'document') {
         lastDocumentSlug = heading.documentSlug ?? lastDocumentSlug
         if (lastDocumentSlug) href = `${options.baseHref}?section=${encodeURIComponent(lastDocumentSlug)}`
-      } else if (options.mode === 'learn') {
-        lastChapter = heading.chapter ?? lastChapter
-        if (lastChapter) href = `#/learn/${lastChapter}`
       } else if (options.mode === 'vocabulary') {
         if (heading.level === 3) lastVocabulary = vocabularyTerms.find(term => term.heading === heading.title)?.id
         else if (heading.level === 2) lastVocabulary = undefined
@@ -223,14 +218,6 @@ const references = [
     href: roadmapHref(),
     mode: 'document' as const,
     load: async (): Promise<string> => (await import('../docs/roadmap.md?raw')).default,
-  },
-  {
-    key: 'learn',
-    title: 'How WebGPU works',
-    kind: 'Guide',
-    href: '#/learn',
-    mode: 'learn' as const,
-    load: async (): Promise<string> => (await import('../docs/learn-webgpu.md?raw')).default,
   },
   {
     key: 'validation-workflow',

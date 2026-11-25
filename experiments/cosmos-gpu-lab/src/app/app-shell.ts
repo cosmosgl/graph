@@ -144,7 +144,6 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         <nav class="lab-navigation" aria-label="Lab navigation">
           <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a>
           <a data-nav="roadmap" href="${roadmapHref()}">WebGPU migration</a>
-          <a data-nav="learn" href="#/learn">Learn</a>
         </nav>
         <form class="global-search" id="lab-search-form" role="search" aria-label="Quick jump">
           <div class="global-search-field">
@@ -283,8 +282,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const path = window.location.hash.split('?')[0] || '#/'
     previousPath = path
     const finish = (): void => {
-      if (version !== renderVersion || currentSection() || (route.kind === 'learn' && route.sectionId) ||
-        (route.kind === 'vocabulary' && route.termId)) return
+      if (version !== renderVersion || currentSection() || (route.kind === 'vocabulary' && route.termId)) return
       window.scrollTo(0, route.kind === 'home' ? 0 : scrollPositions.get(path) ?? 0)
     }
     run.hide()
@@ -299,22 +297,6 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       scrollToSection(workspace, currentSection())
       finish()
       return
-    }
-
-    if (route.kind === 'learn') {
-      const stage = renderReferenceFrame(workspace, 'How WebGPU works', 'Follow one Cosmos simulation tick with interactive examples.')
-      try {
-        const [source, renderer, examples] = await Promise.all([
-          import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
-        ])
-        if (version !== renderVersion) return
-        renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples, sectionNavigation: false })
-        examples.addLearningContents(stage, route.sectionId)
-      } catch (error) {
-        if (version !== renderVersion) return
-        renderFailure(stage, error)
-      }
-      finish(); return
     }
 
     if (route.kind === 'validation-workflow' || route.kind === 'numerical-research') {
