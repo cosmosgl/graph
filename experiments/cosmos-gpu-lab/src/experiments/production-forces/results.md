@@ -14,6 +14,8 @@ At tick 8, three of the seven present point positions differed in the M3 center 
 
 The pointer case exposed a missing update. With the internal loop disabled, WebGL moved the point at x = 2,088 to 2,092 on the first right-button step. The earlier WebGPU package left it at 2,088. The corrected package handles both a manual step and a paused frame while the right button is held. Both graphs then held their tick-4 positions through tick 8 after release.
 
+On M3, changing cluster membership, targets and per-point strengths during a run produced identical positions and centroids in both packages at all eight checkpoints, including disabling, re-enabling and clearing the forces. After converting clusters, attractors, gravity, center and mouse repulsion to classes, the WebGPU position buffers also matched the frozen WebGPU build bit-for-bit at ticks 0, 1, 4 and 8 for each force.
+
 ## Springs, repulsion and collision
 
 WebGL uses one `ForceLink` instance for incoming links and one for outgoing links. WebGPU keeps both neighbor lists in one `ForceLink` because both use the same compute kernel and are rebuilt together when links or weights change. It still integrates the incoming correction before the outgoing pass reads the new positions.

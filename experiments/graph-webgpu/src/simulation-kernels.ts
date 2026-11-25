@@ -4,12 +4,12 @@ import type { GraphConfigInterface } from '@/graph/config'
 import type { GraphData } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
 import { ForceAttractor } from './modules/ForceAttractor'
-import { createCenter, createCenterKernel, createCentroidKernel } from './modules/ForceCenter'
+import { ForceCenter, createCenterKernel, createCentroidKernel } from './modules/ForceCenter'
 import { ForceCollision } from './modules/ForceCollision'
-import { createGravity, createGravityKernel } from './modules/ForceGravity'
+import { ForceGravity, createGravityKernel } from './modules/ForceGravity'
 import { ForceLink, createSpringKernel } from './modules/ForceLink'
 import { ForceManyBody, createRepulsionKernel } from './modules/ForceManyBody'
-import { createPointerForce } from './modules/ForceMouse'
+import { ForceMouse } from './modules/ForceMouse'
 import { Clusters } from './modules/Clusters'
 import { resourceScope } from './modules/Shared/resource-scope'
 import { kernel, type Decl, upload } from './modules/Shared/compute'
@@ -94,8 +94,8 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       }
       return source
     }
-    const applyGravity = createGravity(device, scope, programs.gravity, groups, store)
-    const applyCenter = createCenter(device, scope, programs.center, groups)
+    const gravity = new ForceGravity(device, scope, programs.gravity, groups, store)
+    const center = new ForceCenter(device, scope, programs.center, groups)
     const integrationParams = own(upload(device, new Float32Array(8), uniformUsage))
     const collisionIntegrator = own(upload(device, new Float32Array(8), uniformUsage))
     const links = new ForceLink(device, scope, count, store, programs.spring)
@@ -105,7 +105,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
     let maxSize = 0
     let attractors: ForceAttractor | undefined
     let clusters: Clusters | undefined
-    let pointer: ReturnType<typeof createPointerForce> | undefined
+    let pointer: ForceMouse | undefined
     let collision: ForceCollision | undefined
     let current: 0 | 1 = 0
     const run = (encode: (pass: ComputePass) => void): void => {
@@ -174,7 +174,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         return source.decodeCentroids(sums)
       },
       applyPointer (cfg: GraphConfigInterface, x: number, y: number): void {
-        pointer ??= createPointerForce(device, count)
+        pointer ??= new ForceMouse(device, count)
         const active = pointer
         const forces = forceBuffer()
         integrationParams.write(new Float32Array([count, store.alpha, 0, 0, cfg.simulationFriction, store.stepGuard, 0, 0]))
@@ -201,12 +201,12 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         }
         run(pass => {
           if (cfg.simulationGravity) {
-            applyGravity(pass, positions[current], forces, cfg.simulationGravity)
+            gravity.encode(pass, positions[current], forces, cfg.simulationGravity)
             integrate(pass)
           }
           if (cfg.simulationCenter) {
             const centroid = reduce(pass, positions[current], 'centroid')
-            applyCenter(pass, positions[current], forces, centroid, alpha, cfg.simulationCenter)
+            center.encode(pass, positions[current], forces, centroid, alpha, cfg.simulationCenter)
             integrate(pass)
           }
           if (manyBody.encode(pass, positions[current], forces, integrationParams, cfg, reduce, measureOccupancy)) integrate(pass)

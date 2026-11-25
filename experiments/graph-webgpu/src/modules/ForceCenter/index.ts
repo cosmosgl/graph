@@ -6,7 +6,6 @@ import source from './force-center.wgsl?raw'
 import reduction from './reduce-centroid.wgsl?raw'
 
 type Scope = ReturnType<typeof resourceScope>
-type Center = (pass: ComputePass, positions: Buffer, output: Buffer, centroid: Buffer, alpha: number, strength: number) => void
 
 export function createCenterKernel (device: Device, scope: Scope): Kernel {
   return kernel(device, scope, source, 'center',
@@ -17,10 +16,15 @@ export function createCentroidKernel (device: Device, scope: Scope): Kernel {
   return kernel(device, scope, reduction, 'main', [['input', 'read-only-storage'], ['output', 'storage'], ['params', 'uniform']])
 }
 
-export function createCenter (device: Device, scope: Scope, program: Kernel, groups: number): Center {
-  const params = scope.own(upload(device, new Float32Array(4), Buffer.UNIFORM))
-  return (pass, positions, output, centroid, alpha, strength): void => {
-    params.write(new Float32Array([0, 0, alpha, strength]))
-    program.dispatch(pass, { x: groups, bindings: { positions, output, params, centroid } })
+export class ForceCenter {
+  private readonly params: Buffer
+
+  public constructor (device: Device, scope: Scope, private readonly program: Kernel, private readonly groups: number) {
+    this.params = scope.own(upload(device, new Float32Array(4), Buffer.UNIFORM))
+  }
+
+  public encode (pass: ComputePass, positions: Buffer, output: Buffer, centroid: Buffer, alpha: number, strength: number): void {
+    this.params.write(new Float32Array([0, 0, alpha, strength]))
+    this.program.dispatch(pass, { x: this.groups, bindings: { positions, output, params: this.params, centroid } })
   }
 }
