@@ -1,10 +1,12 @@
 # Replay moving selection and labels on Apple M3
 
-For the separate sparse point replay, build both distributions as shown below, then run the following from the repository root. The test records the reported adapters, full-frame difference counts, click IDs and surviving coordinates under `captures/$LAB_ARTIFACT_RUN`. Use a new capture directory for each run.
+For the sparse point replay, build both distributions as shown below, then run from the repository root with a fresh capture name. The test records the adapters, full-frame differences, click IDs, surviving coordinates and ordered rectangle and lasso IDs for each region.
 
 ```sh
-LAB_ARTIFACT_RUN=sparse-removal-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
+LAB_ARTIFACT_RUN=sparse-area-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
 ```
+
+The M3 replay is in `captures/sparse-area-m3-release`. Its `provenance.json` records the clean revision, bundle hashes and adapters. In `package-sparse-transition-{1,2}x.json`, each package’s `selections` lists the old position, midpoint, destination and whole-graph control. Inspect restoration at 521/522 and 749/750/751 ms to reproduce the destination crossings.
 
 ## Point-only style updates
 

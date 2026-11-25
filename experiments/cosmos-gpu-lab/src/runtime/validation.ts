@@ -68,7 +68,8 @@ export const validationContracts: Record<string, ValidationContract> = {
   'production-graph-api': {
     question: 'Do the built packages draw, pick and track the same points as they move, disappear and return?',
     reference: 'Known IDs, the WebGL canvas during position edits, and each engine’s full YouTube position snapshot at release.',
-    acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position in the removal replay. ' +
+    acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position at all removal and restoration checkpoints. ' +
+      'Check exact area IDs as the point fades and crosses each destination boundary. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
       'Check point colors, sizes and endpoint gradients through an interruption. WebGPU edge clicks must follow the displayed diameter. ' +
       'Check exact rectangle and lasso IDs near the changing edge at both pixel ratios. ' +

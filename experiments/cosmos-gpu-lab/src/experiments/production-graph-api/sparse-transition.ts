@@ -10,12 +10,31 @@ const restored: Point = [80, 96]
 const control: Point = [128, 40]
 const linkProbe: Point = [144, 96]
 
+type Region = 'old' | 'midpoint' | 'destination' | 'all'
+type Probe = { region: Region; rect: [Point, Point]; lasso: Point[] }
+
+function localProbe (region: Region, [x, y]: Point): Probe {
+  return {
+    region,
+    rect: [[x - 2, y - 2], [x + 2, y + 2]],
+    lasso: [[x, y - 2], [x + 2, y], [x, y + 2], [x - 2, y]],
+  }
+}
+
+const areaProbes: Probe[] = [
+  localProbe('old', original),
+  localProbe('midpoint', [64, 96]),
+  localProbe('destination', restored),
+  { region: 'all', rect: [[20, 16], [220, 132]], lasso: [[32, 16], [208, 16], [220, 132], [20, 132]] },
+]
+
 export type SparseSample = {
   phase: Phase;
   time: number;
   pixels: ImageData;
   picks: { point: string; link: string; anchor: string; control: string };
   midpointPicks?: string[];
+  selections: { region: Region; rectangle: number[]; lasso: number[] }[];
   survivors: number[];
   pointSpan: number;
   pointBounds: number[] | null;
@@ -27,7 +46,7 @@ function positions (slot: Point): Float32Array {
   return Float32Array.from([anchor, slot, control].flatMap(([x, y]) => [256 + x - 128, 256 - y + 80]))
 }
 
-/** Both packages see the same positions, pointer events and iframe clock. The application clock keeps running. */
+/** Both packages see the same positions, pointer events, selection geometry and iframe clock. */
 export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: SparseSample[] }> {
   const frame = document.createElement('iframe')
   frame.title = `${engine} sparse point replay`
@@ -127,12 +146,20 @@ export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promis
           for (const x of [40, 48, 64, 80, 88]) midpointPicks.push(await click([x, 96]))
         }
         const pointBounds = right >= left ? [left, top, right + 1, bottom + 1] : null
+        const selections: SparseSample['selections'] = []
+        for (const probe of areaProbes) {
+          const rectangle = await graph.findPointsInRectAsync(probe.rect)
+          const lasso = await graph.findPointsInPolygonAsync(probe.lasso)
+          if (rectangle === null || lasso === null) throw new Error(`${engine} lost the ${probe.region} area read at ${phase} ${time} ms`)
+          selections.push({ region: probe.region, rectangle, lasso })
+        }
         samples.push({
           phase,
           time,
           pixels,
           picks,
           midpointPicks,
+          selections,
           survivors: [xy[0]!, xy[1]!, xy[4]!, xy[5]!],
           pointSpan,
           pointBounds,
@@ -144,7 +171,10 @@ export async function runSparseTransition (engine: Engine, ratio: 1 | 2): Promis
         graph.setPointPositions(positions(target))
         graph.render(undefined, duration)
         const start = now
-        for (const time of duration ? [0, 500, 1000] : [0]) {
+        // The returning center reaches x=66 (rectangle footprint) and x=78
+        // (lasso vertex) under the default cubic-in-out easing.
+        const times = phase === 'restore' ? [0, 500, 521, 522, 749, 750, 751, 1000] : duration ? [0, 500, 1000] : [0]
+        for (const time of times) {
           now = start + time
           await sample(phase, time, probe)
         }

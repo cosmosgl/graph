@@ -16,9 +16,20 @@ This small case exercises pre-initialization setters, NaN absence, linking, pinn
 
 ### Remove and restore a point
 
-Open [Remove and restore a point](#/production-graph-api?section=try-sparse-transition) and choose a frame. Both packages start with three points. The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Each pane shows the captured canvas, and the table shows what each package returned for clicks on the edited point, its link and both surviving points.
+The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Choose a frame to see each package’s canvas, click results and selected IDs. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition)
 
-The replay samples the start, midpoint and end of each one-second transition. The last two frames repeat removal and restoration with duration zero. Changing the pixel ratio reruns both packages. The browser test uses the same replay, compares every RGBA pixel and checks that the surviving points keep their coordinates and click IDs.
+At the first removal frame, the old rectangle and lasso already returned `[]` while the point still painted at its full 24 CSS px diameter. Both stayed empty through the fade. At the first restoration frame, both returned `[1]` at the old center (x = 48) while the point had no painted pixels. Halfway through, both tools returned `[1]` at the midpoint (x = 64) and `[]` at the destination (x = 80).
+
+The destination rectangle and diamond lasso each span 4 × 4 CSS px. During the one-second restoration, both packages returned the following IDs there on M3 at 1× and 2×.
+
+| Time after restoration starts | Destination rectangle | Destination lasso |
+| --- | --- | --- |
+| 521 ms | `[]` | `[]` |
+| 522 ms | `[1]` | `[]` |
+| 749 ms | `[1]` | `[]` |
+| 750 ms through the sampled end at 1,000 ms | `[1]` | `[1]` |
+
+The rectangle uses the point’s full 12 CSS px target radius and starts selecting as the moving center reaches x = 66. The lasso starts selecting when the center reaches its left vertex at x = 78. The times are specific to this geometry and the default cubic easing. A region containing all three locations returned `[0, 2]` throughout removal and `[0, 1, 2]` from the start of restoration. The replay also checks removal and restoration with duration zero. Across 14 checkpoints at both ratios, all 224 pairs of ID lists and all 28 pairs of rendered frames matched.
 
 On M3, the original WebGPU removal differed from WebGL at 630 pixels halfway through the fade at 1× and 2,506 pixels at 2×. After the fix, all nine canvases at each ratio matched exactly. At the midpoint the outgoing point was 12 CSS pixels wide, the link was half as bright, and both clicks returned background. Halfway through restoration the center had moved 16 CSS pixels. A click at its destination, another 16 pixels away, already returned point 1 in both packages.
 

@@ -33,17 +33,17 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Repeat the packaged headless replay on other supported adapters.',
   },
   'production-graph-api/sparse-transition': {
-    badge: 'Frames and picks match',
+    badge: 'Removal and restoration match',
     tone: 'pass',
-    finding: 'Both packages faded the removed point and its link, then restored the same slot at its new location.',
+    finding: 'Both packages dropped the ID on the first fade frame. On return, their destination rectangles selected it at 522 ms and their lassos at 750 ms.',
     area: 'Integration',
     status: 'Verified on M3 at 1× and 2×',
     evidence: [
-      { tone: 'pass', text: '18 canvases matched pixel for pixel' },
-      { tone: 'pass', text: '82 click results matched, including clicks near the returning point' },
-      { tone: 'pass', text: 'Both surviving slots kept their coordinates and IDs' },
+      { tone: 'pass', text: 'All 224 pairs of area results matched, including the old position, midpoint and destination' },
+      { tone: 'pass', text: '28 frame pairs matched pixel for pixel and all 122 click results agreed' },
+      { tone: 'pass', text: 'The whole-graph region returned [0, 2] throughout removal and [0, 1, 2] from the first restoration frame' },
     ],
-    next: 'Check area selection of the removed slot during its fade and after restoration.',
+    next: 'Repeat the same destination boundary checks on another supported adapter.',
   },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
