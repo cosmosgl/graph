@@ -48,6 +48,15 @@ the canvas and click callbacks at the same instant caught a second detail:
 WebGL's pointer window can select the returning point just outside its
 painted edge.
 
+Two label groups can follow the same point and still have different
+lifetimes. The WebGPU simulation now gives each tracker its own indices
+and completed position map. Changing or destroying one group discards
+its pending read. The other group can finish reading the tick it asked
+for and follow the next one. On M3, both packages reported point 1 at
+x = 2140 in the surviving request and at about 2130.8 after gravity
+stepped. WebGPU callers can await `positionsAsync()` for that tick or
+use the completed map while a newer GPU copy is pending.
+
 With the mouse parked, a point could move beneath it without a hover
 callback or a ring in WebGPU. The graph now checks the last cursor
 position when the scene changes and combines changes that happen during
