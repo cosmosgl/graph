@@ -32,6 +32,18 @@ WebGL reports `over 0` when point 0 arrives. Holding the same point produces no 
 
 On M3, the original candidate missed all seven hover callbacks at each pixel ratio. Refreshing the pick recovered the callbacks, but the ring still appeared wider and brighter. WebGL draws hover and focus over the point sprites and gives the hover ring 70% opacity. With that drawing rule, both packages matched every RGBA byte in all nine paired frames at 1× and all nine at 2×.
 
+### Change only point colors and sizes
+
+Open [Change only point colors and sizes](#/production-graph-api?section=try-point-style-updates). The upper link blends its two endpoint colors. Recolor point 0 from red to blue and the midpoint changes from yellow-green to blue-green, even though the link record stays the same. The lower link and its points serve as controls.
+
+Both packages receive the same edits to the same reused arrays. The replay reads the canvas at eight checkpoints, measures the drawn diameter and clicks four locations per frame. Choose **Interrupt with a larger white point** to see the existing difference in how the next transition starts. Halfway from 40 to 8 CSS pixels the point is 24 pixels wide. WebGL restarts at its old 8-pixel target. WebGPU continues from the displayed 24 pixels.
+
+During a size transition WebGL suspends pointer picking and reports the last hovered item. In this replay that is point 2. WebGPU runs a new pick using the target footprint. At rest the same probes select the edited point, background or link in both packages.
+
+On M3, five of eight frames matched every RGBA byte at each pixel ratio. Halfway through shrinking, 16 pixels at 1× and 32 at 2× differed by one channel level. The other two frames show the different restart sizes and colors. The endpoint gradient and the control link matched throughout. Comparing against the earlier WebGPU build, every click and size reading stayed the same. The two regrowth midpoint images changed because the 32-pixel circle now draws round at a tile boundary. [Tile-origin control](#/production-points?section=doc-results)
+
+On the 4,096-point, 8,192-link WebGPU fixture, each of the four point edits previously uploaded 262,144 bytes of link records and 16,384 bytes of point draw order. Immediate color, immediate size, animated color and size, and interrupted color and size now upload zero bytes to either buffer. Color-only point data used 81,928 bytes, size-only used 49,160, and combined edits used 131,080. A restarted point transition also uploaded 32 bytes of interpolation parameters.
+
 ### Two headless point trackers
 
 Open [Two headless point trackers](#/production-graph-api?section=try-headless-trackers). Each package creates a `GraphSimulation` and two trackers before the device or data is ready. A and B both follow point 1. When A changes its indices, its old request resolves to `null`. B's pending request still returns point 1 at the coordinate it had when the request began.

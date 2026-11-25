@@ -5,6 +5,19 @@ import type { CaseReadiness } from './types'
 // live verdict or an approval of the production engine.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
+  'production-graph-api/point-style-updates': {
+    badge: 'Point edits isolated',
+    tone: 'review',
+    finding: 'Recoloring or resizing points preserved the resident WebGPU link records. The packages differ in how an interrupted point appears and picks.',
+    area: 'Integration',
+    status: 'Eight frames checked on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'Immediate edits and the settled frame matched every pixel and click ID' },
+      { tone: 'pass', text: 'Zero link-record uploads in all four WebGPU edits on the 8,192-link control' },
+      { tone: 'warn', text: 'During size transitions WebGL holds the last hit. WebGPU picks using the target size.' },
+    ],
+    next: 'Decide which pointer behavior applications should receive during a size transition.',
+  },
   'production-graph-api/headless-trackers': {
     badge: 'Both trackers match',
     tone: 'pass',

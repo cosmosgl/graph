@@ -3,7 +3,7 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare manual stepping, point removal, hover, selection and point tracking through the two built Cosmos packages.',
+  summary: 'Compare manual stepping, point styles, removal, hover, selection and tracking through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
@@ -39,6 +39,15 @@ export const experiment = defineExperiment({
     acceptance: 'Both packages report the same point IDs and callback order. The ring follows the hovered point and clears when the pointer leaves.',
     recorded: null,
   }, {
+    id: 'point-style-updates',
+    title: 'Change only point colors and sizes',
+    kind: 'compare',
+    question: 'What happens to a point and its link when a color or size change interrupts a transition?',
+    description: 'Compare the drawn frames and click IDs as point colors and sizes change. The link takes its color from its endpoints.',
+    reference: 'Both standalone Graph packages receive the same edits, clicks and transition times.',
+    acceptance: 'Each package preserves its drawing and click results across the edit, including how it handles an interrupted transition.',
+    recorded: null,
+  }, {
     id: 'headless-trackers',
     title: 'Two headless point trackers',
     kind: 'compare',
@@ -52,6 +61,7 @@ export const experiment = defineExperiment({
     if (caseId === 'sparse-transition') return (await import('./sparse-view')).createSparseView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
+    if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)
     return (await import('./view')).createPackageView(host)
   },
   pages: [{

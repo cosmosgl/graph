@@ -6,6 +6,20 @@ For the separate sparse point replay, build both distributions as shown below, t
 LAB_ARTIFACT_RUN=sparse-removal-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/sparse-transition.test.ts
 ```
 
+## Point-only style updates
+
+Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.
+
+```sh
+LAB_ARTIFACT_RUN=point-styles-native-02 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/point-style-updates.test.ts
+```
+
+Each ratio has eight frames from each real package. Compare the RGBA hashes, center and midpoint colors, painted spans, size getter and four click IDs against the previous candidate. The engine browser suite separately checks buffer writes and identity, interpolation sources, highlights and live collision sizes.
+
+The 4,096-point / 8,192-link capture in `captures/point-styles-uploads-zF7J7b` includes the two standalone WebGPU bundles and a Chrome runner that records public luma buffer allocations, CPU writes and GPU copies. The full update is a positive control. Run `node uploads.cjs before` and `node uploads.cjs after` from that directory to replay the four isolated style edits.
+
+The M3 control uses the WebGPU package from `6b56fb87`. The per-frame hashes and probes are in `captures/point-style-visual-control-6b56fb87` and `captures/point-style-visual-m3-corrected/before-after.json`. Chrome 158.0.8127.37 reported ANGLE Metal on Apple M3 for WebGL and Apple Metal 3 with fallback disabled for WebGPU. Run `production-points/tile-origin.test.ts` alongside the replay to isolate the 32-pixel circle independently of the edit.
+
 ## Independent headless trackers
 
 Build both standalone packages and run the tracker regression from the repository root. Use a new capture name each time.
