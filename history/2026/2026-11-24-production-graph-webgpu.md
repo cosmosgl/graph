@@ -31,6 +31,14 @@ select a thin link several pixels beyond its painted edge and inside a dash
 gap. Checking both the canvas pixels and the public click callback preserves
 that behavior when an endpoint moves or a point covers the link.
 
+The point-label story exposed a timing difference. Halfway through a size
+change, WebGPU painted the point at 12 but told the label its size was
+already 20. The point-radius and link-width getters now follow the same
+clock as the drawing, so a label can stay in place relative to the point
+without reading pixels back. When a second edit arrives mid-animation,
+WebGPU starts at the displayed size. WebGL jumps to its previous target.
+The paired replay checks the label and painted geometry in both cases.
+
 Running one force at a time also exposed a difference in how a host drives
 the Graph. Holding the right mouse button must repel nearby points during
 a manually scheduled update. Reading the positions after each update lets
