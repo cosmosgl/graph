@@ -7,7 +7,7 @@ import { createAttractors } from './modules/ForceAttractor'
 import { createCenter, createCenterKernel, createCentroidKernel } from './modules/ForceCenter'
 import { ForceCollision } from './modules/ForceCollision'
 import { createGravity, createGravityKernel } from './modules/ForceGravity'
-import { createLinkForce, createSpringKernel } from './modules/ForceLink'
+import { ForceLink, createSpringKernel } from './modules/ForceLink'
 import { ForceManyBody, createRepulsionKernel } from './modules/ForceManyBody'
 import { createPointerForce } from './modules/ForceMouse'
 import { createClusters } from './modules/Clusters'
@@ -98,7 +98,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
     const applyCenter = createCenter(device, scope, programs.center, groups)
     const integrationParams = own(upload(device, new Float32Array(8), uniformUsage))
     const collisionIntegrator = own(upload(device, new Float32Array(8), uniformUsage))
-    const links = createLinkForce(device, scope, count, store, programs.spring)
+    const links = new ForceLink(device, scope, count, store, programs.spring)
     const manyBody = new ForceManyBody(device, count, store, programs.repulsion)
     let forces: Buffer | undefined
     let sizes: Buffer | undefined
@@ -143,7 +143,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       current: (): Buffer => positions[current],
       updateSamples: () => manyBody.updateSamples(),
       restartOccupancyMeasurement: () => manyBody.restartOccupancyMeasurement(),
-      updateTopology: links.updateTopology,
+      updateTopology: data => links.updateTopology(data),
       updateSizes (data: GraphData): void {
         // Size collision cells from resolved diameters so an unused default preserves the neighbor samples.
         maxSize = 0

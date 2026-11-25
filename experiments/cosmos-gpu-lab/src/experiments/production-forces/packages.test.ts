@@ -4,6 +4,7 @@ import { combinedMetrics, positionStats } from './compare'
 import { absentIndex, forceCases, forcePositions, origin, type ForceCase } from './fixture'
 import { createForcePreview, type ForceSession } from './frame'
 import { isScaleCase } from './scale-fixture'
+import { replaySpringEdits } from './spring-edits'
 import { createForcesView } from './view'
 
 // Check recognizable motion even if both packages were to agree on the same broken output.
@@ -128,6 +129,32 @@ it.each(forceCases.filter(fixture => !isScaleCase(fixture)))('compares packaged 
     await writeArtifact(`package-forces-${fixture}`, { fixture, devices, records })
   } finally {
     for (const session of sessions) session.destroy()
+  }
+})
+
+it('preserves the active spring topology through weight edits, link replacement and simulation restart', async () => {
+  const reference = await replaySpringEdits('webgl')
+  const candidate = await replaySpringEdits('webgpu')
+  for (const [edit, expected] of Object.entries(reference)) {
+    const actual = candidate[edit as keyof typeof candidate]
+    expect(new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength), edit)
+      .toEqual(new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength))
+  }
+
+  const { initial, weighted, zeroWeight, replaced, disabled, reenabled, resumed } = reference
+  expect(weighted[2]).toBeLessThan(initial[2]) // Initial spring pulls point 1 toward pin 0.
+  expect(weighted[4]).toBe(initial[4])
+  expect(zeroWeight).toEqual(weighted)
+  expect(replaced[2]).toBeGreaterThan(zeroWeight[2]) // Replacement spring connects 1 to 2.
+  expect(replaced[4]).toBeLessThan(zeroWeight[4])
+  expect(disabled).toEqual(replaced)
+  expect(reenabled).toEqual(disabled)
+  expect(resumed[2]).toBeGreaterThan(reenabled[2])
+  expect(resumed[4]).toBeLessThan(reenabled[4])
+  for (const xy of Object.values(reference)) {
+    expect(xy).toHaveLength(6)
+    expect(xy.slice(0, 2)).toEqual(initial.slice(0, 2))
+    expect(xy.every(Number.isFinite)).toBe(true)
   }
 })
 

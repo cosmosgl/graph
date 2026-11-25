@@ -9,12 +9,6 @@ import source from './force-link.wgsl?raw'
 
 type Scope = ReturnType<typeof resourceScope>
 type Direction = {offsets: Buffer; edges: Buffer}
-interface LinkForce {
-  updateTopology(data: GraphData): void;
-  prepare(config: GraphConfigInterface): void;
-  encode(pass: ComputePass, current: () => Buffer, sizes: Buffer, forces: Buffer, integrate: (pass: ComputePass) => void): void;
-  releaseTopology(): void;
-}
 
 export function createSpringKernel (device: Device, scope: Scope): Kernel {
   const read = 'read-only-storage'
@@ -44,42 +38,60 @@ function springEdges (group: LinksByPoint, data: GraphData, store: Store): Uint3
   return edges
 }
 
-export function createLinkForce (device: Device, scope: Scope, count: number, store: Store, program: Kernel): LinkForce {
-  const groups = Math.ceil(count / 64)
-  const params = scope.own(upload(device, new Float32Array(12), Buffer.UNIFORM))
-  let topology = resourceScope()
-  let directions: Direction[] = []
-  return {
-    updateTopology (data: GraphData): void {
-      const next = resourceScope()
-      try {
-        const newDirections: typeof directions = []
-        for (const group of [data.linksBySource, data.linksByTarget]) {
-          if (!group?.neighbors.length) continue
-          newDirections.push({
-            offsets: next.own(upload(device, group.offsets)),
-            edges: next.own(upload(device, springEdges(group, data, store))),
-          })
-        }
-        topology.destroy(); topology = next; directions = newDirections
-      } catch (error) { next.destroy(); throw error }
-    },
-    prepare (config): void {
-      if (!directions.length) return
-      params.write(new Float32Array([config.simulationLinkSpring, config.simulationLinkDistance,
-        ...config.simulationLinkDistRandomVariationRange, store.alpha, config.simulationFriction, store.stepGuard,
-        config.simulationCollision ? 1 : 0, config.simulationCollisionRadius ?? 0, config.simulationCollisionPadding, count, 0]))
-    },
-    encode (pass, current, sizes, forces, integrate): void {
-      for (const direction of directions) {
-        program.dispatch(pass, { x: groups, bindings: { positions: current(), ...direction, sizes, params, forces } })
-        integrate(pass)
+export class ForceLink {
+  private readonly groups: number
+  private readonly params: Buffer
+  private topology = resourceScope()
+  private directions: Direction[] = []
+
+  public constructor (
+    private readonly device: Device,
+    scope: Scope,
+    private readonly count: number,
+    private readonly store: Store,
+    private readonly program: Kernel
+  ) {
+    this.groups = Math.ceil(count / 64)
+    this.params = scope.own(upload(device, new Float32Array(12), Buffer.UNIFORM))
+  }
+
+  public updateTopology (data: GraphData): void {
+    const next = resourceScope()
+    const directions: Direction[] = []
+    try {
+      for (const group of [data.linksBySource, data.linksByTarget]) {
+        if (!group?.neighbors.length) continue
+        directions.push({
+          offsets: next.own(upload(this.device, group.offsets)),
+          edges: next.own(upload(this.device, springEdges(group, data, this.store))),
+        })
       }
-    },
-    releaseTopology (): void {
-      topology.destroy()
-      topology = resourceScope()
-      directions = []
-    },
+      this.topology.destroy()
+      this.topology = next
+      this.directions = directions
+    } catch (error) {
+      next.destroy()
+      throw error
+    }
+  }
+
+  public prepare (config: GraphConfigInterface): void {
+    if (!this.directions.length) return
+    this.params.write(new Float32Array([config.simulationLinkSpring, config.simulationLinkDistance,
+      ...config.simulationLinkDistRandomVariationRange, this.store.alpha, config.simulationFriction, this.store.stepGuard,
+      config.simulationCollision ? 1 : 0, config.simulationCollisionRadius ?? 0, config.simulationCollisionPadding, this.count, 0]))
+  }
+
+  public encode (pass: ComputePass, current: () => Buffer, sizes: Buffer, forces: Buffer, integrate: (pass: ComputePass) => void): void {
+    for (const direction of this.directions) {
+      this.program.dispatch(pass, { x: this.groups, bindings: { positions: current(), ...direction, sizes, params: this.params, forces } })
+      integrate(pass)
+    }
+  }
+
+  public releaseTopology (): void {
+    this.topology.destroy()
+    this.topology = resourceScope()
+    this.directions = []
   }
 }

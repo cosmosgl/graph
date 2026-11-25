@@ -16,6 +16,10 @@ The pointer case exposed a missing update. With the internal loop disabled, WebG
 
 ## Springs, repulsion and collision
 
+WebGL uses one `ForceLink` instance for incoming links and one for outgoing links. WebGPU keeps both neighbor lists in one `ForceLink` because both use the same compute kernel and are rebuilt together when links or weights change. It still integrates the incoming correction before the outgoing pass reads the new positions.
+
+On M3, setting a spring's weight to zero stopped its endpoints moving. Replacing the link moved the newly connected point. Disabling and re-enabling simulation preserved the positions until the next step. Both packages returned the same coordinates at all seven checkpoints. The class also reproduced the previous WebGPU position buffers exactly in the weighted-spring and combined cases and at every sampled tick through 100 on the 8,192-slot dense and hub graphs.
+
 Both packages returned identical coordinates, including after the original contact resolved. The maximum per-axis difference and paired RMS distance were zero at ticks 0, 1, 4 and 8 on Apple M3 and SwiftShader. The following graph-unit measurements agreed on both adapters. RMS movement is relative to the preceding row.
 
 | Tick | Penetration of points 1 and 2 | Link 0 length | Link 1 length | RMS movement |

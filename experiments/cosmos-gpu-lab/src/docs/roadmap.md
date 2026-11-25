@@ -29,7 +29,7 @@ The first milestone is a developer opening the same story twice and getting the 
 
 Use the WebGL module as the starting point. Follow its folder, name, responsibility and coding style wherever they fit. For a stateful force, prefer the corresponding class and make it easy to find where it prepares data, applies one step and releases resources. Preserve when configuration changes take effect and which positions the next force reads.
 
-The WebGPU `ForceCollision` and `ForceManyBody` classes own their force-specific buffers. Their `encode` methods receive the current compute pass and position buffer from the simulation. This lets the simulation apply each force to the latest positions and record the force and integration work for a tick in one command buffer.
+The WebGPU `ForceCollision`, `ForceManyBody` and `ForceLink` classes record their work into the simulation's compute pass. The simulation supplies the latest positions and integrates each correction. For springs this happens twice per tick because the second direction reads the positions produced by the first. [Spring updates](#/production-forces?section=doc-results-springs-repulsion-and-collision)
 
 When the implementations deliberately differ, record what WebGL does, what WebGPU does, why, and what an application can observe. Put the example and its check in the feature's Lab results and link it from the inventory. Changes that require application edits also belong in the public migration notes. [Collision grid sizing](#/production-force-collision?section=doc-results-collision-grid-sizing)
 
