@@ -16,6 +16,10 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
           <button data-tool="Rectangle" disabled>Rectangle</button>
           <button data-tool="Lasso" disabled>Lasso</button>
         </div>
+        <div class="selection-group" role="group" aria-label="Point selection rule">
+          <button data-selection-mode="touch" title="Select points that touch or overlap the area" aria-pressed="true" disabled>Touch</button>
+          <button data-selection-mode="center" title="Point center is inside or on the boundary" aria-pressed="false" disabled>Center inside</button>
+        </div>
         <div class="selection-group" role="group" aria-label="Pixel ratio">
           <button data-ratio="1" title="1 device pixel per CSS pixel" aria-pressed="true" disabled>1×</button>
           <button data-ratio="2" title="2 device pixels per CSS pixel" aria-pressed="false" disabled>2×</button>
@@ -61,6 +65,7 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
   const caption = div.querySelector('.selection-caption')!
   const clearPresetCaption = (): void => { caption.textContent = '' }
   const buttons = Array.from(div.querySelectorAll<HTMLButtonElement>('[data-tool]'))
+  const selectionModeButtons = Array.from(div.querySelectorAll<HTMLButtonElement>('[data-selection-mode]'))
   const ratioButtons = Array.from(div.querySelectorAll<HTMLButtonElement>('[data-ratio]'))
   const presetButtons = Array.from(div.querySelectorAll<HTMLButtonElement>('[data-preset]'))
   const overlay = div.querySelector('svg')!
@@ -216,6 +221,14 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
     buttons.forEach(button => {
       button.disabled = false
       button.addEventListener('click', () => { setMode(button.textContent === 'Lasso' ? 'Lasso' : 'Rectangle') })
+    })
+    selectionModeButtons.forEach(button => {
+      button.disabled = false
+      button.addEventListener('click', () => {
+        graph.setConfigPartial({ pointSelectionMode: button.getAttribute('data-selection-mode') === 'center' ? 'center' : 'touch' })
+        selectionModeButtons.forEach(option => option.setAttribute('aria-pressed', String(option === button)))
+        updateSelection(displayedSelection)
+      })
     })
     const applyPreset = (nextPreset: string): void => {
       preset = nextPreset

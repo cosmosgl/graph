@@ -266,6 +266,15 @@ export interface GraphConfigInterface {
   focusedPointIndex?: number;
 
   /**
+   * How `findPointsInRect` and `findPointsInPolygon` select points.
+   * `'touch'` selects when the point's selection footprint overlaps or touches the area.
+   * `'center'` requires the point's center to be inside the area or on its boundary.
+   * Can be changed at runtime with `setConfig` or `setConfigPartial`.
+   * Default value: `'touch'`
+   */
+  pointSelectionMode: 'touch' | 'center';
+
+  /**
    * Array of point indices to highlight. When set, all points NOT in this array will be
    * greyed out. An empty array `[]` activates highlighting with all points greyed out.
    * Set to `undefined` to clear highlighting and show all points normally.

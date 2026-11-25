@@ -446,6 +446,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       rect1: [number, number];
       scalePointsOnZoom: number;
       maxPointSize: number;
+      centerOnly: number;
     };
   }> | undefined
 
@@ -461,6 +462,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       maxPointSize: number;
       polygonBounds0: [number, number];
       polygonBounds1: [number, number];
+      centerOnly: number;
     };
   }> | undefined
 
@@ -1009,6 +1011,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           rect1: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
+          centerOnly: 'f32',
         },
         defaultUniforms: {
           sizeScale: config.pointSizeScale,
@@ -1020,6 +1023,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           rect1: ensureVec2(store.searchArea?.[1], [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
+          centerOnly: config.pointSelectionMode === 'center' ? 1 : 0,
         },
       },
     })
@@ -1068,6 +1072,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           maxPointSize: 'f32',
           polygonBounds0: 'vec2<f32>',
           polygonBounds1: 'vec2<f32>',
+          centerOnly: 'f32',
         },
         defaultUniforms: {
           worldOrigin: store.worldOrigin,
@@ -1080,6 +1085,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           maxPointSize: store.maxPointSize,
           polygonBounds0: this.polygonBounds0,
           polygonBounds1: this.polygonBounds1,
+          centerOnly: config.pointSelectionMode === 'center' ? 1 : 0,
         },
       },
     })
@@ -2530,6 +2536,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         rect1: ensureVec2(this.store.searchArea?.[1], [0, 0]),
         scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0, // Convert boolean to number
         maxPointSize: this.store.maxPointSize,
+        centerOnly: this.config.pointSelectionMode === 'center' ? 1 : 0,
       },
     })
 
@@ -2569,6 +2576,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         maxPointSize: this.store.maxPointSize,
         polygonBounds0: this.polygonBounds0,
         polygonBounds1: this.polygonBounds1,
+        centerOnly: this.config.pointSelectionMode === 'center' ? 1 : 0,
       },
     })
 

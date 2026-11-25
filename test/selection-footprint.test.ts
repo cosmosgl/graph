@@ -2,6 +2,46 @@ import { describe, expect, it } from 'vitest'
 import { Graph, PointShape } from '@cosmos.gl/graph'
 
 describe('selection footprints', () => {
+  it('switches rectangle and lasso queries between footprint and center selection', async () => {
+    const div = document.createElement('div')
+    div.style.cssText = 'width:256px;height:256px'
+    document.body.appendChild(div)
+    const graph = new Graph(div, {
+      pixelRatio: 1,
+      enableSimulation: false,
+      enableRenderLoop: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+    })
+    // The identity view places these centers at x = 128, 144, 154, 160, and 124.
+    graph.setPointPositions(new Float32Array([2048, 2048, 2064, 2048, 2074, 2048, 2080, 2048, 2044, 2048]))
+    graph.setPointSizes(new Float32Array([20, 20, 20, 20, 0]))
+    graph.render()
+    try {
+      await graph.ready
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [256, 256])
+      graph.renderOneFrame()
+      const polygon: [number, number][] = [[112, 112], [144, 112], [144, 144], [112, 144]]
+      const expectSelection = (indices: number[]): void => {
+        expect(graph.findPointsInRect([[112, 112], [144, 144]])).toEqual(indices)
+        expect(graph.findPointsInPolygon(polygon)).toEqual(indices)
+      }
+      // The first center is inside, the second is on the edge, and the third footprint is tangent.
+      expectSelection([0, 1, 2])
+      graph.setConfigPartial({ pointSelectionMode: 'center' })
+      expectSelection([0, 1])
+      // The second center is on the diagonal. The third is inside the bounds and outside the triangle.
+      expect(graph.findPointsInPolygon([[112, 112], [160, 112], [112, 160]])).toEqual([0, 1])
+      // Count a center on a vertex even when its neighbors are one float32 step to the left.
+      const adjacentX = 144 - 2 ** -16
+      expect(graph.findPointsInPolygon([[adjacentX, 120], [144, 128], [adjacentX, 136]])).toEqual([1])
+      graph.setConfigPartial({ pointSelectionMode: 'touch' })
+      expectSelection([0, 1, 2])
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
   it.each([
     { pixelRatio: 1, scalePointsOnZoom: false },
     { pixelRatio: 2, scalePointsOnZoom: false },

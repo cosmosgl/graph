@@ -18,6 +18,7 @@ layout(std140) uniform findPointsInRectUniforms {
   vec2 rect1;
   float scalePointsOnZoom;
   float maxPointSize;
+  float centerOnly;
 } findPointsInRect;
 
 #define sizeScale findPointsInRect.sizeScale
@@ -29,6 +30,7 @@ layout(std140) uniform findPointsInRectUniforms {
 #define rect1 findPointsInRect.rect1
 #define scalePointsOnZoom findPointsInRect.scalePointsOnZoom
 #define maxPointSize findPointsInRect.maxPointSize
+#define centerOnly findPointsInRect.centerOnly
 #else
 uniform float sizeScale;
 uniform vec2 worldOrigin;
@@ -39,6 +41,7 @@ uniform vec2 rect0;
 uniform vec2 rect1;
 uniform float scalePointsOnZoom;
 uniform float maxPointSize;
+uniform float centerOnly;
 #endif
 
 out vec4 fragColor;
@@ -79,10 +82,15 @@ void main() {
 
   vec2 screenPos = (final.xy + 1.0) * screenSize / 2.0;
   vec2 closest = clamp(screenPos, rect0, rect1);
+  fragColor = vec4(0.0, 0.0, pointPosition.r, pointPosition.g);
+  if (centerOnly > 0.5) {
+    fragColor.r = float(all(equal(screenPos, closest)));
+    return;
+  }
+
   vec2 delta = screenPos - closest;
   float radius = 0.5 * pointSizeF(size);
 
-  fragColor = vec4(0.0, 0.0, pointPosition.r, pointPosition.g);
   bool overlaps = pSize.g > 0.5
     ? all(lessThanEqual(abs(delta), vec2(radius * SQUARE_HALF_SIZE)))
     : dot(delta, delta) <= radius * radius;

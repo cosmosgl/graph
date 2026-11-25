@@ -1347,8 +1347,10 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Find point indices whose selection footprints touch a rectangular area.
-   * Uses resolved target sizes throughout size transitions, with the current zoom,
+   * Find point indices in a rectangular area using `pointSelectionMode`.
+   * The default `'touch'` mode selects footprints that touch or overlap the rectangle.
+   * In `'center'` mode, a point's center must be inside the rectangle or on its boundary.
+   * Touch mode uses resolved target sizes throughout size transitions, with the current zoom,
    * pixel-size floor and hardware size cap. Outline rings are excluded.
    * Circles and squares use their shape geometry; other shapes and images use a circle.
    * Shape None retains a circular selection footprint even without an image.
@@ -1360,7 +1362,7 @@ export class Graph implements PositionTextureSource {
    * @param rect - Two opposite corners, typically `[[left, top], [right, bottom]]`.
    * Reversed coordinates are normalized automatically.
    * The coordinates should be from 0 to the width/height of the canvas.
-   * @returns Array of point indices whose selection footprints touch or overlap the rectangle.
+   * @returns Array of point indices matching the selection rule.
    */
   public findPointsInRect (rect: [[number, number], [number, number]]): number[] {
     if (this._isDestroyed) return []
@@ -1379,10 +1381,12 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Find point indices whose selection footprints touch a polygon area.
-   * Degenerate paths with at least three vertices select footprints touching their segments,
+   * Find point indices in a polygon area using `pointSelectionMode`.
+   * The default `'touch'` mode selects footprints that touch or overlap the polygon.
+   * In `'center'` mode, a point's center must be inside the polygon or on its boundary.
+   * Collapsed paths with at least three vertices are tested against their segments,
    * including a single location when all vertices coincide.
-   * Uses resolved target sizes throughout size transitions, with the current zoom,
+   * Touch mode uses resolved target sizes throughout size transitions, with the current zoom,
    * pixel-size floor and hardware size cap. Outline rings are excluded.
    * Circles and squares use their shape geometry; other shapes and images use a circle.
    * Shape None retains a circular selection footprint even without an image.
@@ -1393,7 +1397,7 @@ export class Graph implements PositionTextureSource {
    *
    * @param polygonPath - Array of points `[[x1, y1], [x2, y2], ..., [xn, yn]]` that defines the polygon.
    * The coordinates should be from 0 to the width/height of the canvas.
-   * @returns Array of point indices whose selection footprints touch or overlap the polygon.
+   * @returns Array of point indices matching the selection rule.
    */
   public findPointsInPolygon (polygonPath: [number, number][]): number[] {
     if (this._isDestroyed) return []
