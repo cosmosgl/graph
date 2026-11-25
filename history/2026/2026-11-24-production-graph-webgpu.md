@@ -39,6 +39,15 @@ without reading pixels back. When a second edit arrives mid-animation,
 WebGPU starts at the displayed size. WebGL jumps to its previous target.
 The paired replay checks the label and painted geometry in both cases.
 
+Removing a point exposed two different lifetimes for the same slot. Its
+ID leaves picking, tracking and the simulation as soon as either position
+coordinate becomes NaN. Its last finite position still anchors the point
+and its incident links while they fade. Restoring the slot somewhere else
+after that fade uses the old location as the start of the move. Checking
+the canvas and click callbacks at the same instant caught a second detail:
+WebGL's pointer window can select the returning point just outside its
+painted edge.
+
 Running one force at a time also exposed a difference in how a host drives
 the Graph. Holding the right mouse button must repel nearby points during
 a manually scheduled update. Reading the positions after each update lets
