@@ -48,6 +48,14 @@ the canvas and click callbacks at the same instant caught a second detail:
 WebGL's pointer window can select the returning point just outside its
 painted edge.
 
+With the mouse parked, a point could move beneath it without a hover
+callback or a ring in WebGPU. The graph now checks the last cursor
+position when the scene changes and combines changes that happen during
+a pending pick. Once the callbacks matched, the replay showed a wider,
+brighter ring. WebGL paints the hover ring above the point sprites at
+70% opacity. Following that rule matched all nine frames at both pixel
+ratios on M3, including the handoff from one point to another.
+
 Running one force at a time also exposed a difference in how a host drives
 the Graph. Holding the right mouse button must repel nearby points during
 a manually scheduled update. Reading the positions after each update lets
