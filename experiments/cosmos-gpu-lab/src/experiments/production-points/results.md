@@ -1,5 +1,7 @@
 All eight shapes matched WebGL in all 26 Points frames on **Apple M3 (Metal)** and all 26 on **SwiftShader** in Chrome 157.0.8103.79. Across the two adapters, every RGBA channel matched in 5,216,640 compared pixels.
 
+A later M3 replay caught a 32 CSS-pixel circle that drew as a square when its sprite started on a raster tile boundary. For the aligned axis, the coordinate at the tile origin is exactly zero. Using that value avoids dividing by a rounding step that Metal can flush to zero. A static control places four circles on both axes, one axis or neither. It went from 804 differing pixels at 1× and 1,722 at 2× to exact agreement at both ratios. [Interrupted point-style replay](#/production-graph-api?section=try-point-style-updates)
+
 | Center placement | Diameters in CSS pixels | M3 at 1× | M3 at 2× | SwiftShader at 1× | SwiftShader at 2× |
 | --- | --- | ---: | ---: | ---: | ---: |
 | (0.25, 0.375) CSS px | 22.125, 22.3, 22.625, 22.75 | 0 | 0 | 0 | 0 |

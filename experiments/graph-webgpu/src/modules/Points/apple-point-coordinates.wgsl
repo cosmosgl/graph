@@ -25,7 +25,10 @@ fn tileSlope(span: vec2f) -> vec4f {
 fn tileCoefficient(offset: vec2f, slope: vec4f) -> vec2f {
   let high = offset * slope.xy;
   let error = fma(offset, slope.xy, -high) + offset * slope.zw;
-  let step28 = vec2f(guardStep(high.x, 4u), guardStep(high.y, 4u));
+  // When the sprite begins on this tile the coefficient is exactly zero on that
+  // axis. A unit rounding step keeps it zero: halving guardStep(0) can flush
+  // to zero on Metal, and the resulting 0/0 corrupts the shape distance.
+  let step28 = select(vec2f(guardStep(high.x, 4u), guardStep(high.y, 4u)), vec2f(1), offset == vec2f(0));
   let step29 = step28 * 0.5;
   let guarded = round(error / step29) * step29;
   return high + round(guarded / step28) * step28;
