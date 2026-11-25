@@ -25,6 +25,14 @@ used the same camera and measured simulation ticks 13–72.
 
 The first milestone is a developer opening the same story twice and getting the same result from the same gesture. The last milestone is an application importing the published `@cosmos.gl/graph` and running entirely on WebGPU. Use the following sequence to get from one to the other.
 
+### How to port a module
+
+Use the WebGL module as the starting point. Follow its folder, name, responsibility and coding style wherever they fit. For a stateful force, prefer the corresponding class and make it easy to find where it prepares data, applies one step and releases resources. Preserve when configuration changes take effect and which positions the next force reads.
+
+Keep a WebGPU-specific design when it has a concrete benefit. For example, a force can accept the current compute pass and position buffer explicitly so the simulation can schedule several forces in order and submit their work together. Either a class or a factory can own the persistent buffers.
+
+When the implementations deliberately differ, record what WebGL does, what WebGPU does, why, and what an application can observe. Put the example and its check in the feature's Lab results and link it from the inventory. Changes that require application edits also belong in the public migration notes. [Collision grid sizing](#/production-force-collision?section=doc-results-collision-grid-sizing)
+
 ### Run the same story twice
 
 Develop WebGPU in the private workspace package `experiments/graph-webgpu` on the same branch. Run the WebGL Storybook with `pnpm run storybook` on port 6006 and WebGPU with `pnpm run storybook:webgpu` on port 6007. Both read the same story files, assets and fixtures. The WebGPU preview resolves the public `@cosmos.gl/graph` import to the candidate entry. Each preview shows its engine and revision. The packed WebGPU Deck consumer runs separately on Deck 10 alpha.1 and luma alpha.14. The shared Deck stories still use the WebGL dependency family.
