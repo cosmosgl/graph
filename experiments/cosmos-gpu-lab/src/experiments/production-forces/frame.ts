@@ -1,5 +1,5 @@
 import type { DeviceInfo } from '@luma.gl/core'
-import type { GraphConfig } from '../../../../../dist/index.js'
+import type { Graph, GraphConfig } from '../../../../../dist/index.js'
 import type { Engine } from '../production-graph-api/frame'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import { forceConfig, loadForce, pointer, viewport, type ForceCase } from './fixture'
@@ -11,6 +11,7 @@ type PreviewOptions = {
 }
 
 export type ForceSession = {
+  graph: Graph;
   device: DeviceInfo;
   advance(steps: number): Promise<Float32Array>;
   project(x: number, y: number): [number, number];
@@ -64,6 +65,7 @@ async function mountForce (host: HTMLDivElement, engine: Engine, fixture: ForceC
       canvas.dispatchEvent(new view.MouseEvent(held ? 'mousemove' : 'mouseup', payload))
     }
     return {
+      graph,
       device,
       project: (x, y) => graph.spaceToScreenPosition([x, y]),
       linkEndpoints: id => graph.getConnectedPointIndices(id),

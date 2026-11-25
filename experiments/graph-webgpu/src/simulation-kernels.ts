@@ -3,14 +3,14 @@ import type { Kernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '@/graph/config'
 import type { GraphData } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
-import { createAttractors } from './modules/ForceAttractor'
+import { ForceAttractor } from './modules/ForceAttractor'
 import { createCenter, createCenterKernel, createCentroidKernel } from './modules/ForceCenter'
 import { ForceCollision } from './modules/ForceCollision'
 import { createGravity, createGravityKernel } from './modules/ForceGravity'
 import { ForceLink, createSpringKernel } from './modules/ForceLink'
 import { ForceManyBody, createRepulsionKernel } from './modules/ForceManyBody'
 import { createPointerForce } from './modules/ForceMouse'
-import { createClusters } from './modules/Clusters'
+import { Clusters } from './modules/Clusters'
 import { resourceScope } from './modules/Shared/resource-scope'
 import { kernel, type Decl, upload } from './modules/Shared/compute'
 import gather from './modules/Shared/gather-positions.wgsl?raw'
@@ -103,8 +103,8 @@ export function createState (device: Device, packed: Float32Array, store: Store,
     let forces: Buffer | undefined
     let sizes: Buffer | undefined
     let maxSize = 0
-    let attractors: ReturnType<typeof createAttractors>
-    let clusters: ReturnType<typeof createClusters>
+    let attractors: ForceAttractor | undefined
+    let clusters: Clusters | undefined
     let pointer: ReturnType<typeof createPointerForce> | undefined
     let collision: ForceCollision | undefined
     let current: 0 | 1 = 0
@@ -156,12 +156,12 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         else sizes = upload(device, values)
       },
       updateClusters (data: GraphData): void {
-        const next = createClusters(device, data)
+        const next = Clusters.create(device, data)
         clusters?.destroy()
         clusters = next
       },
       updateAttractors (data: GraphData): void {
-        const next = createAttractors(device, data)
+        const next = ForceAttractor.create(device, data)
         attractors?.destroy()
         attractors = next
       },

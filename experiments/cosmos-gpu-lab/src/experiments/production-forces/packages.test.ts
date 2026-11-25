@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { writeArtifact } from '../../testing/artifacts'
+import { replayAttractionEdits } from './attraction-edits'
 import { combinedMetrics, positionStats } from './compare'
 import { absentIndex, forceCases, forcePositions, origin, type ForceCase } from './fixture'
 import { createForcePreview, type ForceSession } from './frame'
@@ -156,6 +157,42 @@ it('preserves the active spring topology through weight edits, link replacement 
     expect(xy.slice(0, 2)).toEqual(initial.slice(0, 2))
     expect(xy.every(Number.isFinite)).toBe(true)
   }
+})
+
+it('updates cluster centroids and point attractions after live edits and simulation restart', async () => {
+  const gl = await replayAttractionEdits('webgl')
+  const gpu = await replayAttractionEdits('webgpu')
+  for (const [phase, reference] of Object.entries(gl)) {
+    const actual = gpu[phase as keyof typeof gpu]
+    expect([...actual.xy], phase).toEqual([...reference.xy])
+    expect([...actual.centroids], phase).toEqual([...reference.centroids])
+    expect([...actual.xy.slice(0, 2)]).toEqual([origin - 50, origin + 30]) // pin
+    expect([...actual.xy.slice(12, 14)]).toEqual([NaN, NaN]) // absent
+  }
+
+  const { initial, first, edited, pulled, reweighted, disabled, resumed, cleared } = gpu
+  expect(first.xy[2]).toBeLessThan(initial.xy[2])
+  expect(edited.xy[2]).toBe(origin + 24)
+  for (const { xy, centroids } of [edited, pulled, reweighted, disabled, resumed]) {
+    // Sparse cluster IDs 1 and 3. Cluster 3 includes the absent slot, which contributes no mass.
+    expect(centroids).toHaveLength(8)
+    expect([centroids[0], centroids[1], centroids[4], centroids[5]]).toEqual([NaN, NaN, NaN, NaN])
+    for (const axis of [0, 1]) {
+      expect(centroids[2 + axis]).toBeCloseTo((xy[4 + axis] + xy[6 + axis]) / 2, 3)
+      expect(centroids[6 + axis]).toBeCloseTo((xy[axis] + xy[2 + axis]) / 2, 3)
+    }
+  }
+  expect(pulled.xy[2]).toBeLessThan(edited.xy[2]) // point 1 moves toward the live centroid
+  expect(pulled.xy[4]).toBeGreaterThan(edited.xy[4]) // point 2 moves toward the explicit cluster target
+  expect(pulled.xy[10]).toBe(edited.xy[10] + (origin + 64 - edited.xy[10]) / 8) // half-strength point attractor
+  expect(pulled.xy[14]).toBe(edited.xy[14])
+  expect(reweighted.xy[2]).toBe(pulled.xy[2]) // zero cluster strength
+  expect(reweighted.xy[10]).toBe(pulled.xy[10]) // zero attractor strength
+  expect(reweighted.xy[14]).toBeLessThan(pulled.xy[14])
+  expect(disabled.xy).toEqual(reweighted.xy)
+  expect(resumed.xy[14]).toBeLessThan(disabled.xy[14])
+  expect(cleared.xy).toEqual(resumed.xy)
+  expect(cleared.centroids).toHaveLength(0)
 })
 
 it('applies four held-button impulses when the responsive previews run straight to tick eight', async () => {

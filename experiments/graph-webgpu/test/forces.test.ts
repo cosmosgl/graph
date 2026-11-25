@@ -107,6 +107,11 @@ describe('WebGPU simulation forces', () => {
       sim.applyMouseRepulsion(0, 0)
       expect(await sim.getPointPositionsAsync()).toEqual(new Float32Array([0, 0, 18.5, 0, NaN, NaN]))
       expect(await sim.getClusterPositionsAsync()).toEqual([9.25, 0])
+      const previousCentroids = sim.getClusterPositionsAsync()
+      sim.setPointClusters([2, 0, undefined])
+      sim.applyData()
+      expect(await previousCentroids).toEqual([])
+      expect(await sim.getClusterPositionsAsync()).toEqual([18.5, 0, NaN, NaN, 0, 0])
     } finally { sim.destroy() }
   })
 
