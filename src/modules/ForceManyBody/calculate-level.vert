@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 
 // Aggregates each point into its grid cell. A level is a plain 2D grid of

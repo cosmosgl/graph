@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 
 uniform sampler2D positionsTexture;

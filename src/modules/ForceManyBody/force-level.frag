@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 
 // One grid level of precise many-body repulsion (Barnes-Hut-style approximation).

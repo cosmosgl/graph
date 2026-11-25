@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 // Fragment shaders default int to mediump, guaranteed only to 32767 — the
 // point index below runs up to the point count.
