@@ -1,5 +1,9 @@
 struct Edge { other: u32, bias: f32, strength: f32, random: f32 }
-struct Params { spring: f32, distance: f32, low: f32, high: f32, alpha: f32, friction: f32, maxStep: f32, collision: f32, radius: f32, padding: f32, count: f32, unused: f32 }
+struct Params {
+  spring: f32, distance: f32, low: f32, high: f32,
+  alpha: f32, collision: f32, radius: f32, padding: f32,
+  count: f32,
+}
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read> offsets: array<u32>;
 @group(0) @binding(2) var<storage, read> edges: array<Edge>;

@@ -77,9 +77,11 @@ export class ForceLink {
 
   public prepare (config: GraphConfigInterface): void {
     if (!this.directions.length) return
-    this.params.write(new Float32Array([config.simulationLinkSpring, config.simulationLinkDistance,
-      ...config.simulationLinkDistRandomVariationRange, this.store.alpha, config.simulationFriction, this.store.stepGuard,
-      config.simulationCollision ? 1 : 0, config.simulationCollisionRadius ?? 0, config.simulationCollisionPadding, this.count, 0]))
+    this.params.write(new Float32Array([
+      config.simulationLinkSpring, config.simulationLinkDistance, ...config.simulationLinkDistRandomVariationRange,
+      this.store.alpha, config.simulationCollision ? 1 : 0, config.simulationCollisionRadius ?? 0, config.simulationCollisionPadding,
+      this.count,
+    ]))
   }
 
   public encode (pass: ComputePass, current: () => Buffer, sizes: Buffer, forces: Buffer, integrate: (pass: ComputePass) => void): void {

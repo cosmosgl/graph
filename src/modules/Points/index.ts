@@ -4,6 +4,7 @@ import type { ShaderModule } from '@luma.gl/shadertools'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
+import { getFriction } from '@/graph/config'
 import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX, POINT_RING_SCALE } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
@@ -85,17 +86,6 @@ const POINT_SHADER_DEFINES = {
   EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
   POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
 } as unknown as Record<string, boolean>
-
-/**
- * `simulationFriction` as update-position.frag receives it: a non-finite value runs at the
- * default. The shader keeps positions finite by dropping a non-finite velocity, which it reads
- * from a texture; friction is applied after that test, and a NaN or infinite friction makes
- * every step non-finite (even a resting point's: `0 × Infinity` is NaN), so it would turn
- * every position non-finite for good.
- */
-function getFriction (friction: number): number {
-  return Number.isFinite(friction) ? friction : defaultConfigValues.simulationFriction
-}
 
 /** Stroke defaults handed to the point vertex shader every frame (see `Points.getStrokeUniforms`). */
 interface StrokeUniforms {

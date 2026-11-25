@@ -1,6 +1,6 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import type { Kernel } from '@luma.gl/graph'
-import type { GraphConfigInterface } from '@/graph/config'
+import { getFriction, type GraphConfigInterface } from '@/graph/config'
 import type { GraphData } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
 import { ForceAttractor } from './modules/ForceAttractor'
@@ -177,7 +177,8 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         pointer ??= new ForceMouse(device, count)
         const active = pointer
         const forces = forceBuffer()
-        integrationParams.write(new Float32Array([count, store.alpha, 0, 0, cfg.simulationFriction, store.stepGuard, 0, 0]))
+        const friction = getFriction(cfg.simulationFriction)
+        integrationParams.write(new Float32Array([count, store.alpha, 0, 0, friction, store.stepGuard, 0, 0]))
         run(pass => {
           active.encode(pass, positions[current], forces, x, y, cfg.simulationRepulsionFromMouse)
           integrate(pass)
@@ -192,7 +193,8 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         const forces = forceBuffer()
         const alpha = store.alpha
         const nearLimit = manyBody.nearLimit
-        integrationParams.write(new Float32Array([count, alpha, cfg.simulationRepulsion, nearLimit, cfg.simulationFriction, store.stepGuard, 0, 0]))
+        const friction = getFriction(cfg.simulationFriction)
+        integrationParams.write(new Float32Array([count, alpha, cfg.simulationRepulsion, nearLimit, friction, store.stepGuard, 0, 0]))
         manyBody.prepare(cfg, measureOccupancy)
         if (cfg.simulationLinkSpring) links.prepare(cfg)
         if (cfg.simulationCollision) {

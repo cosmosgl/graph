@@ -2,7 +2,7 @@ import { luma } from '@luma.gl/core'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it } from 'vitest'
 import { getFinestGridSize } from '@/graph/modules/Shared/cell-slots'
-import { GraphSimulation, type GraphSimulationConfig } from '../src'
+import { defaultConfigValues, GraphSimulation, type GraphSimulationConfig } from '../src'
 import { createRepulsionGrid } from '../src/modules/ForceManyBody/repulsion-grid'
 import { createNearField } from '../src/modules/ForceManyBody/near-field'
 import { upload } from '../src/modules/Shared/compute'
@@ -19,6 +19,36 @@ const isolated: GraphSimulationConfig = {
 }
 
 describe('WebGPU simulation forces', () => {
+  it('uses the default for non-finite friction on both simulation steps and pointer impulses', async () => {
+    const sim = new GraphSimulation({ ...isolated, simulationGravity: 0.25 })
+    const positions = Float32Array.of(2048, 2048, 2008, 2048)
+    const fallback = defaultConfigValues.simulationFriction
+    const cases = [[NaN, fallback], [Infinity, fallback], [-Infinity, fallback], [0, 0], [-0.5, -0.5]] as const
+    try {
+      await sim.ready
+      sim.config.simulationRepulsionFromMouse = 16
+      // At the world origin the first point stays still. Forty units to its left,
+      // gravity gives the second point a +1 x correction and the pointer gives it -1.
+      for (const [friction, expected] of cases) {
+        sim.setConfig({ simulationFriction: friction })
+        sim.setPointPositions(positions)
+        sim.applyData(1)
+        sim.step()
+        expect(await sim.getPointPositionsAsync(), `gravity with friction ${friction}`).toEqual(
+          Float32Array.of(2048, 2048, 2008 + expected, 2048)
+        )
+
+        sim.setPointPositions(positions)
+        sim.applyData(1)
+        sim.pause()
+        sim.applyMouseRepulsion(2048, 2048)
+        expect(await sim.getPointPositionsAsync(), `pointer with friction ${friction}`).toEqual(
+          Float32Array.of(2048, 2048, 2008 - expected, 2048)
+        )
+      }
+    } finally { sim.destroy() }
+  })
+
   it.each([6, 512 ** 2 + 1])('resamples dense cells, excludes self and adds sparse neighbors to the far force at %i slots', async count => {
     const device = await luma.createDevice({ type: 'webgpu', adapters: [webgpuAdapter], waitForPageLoad: false })
     const scope = resourceScope()
