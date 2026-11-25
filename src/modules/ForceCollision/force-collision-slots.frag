@@ -24,9 +24,9 @@ precision highp int;
 // per pass. Like it, this is a position correction and not a force: no alpha
 // unless `collisionCooling` opts in, integrated with friction 1.
 
-uniform sampler2D positionsTexture;
-uniform sampler2D sizeTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D sizeTexture;
+uniform highp sampler2D exitTexture;
 // One layer per peeling pass, [point index, hash] per cell. Float data —
 // highp, the default sampler precision is lowp.
 uniform highp sampler2DArray slotsTexture;

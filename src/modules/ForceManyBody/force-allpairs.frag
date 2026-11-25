@@ -11,9 +11,9 @@ precision highp int;
 // of the per-tick re-sampling noise that shows up as shimmer in dense layouts
 // (see force-nearfield.frag for the sampled path used above the threshold).
 
-uniform sampler2D positionsTexture;
-uniform sampler2D randomValues;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D randomValues;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceAllPairsUniforms {

@@ -24,10 +24,10 @@ in vec4 pointRingColor;
 #endif
 out vec4 resolvedRingColor;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D pointStatus;
-uniform sampler2D exitTexture;
-uniform sampler2D imageAtlasCoords;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D pointStatus;
+uniform highp sampler2D exitTexture;
+uniform highp sampler2D imageAtlasCoords;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawVertexUniforms {

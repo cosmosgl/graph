@@ -6,8 +6,8 @@ precision highp float;
 precision highp int;
 #endif
 
-uniform sampler2D positionsTexture;
-uniform sampler2D trackedIndices;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D trackedIndices;
 
 out vec4 fragColor;
 

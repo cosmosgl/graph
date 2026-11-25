@@ -18,9 +18,9 @@ in float size;
 in float imageSize;
 in float imageIndex;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D pointStatus;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D pointStatus;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillPickingBufferUniforms {

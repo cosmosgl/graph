@@ -2,14 +2,14 @@ export function forceFrag (maxLinks: number): string {
   return `#version 300 es
 precision highp float;
 
-uniform sampler2D positionsTexture;
-uniform sampler2D exitTexture;
-uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
-uniform sampler2D linkNeighborAndSpringTexture; // Neighbor texel in RG, bias and strength in BA
-uniform sampler2D linkRandomDistanceTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D exitTexture;
+uniform highp sampler2D linkInfoTexture; // Texture storing first link indices and amount
+uniform highp sampler2D linkNeighborAndSpringTexture; // Neighbor texel in RG, bias and strength in BA
+uniform highp sampler2D linkRandomDistanceTexture;
 // Resolved point sizes (r channel), laid out like the positions texture. Only
 // read while useCollisionRadii is set; otherwise a placeholder is bound.
-uniform sampler2D sizeTexture;
+uniform highp sampler2D sizeTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceLinkUniforms {

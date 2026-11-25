@@ -18,17 +18,17 @@ precision highp float;
 // an unbiased estimate of the cell's exact all-pairs repulsion (Monte-Carlo
 // P3M), and force-collision-slots.frag resolves contacts against it directly.
 
-uniform sampler2D positionsTexture;
+uniform highp sampler2D positionsTexture;
 #ifdef COLLISION_SLOTS
 // The collision force peels into a pair of 2D targets and copies each pass into
 // its layer of the array it reads (ForceCollision/index.ts): pass k−1's target.
-uniform sampler2D previousSlot;
+uniform highp sampler2D previousSlot;
 #else
 // The slot array holding pass k−1 (the other one of the two, see NearFieldSlots
 // in index.ts); previousLayer is its layer. Float data — highp.
 uniform highp sampler2DArray previousSlot;
 #endif
-uniform sampler2D exitTexture;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform buildNearFieldSlotsUniforms {

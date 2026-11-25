@@ -1161,10 +1161,13 @@ describe('the step bound (update-position.frag)', () => {
       [1e10, 0], [-1e20, 2e20], [2e19, 2e19], [3e38, 3e38], [3e38, -1],
       // Within the bound, the bound itself, and just over it
       [100, -50], [MAX_STEP, 0], [2890, 2890], [2900, 2900],
+      // A finite sub-unit movement at a coordinate that a half-float sampler rounds.
+      [1.5, -0.25],
     ]
     const count = velocities.length
     const positions = new Float32Array(count * 2)
     for (let i = 0; i < count; i += 1) positions.set([1000 + i * 10, -3000 + i * 7], i * 2)
+    positions.set([4096.25, 4097.25], (count - 1) * 2)
     await withCanvasGraph({ spaceSize: 4096, simulationFriction: 1, enableRenderLoop: false }, positions, async (graph) => {
       graph.pause()
       const points = graph.simulation.points
@@ -1176,6 +1179,7 @@ describe('the step bound (update-position.frag)', () => {
       const before = graph.getPointPositionsArray()
       points?.updatePosition()
       const after = graph.getPointPositionsArray()
+      expect(Array.from(after.slice(-2))).toEqual([4097.75, 4097])
 
       velocities.forEach(([vx, vy], i) => {
         const x = after[i * 2] as number

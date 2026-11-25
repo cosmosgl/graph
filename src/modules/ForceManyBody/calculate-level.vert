@@ -6,8 +6,8 @@ precision highp float;
 // texel per cell; additive blending accumulates [sum(x), sum(y), count, 0] per
 // cell via calculate-level.frag.
 
-uniform sampler2D positionsTexture;
-uniform sampler2D exitTexture;
+uniform highp sampler2D positionsTexture;
+uniform highp sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform calculateLevelsPreciseUniforms {

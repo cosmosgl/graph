@@ -3,8 +3,8 @@
 precision highp float;
 #endif
 
-uniform sampler2D sourceTexture;
-uniform sampler2D targetTexture;
+uniform highp sampler2D sourceTexture;
+uniform highp sampler2D targetTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform interpolatePositionUniforms {

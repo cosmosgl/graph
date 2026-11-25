@@ -11,7 +11,7 @@ precision highp int;
 // consumer's coarsest grid and shifted by the part of it the consumer asks for
 // (DataBoundsRunOptions.originShift).
 
-uniform sampler2D partialsTexture;
+uniform highp sampler2D partialsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform reduceBoundsFinalUniforms {
