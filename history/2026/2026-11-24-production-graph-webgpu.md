@@ -39,6 +39,15 @@ without reading pixels back. When a second edit arrives mid-animation,
 WebGPU starts at the displayed size. WebGL jumps to its previous target.
 The paired replay checks the label and painted geometry in both cases.
 
+Recoloring a point can change a link’s gradient because the shader reads
+the endpoint colors when it draws. The link record itself stays the same.
+Previously each point edit uploaded 256 KiB of links on the 8,192-link
+fixture. Updating the point records in place brought that to zero, even
+when a second edit arrived mid-animation. That replay also caught a
+32-pixel circle drawing square on M3. Placing a static circle at the same
+tile boundary reproduced it. Keeping the zero coordinate exact restored
+the circular edge at both pixel ratios.
+
 Removing a point exposed two different lifetimes for the same slot. Its
 ID leaves picking, tracking and the simulation as soon as either position
 coordinate becomes NaN. Its last finite position still anchors the point
