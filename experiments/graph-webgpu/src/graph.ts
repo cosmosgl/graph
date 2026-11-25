@@ -70,7 +70,9 @@ export class Graph {
     this.ready = this.simulation.ready.then(() => {
       if (this.isDestroyed) return
       const device = this.simulation.device!
-      this.renderer = new GraphRenderer(device, this.graph, this.config, () => this.simulation.getPointPositionBuffer(), this.simulation.ownsDevice)
+      this.renderer = new GraphRenderer(device, this.graph, this.config, () => this.simulation.getPointPositionBuffer(), {
+        ownsCanvas: this.simulation.ownsDevice, trackSizes: !!container,
+      })
       if (container) {
         const attached = device.canvasContext?.canvas
         if (!(attached instanceof HTMLCanvasElement)) throw new Error('An interactive WebGPU Graph requires an HTML canvas on its device')
@@ -103,6 +105,8 @@ export class Graph {
       this.transition.setDurationOverride(this.canvas && this.hasRendered ? transitionDuration : 0)
       const animate = this.transition.duration > 0 && this.transition.isPending
       const newPositions = this.transition.isPendingFor(TransitionProperty.Positions)
+      const pointSizes = this.transition.isPendingFor(TransitionProperty.PointSizes)
+      const linkWidths = this.transition.isPendingFor(TransitionProperty.LinkWidths)
       const oldSource = this.getPointPositionBuffer()
       if (!newPositions && this.transition.isPending && this.transition.isActiveFor(TransitionProperty.Positions) && oldSource) {
         if (this.positionTransition?.write(oldSource, 1)) this.simulation.markPositionsChanged()
@@ -110,7 +114,13 @@ export class Graph {
       const from = animate && newPositions && oldSource ? copyPositions(oldSource) : undefined
       try {
         this.simulation.applyData(alpha)
-        this.renderer?.update({ animate, previousProgress: this.transition.progress })
+        this.renderer?.update({
+          animate,
+          previousProgress: this.transition.progress,
+          animatePointSizes: pointSizes,
+          animateLinkWidths: linkWidths,
+          continueTransition: this.transition.isActive && !this.transition.isPending,
+        })
         const target = this.getPointPositionBuffer()
         if (from && target) {
           this.positionTransition ??= new PositionTransition(target.device)
@@ -278,8 +288,20 @@ export class Graph {
   public getNeighboringPointIndices (ids: number | number[]): number[] { return this.graph.getNeighboringPointIndices(ids) }
   public getConnectedLinkIndices (ids: number | number[]): number[] { return this.graph.getConnectedLinkIndices(ids) }
   public getConnectedPointIndices (ids: number | number[]): number[] { return this.graph.getConnectedPointIndices(ids) }
-  public getPointRadiusByIndex (id: number): number | undefined { return this.graph.isPointIndex(id) ? this.graph.getResolvedPointFootprint(id) : undefined }
-  public getLinkWidthByIndex (id: number): number | undefined { return id >= 0 && id < (this.graph.linksNumber ?? 0) ? this.graph.getResolvedLinkWidth(id) : undefined }
+  /** The displayed shape size or, for a point with a larger image, its image size. */
+  public getPointRadiusByIndex (index: number): number | undefined {
+    if (this.isDestroyed || !this.graph.isPointIndex(index)) return undefined
+    const size = this.transition.isActiveFor(TransitionProperty.PointSizes) ? this.renderer?.getPointSize(index, this.transition.progress) : undefined
+    return this.graph.getResolvedPointFootprint(index, size)
+  }
+
+  /** The width at the current animation frame, in the same units as setLinkWidths(). */
+  public getLinkWidthByIndex (index: number): number | undefined {
+    if (this.isDestroyed || this.graph.linkWidths?.[index] === undefined) return undefined
+    const width = this.transition.isActiveFor(TransitionProperty.LinkWidths) ? this.renderer?.getLinkWidth(index, this.transition.progress) : undefined
+    return width ?? this.graph.getResolvedLinkWidth(index)
+  }
+
   public getPointSizes (): Float32Array { return Float32Array.from({ length: this.graph.pointsNumber ?? 0 }, (_, id) => this.graph.getResolvedPointSize(id)) }
   public getLinkWidths (): Float32Array { return Float32Array.from({ length: this.graph.linksNumber ?? 0 }, (_, id) => this.graph.getResolvedLinkWidth(id)) }
   public getPointColors (): Float32Array { return Float32Array.from({ length: 4 * (this.graph.pointsNumber ?? 0) }, (_, i) => this.graph.getResolvedPointColorChannel(Math.floor(i / 4), i % 4)) }

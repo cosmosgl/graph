@@ -17,6 +17,7 @@ struct Params {
   pointViewport: vec4f,    // world origin and full CSS viewport, including during 1×1 picking
   pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
   linkPickPixel: vec2f,    // top-left texel of WebGL's CSS-resolution pointer index pass
+  animateSizes: vec2f,     // point size and link width channels queued for this cycle
   uniformLinkRgb: vec3f,  // shared solid-link color; opacity and width still vary per link
 }
 
@@ -34,14 +35,14 @@ fn currentPoint(i: u32) -> Point {
   let next = points[i];
   if (params.transition.x >= 1.0) { return next; }
   if (i >= u32(params.transition.y)) { return enterPoint(next,params.transition.x); }
-  return interpolatePoint(previousPoints[i],next,params.transition.x);
+  return interpolatePoint(previousPoints[i],next,params.transition.x,params.animateSizes.x);
 }
 
 fn currentLink(i: u32) -> Link {
   let next = links[i];
   if (params.transition.x >= 1.0) { return next; }
   if (i >= u32(params.transition.z)) { return enterLink(next,params.transition.x); }
-  return interpolateLink(previousLinks[i],next,params.transition.x);
+  return interpolateLink(previousLinks[i],next,params.transition.x,params.animateSizes.y);
 }
 
 fn screen(world: vec2f) -> vec2f {

@@ -10,6 +10,7 @@ import { packLinks, linkStride, type LinkRgb } from './modules/Lines'
 import { Points, pointStride, shadeDirection } from './modules/Points'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
+import { captureSizes, displayedSize, type SizeValues } from './size-transition'
 import records from './style-records.wgsl?raw'
 import common from './draw-common.wgsl?raw'
 import applePointCoordinates from './modules/Points/apple-point-coordinates.wgsl?raw'
@@ -55,6 +56,13 @@ type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
 type DrawKind = 'point' | 'link' | 'solidLink' | 'uniformRgbLink'
 type CoverageMode = 'none' | 'mark' | 'test'
+type StyleUpdate = {
+  animate?: boolean;
+  previousProgress?: number;
+  animatePointSizes?: boolean;
+  animateLinkWidths?: boolean;
+  continueTransition?: boolean;
+}
 type EncodeOptions = {
   draw?: GraphDrawOptions;
   uniforms?: Buffer;
@@ -96,7 +104,15 @@ export class GraphRenderer {
   private highlightMask?: PointHighlightMask
   private order?: Uint32Array
   private baseOrder?: Uint32Array
-  private previous?: { points: Buffer; links: Buffer; pointCount: number; linkCount: number }
+  private pointSizes: SizeValues = 0
+  private linkWidths: SizeValues = 0
+  private previous?: {
+    points: Buffer; links: Buffer;
+    pointCount: number; linkCount: number;
+    pointSizes: SizeValues; linkWidths: SizeValues;
+    animatePointSizes: boolean; animateLinkWidths: boolean;
+  }
+
   private interpolation: StyleTransition
   private pointCount = 0
   private linkCount = 0
@@ -118,7 +134,7 @@ export class GraphRenderer {
     private data: GraphData,
     private config: GraphConfigInterface,
     private positionSource: () => PositionSource | undefined,
-    private readonly ownsCanvas = false
+    private readonly options: { ownsCanvas?: boolean; trackSizes?: boolean } = {}
   ) {
     this.points = new Points(device)
     this.highlightPass = new PointHighlightPass(device)
@@ -143,7 +159,7 @@ export class GraphRenderer {
   }
 
   /** Upload changed channels after the data model has resolved the pending setters. */
-  public update (options: { animate?: boolean; previousProgress?: number } = {}): void {
+  public update (options: StyleUpdate = {}): void {
     const data = this.data
     const config = this.config
     this.revision++
@@ -167,22 +183,50 @@ export class GraphRenderer {
       // the next interpolation starts at the current appearance rather than the previous target.
       let fromPoints = this.pointBuffer
       let fromLinks = this.linkBuffer
+      let pointSizes = this.pointSizes
+      let linkWidths = this.linkWidths
+      const animatePointSizes = options.animatePointSizes ?? true
+      const animateLinkWidths = options.animateLinkWidths ?? true
       if (this.previous && progress < 1) {
-        fromPoints = this.interpolation.freeze('Point', this.previous.points, this.pointBuffer, progress, this.previous.pointCount, this.pointCount)
+        const previous = this.previous
+        if (this.options.trackSizes && animatePointSizes && previous.animatePointSizes) {
+          pointSizes = captureSizes(this.pointCount, index => this.getPointSize(index, progress))
+        }
+        if (this.options.trackSizes && animateLinkWidths && previous.animateLinkWidths) {
+          linkWidths = captureSizes(this.linkCount, index => this.getLinkWidth(index, progress))
+        }
+        fromPoints = this.interpolation.freeze(
+          'Point', previous.points, this.pointBuffer, progress, previous.pointCount, this.pointCount, previous.animatePointSizes
+        )
         try {
-          fromLinks = this.interpolation.freeze('Link', this.previous.links, this.linkBuffer, progress, this.previous.linkCount, this.linkCount)
+          fromLinks = this.interpolation.freeze(
+            'Link', previous.links, this.linkBuffer, progress, previous.linkCount, this.linkCount, previous.animateLinkWidths
+          )
         } catch (e) { fromPoints.destroy(); throw e }
       }
       this.releasePrevious()
-      this.previous = { points: fromPoints, links: fromLinks, pointCount: this.pointCount, linkCount: this.linkCount }
+      this.previous = {
+        points: fromPoints,
+        links: fromLinks,
+        pointCount: this.pointCount,
+        linkCount: this.linkCount,
+        pointSizes,
+        linkWidths,
+        animatePointSizes,
+        animateLinkWidths,
+      }
       if (fromPoints === this.pointBuffer) this.pointBuffer = undefined
       if (fromLinks === this.linkBuffer) this.linkBuffer = undefined
-    } else {
+    } else if (!options.continueTransition) {
       this.releasePrevious()
     }
     this.pointBuffer = this.storage(this.pointBuffer, attributes, 'cosmos-point-style', pointStride * 4)
     this.orderBuffer = this.storage(this.orderBuffer, order, 'cosmos-point-order', 4)
     this.linkBuffer = this.storage(this.linkBuffer, edges, 'cosmos-link-style', linkStride * 4)
+    if (this.options.trackSizes) {
+      this.pointSizes = captureSizes(pointCount, i => attributes[i * pointStride + 4]!)
+      this.linkWidths = captureSizes(linkCount, i => edges[i * linkStride + 2]!)
+    }
     this.pointCount = pointCount
     this.linkCount = linkCount
     this.hasOnlySolidLinks = hasOnlySolidLinks
@@ -191,6 +235,16 @@ export class GraphRenderer {
     this.highlightMask = mask
     this.order = order
     this.baseOrder = data.pointRenderOrder
+  }
+
+  public getPointSize (index: number, progress: number): number {
+    const source = this.previous?.animatePointSizes ? this.previous.pointSizes : undefined
+    return displayedSize(index, progress, this.pointSizes, source, this.previous?.pointCount)
+  }
+
+  public getLinkWidth (index: number, progress: number): number {
+    const source = this.previous?.animateLinkWidths ? this.previous.linkWidths : undefined
+    return displayedSize(index, progress, this.linkWidths, source, this.previous?.linkCount)
   }
 
   public updatePointHighlights (): void {
@@ -244,7 +298,7 @@ export class GraphRenderer {
     // On the owned canvas the existing depth attachment can reject link
     // fragments hidden by opaque points. Reserve the extra point draw for
     // dense graphs with at least one link per device pixel.
-    const coverLinks = this.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
+    const coverLinks = !!this.options.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
       !!framebuffer.depthStencilAttachment && framebuffer.colorAttachments[0]!.texture.samples === 1 &&
       this.config.renderLinks && this.linkCount >= framebuffer.width * framebuffer.height && this.canUseSolidLinks(view)
     const pass = this.device.beginRenderPass({
@@ -298,6 +352,7 @@ export class GraphRenderer {
     this.pointBuffer?.destroy()
     this.linkBuffer?.destroy()
     this.orderBuffer?.destroy()
+    this.pointSizes = this.linkWidths = 0
     this.hostUniforms.forEach(buffer => buffer.destroy())
     this.hostUniforms.length = 0
     this.hostEncoder = undefined
@@ -397,7 +452,7 @@ export class GraphRenderer {
       shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),
-      ...(linkPickPixel ?? [0, 0]), 0, 0,
+      ...(linkPickPixel ?? [0, 0]), Number(this.previous?.animatePointSizes ?? false), Number(this.previous?.animateLinkWidths ?? false),
       ...(this.uniformLinkRgb ?? [0, 0, 0]), 0,
     ]))
     const bindings = {
