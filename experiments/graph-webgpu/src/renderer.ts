@@ -13,7 +13,7 @@ import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
 import { hasOnlyDefaultPointStyles, Points, pointStride, shadeDirection, type PointChannels } from './modules/Points'
 import { estimateOpaqueArea } from './modules/Points/occlusion'
-import { readPointStyle } from './modules/Points/style-table'
+import { interruptedPointTable, readPointStyle } from './modules/Points/style-table'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import { captureSizes, displayedSize, type SizeValues } from './size-transition'
@@ -208,16 +208,32 @@ export class GraphRenderer {
     }
   }
 
+  /** Over the dense limit, validate the resolved table before the simulation publishes data or uploads GPU state. */
+  public withStyleCapacityCheck (
+    count: number, interrupted: boolean, apply: (prepare?: (pointsOnly: boolean) => ReturnType<Points['pack']>) => void
+  ): void {
+    const limit = this.device.limits.maxStorageBufferBindingSize
+    if (interrupted && this.previous?.points && this.pointBuffer && this.pointCount * pointStride * 4 > limit) {
+      // The displayed source of the next animation can have more exceptions than either endpoint.
+      interruptedPointTable(this.styleIds.get(this.previous.points), this.styleIds.get(this.pointBuffer), this.previous.pointCount, this.pointCount, limit)
+    }
+    if (count * pointStride * 4 <= limit || hasOnlyDefaultPointStyles(this.data, this.config)) {
+      apply()
+      return
+    }
+    this.points.withAtlas(this.data.inputImageData, () => apply(pointsOnly => this.packPointStyles(pointsOnly)))
+  }
+
   /** Upload changed channels after the data model has resolved the pending setters. */
-  public update (options: StyleUpdate = {}): void {
+  public update (options: StyleUpdate = {}, prepared?: ReturnType<Points['pack']>): void {
     this.revision++
     const sameCounts = this.lines.count === (this.data.linksNumber ?? 0) && this.pointCount === (this.data.pointsNumber ?? 0)
     const widthsOnly = !!options.linkWidthsOnly && !!this.lines.buffer && sameCounts
     const pointChannels = this.pointCount && this.pointBuffer && this.highlightMask && sameCounts ? options.pointChannels : undefined
     const previous = this.capturePrevious(options, widthsOnly, !!pointChannels)
     try {
-      if (pointChannels && (this.styleIds.has(this.pointBuffer!) || hasOnlyDefaultPointStyles(this.data, this.config))) {
-        this.updateAllStyles(previous, true)
+      if (pointChannels && (prepared || this.styleIds.has(this.pointBuffer!) || hasOnlyDefaultPointStyles(this.data, this.config))) {
+        this.updateAllStyles(previous, true, prepared)
       } else if (pointChannels) {
         const sizes = pointChannels.sizes && this.options.trackSizes ? captureSizes(this.pointCount, i => this.data.getResolvedPointSize(i)) : this.pointSizes
         const source = this.points.updateStyles(this.pointBuffer!, this.data, this.config, pointChannels, previous?.points === this.pointBuffer)
@@ -230,7 +246,7 @@ export class GraphRenderer {
         const snapshot = this.lines.updateWidths(this.data, !!previous && previous.links === this.lines.buffer)
         if (snapshot && previous) previous.links = snapshot
       } else {
-        this.updateAllStyles(previous)
+        this.updateAllStyles(previous, false, prepared)
       }
     } catch (error) {
       if (previous?.points !== this.pointBuffer) previous?.points?.destroy()
@@ -408,25 +424,32 @@ export class GraphRenderer {
     return ids ? ids.length + 1 : 0
   }
 
-  private updateAllStyles (previous?: PreviousStyles, pointsOnly = false): void {
-    this.points.withAtlas(this.data.inputImageData, () => this.uploadStyles(previous, pointsOnly))
+  private packPointStyles (pointsOnly: boolean): ReturnType<Points['pack']> {
+    const background = getRgbaColor(this.config.backgroundColor)
+    const clearColor = background[3] > 0 ? background : transparent
+    const wasCompact = !!this.pointBuffer && this.styleIds.has(this.pointBuffer)
+    const ordering = pointsOnly && this.highlightMask && this.order ? { mask: this.highlightMask, order: this.order } : undefined
+    return this.points.pack(this.data, this.config, clearColor, wasCompact, ordering)
   }
 
-  private uploadStyles (previous: PreviousStyles | undefined, pointsOnly: boolean): void {
+  private updateAllStyles (previous: PreviousStyles | undefined, pointsOnly: boolean, prepared?: ReturnType<Points['pack']>): void {
+    this.points.withAtlas(this.data.inputImageData, () => this.uploadStyles(previous, pointsOnly, prepared ?? this.packPointStyles(pointsOnly)))
+  }
+
+  private uploadStyles (previous: PreviousStyles | undefined, pointsOnly: boolean, styles: ReturnType<Points['pack']>): void {
     const data = this.data
     const config = this.config
     const pointCount = data.pointsNumber ?? 0
     const background = getRgbaColor(config.backgroundColor)
     const clearColor = background[3] > 0 ? background : transparent
     const wasCompact = !!this.pointBuffer && this.styleIds.has(this.pointBuffer)
-    const ordering = pointsOnly && this.highlightMask && this.order ? { mask: this.highlightMask, order: this.order } : undefined
-    const { attributes, ids, order, mask, greyExitColor } = this.points.pack(data, config, clearColor, wasCompact, ordering)
+    const { attributes, ids, order, mask, greyExitColor } = styles
     const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => data.getResolvedPointSize(i)) : 0
     const oldPointTarget = previous?.points === this.pointBuffer ? undefined : this.pointBuffer
     let pointBuffer: Buffer | undefined
     let orderBuffer: Buffer | undefined
     try {
-      if (ordering && wasCompact === !!ids) orderBuffer = this.orderBuffer!
+      if (pointsOnly && this.order === order && wasCompact === !!ids) orderBuffer = this.orderBuffer!
       else {
         let orderAndMask = order
         if (ids) {

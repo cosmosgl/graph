@@ -21,6 +21,17 @@ export interface PointPositionBuffer {
   version: number;
 }
 
+// GraphData resolves channels by replacing references. Keep the pending input
+// references available for a corrected retry while restoring the displayed model.
+function resolveData (data: GraphData, update: () => void, validate?: () => void): void {
+  if (!validate) { update(); return }
+  const previous = { ...data }
+  try { update(); validate() } catch (error) {
+    Object.assign(data, previous)
+    throw error
+  }
+}
+
 // Keep the four-float position ABI for up to ten million points on capable devices.
 const showcasePositionBytes = 10_000_000 * 4 * Float32Array.BYTES_PER_ELEMENT
 
@@ -288,12 +299,16 @@ export class GraphSimulation {
   }
 
   /** @internal Apply point paint and footprints without walking link data. A direct simulation setter can still require a full update. */
-  public applyPointStyleUpdate (colors: boolean, sizes: boolean, alpha?: number): boolean {
+  public applyPointStyleUpdate (colors: boolean, sizes: boolean, alpha?: number, validate?: () => void): boolean {
     if (this.pendingUpdates && !(sizes && this.pendingUpdates === DataUpload.Sizes)) return false
-    if (colors) this.data.updatePointColor()
+    resolveData(this.data, () => {
+      if (colors) this.data.updatePointColor()
+      if (sizes) {
+        this.data.updatePointSize()
+        this.data.updatePointImageSizes()
+      }
+    }, validate)
     if (sizes) {
-      this.data.updatePointSize()
-      this.data.updatePointImageSizes()
       if (this.config.enableSimulation) this.state?.updateSizes(this.data)
       this.pendingUpdates &= ~DataUpload.Sizes
       this.pendingCreates &= ~DataUpload.Sizes
@@ -311,12 +326,17 @@ export class GraphSimulation {
   }
 
   public applyData (alpha?: number): void {
-    if (this.defer(() => this.applyData(alpha))) return
+    this.applyValidatedData(alpha)
+  }
+
+  /** @internal A Graph sharing this model validates a compact style before the GPU channels become visible. */
+  public applyValidatedData (alpha?: number, validate?: () => void): void {
+    if (this.defer(() => this.applyValidatedData(alpha, validate))) return
     // Reject an unsupported replacement before GraphData resolves its parallel
     // channels. Keep the displayed model and GPU positions together on failure.
     const nextCount = Math.floor((this.data.inputPointPositions?.length ?? 0) / 2)
     assertStorageSize(this.device!, nextCount * 16, 'Point position buffer')
-    this.data.update()
+    resolveData(this.data, () => this.data.update(), validate)
     this.uploadChannels(this.pendingUpdates)
     this.pendingUpdates = this.pendingCreates = 0
     this.shouldSkipRescale = false

@@ -525,6 +525,73 @@ describe('WebGPU Graph', () => {
     } finally { cleanup() }
   })
 
+  it('keeps the prior draw, footprint and GPU positions after a compact style replacement exceeds the grant', async () => {
+    const { graph, host, cleanup } = mountedGraph({ enableSimulation: false, backgroundColor: '#000', pointDefaultColor: '#f00' })
+    try {
+      await graph.ready
+      const count = 16
+      const xy = new Float32Array(count * 2)
+      for (let i = 0; i < count; i++) xy.set([i ? 2096 : 2000, 2048], i * 2)
+      graph.setPointPositions(xy)
+      graph.setLinks(new Float32Array())
+      const device = graph.getPointPositionBuffer()!.device
+      Object.defineProperty(device.limits, 'maxStorageBufferBindingSize', { configurable: true, value: 4 * 96 })
+      graph.render(undefined, 0)
+      const canvas = host.querySelector('canvas')!
+      const copy = document.createElement('canvas')
+      copy.width = canvas.width
+      copy.height = canvas.height
+      const ctx = copy.getContext('2d', { willReadFrequently: true })!
+      const [x, y] = graph.spaceToScreenPosition([2000, 2048])
+      const pixel = (delta: number): number[] => {
+        graph.renderOneFrame()
+        ctx.drawImage(canvas, 0, 0)
+        return Array.from(ctx.getImageData(x + delta, y, 1, 1).data)
+      }
+      const edge = (delta: number): Promise<number[] | null> => graph.findPointsInRectAsync([[x + delta, y], [x + delta + 1, y + 1]])
+      graph.setPointSizes(Float32Array.from({ length: count }, (_, i) => i + 1))
+      expect(() => graph.render(undefined, 0)).toThrow(/storage binding/)
+      // No area query before the failure: the footprints must be populated from the last good model.
+      expect(graph.getPointRadiusByIndex(0)).toBe(12)
+      expect(graph.getPointSizes()[0]).toBe(12)
+      expect(await edge(4)).toEqual([0])
+      expect(pixel(4)).toEqual([255, 0, 0, 255])
+
+      const replacement = xy.slice()
+      replacement[2] = 2100
+      graph.setPointPositions(replacement)
+      expect(() => graph.render(undefined, 0)).toThrow(/storage binding/)
+      expect(await graph.getPointPositionsAsync()).toEqual(xy)
+      expect(graph.getPointSizes()[0]).toBe(12)
+      expect(pixel(12)).toEqual([0, 0, 0, 255])
+      expect(await edge(12)).toEqual([])
+
+      const valid = new Float32Array(count).fill(NaN)
+      valid[0] = 32
+      graph.setPointSizes(valid)
+      graph.render(undefined, 0)
+      expect(await graph.getPointPositionsAsync()).toEqual(replacement)
+      expect(graph.getPointRadiusByIndex(0)).toBe(32)
+      expect(pixel(12)).toEqual([255, 0, 0, 255])
+      expect(await edge(12)).toEqual([0])
+
+      // Each endpoint fits, but freezing both disjoint override sets would take seven records.
+      const old = new Float32Array(count).fill(NaN)
+      old.fill(20, 0, 3)
+      graph.setPointSizes(old)
+      graph.render(undefined, 0)
+      const next = new Float32Array(count).fill(NaN)
+      next.fill(28, 3, 6)
+      graph.setPointSizes(next)
+      graph.render(undefined, 60_000)
+      graph.setPointSizes(new Float32Array(count).fill(NaN))
+      expect(() => graph.render(undefined, 60_000)).toThrow(/interrupted point styles/)
+      expect(graph.getPointSizes()[3]).toBe(28)
+      graph.render(undefined, 0)
+      expect(graph.getPointSizes()[3]).toBe(12)
+    } finally { cleanup() }
+  })
+
   it('keeps explicit size and color channels while fading default color channels in a sparse slot', async () => {
     const { host, graph, cleanup } = mountedGraph({ backgroundColor: '#000', pointDefaultColor: '#f00', enableSimulation: false })
     try {

@@ -139,21 +139,29 @@ export class Graph {
       let pointStylesOnly = false
       let linkWidthsOnly = false
       try {
-        if (partial && (pointColors || pointSizes) && !linkWidths) {
-          pointStylesOnly = this.simulation.applyPointStyleUpdate(pointColors, pointSizes, alpha)
-        } else if (partial && linkWidths && !pointColors && !pointSizes) {
-          linkWidthsOnly = this.simulation.applyLinkWidthUpdate(alpha)
-        }
-        if (!pointStylesOnly && !linkWidthsOnly) this.simulation.applyData(alpha)
-        this.renderer?.update({
-          pointChannels: pointStylesOnly ? { colors: pointColors, sizes: pointSizes } : undefined,
-          linkWidthsOnly,
-          linkTopologyOnly,
-          animate,
-          previousProgress: this.transition.progress,
-          animatePointSizes: pointSizes,
-          animateLinkWidths: linkWidths,
-          continueTransition: this.transition.isActive && !this.transition.isPending,
+        const count = Math.floor((this.graph.inputPointPositions?.length ?? 0) / 2)
+        this.renderer!.withStyleCapacityCheck(count, animate && this.transition.progress < 1, prepare => {
+          let styles: ReturnType<NonNullable<typeof prepare>> | undefined
+          if (partial && (pointColors || pointSizes) && !linkWidths) {
+            const validate = prepare && ((): void => { styles = prepare(true) })
+            pointStylesOnly = this.simulation.applyPointStyleUpdate(pointColors, pointSizes, alpha, validate)
+          } else if (partial && linkWidths && !pointColors && !pointSizes) {
+            linkWidthsOnly = this.simulation.applyLinkWidthUpdate(alpha)
+          }
+          if (!pointStylesOnly && !linkWidthsOnly) {
+            if (prepare && !linkTopologyOnly) this.simulation.applyValidatedData(alpha, () => { styles = prepare(false) })
+            else this.simulation.applyData(alpha)
+          }
+          this.renderer?.update({
+            pointChannels: pointStylesOnly ? { colors: pointColors, sizes: pointSizes } : undefined,
+            linkWidthsOnly,
+            linkTopologyOnly,
+            animate,
+            previousProgress: this.transition.progress,
+            animatePointSizes: pointSizes,
+            animateLinkWidths: linkWidths,
+            continueTransition: this.transition.isActive && !this.transition.isPending,
+          }, styles)
         })
         const target = this.getPointPositionBuffer()
         if (from && target) {
