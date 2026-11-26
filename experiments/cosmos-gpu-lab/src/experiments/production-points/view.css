@@ -1,0 +1,56 @@
+.points-comparison-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--points-width)), 1fr));
+  gap: var(--space-3);
+  max-width: calc(2 * var(--points-width) + var(--space-3));
+}
+.points-comparison-panels section { min-width: 0; }
+.points-comparison-panels h3 { margin: 0 0 var(--space-2); font-size: var(--type-subsection); }
+.points-comparison-surface {
+  position: relative;
+  width: min(100%, var(--points-width));
+  height: var(--points-height);
+  border-radius: 6px;
+  overflow: auto;
+  background: var(--control-bg);
+}
+.points-comparison-surface :is(iframe, canvas) {
+  display: block;
+  width: var(--points-width);
+  height: var(--points-height);
+  max-width: none;
+  border: 0;
+  pointer-events: none;
+}
+.points-comparison-surface canvas { position: absolute; inset: 0 auto auto 0; z-index: 1; }
+.points-comparison-surface canvas[hidden] { display: none; }
+.points-comparison-panels [role="status"], .points-grid-key {
+  margin: var(--space-2) 0;
+  color: var(--text-secondary);
+  font-size: var(--type-meta);
+  overflow-wrap: anywhere;
+}
+.points-comparison-panels [role="status"]:empty { margin: 0; }
+.points-difference-control { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+.points-difference-control input { margin: 0; }
+.points-comparison-verdict { min-height: 1.5em; font-variant-numeric: tabular-nums; }
+.points-comparison-table table {
+  width: 100%;
+  max-width: 43rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+.points-comparison-table caption { padding-bottom: var(--space-2); text-align: left; font-weight: 600; }
+.points-comparison-table th, .points-comparison-table td {
+  border-bottom: 1px solid var(--control-border);
+  padding: 5px var(--space-2);
+  text-align: right;
+}
+.points-comparison-table th { font-size: var(--type-meta); font-weight: 500; }
+.points-comparison-table th:first-child { text-align: left; white-space: nowrap; }
+.points-heading-compact { display: none; }
+@media (max-width: 600px) {
+  .points-heading-full { display: none; }
+  .points-heading-compact { display: inline; }
+  .points-comparison-table th, .points-comparison-table td { padding-inline: 4px; }
+}

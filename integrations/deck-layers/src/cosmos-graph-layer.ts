@@ -1,4 +1,4 @@
-import { COORDINATE_SYSTEM, Layer } from '@deck.gl/core'
+import { Layer } from '@deck.gl/core'
 import type {
   Accessor,
   AccessorContext,
@@ -14,6 +14,7 @@ import type {
 } from '@deck.gl/core'
 import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
 import type { GraphConfig } from '@cosmos.gl/graph'
+import { pickingBlendParameter, positionSourceMethod, requiredDeviceType } from './graph-host.js'
 
 /**
  * Binary styling channels for binary points, keyed by the accessor each one
@@ -293,12 +294,24 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   onGraphCreated: { type: 'function', value: null, optional: true },
   onGraphDataLoaded: { type: 'function', value: null, optional: true },
   // cosmos draws its space coordinates as world coordinates; `modelMatrix` places the space
-  coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+  coordinateSystem: 'cartesian',
 }
 
 /** The slice of a deck gesture event the drag handlers need. */
 type DragGestureEvent = {
+  offsetCenter?: { x: number; y: number };
   stopImmediatePropagation?: () => void;
+}
+
+// Deck's async pick identifies the grabbed point and viewport at pointer-down.
+// Mjolnir supplies the current canvas-relative CSS pixels for each gesture.
+function dragPickingInfo (info: PickingInfo, event: DragGestureEvent): CosmosGraphPickingInfo {
+  const pointer = event.offsetCenter
+  if (!pointer || (info.x === pointer.x && info.y === pointer.y)) return info
+  const { x, y } = pointer
+  const viewport = info.viewport
+  const coordinate = viewport ? viewport.unproject([x - viewport.x, y - viewport.y]) : info.coordinate
+  return { ...info, x, y, pixel: [x, y], coordinate }
 }
 
 /** The update-trigger keys the layer reads. */
@@ -518,7 +531,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     keptLinks: readonly LinkDataT[] | null;
     /**
      * `getBounds`' measured box: the last one read back (`null` when nothing finite was
-     * there), the position texture version it was asked at, and whether a read is on its
+     * there), the position version it was asked at, and whether a read is on its
      * way. Unset until the first read lands, and again when a new dataset is loaded. The
      * serial counts the datasets loaded: a read of the previous one that lands after the
      * next is dropped.
@@ -545,9 +558,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   public initializeState (): void {
     const { device, timeline } = this.context
-    if (device.type !== 'webgl') {
+    if (device.type !== requiredDeviceType) {
       throw new Error(
-        `@cosmos.gl/deck-layers requires a WebGL 2 device — cosmos.gl is WebGL-only, got '${device.type}'`
+        `@cosmos.gl/deck-layers requires a '${requiredDeviceType}' device, got '${device.type}'`
       )
     }
 
@@ -636,8 +649,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   public draw (opts: {
-    shaderModuleProps?: { picking?: { isActive?: number | boolean } };
-    parameters?: { blendColor?: number[] };
+    shaderModuleProps?: { picking?: { isActive?: number | boolean }; project?: { devicePixelRatio?: number } };
+    parameters?: { blendColor?: number[]; blendConstant?: number[] };
   }): void {
     const { graph, isReady } = this.state
     if (!graph || !isReady) return
@@ -646,19 +659,19 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const view = this._viewTransform(graph, viewport)
     if (!view) return
     graph.setViewTransform(view, [viewport.width, viewport.height])
-    if (opts.shaderModuleProps?.picking?.isActive) {
-      // deck's pick pass: cosmos draws its picking colors with the alpha deck uses to tell
-      // layers apart (the pass's blend constant), links offset past the points so one layer
-      // carries both index spaces — getPickingInfo splits them again
-      graph.drawToRenderPass(this.context.renderPass, {
-        picking: {
-          alpha: opts.parameters?.blendColor?.[3] ?? 1,
+    // Deck's color and picking passes each supply their viewport's backing scale.
+    // An app-supplied Graph can have a different pixelRatio on the same device.
+    const drawOptions = {
+      pixelRatio: opts.shaderModuleProps?.project?.devicePixelRatio ?? this._pixelRatio(),
+      // Deck uses alpha to identify the layer. Link IDs follow the point IDs.
+      picking: opts.shaderModuleProps?.picking?.isActive
+        ? {
+          alpha: opts.parameters?.[pickingBlendParameter]?.[3] ?? 1,
           linkIndexOffset: graph.graph.pointsNumber ?? 0,
-        },
-      })
-      return
+        }
+        : undefined,
     }
-    graph.drawToRenderPass(this.context.renderPass)
+    graph.drawToRenderPass(this.context.renderPass, drawOptions)
   }
 
   public getPickingInfo ({ info }: GetPickingInfoParams): CosmosGraphPickingInfo {
@@ -690,7 +703,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (dragReheatAlpha !== null) graph.start(dragReheatAlpha)
     // A grabbed point must not also pan the view
     event.stopImmediatePropagation?.()
-    this.props.onPointDragStart?.(picked)
+    this.props.onPointDragStart?.(dragPickingInfo(picked, event))
     return true
   }
 
@@ -698,12 +711,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const { graph, draggedPointIndex } = this.state
     if (!graph || draggedPointIndex === null) return false
 
-    const position = this._dragPosition(graph, info)
+    const picked = dragPickingInfo(info, event)
+    const position = this._dragPosition(graph, picked)
     if (position) graph.setPointPosition(draggedPointIndex, position[0], position[1])
     event.stopImmediatePropagation?.()
     // Repaint even when the simulation is settled and the ticker is idle
     ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
-    this.props.onPointDrag?.(info as CosmosGraphPickingInfo)
+    this.props.onPointDrag?.(picked)
     return true
   }
 
@@ -714,7 +728,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (this.props.unpinOnDragEnd) graph.setPinnedPoint(draggedPointIndex, false)
     this.state.draggedPointIndex = null
     event.stopImmediatePropagation?.()
-    this.props.onPointDragEnd?.(info as CosmosGraphPickingInfo)
+    this.props.onPointDragEnd?.(dragPickingInfo(info, event))
     return true
   }
 
@@ -755,7 +769,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   public getBounds (): [number[], number[]] | null {
     const { state } = this
     const graph = state?.graph
-    const positions = graph?.getPointPositionTexture()
+    const positions = graph?.[positionSourceMethod]()
     if (graph && positions && positions.pointCount > 0) {
       if (positions.version !== state.measuredBoundsVersion && !state.isMeasuringBounds) this._measureBounds(graph, positions.version)
       if (state.measuredBounds !== undefined) return state.measuredBounds ?? this._spaceSquare()
@@ -877,7 +891,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     } else if (graph) graph.destroy()
     this.state.graph = undefined
     this.state.holdsHover = false
-    // Another graph's texture versions would not mean the same box
+    // Another graph's position versions would not mean the same box
     this.state.measuredBounds = undefined
     this.state.measuredBoundsVersion = undefined
     this.state.isMeasuringBounds = false
@@ -885,7 +899,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   /**
    * Starts one asynchronous read of the live positions and keeps its box for `getBounds`,
-   * stamped with the texture version the read was asked at. A read that lands after the
+   * stamped with the position version the read was asked at. A read that lands after the
    * layer let go of the graph is dropped; an empty result (nothing to read, or the point
    * count changed under the copy) leaves the box as it was, and the next call asks again.
    */

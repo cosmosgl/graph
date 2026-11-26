@@ -8,15 +8,26 @@ import { benchCSS } from './css'
 
 export class FPSMonitor {
   private bench: GLBench | undefined
-  private container: HTMLElement
+  private readonly widget: HTMLElement
+  private readonly style: HTMLStyleElement
 
-  public constructor (canvas: HTMLCanvasElement, container?: HTMLElement) {
-    // Scope the widget (and the style element gl-bench injects) to the graph's
-    // container, so multiple Graph instances don't remove each other's monitor.
-    this.container = container ?? document.body
-    this.destroy()
-    const gl = (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGL2RenderingContext
-    this.bench = new GLBench(gl, { css: benchCSS, dom: this.container })
+  /** A null canvas uses gl-bench's CPU and frame-rate measurements without opening a GL context. */
+  public constructor (canvas: HTMLCanvasElement | null, container: HTMLElement = document.body) {
+    // gl-bench creates fixed IDs. Capture the two nodes before mounting so a
+    // graph can release only its own monitor, even when hosts are shared.
+    const mount = container.ownerDocument.createElement('div')
+    const gl = canvas && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')) as WebGLRenderingContext | null
+    this.bench = new GLBench(gl, { css: benchCSS, dom: mount })
+    this.widget = mount.querySelector<HTMLElement>('#gl-bench')!
+    this.style = mount.querySelector<HTMLStyleElement>('#gl-bench-style')!
+    if (!canvas) {
+      this.bench.addUI('frame')
+      this.widget.title = 'Frame rate and CPU frame load. GPU time is unavailable in this monitor.'
+      this.widget.querySelector<HTMLElement>('.gl-box')!.style.cursor = 'default'
+      // The built-in click toggles a WebGL-only profiler. Leave its GPU gauge hidden.
+      this.widget.addEventListener('click', event => event.stopImmediatePropagation(), { capture: true })
+    }
+    container.append(this.style, this.widget)
   }
 
   public begin (): void {
@@ -30,9 +41,7 @@ export class FPSMonitor {
 
   public destroy (): void {
     this.bench = undefined
-    // gl-bench appends both elements as direct children of the container;
-    // ':scope >' keeps a monitor in a nested container out of reach.
-    this.container.querySelector(':scope > #gl-bench')?.remove()
-    this.container.querySelector(':scope > #gl-bench-style')?.remove()
+    this.widget.remove()
+    this.style.remove()
   }
 }

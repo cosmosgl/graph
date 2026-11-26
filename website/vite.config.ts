@@ -1,6 +1,11 @@
 import { fileURLToPath } from 'node:url'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync, realpathSync } from 'node:fs'
 import { defineConfig } from 'vite'
+
+// Workspace development can use Graph before its first build. An installed
+// public package must resolve its own entry, including in a packed-site check.
+const installedGraph = new URL('./node_modules/@cosmos.gl/graph', import.meta.url)
+const workspaceGraph = existsSync(installedGraph) && realpathSync(installedGraph) === realpathSync(new URL('../', import.meta.url))
 
 export default defineConfig({
   base: './',
@@ -17,7 +22,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@cosmos.gl/graph': fileURLToPath(new URL('../src/index.ts', import.meta.url)),
+      ...(workspaceGraph ? { '@cosmos.gl/graph': fileURLToPath(new URL('../src/index.ts', import.meta.url)) } : {}),
       '@/graph': fileURLToPath(new URL('../src', import.meta.url)),
     },
   },

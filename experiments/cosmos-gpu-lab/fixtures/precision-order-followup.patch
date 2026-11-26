@@ -1,0 +1,78 @@
+diff --git a/experiments/cosmos-gpu-lab/src/experiments/precision-diagnostics/order-followup.test.ts b/experiments/cosmos-gpu-lab/src/experiments/precision-diagnostics/order-followup.test.ts
+new file mode 100644
+index 0000000..cc68f0d
+--- /dev/null
++++ b/experiments/cosmos-gpu-lab/src/experiments/precision-diagnostics/order-followup.test.ts
+@@ -0,0 +1,72 @@
++import { expect, it } from 'vitest'
++import { writeArtifact } from '../../testing/artifacts'
++import { nativeDiagnostics } from './gpu'
++import { cpuSums, gravityFixture, sumFixture, type SumFixture } from './model'
++
++type Order = 'repeating' | 'lane-aligned'
++type Trial = {
++  index: number; phase: 'before' | 'interleaved' | 'after'; kind: SumFixture; order: Order;
++  input: number[]; cpu: ReturnType<typeof cpuSums>; adapter: Record<string, unknown> | null;
++  device: string | null; gpu: Array<{ name: string; value: number | string; finite: boolean }>; error: string | null;
++}
++
++// Review-prompted within-session repeatability study, not an accuracy acceptance test.
++it('records repeated interleaved cancellation orders and positive controls', async () => {
++  const count = 1024; const seed = 5931
++  const originals = { cancellation: sumFixture('cancellation', count), positive: sumFixture('positive', count) }
++  const reorder = (original: Float32Array): Float32Array =>
++    Float32Array.from({ length: count }, (_, i) => original[(i % 256) * 4 + Math.floor(i / 256)])
++  const aligned = { cancellation: reorder(originals.cancellation), positive: reorder(originals.positive) }
++  const sameMultiset = (left: Float32Array, right: Float32Array): boolean => {
++    const a = Array.from(left).sort((x, y) => x - y); const b = Array.from(right).sort((x, y) => x - y)
++    return a.length === b.length && a.every((value, index) => value === b[index])
++  }
++  const multisetIdentity = sameMultiset(originals.cancellation, aligned.cancellation) && sameMultiset(originals.positive, aligned.positive)
++  const sequence: Array<{ phase: Trial['phase']; kind: 'positive' | 'cancellation'; order: Order }> = [
++    { phase: 'before', kind: 'positive', order: 'repeating' },
++    { phase: 'before', kind: 'positive', order: 'lane-aligned' },
++    ...(['repeating', 'lane-aligned', 'lane-aligned', 'repeating', 'lane-aligned', 'repeating', 'repeating', 'lane-aligned'] as Order[])
++      .map(order => ({ phase: 'interleaved' as const, kind: 'cancellation' as const, order })),
++    { phase: 'after', kind: 'positive', order: 'repeating' },
++    { phase: 'after', kind: 'positive', order: 'lane-aligned' },
++  ]
++  const metadata = {
++    experiment: 'precision-diagnostics', study: 'review-prompted-interleaved-followup',
++    recordedAt: new Date().toISOString(), browser: navigator.userAgent,
++    sourceRevision: import.meta.env.LAB_SOURCE_REVISION || null,
++    workingTree: import.meta.env.LAB_WORKTREE_STATE || 'Not recorded',
++    sourceSnapshot: import.meta.env.LAB_SOURCE_SNAPSHOT || null,
++    gpuApiImplementation: 'luma-resources-v1', parameters: { count, seed, sequence },
++    limits: ['One session, fresh device each trial; not randomized.', 'No GPU cancellation accuracy threshold, performance or migration claim.'],
++  }
++  const rows: Trial[] = []
++  for (const [offset, setting] of sequence.entries()) {
++    const input = setting.order === 'repeating' ? originals[setting.kind] : aligned[setting.kind]
++    const row: Trial = {
++      index: offset + 1, ...setting, input: Array.from(input), cpu: cpuSums(input),
++      adapter: null, device: null, gpu: [], error: null,
++    }
++    try {
++      const result = await nativeDiagnostics(gravityFixture(count, seed), input)
++      row.adapter = result.adapter; row.device = result.device
++      row.gpu = result.sums.map(({ name, value }) => ({ name, value: Number.isFinite(value) ? value : String(value), finite: Number.isFinite(value) }))
++    } catch (error) { row.error = String(error) }
++    rows.push(row)
++    await writeArtifact(`order-followup-trial-${String(row.index).padStart(2, '0')}`, { ...metadata, row })
++  }
++  const expectedNames = ['WGSL serial', 'WGSL blocked 64', 'WGSL tree 256']
++  const exactControls = rows.length === 12 && rows.every(row => row.cpu.exact === (row.kind === 'positive' ? 2560 : 512))
++  const positive = rows.filter(row => row.kind === 'positive')
++  const cpuPositive = positive.length === 4 && positive.every(row => row.cpu.serial === 2560 && row.cpu.blocked === 2560 && row.cpu.tree === 2560)
++  const gpuComplete = rows.length === 12 && rows.every(row => row.gpu.length === 3 &&
++    row.gpu.every((value, index) => value.name === expectedNames[index] && value.finite))
++  const gpuPositive = positive.length === 4 && positive.every(row => row.gpu.length === 3 && row.gpu.every(value => value.value === 2560))
++  const identity = (adapter: Record<string, unknown>): string => JSON.stringify({
++    type: adapter.type, vendor: adapter.vendor, renderer: adapter.renderer, gpu: adapter.gpu,
++    gpuBackend: adapter.gpuBackend, gpuArchitecture: adapter.gpuArchitecture, fallback: adapter.fallback,
++  })
++  const sameReportedAdapter = rows.length === 12 && rows.every(row => row.adapter !== null && identity(row.adapter) === identity(rows[0].adapter!))
++  const checks = { multisetIdentity, exactControls, cpuPositive, gpuComplete, gpuPositive, sameReportedAdapter }
++  await writeArtifact('order-followup-summary', { ...metadata, completedAt: new Date().toISOString(), checks, rows })
++  for (const check of Object.values(checks)) expect(check).toBe(true)
++}, 60000)

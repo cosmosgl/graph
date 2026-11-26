@@ -190,15 +190,27 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality, samples: numb
   // Bins for picking the traced point from the densest cell: a few points per bin, 2² to 16².
   const bins = Math.min(16, Math.max(2, Math.floor(Math.sqrt(n) / 8)))
 
-  let current: Float32Array<ArrayBufferLike> = new Float32Array(n * 2)
-  let previous: Float32Array<ArrayBufferLike> | undefined
+  const current = new Float32Array(n * 2)
+  let reading = false
   let box = { minX: 0, minY: 0, maxX: 0, maxY: 0 }
   let tick = 0
 
-  /** Reads this tick's positions back and keeps their bounding box for the bin pick. */
-  const measure = (): void => {
-    current = graph.getPointPositionsArray(current)
-    if (current.length !== n * 2) return
+  /** Sample this tick when the previous copy has finished. A busy GPU can skip intermediate ticks. */
+  const measure = async (measuredTick: number): Promise<void> => {
+    if (reading || destroyed) return
+    reading = true
+    try {
+      const positions = await graph.getPointPositionsAsync(current)
+      if (destroyed || positions.length !== n * 2) return
+      updateTrace(measuredTick)
+    } catch (error) {
+      if (!destroyed) trailLabel.textContent = `Position read failed: ${String(error)}`
+    } finally {
+      reading = false
+    }
+  }
+
+  const updateTrace = (measuredTick: number): void => {
     let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity
     for (let i = 0; i < n * 2; i += 2) {
       const x = current[i] as number; const y = current[i + 1] as number
@@ -206,24 +218,22 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality, samples: numb
       if (y < minY) minY = y; if (y > maxY) maxY = y
     }
     box = { minX, minY, maxX, maxY }
-    const swap: Float32Array<ArrayBufferLike> = previous ?? new Float32Array(n * 2)
-    previous = current
-    current = swap
+    traceStep(measuredTick)
   }
 
   // ── The traced point ──
   let tracedIndex = -1
   const trail: number[] = []
+  const trailTicks: number[] = []
 
-  /** A point from the fullest bin of the current positions (`previous` after measure). */
+  /** A point from the fullest bin of the completed snapshot. */
   const pickFromDensestBin = (): number => {
-    if (!previous) return 0
     const width = Math.max(box.maxX - box.minX, 1e-9)
     const height = Math.max(box.maxY - box.minY, 1e-9)
     const counts = new Uint32Array(bins * bins)
     const binOf = (i: number): number => {
-      const bx = Math.min(bins - 1, Math.max(0, Math.floor(((previous![i * 2] as number) - box.minX) / width * bins)))
-      const by = Math.min(bins - 1, Math.max(0, Math.floor(((previous![i * 2 + 1] as number) - box.minY) / height * bins)))
+      const bx = Math.min(bins - 1, Math.max(0, Math.floor(((current[i * 2] as number) - box.minX) / width * bins)))
+      const by = Math.min(bins - 1, Math.max(0, Math.floor(((current[i * 2 + 1] as number) - box.minY) / height * bins)))
       return by * bins + bx
     }
     for (let i = 0; i < n; i += 1) counts[binOf(i)] = (counts[binOf(i)] as number) + 1
@@ -290,17 +300,20 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality, samples: numb
     ctx.fillText(`${barUnits} u`, 12, size - 15)
   }
 
-  const traceStep = (): void => {
-    if (!previous) return
-    if (tracedIndex < 0 && tick >= FORMED_TICK) {
+  const traceStep = (measuredTick: number): void => {
+    if (tracedIndex < 0 && measuredTick >= FORMED_TICK) {
       // One fit, on the formed layout; the seed fit before it only frames the start.
       graph.fitView(600)
       tracedIndex = pickFromDensestBin()
       trailLabel.textContent = `one point, last ${TRAIL_WINDOW} ticks`
     }
     if (tracedIndex < 0) return
-    trail.push(previous[tracedIndex * 2] as number, previous[tracedIndex * 2 + 1] as number)
-    if (trail.length > TRAIL_WINDOW * 2) trail.splice(0, trail.length - TRAIL_WINDOW * 2)
+    trail.push(current[tracedIndex * 2] as number, current[tracedIndex * 2 + 1] as number)
+    trailTicks.push(measuredTick)
+    while (trailTicks[0]! <= measuredTick - TRAIL_WINDOW) {
+      trailTicks.shift()
+      trail.splice(0, 2)
+    }
     drawTrail()
   }
 
@@ -319,8 +332,7 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality, samples: numb
     ...scenario.config,
     onSimulationTick: (): void => {
       tick += 1
-      measure()
-      traceStep()
+      measure(tick)
     },
   }
 

@@ -143,18 +143,6 @@ const paneConfig = (pixelRatio: number, t: Toggles): GraphConfig => ({
   linkVisibilityMinTransparency: 0.9,
 })
 
-// The panes share one camera. Cosmos exposes no transform setter, so the
-// zoom is mirrored through the graph's private d3 zoom behavior — story-only.
-type GraphInternals = {
-  canvasD3Selection?: { call: (fn: unknown, transform: unknown) => void };
-  zoomInstance: { behavior: { transform: unknown } };
-}
-
-const applyTransform = (graph: Graph, transform: unknown): void => {
-  const g = graph as unknown as GraphInternals
-  g.canvasD3Selection?.call(g.zoomInstance.behavior.transform, transform)
-}
-
 // Reference rings: an SVG circle of the exact nominal diameter (size × zoom in
 // CSS px, or the constant-size rule when not scaling) over every circle point.
 // A correctly sized point fills the ring; the ring is what a legend would draw.
@@ -234,7 +222,11 @@ export const antiAliasing = (): { graph: Graph; div: HTMLDivElement; destroy?: (
         updateOverlay()
         if (!userDriven || syncing) return
         syncing = true
-        for (const other of graphs) if (other !== graph) applyTransform(other, e.transform)
+        // Share the world center and zoom so either pane can take the next gesture.
+        const center = Float32Array.from(graph.screenToSpacePosition([host.clientWidth / 2, host.clientHeight / 2]))
+        for (const other of graphs) {
+          if (other !== graph) other.setZoomTransformByPointPositions(center, 0, e.transform.k, 0, false)
+        }
         syncing = false
         zoomLabel.textContent = `zoom ${e.transform.k.toFixed(2)}`
       },

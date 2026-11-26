@@ -1,11 +1,16 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@cosmos.gl/graph": ["./node_modules/@cosmos.gl/graph/src/index.ts", "./node_modules/@cosmos.gl/graph"],
+      "@/graph/*": ["../src/*"]
+    },
     "jsx": "react-jsx",
     "declaration": false,
     "noEmit": true,
     "resolveJsonModule": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "@webgpu/types"],
     "lib": ["es2022", "dom", "dom.iterable"]
   },
   "include": ["src/**/*"],

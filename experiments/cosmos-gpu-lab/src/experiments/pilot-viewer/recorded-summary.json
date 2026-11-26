@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "experiment": "pilot-viewer",
+  "recordedAt": "2026-11-18",
+  "sourceRevision": null,
+  "environment": "User's M3, visible inline Chromium 157; Apple WebGPU / metal-3, fallback false; luma 10.0.0-alpha.15",
+  "scope": "Original 34-member / 78-link Karate Club trial, two viewport sizes; new investigations are recorded separately below.",
+  "question": "Does the bounded explorer support responsive picking while the graph runs?",
+  "method": "Use the corrected resident runtime, complete frame intervals, controlled picking and native exploration. Keep the 50-ms feedback target.",
+  "conclusion": "The explorer works, but one running selection took 100.4 ms and failed the 50-ms target. Most of that wait followed drawing the highlight; its cause is still unknown.",
+  "checks": [
+    { "name": "Frame intervals", "outcome": "Pass", "detail": "Both original windows met the 95%-within-33-ms target." },
+    { "name": "Picking feedback", "outcome": "Fail", "detail": "100.4 ms in the wider window. The earlier separate 68.2-ms failure remains unexplained." },
+    { "name": "Sampled pixels and identities", "outcome": "Pass", "detail": "No failures in the bounded original CPU audits; strict production color compatibility remains rejected separately." }
+  ],
+  "limits": "Historical observations do not establish a cause, full mask parity, larger-graph acceptance or full migration readiness. The original measured source was not independently snapshotted.",
+  "visual": "The live graph is a new session, not the captured failing frame.",
+  "sourcePage": "findings"
+}

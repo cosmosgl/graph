@@ -35,7 +35,7 @@ export interface GeneratedGraphData {
 }
 
 /** Mulberry32 PRNG — fast, seedable, good enough for graph generation. */
-function makeRng (seed: number): () => number {
+export function makeRng (seed: number): () => number {
   let a = seed >>> 0
   return () => {
     a |= 0

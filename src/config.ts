@@ -576,6 +576,7 @@ export interface GraphConfigInterface {
   /**
    * Friction coefficient.
    * Values range from 0 (high friction, stops quickly) to 1 (no friction, keeps moving).
+   * A non-finite value uses the default when applying a force.
    * Default value: `0.85`
    */
   simulationFriction: number;
@@ -883,7 +884,7 @@ export interface GraphConfigInterface {
   onDragEnd?: (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => void;
 
   /**
-   * Show WebGL performance monitor.
+   * Show the graph's frame rate and CPU frame load. A headless graph has no monitor.
    * Default value: `false`
    */
   showFPSMonitor: boolean;
@@ -1089,6 +1090,11 @@ export function createDefaultConfig (): GraphConfigInterface {
  */
 export function resetConfigToDefaults (target: GraphConfigInterface): void {
   Object.assign(target, createDefaultConfig())
+}
+
+/** Apply the default before a GPU step multiplies velocity by friction. Even a resting point would move to NaN with non-finite friction. */
+export function getFriction (friction: number): number {
+  return Number.isFinite(friction) ? friction : defaultConfigValues.simulationFriction
 }
 
 /**

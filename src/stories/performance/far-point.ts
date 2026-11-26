@@ -97,6 +97,7 @@ type Pane = {
   tick: number;
   readTick: number;
   readback: Float32Array;
+  pendingRead?: Float32Array;
 }
 
 export const farPoint = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
@@ -159,18 +160,30 @@ export const farPoint = (): { graph: Graph; div: HTMLDivElement; destroy?: () =>
   const withFar = makePane('blob + one far point', true)
   const panes = [alone, withFar]
 
-  const refresh = (pane: Pane, force = false): void => {
+  const refresh = async (pane: Pane, force = false): Promise<void> => {
     if (!hasPoints || disposed) return
-    if (!force && pane.tick === pane.readTick) return
+    if (pane.pendingRead === pane.readback || (!force && pane.tick === pane.readTick)) return
     const n = pointsNumber
-    const positions = pane.graph.getPointPositionsArray(pane.readback)
+    const tick = pane.tick
+    const target = pane.readback
+    pane.pendingRead = target
+    let positions: Float32Array
+    try {
+      positions = await pane.graph.getPointPositionsAsync(target)
+    } catch (error) {
+      if (!disposed && target === pane.readback) pane.readout.textContent = `Position read failed: ${String(error)}`
+      return
+    } finally {
+      if (pane.pendingRead === target) pane.pendingRead = undefined
+    }
+    if (disposed || target !== pane.readback) return
     if (positions.length < (n + (pane.hasFar ? 1 : 0)) * 2) return
     pane.readback = positions
-    pane.readTick = pane.tick
+    pane.readTick = tick
     const { blobExtent, boxSide, farAt } = measure(positions, n, pane.hasFar)
     const cell = boxSide / finestGridSize(n)
     const lines = [
-      `tick: ${pane.tick}`,
+      `tick: ${tick}`,
       `blob extent: ${Math.round(blobExtent)}`,
       `box side: ${Math.round(boxSide).toLocaleString('en')}`,
       `finest cell: ${cell >= 100 ? Math.round(cell).toLocaleString('en') : cell.toFixed(1)} units`,

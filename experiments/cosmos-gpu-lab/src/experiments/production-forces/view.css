@@ -1,0 +1,17 @@
+.package-forces-panels {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(256px, 100%), 1fr));
+  gap: 12px;
+  max-width: 588px;
+}
+.package-forces-panels section { min-width: 0; }
+.package-forces-panels h3 { margin: 0 0 var(--space-2); font-size: var(--type-subsection); }
+.package-forces-panels section > div { width: min(288px, 100%); overflow: auto; background: var(--control-bg); }
+.package-forces-panels p { min-height: 1.5em; margin: .25rem 0; font-size: var(--type-meta); color: var(--text-secondary); }
+[data-force-result] { min-height: 3em; font-variant-numeric: tabular-nums; }
+/* Keep the package coordinate system fixed when two full-size canvases just exceed the reading column. */
+@container (524px <= width < 588px) {
+  .package-forces-panels section > div { width: 254px; height: 169px; overflow: hidden; }
+  .package-forces-panels iframe { transform: scale(.88); transform-origin: top left; }
+}

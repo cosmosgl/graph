@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "experiment": "cluster-attraction",
+  "recordedAt": "2026-11-18",
+  "sourceRevision": "7deb5adabacd7244b29fc4b389a6044230d6532e",
+  "environment": "User’s M3, visible inline Chromium 157; Apple WebGPU / metal-3, fallback false; luma 10.0.0-alpha.15",
+  "scope": "Isolated cluster centroids, attraction and integration; 8, 1,024 and 8,192 points.",
+  "question": "Can WebGPU preserve Cosmos cluster attraction and its update semantics at useful cost?",
+  "method": "Unchanged production GLSL, grouped high/low WebGPU reduction and corrected arithmetic, independent scalar CPU reference.",
+  "conclusion": "Cluster attraction passes the bounded comparison through 8,192 points. WebGPU is faster for one large or heavily uneven group; WebGL has lower medians for balanced groups and supplied targets.",
+  "checks": [
+    {
+      "name": "Backend versus CPU",
+      "outcome": "Pass",
+      "detail": "45/45 checkpoint/update rows per backend, including group sums, force, integration and independent positions."
+    },
+    {
+      "name": "WebGPU versus WebGL",
+      "outcome": "Pass",
+      "detail": "18/18 comparisons from identical inputs; 18/18 post-timing group sums also pass."
+    },
+    {
+      "name": "Force-only GPU cost",
+      "outcome": "Measured only",
+      "detail": "126 measured batches plus 36 warmups. Results depend on group shape; they do not measure full frames."
+    }
+  ],
+  "limits": "One native session, 30 ticks, fixed alpha, four checkpoints and one membership/target/strength update per input. Combined forces, long trajectories, production setters, update latency and whole-frame cost remain unchecked. Pilot picking and color failures remain open.",
+  "visual": "Live positions evolve separately. The preview is a new local session, not recorded evidence.",
+  "sourcePage": "findings"
+}

@@ -1,0 +1,153 @@
+import { milliseconds } from '../../runtime/result-format'
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import type { ExperimentInstance } from '../../runtime/experiment'
+import { createControlledProfiler, profileSummary, PROFILE_POLICY, type ControlledProfiler } from '../combined-layout/controlled-profile'
+import { PROFILE_STAGES } from '../combined-layout/stage-timing'
+import type { Fixture } from '../combined-layout/data'
+const labels = [
+  'Gravity force', 'Gravity integration', 'Bounds + frame', 'Grid clear + binning', 'Grid aggregates',
+  'Sample selection', 'Centroid correction', 'Far contributions + accumulation', 'Resolve repulsion', 'Repulsion integration',
+  'Incoming springs', 'Incoming integration', 'Outgoing springs', 'Outgoing integration', 'Draw circles + links',
+]
+const names = ['GPU rebuild', 'GPU retained capacity']
+const number = milliseconds
+export async function createProfileView (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">One frozen input per run: positions, topology, samples, alpha, tick/seed and camera stay fixed.
+    Normal frames keep one simulation pass; diagnostic profiles use 15 passes. Their times are shown separately.</p>
+    <div
+      data-run-part="configuration" class="scale-toolbar"><label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
+      <option>star</option></select></label>
+      <label>Logical points <select data-control="count"><option selected>4096</option><option>8192</option></select></label>
+      <label>Input state <select data-control="history"><option value="resized">After resize history</option>
+        <option value="initial" selected>Initial fixture · control</option></select></label></div>
+    <p class="demo-note"
+      data-run-part="explanation">${PROFILE_POLICY.warmups} warmup rounds + ${PROFILE_POLICY.samples} measured rounds.
+      Each round balances rebuilt/retained resources and normal/profile timing. Keep this tab visible.
+      Both lanes use the strict arithmetic candidate and the unchanged CPU tolerance.</p>
+    <div class="controls"><button data-action="run" class="button-primary"
+      data-run-action="primary">Prepare + profile</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset" disabled
+      data-run-action="primary">Reset</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div>
+    <p data-output="status" role="status"
+      data-run-part="status">Ready. Choose a graph and prepare its frozen input.</p>
+    <p data-output="capture" class="demo-note"></p><p data-output="cleanup" class="demo-note"></p>
+    <section
+      data-run-part="visualization" class="backend-panels">${names.map((name, i) => `<article class="backend-panel"><div class="panel-heading"><h2>${name}</h2>
+      <span class="status" data-output="memory-${i}">Not prepared</span></div><canvas data-lane="${i}" width="480" height="340"
+      aria-label="${name} fixed-input layout"></canvas></article>`).join('')}</section>
+    <h3
+      data-run-part="results">Normal frame and diagnostic profile</h3><p class="demo-note"
+      data-run-part="results">The split-pass sum includes diagnostic pass boundaries.
+      It is not a decomposition of the normal single-pass frame. GPU values require all eight valid measured samples.</p>
+    <div data-output="frames" class="many-body-results"
+      data-run-part="results"></div>
+    <h3
+      data-run-part="results">Diagnostic GPU stages</h3><p class="demo-note"
+      data-run-part="results">Separate passes change scheduling. Very short stages can round to zero at the timer's resolution.
+      Replay and CPU checks apply to each trial.</p>
+    <div data-output="stages" class="many-body-results"
+      data-run-part="results"></div><p data-output="checks" class="demo-note" data-run-part="results"></p>`
+  const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
+  const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
+  const select = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
+  const status = el('[data-output="status"]')
+  let profiler: ControlledProfiler | undefined; let busy = false; let stopped = false; let destroyed = false
+  const controls = (): void => {
+    host.querySelectorAll<HTMLSelectElement>('select').forEach(s => { s.disabled = busy })
+    button('run').disabled = busy; button('stop').disabled = !busy
+    button('reset').disabled = busy || !profiler; button('export').disabled = busy || !profiler
+  }
+  const render = (): void => {
+    if (!profiler || destroyed) return
+    const r = profiler.report; const c = r.capture
+    if (c) {
+      el('[data-output="capture"]').textContent = `Frozen input ${c.fingerprint} · tick ${c.tick} · alpha ${c.alpha.toFixed(6)} · ` +
+        `${r.settings.count.toLocaleString('en-US')} points. Input is restored before each trial; the clock and seed do not advance.`
+      c.capacities.forEach((count, i) => {
+        el(`[data-output="memory-${i}"]`).textContent = `${count.toLocaleString('en-US')} capacity · ${(c.bufferBytes[i] / 1048576).toFixed(3)} MiB`
+      })
+    }
+    el('[data-output="frames"]').innerHTML = `<table><thead><tr><th>Backend</th><th>Timing mode</th><th>Samples</th>
+      <th>GPU median (ms)</th><th>GPU range (ms)</th></tr></thead><tbody>${names.flatMap((name, lane) =>
+    (['normal', 'profile'] as const).map(kind => {
+      const s = profileSummary(r, lane, kind)
+      return `<tr><td>${name}</td><td>${kind === 'normal' ? 'Normal · 2 passes' : 'Diagnostic · 15 passes'}</td>
+        <td>${s.samples}/8</td><td>${number(s.gpuMs)}</td><td>${s.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td></tr>`
+    })).join('')}</tbody></table>`
+    el('[data-output="stages"]').innerHTML = `<table><thead><tr><th>Stage</th><th>Rebuild (ms)</th><th>Rebuild range</th>
+      <th>Retained (ms)</th><th>Retained range</th></tr></thead><tbody>${PROFILE_STAGES.map((name, i) => {
+    const a = profileSummary(r, 0, 'profile', name); const b = profileSummary(r, 1, 'profile', name)
+    return `<tr><td>${labels[i]}</td><td>${number(a.gpuMs)}</td><td>${a.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td>
+        <td>${number(b.gpuMs)}</td><td>${b.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td></tr>`
+  }).join('')}</tbody></table>`
+    const checks = r.trials.filter(t => t.check.valid).length
+    el('[data-output="checks"]').textContent = `${checks}/${r.trials.length} trial checks pass · ` +
+      `${r.anchors?.filter(c => c.valid).length ?? 0}/2 normal anchors pass · ` +
+      `${r.preparation?.frames ?? 0} checked preparation frames. Partial runs do not produce complete GPU medians.`
+  }
+  const dispose = (): void => {
+    if (!profiler) return
+    profiler.destroy()
+    el('[data-output="cleanup"]').textContent = `Previous run cleanup: ${profiler.remainingBytes().join(' / ')} tracked buffer bytes remain.`
+    profiler = undefined
+  }
+  button('run').addEventListener('click', async () => {
+    if (busy) return
+    dispose(); busy = true; stopped = false; controls()
+    for (const name of ['capture', 'frames', 'stages', 'checks']) el(`[data-output="${name}"]`).replaceChildren()
+    status.textContent = 'Creating the two GPU lanes…'
+    try {
+      const next = await createControlledProfiler({
+        fixture: select('fixture').value as Fixture,
+        count: Number(select('count').value),
+        peakCount: 8192,
+        history: select('history').value === 'resized',
+      }, i => el(`[data-lane="${i}"]`))
+      if (destroyed) { next.destroy(); return }
+      profiler = next
+      await next.run({
+        cancelled: () => stopped || destroyed || document.hidden,
+        progress: message => { if (!destroyed) { status.textContent = message; render() } },
+      })
+      if (destroyed) return
+      render(); status.textContent = next.report.status === 'complete'
+        ? 'Finished. All frozen-input trials passed the unchanged checks.'
+        : next.report.status === 'cancelled' ? 'Stopped. Partial results are available for export.' : `Failed: ${next.report.error}`
+    } catch (error) { runError = String(error); if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
+  })
+  button('stop').addEventListener('click', () => { stopped = true })
+  for (const name of ['fixture', 'count', 'history']) {
+    select(name).addEventListener('change', () => {
+      if (profiler && !busy) status.textContent = 'Settings changed. Prepare + profile to measure them; the displayed results belong to the previous run.'
+    })
+  }
+  button('reset').addEventListener('click', () => {
+    if (busy) return
+    dispose(); for (const name of ['capture', 'frames', 'stages', 'checks']) el(`[data-output="${name}"]`).replaceChildren()
+    status.textContent = 'Ready. Choose a graph and prepare its frozen input.'; controls()
+  })
+  button('export').addEventListener('click', () => {
+    if (!profiler) return
+    const url = URL.createObjectURL(new Blob([JSON.stringify(profiler.report, null, 2)], { type: 'application/json' }))
+    const a = document.createElement('a'); a.href = url; a.download = `cosmos-gpu-stage-profile-${Date.now()}.json`; a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : profiler ? 'Complete' : 'Ready',
+    profiler?.report.trials.map(t => t.check.valid) ?? [],
+    'Incomplete timing samples; broader inputs and runtime performance.',
+    [],
+    runError,
+    'trial checks'), {
+    experiment: 'gpu-stage-profile',
+    devices: () => profiler?.report.info ?? [],
+    secondarySettings: ['[data-control="history"]'],
+  })
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; profiler?.destroy() } }
+}

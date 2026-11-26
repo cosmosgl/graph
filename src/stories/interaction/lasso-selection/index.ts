@@ -5,6 +5,7 @@ import { PolygonSelection } from './polygon'
 
 export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
   const nClusters = 25
+  let selectionRequest = 0
   // wholeness 0: the story renders no links, so skip generating them
   const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 0)
 
@@ -19,6 +20,7 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
     backgroundColor: '#1a1a2e',
     pointGreyoutOpacity: 0.2,
     onBackgroundClick: (): void => {
+      selectionRequest++
       graph.setConfigPartial({ highlightedPointIndices: undefined })
     },
   })
@@ -26,8 +28,10 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
   graph.setZoomLevel(0.4)
 
   const polygonSelection = new PolygonSelection(div, (polygonPoints) => {
-    const indices = graph.findPointsInPolygon(polygonPoints)
-    graph.setConfigPartial({ highlightedPointIndices: indices })
+    const request = ++selectionRequest
+    graph.findPointsInPolygonAsync(polygonPoints).then(indices => {
+      if (indices && request === selectionRequest) graph.setConfigPartial({ highlightedPointIndices: indices })
+    }).catch((error: unknown) => { console.error('Polygon selection failed', error) })
   })
 
   const actionsDiv = document.createElement('div')
@@ -43,6 +47,7 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
   actionsDiv.appendChild(polygonButton)
 
   const destroy = (): void => {
+    selectionRequest++
     polygonSelection.destroy()
     if (actionsDiv.parentNode) {
       actionsDiv.parentNode.removeChild(actionsDiv)

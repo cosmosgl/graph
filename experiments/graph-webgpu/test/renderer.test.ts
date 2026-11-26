@@ -1,0 +1,467 @@
+import { Buffer, luma, Texture, type Device, type Framebuffer } from '@luma.gl/core'
+import { webgpuAdapter } from '@luma.gl/core/webgpu'
+import { expect, it, vi } from 'vitest'
+import { createDefaultConfig } from '../../../src/config'
+import { GraphData, PointShape } from '../../../src/modules/GraphData'
+import { GraphRenderer, type GraphView } from '../src/renderer'
+
+interface Scene {
+  data: GraphData;
+  view: GraphView;
+  device: Device;
+  renderer: GraphRenderer;
+  framebuffer: Framebuffer;
+  positions: Buffer;
+  readPixel: (x: number, y: number) => Promise<number[]>;
+  errors: string[];
+  destroy: () => void;
+}
+
+async function createScene (config = createDefaultConfig(), count = 3): Promise<Scene> {
+  const errors: string[] = []
+  const device = await luma.createDevice({
+    type: 'webgpu',
+    adapters: [webgpuAdapter],
+    waitForPageLoad: false,
+    onError: err => { errors.push(err.message); return true },
+  })
+  Object.assign(config, {
+    curvedLinks: true,
+    curvedLinkWeight: 1,
+    curvedLinkControlPointDistance: 0.5,
+    curvedLinkSegments: 20,
+    linkDefaultWidth: 6,
+    linkVisibilityMinTransparency: 1,
+    linkDefaultColor: '#00ff00',
+    pointDefaultSize: 18,
+  })
+  const data = new GraphData(config)
+  data.inputPointPositions = new Float32Array(count * 2).fill(-100)
+  data.inputPointPositions.set([16, 32, 80, 32, 16, 32])
+  data.inputPointColors = new Float32Array(count * 4).fill(NaN)
+  data.inputPointColors.set([1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1])
+  data.inputLinks = new Float32Array([0, 1])
+  data.update()
+  const packed = new Float32Array(count * 4)
+  for (let i = 3; i < count; i++) packed.set([-100, -100, 0, 0], i * 4)
+  packed.set([16, 32, 1, 0, 80, 32, 0, 0, 16, 32, 0, 0])
+  const positions = device.createBuffer({
+    data: packed,
+    usage: Buffer.STORAGE | Buffer.COPY_DST,
+  })
+  const renderer = new GraphRenderer(device, data, config, () => ({ buffer: positions, pointCount: count }))
+  const texture = device.createTexture({ width: 192, height: 128, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
+  const framebuffer = device.createFramebuffer({ width: 192, height: 128, colorAttachments: [texture] })
+  const pixel = device.createBuffer({ byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
+  const view = { width: 96, height: 64, x: 0, y: 64, scale: 1, pixelRatio: 2 }
+  const readPixel = async (x: number, y: number): Promise<number[]> => {
+    device.commandEncoder.copyTextureToBuffer({
+      sourceTexture: texture, origin: [x, y, 0], destinationBuffer: pixel, width: 1, height: 1, bytesPerRow: 256,
+    })
+    device.submit()
+    return Array.from(await pixel.readAsync(0, 4))
+  }
+  renderer.update()
+  function destroy (): void {
+    renderer.destroy()
+    pixel.destroy()
+    framebuffer.destroy()
+    texture.destroy()
+    positions.destroy()
+    device.destroy()
+  }
+  return { data, view, device, renderer, framebuffer, positions, readPixel, errors, destroy }
+}
+
+it('draws live GPU positions, preserves overlap order and picks a curved stroke at DPR 2', async () => {
+  const scene = await createScene()
+  const { data, view, device, renderer, framebuffer, positions, readPixel, errors } = scene
+  try {
+    renderer.draw(view, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([255, 255, 0, 255])
+    expect(await renderer.pick(16, 32, view)).toEqual({ kind: 'point', index: 2 })
+    expect(await renderer.pick(48, 16, view)).toEqual({ kind: 'link', index: 0 })
+    expect(await renderer.pick(48, 32, view)).toBeNull()
+
+    // The embedding host can record visual and picking draws with different cameras before it submits.
+    const hostPass = device.beginRenderPass({ framebuffer, clearColor: [1, 0, 1, 1] })
+    renderer.drawToRenderPass(hostPass, view, { points: false, picking: { alpha: 7 / 255, linkIndexOffset: 80 } })
+    renderer.drawToRenderPass(hostPass, { ...view, x: 8 }, { links: false, picking: { alpha: 6 / 255 } })
+    hostPass.end()
+    expect(await readPixel(96, 32)).toEqual([81, 0, 0, 7])
+    expect(await readPixel(48, 64)).toEqual([3, 0, 0, 6])
+    expect(await readPixel(1, 1)).toEqual([255, 0, 255, 255])
+
+    data.inputPointRenderOrder = [0]
+    data.updatePointRenderOrder()
+    renderer.update()
+    expect(await renderer.pick(16, 32, view)).toEqual({ kind: 'point', index: 0 })
+    positions.write(new Float32Array([0, 0, 0, 1]), 0)
+    expect(await renderer.pick(16, 32, view)).toEqual({ kind: 'point', index: 2 })
+    expect(await renderer.pick(48, 16, view)).toBeNull()
+    expect(errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('uses the nearest occupied circle sample for pointer picks before considering the link under the cursor', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { view, data, renderer, positions } = scene
+  try {
+    config.curvedLinks = false
+    data.inputPointSizes = Float32Array.of(16, 4, 16)
+    data.update()
+    renderer.update()
+    for (const pixelRatio of [1, 2]) {
+      const camera = { ...view, pixelRatio }
+      // Both overlapping points end at x=24. Their pick window still reaches the link at x=30.
+      expect(await renderer.pick(30, 32, camera)).toEqual({ kind: 'point', index: 2 })
+      expect(await renderer.pick(38, 32, camera)).toEqual({ kind: 'link', index: 0 })
+    }
+    data.inputPointRenderOrder = [0]
+    data.updatePointRenderOrder()
+    renderer.update()
+    expect(await renderer.pick(30, 32, view)).toEqual({ kind: 'point', index: 0 })
+
+    // Two tiny points compete in one window. Nearer samples win, then the lower-left scan order breaks ties.
+    positions.write(Float32Array.of(60, 37, 0, 0, 60, 27, 0, 0, 0, 0, 0, 1))
+    data.inputPointSizes = Float32Array.of(1, 1, 1)
+    data.inputPointColors = new Float32Array(12) // Pointer circles remain pickable even with transparent paint.
+    data.update()
+    renderer.update()
+    expect(await renderer.pick(60, 30, view)).toEqual({ kind: 'point', index: 0 })
+    expect(await renderer.pick(60, 32, view)).toEqual({ kind: 'point', index: 1 })
+    expect(await renderer.pick(60, 34, view)).toEqual({ kind: 'point', index: 1 })
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('picks the point visible at an overlap as its diameter shrinks and regrows after an interruption', async () => {
+  const scene = await createScene()
+  const { data, device, framebuffer, renderer, view, readPixel } = scene
+  // Red point 0 and yellow point 2 share a center. An exposed part of the red point must pick as 0.
+  const resize = (front: number, animate = false, previousProgress = 1): void => {
+    data.inputPointSizes = Float32Array.of(48, 8, front)
+    data.update()
+    renderer.update({ animate, animatePointSizes: true, pointChannels: { colors: false, sizes: true }, previousProgress })
+  }
+  const probes = [30, 34] // 14 and 18 CSS pixels to the right of the common center.
+  async function check (progress: number, expected: [number, number]): Promise<void> {
+    const current = { ...view, styleProgress: progress }
+    renderer.draw(current, framebuffer)
+    for (const [i, x] of probes.entries()) {
+      const color = expected[i] === 2 ? [255, 255, 0, 255] : [255, 0, 0, 255]
+      expect(await readPixel(x * view.pixelRatio, 32 * view.pixelRatio)).toEqual(color)
+      expect(await renderer.pick(x, 32, current)).toEqual({ kind: 'point', index: expected[i] })
+    }
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, current, { links: false, picking: { alpha: 7 / 255 } })
+    pass.end()
+    for (const [i, x] of probes.entries()) {
+      expect(await readPixel(x * view.pixelRatio, 32 * view.pixelRatio)).toEqual([expected[i]! + 1, 0, 0, 7])
+    }
+  }
+  try {
+    resize(40)
+    resize(8, true)
+    await check(0, [2, 2]) // Displayed diameter 40, target 8.
+    await check(0.5, [0, 0]) // Displayed diameter 24.
+    resize(40, true, 0.5)
+    await check(0, [0, 0]) // First frame after interruption still displays 24.
+    await check(0.5, [2, 0]) // Diameter 32 covers the inner probe.
+    await check(1, [2, 2])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('keeps the displayed scene usable when replacing the image atlas fails', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { data, view, device, renderer, framebuffer, readPixel } = scene
+  const allocation = vi.spyOn(device, 'createTexture')
+  try {
+    renderer.draw(view, framebuffer)
+    const background = await readPixel(0, 0)
+    config.backgroundColor = '#ff00ff'
+    data.inputImageData = [new ImageData(1, 1)]
+    allocation.mockImplementationOnce(() => { throw new Error('atlas allocation failed') })
+    expect(() => renderer.update()).toThrow('atlas allocation failed')
+    renderer.draw(view, framebuffer)
+    expect(await readPixel(0, 0)).toEqual(background)
+    renderer.update()
+    renderer.draw(view, framebuffer)
+    expect(await readPixel(0, 0)).toEqual([255, 0, 255, 255])
+  } finally { allocation.mockRestore(); scene.destroy() }
+})
+
+it('samples a 96 px point image at its drawn size and blends over the shape that is present', async () => {
+  const config = createDefaultConfig()
+  config.backgroundColor = '#000'
+  const scene = await createScene(config)
+  const { data, view, device, renderer, framebuffer, positions, readPixel } = scene
+  try {
+    positions.write(Float32Array.of(48, 32, 1, 0))
+    data.inputLinks = new Float32Array()
+    data.inputPointColors = Float32Array.of(0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+    data.inputImageData = [new ImageData(Uint8ClampedArray.of(255, 0, 0, 128, 0, 255, 0, 255), 2, 1)]
+    data.inputPointImageIndices = Float32Array.of(0, -1, -1)
+    data.inputPointImageSizes = Float32Array.of(96, 0, 0)
+    function draw (shape: PointShape, size: number): void {
+      data.inputPointShapes = Float32Array.of(shape, PointShape.None, PointShape.None)
+      data.inputPointSizes = Float32Array.of(size, 0, 0)
+      data.update()
+      renderer.update()
+      renderer.draw(view, framebuffer)
+    }
+
+    draw(PointShape.None, 16)
+    // At 2x the center falls between columns 95 and 96. Each reads one atlas texel.
+    expect(await readPixel(95, 64)).toEqual([64, 0, 0, 255])
+    expect(await readPixel(96, 64)).toEqual([0, 255, 0, 255])
+    expect(await readPixel(4, 64)).toEqual([64, 0, 0, 255])
+    expect(await renderer.pick(2, 32, view)).toEqual({ kind: 'point', index: 0 })
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, view, { picking: { alpha: 7 / 255 } })
+    pass.end()
+    expect(await readPixel(4, 64)).toEqual([1, 0, 0, 7])
+
+    draw(PointShape.Circle, 0)
+    expect(await readPixel(95, 64)).toEqual([64, 0, 0, 255])
+    draw(PointShape.Circle, 16)
+    // WebGL retains the blue shape RGB outside its core, where only image alpha contributes.
+    expect(await readPixel(4, 64)).toEqual([64, 0, 64, 255])
+    expect(await readPixel(95, 64)).toEqual([128, 0, 127, 255])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('matches every RGBA byte of the general link shader for overlapping solid strokes', async () => {
+  const config = createDefaultConfig()
+  const scene = await createScene(config)
+  const { data, device, framebuffer, positions, renderer, view } = scene
+  const { width, height } = framebuffer
+  const bytesPerRow = width * 4
+  const pixels = device.createBuffer({ byteLength: bytesPerRow * height, usage: Buffer.COPY_SRC | Buffer.COPY_DST })
+  async function capture (hoveredLink?: number): Promise<Uint8Array> {
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, { ...view, hoveredLink }, { points: false })
+    pass.end()
+    device.commandEncoder.copyTextureToBuffer({
+      sourceTexture: framebuffer.colorAttachments[0]!.texture, destinationBuffer: pixels, width, height, bytesPerRow,
+    })
+    device.submit()
+    return (await pixels.readAsync()).slice()
+  }
+  try {
+    // Hover takes the general path. A zero width increase and unchanged color preserve its appearance.
+    config.hoveredLinkWidthIncrease = 0
+    config.hoveredLinkColor = undefined
+    data.inputLinks = new Float32Array([0, 1, 1, 2, 2, 0, 0, 1])
+    data.inputLinkWidths = new Float32Array([0.625, 1.125, 3.25, 1.875])
+    positions.write(new Float32Array([9.625, 23.2, 0, 0, 76.125, 39.1, 0, 0, 42.25, 11.375, 0, 0]))
+    for (const colors of [
+      [1, 0.1, 0, 0.5, 0, 0.8, 0.2, 0.75, 0, 0.1, 1, 1, 1, 0.2, 1, 0.375],
+      // Uniform RGB still preserves per-link alpha, width, focus and curvature.
+      [0.4, 0.2, 0.7, 0.5, 0.4, 0.2, 0.7, 0.75, 0.4, 0.2, 0.7, 1, 0.4, 0.2, 0.7, 0.375],
+    ]) {
+      data.inputLinkColors = new Float32Array(colors)
+      data.update()
+      renderer.update()
+      for (const curved of [false, true]) {
+        config.curvedLinks = curved
+        config.focusedLinkIndex = curved ? 2 : undefined
+        const reference = await capture(0)
+        expect(reference.some(v => v !== 0)).toBe(true)
+        const solid = await capture()
+        expect(solid.findIndex((value, i) => value !== reference[i])).toBe(-1)
+      }
+    }
+    expect(scene.errors).toEqual([])
+  } finally { pixels.destroy(); scene.destroy() }
+})
+
+it('interpolates point colors and retargets an interrupted update from the displayed frame', async () => {
+  const scene = await createScene()
+  const { data, view, renderer, framebuffer, readPixel, errors } = scene
+  try {
+    data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1])
+    data.update()
+    renderer.update({ animate: true })
+    renderer.draw({ ...view, styleProgress: 0.5 }, framebuffer)
+    const halfway = await readPixel(32, 64)
+    expect(halfway).toEqual([255, 128, 0, 255])
+
+    data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1])
+    data.update()
+    renderer.update({ animate: true, previousProgress: 0.5 })
+    renderer.draw({ ...view, styleProgress: 0 }, framebuffer)
+    expect(await readPixel(32, 64)).toEqual(halfway)
+    renderer.draw({ ...view, styleProgress: 1 }, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
+    expect(errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it.each(['link widths', 'point colors and sizes'])('matches full uploads when %s interrupt a mixed point and link transition', async edit => {
+  const optimized = await createScene()
+  const reference = await createScene()
+  const scenes = [optimized, reference]
+  const readbacks = scenes.map(({ device, framebuffer }) => device.createBuffer({
+    byteLength: framebuffer.width * framebuffer.height * 4, usage: Buffer.COPY_DST | Buffer.COPY_SRC,
+  }))
+  async function compareFrame (styleProgress: number): Promise<Uint8Array> {
+    const captures = await Promise.all(scenes.map(async ({ renderer, framebuffer, device, view }, i) => {
+      const drawView = { ...view, styleProgress }
+      renderer.draw(drawView, framebuffer)
+      device.commandEncoder.copyTextureToBuffer({
+        sourceTexture: framebuffer.colorAttachments[0]!.texture,
+        destinationBuffer: readbacks[i]!,
+        width: framebuffer.width,
+        height: framebuffer.height,
+        bytesPerRow: framebuffer.width * 4,
+      })
+      device.submit()
+      return { pixels: (await readbacks[i]!.readAsync()).slice(), pick: await renderer.pick(48, 21, drawView) }
+    }))
+    expect(captures[0]!.pixels.findIndex((v, i) => v !== captures[1]!.pixels[i])).toBe(-1)
+    expect(captures[0]!.pick).toEqual(captures[1]!.pick)
+    return captures[0]!.pixels
+  }
+  try {
+    for (const { data, renderer } of scenes) {
+      data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1])
+      data.inputLinkColors = Float32Array.of(0, 0, 1, 1)
+      data.inputLinkWidths = Float32Array.of(14)
+      data.update()
+      renderer.update({ animate: true })
+    }
+    const halfway = await compareFrame(0.5)
+    for (const scene of scenes) {
+      if (edit === 'link widths') {
+        scene.data.inputLinkWidths = Float32Array.of(NaN) // Reset this link to its configured default.
+        scene.data.updateLinkWidth()
+        scene.renderer.update({ animate: true, previousProgress: 0.5, linkWidthsOnly: scene === optimized })
+      } else {
+        scene.data.inputPointSizes = Float32Array.of(6, NaN, 26)
+        scene.data.inputPointColors = Float32Array.of(0, 1, 1, 1, 1, 0, 1, 1, 0, NaN, 1, 0.75)
+        scene.data.update()
+        scene.renderer.update({
+          pointChannels: scene === optimized ? { colors: true, sizes: true } : undefined,
+          animate: true,
+          previousProgress: 0.5,
+          animatePointSizes: true,
+          animateLinkWidths: false,
+        })
+      }
+    }
+    const interrupted = await compareFrame(0)
+    // An unqueued link width snaps to its target. When width itself animates, every pixel stays continuous.
+    if (edit === 'link widths') expect(interrupted.findIndex((v, i) => v !== halfway[i])).toBe(-1)
+    await compareFrame(0.5)
+    // Interrupt the narrow update again with a mixed one before the styles reach their targets.
+    for (const { data, renderer } of scenes) {
+      data.inputPointSizes = Float32Array.of(30, 30, 30)
+      data.inputLinkWidths = Float32Array.of(2)
+      data.update()
+      renderer.update({ animate: true, previousProgress: 0.5 })
+    }
+    await compareFrame(0)
+    await compareFrame(1)
+    expect(scenes.flatMap(scene => scene.errors)).toEqual([])
+  } finally {
+    readbacks.forEach(buffer => buffer.destroy())
+    scenes.forEach(scene => scene.destroy())
+  }
+})
+
+it('applies a highlight to the displayed style and invalidates a pick from the preceding frame', async () => {
+  const config = createDefaultConfig()
+  config.pointGreyoutColor = '#0f0'
+  const scene = await createScene(config)
+  const { data, view, renderer, framebuffer, readPixel } = scene
+  try {
+    data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1])
+    data.update()
+    renderer.update({ animate: true })
+    const halfway = { ...view, styleProgress: 0.5 }
+    renderer.draw(halfway, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([128, 128, 128, 255])
+    expect(await readPixel(160, 64)).toEqual([0, 0, 255, 255])
+
+    const pendingPick = renderer.pick(16, 32, halfway)
+    config.highlightedPointIndices = [2]
+    renderer.updatePointHighlights()
+    expect(await pendingPick).toBeNull()
+    renderer.draw(halfway, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([128, 128, 128, 255])
+    expect(await readPixel(160, 64)).toEqual([0, 255, 0, 255])
+    expect(await renderer.pick(16, 32, halfway)).toEqual({ kind: 'point', index: 2 })
+    renderer.draw({ ...view, styleProgress: 1 }, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('preserves compact style edits, highlights, interrupted frames and picks when a dense binding cannot fit', async () => {
+  const count = 16
+  const config = createDefaultConfig()
+  config.pointDefaultColor = '#ff0000'
+  const scene = await createScene(config, count)
+  const { renderer, data, device, readPixel, framebuffer, view } = scene
+  // Exercise the real compute/draw/pick kernels with a budget of four Point records.
+  Object.defineProperty(device.limits, 'maxStorageBufferBindingSize', { configurable: true, value: 4 * 96 })
+  const edit = (rgb: [number, number, number], size: number, previousProgress: number): void => {
+    data.inputPointColors = new Float32Array(count * 4).fill(NaN)
+    data.inputPointColors.set([...rgb, 1], 4)
+    data.inputPointSizes = new Float32Array(count).fill(NaN)
+    data.inputPointSizes[1] = size
+    data.update()
+    renderer.update({ animate: true, animatePointSizes: true, previousProgress, pointChannels: { colors: true, sizes: true } })
+  }
+  const pixel = async (progress: number, x = 80): Promise<number[]> => {
+    renderer.draw({ ...view, styleProgress: progress }, framebuffer)
+    return readPixel(x * view.pixelRatio, 64)
+  }
+  try {
+    config.curvedLinks = false
+    config.linkColorInterpolateFromEndpoints = true
+    config.linkOpacity = 1
+    data.inputPointColors = undefined
+    data.update()
+    renderer.update()
+    expect(await pixel(1, 48)).toEqual([255, 0, 0, 255])
+    expect(await pixel(1)).toEqual([255, 0, 0, 255])
+    edit([0, 0, 1], 36, 1)
+    expect(await pixel(0.5)).toEqual([128, 0, 128, 255])
+    edit([0, 1, 0], 10, 0.5)
+    expect(await pixel(0)).toEqual([128, 0, 128, 255])
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    // The same link now mixes the inherited red and the exceptional green endpoint.
+    const [red, green, blue, alpha] = await pixel(1, 48)
+    expect(red).toBeGreaterThan(120)
+    expect(green).toBeGreaterThan(120)
+    expect(red! + green!).toBe(255)
+    expect([blue, alpha]).toEqual([0, 255])
+    expect(await renderer.pick(80, 32, view)).toEqual({ kind: 'point', index: 1 })
+    config.highlightedPointIndices = [2]
+    config.pointGreyoutColor = '#ffffff'
+    renderer.update()
+    expect(await pixel(1)).toEqual([255, 255, 255, 255])
+    config.highlightedPointIndices = [1]
+    renderer.updatePointHighlights()
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    expect(await pixel(1, 16)).toEqual([255, 255, 255, 255])
+
+    data.inputImageData = [new ImageData(1, 1)]
+    data.inputPointSizes = Float32Array.from({ length: count }, (_, i) => i + 1)
+    data.update()
+    expect(() => renderer.update()).toThrow(/storage binding/)
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    expect(await renderer.pick(80, 32, view)).toEqual({ kind: 'point', index: 1 })
+    data.inputPointSizes = undefined
+    data.update()
+    renderer.update()
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "experiment": "point-attractors",
+  "recordedAt": "2026-11-18",
+  "sourceRevision": "011edd61701d21006fbcf35c39fa983c68b98930",
+  "environment": "User’s M3, visible inline Chromium 157; WebGL ANGLE Metal Renderer Apple M3; WebGPU Apple / metal-3, fallback false; luma 10.0.0-alpha.15",
+  "scope": "Isolated per-point attractors; 12, 1,024 and 8,192 points.",
+  "question": "Can WebGPU preserve per-point targets, strengths and live updates at useful cost?",
+  "method": "Unchanged production GLSL, corrected WebGPU arithmetic and independent raw-channel CPU reference.",
+  "conclusion": "Per-point attractors preserve the tested behavior through 8,192 points, including live target changes and disabling/re-enabling. The corrected WebGPU candidate costs more than WebGL in these isolated force timings.",
+  "checks": [
+    {
+      "name": "Backend versus CPU",
+      "outcome": "Pass",
+      "detail": "72/72 checkpoint/update rows per backend. Forces, integration and independent trajectories pass; all nine disabled-stage checks per backend preserve positions exactly."
+    },
+    {
+      "name": "WebGPU versus WebGL",
+      "outcome": "Pass",
+      "detail": "18/18 shared-input comparisons; 18/18 post-timing force/position checks also pass."
+    },
+    {
+      "name": "Force-only GPU cost",
+      "outcome": "Measured only",
+      "detail": "At 8,192 points: WebGPU medians 0.324–0.487 ms versus WebGL 0.032–0.036 ms. Includes corrected arithmetic; excludes integration/drawing/uploads/readbacks."
+    }
+  ],
+  "limits": "One native session, 30 fixed-alpha ticks and four checkpoints per input. No full-frame acceptance, long cooling/reheating, combined-force ordering, production setters/transitions or broader device coverage. Historical pilot picking and color failures remain open.",
+  "visual": "Live positions evolve separately; this preview is not recorded evidence.",
+  "sourcePage": "findings"
+}

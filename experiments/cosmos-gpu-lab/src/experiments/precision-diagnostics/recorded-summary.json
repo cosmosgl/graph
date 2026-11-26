@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "experiment": "precision-diagnostics",
+  "recordedAt": "2026-11-12T08:23:05.471Z",
+  "sourceRevision": null,
+  "environment": "Apple M3 host, installed headless Chrome 157, luma 10.0.0-alpha.4; WebGPU adapter reported Apple",
+  "scope": "One 1,024-number cancellation fixture. The wider study also investigates gravity and other inputs.",
+  "question": "How does the order of additions change the answer on the same input?",
+  "method": "Add the same numbers one at a time, in groups, or as a branching tree of partial sums. Compare CPU and WebGPU with the exact answer.",
+  "conclusion": "The exact sum is 512. In this recorded run, CPU and WebGPU both produced 1 with serial addition, 16 with blocked addition and 512 with the tree.",
+  "checks": [
+    { "name": "Exact fixture sum", "outcome": "Measured only", "detail": "512, calculated from bounded integers." },
+    { "name": "One at a time (serial)", "outcome": "Measured only", "detail": "CPU 1 · WebGPU 1." },
+    { "name": "In groups (blocked)", "outcome": "Measured only", "detail": "CPU 16 · WebGPU 16." },
+    { "name": "Tree of partial sums", "outcome": "Measured only", "detail": "CPU 512 · WebGPU 512." }
+  ],
+  "limits": "The result is specific to this input and recorded environment. There is no production accuracy or performance verdict, and the tree is not universally exact.",
+  "visual": "A table is the evidence for this numerical comparison; the live diagnostic can be opened below.",
+  "sourcePage": "method"
+}

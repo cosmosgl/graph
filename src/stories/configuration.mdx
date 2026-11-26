@@ -64,14 +64,14 @@ All configuration properties are optional. When creating a graph or calling `set
 | linkArrowsSizeScale | Scale factor for the link arrows size | `1` |
 | linkVisibilityDistanceRange | The range defines the minimum and maximum link visibility distance in pixels.<br /><br />The link will be fully opaque when its length is less than the first number in the array, and will have `linkVisibilityMinTransparency` transparency when its length is greater than the second number in the array.<br /><br />This distance is defined in screen space coordinates and will change as you zoom in and out (e.g. links become longer when you zoom in, and shorter when you zoom out). | `[50, 150]` |
 | linkVisibilityMinTransparency | The transparency value that the link will have when its length reaches the maximum link distance value from `linkVisibilityDistanceRange`. | `0.25` |
-| showFPSMonitor | Show WebGL performance monitor | `false` |
+| showFPSMonitor | Show frame rate and CPU frame load in the graph container | `false` |
 | pixelRatio | Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.<br /><br />**Note:** This value always overrides the luma.gl Device's `useDevicePixels` setting, even when providing an external device via the `devicePromise` parameter. | `window.devicePixelRatio \|\| 2` |
 | scalePointsOnZoom | Increase/decrease point size when zooming | `false` |
 | initialZoomLevel | Initial zoom level (set once during initialization) | `undefined` |
 | enableZoom | Enables zooming interactions | `true` |
 | enableSimulationDuringZoom | Keep simulation running during zoom operations. Note: initialization zoom (e.g. `fitViewOnInit`) always runs with simulation enabled regardless of this setting. Individual zoom method calls can override this value via their `enableSimulation` parameter. | `false` |
 | enableDrag | Enable/disable point dragging | `false` |
-| pointSelectionMode | Hit rule for `findPointsInRect()` and `findPointsInPolygon()`. With `'touch'`, a point is selected when its footprint overlaps or touches the selection area. With `'center'`, a point is selected when its center is inside or on the boundary. | `'touch'` |
+| pointSelectionMode | Hit rule for rectangle and lasso queries, including `findPointsInRectAsync()` and `findPointsInPolygonAsync()`. With `'touch'`, a point is selected when its footprint overlaps or touches the selection area. With `'center'`, a point is selected when its center is inside or on the boundary. | `'touch'` |
 | fitViewOnInit | Auto-zoom to fit all points on initialization | `true` |
 | fitViewDelay | Delay before fitting view when enabled in milliseconds | `250` |
 | fitViewPadding | Extra space around points when fitting view | `0.1` |

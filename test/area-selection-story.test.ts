@@ -26,7 +26,7 @@ it.each(['Rectangle', 'Lasso'])('keeps the %s preview selected while zooming dur
     outline.dispatchEvent(pointer('pointerdown', 320, 280))
     overlay.dispatchEvent(pointer('pointermove', 270, 260))
     expect(caption.textContent).toBe('')
-    expect(status.textContent).toBe('Selected: Circle')
+    await expect.poll(() => status.textContent).toBe('Selected: Circle')
     const preview = outline.getAttribute('d')
     const zoomBefore = story.graph.getZoomLevel()
     overlay.dispatchEvent(new WheelEvent('wheel', {
@@ -35,7 +35,7 @@ it.each(['Rectangle', 'Lasso'])('keeps the %s preview selected while zooming dur
     await vi.waitFor(() => { expect(story.graph.getZoomLevel()).toBeGreaterThan(zoomBefore) })
     expect(outline.getAttribute('d')).toBe(preview)
     expect(story.graph.findPointsInRect([[224, 244], [316, 285]])).toEqual([0])
-    expect(status.textContent).toBe('Selected: Circle')
+    await expect.poll(() => status.textContent).toBe('Selected: Circle')
     overlay.dispatchEvent(pointer('pointerup', 270, 260))
     capture.mockRestore()
     // Presets restore their explanation; a subsequent zoom clears it again.
@@ -94,22 +94,22 @@ it.each([
     overlay.dispatchEvent(pointer('pointermove', [250, 240]))
     overlay.dispatchEvent(pointer('pointerup', end))
     story.div.querySelector<HTMLButtonElement>('[data-tool="Rectangle"]')!.click()
-    expect(status.textContent).toBe('Selected: Circle')
+    await expect.poll(() => status.textContent).toBe('Selected: Circle')
     const original = outline.getAttribute('d')
     outline.dispatchEvent(pointer('pointerdown', [250, 240]))
     overlay.dispatchEvent(pointer('pointermove', destination))
     const preview = outline.getAttribute('d')
     expect(preview).not.toBe(original)
-    expect(status.textContent).toBe('Selected: none')
+    await expect.poll(() => status.textContent).toBe('Selected: none')
     overlay.dispatchEvent(pointer('pointerup', destination))
     expect(outline.getAttribute('d')).toBe(preview)
-    expect(status.textContent).toBe('Selected: none')
+    await expect.poll(() => status.textContent).toBe('Selected: none')
     // An empty newly drawn rectangle still leaves the committed selection alone.
     overlay.dispatchEvent(pointer('pointerdown', [430, 350]))
     overlay.dispatchEvent(pointer('pointermove', [450, 350]))
     overlay.dispatchEvent(pointer('pointerup', [450, 350]))
     expect(outline.getAttribute('d')).toBe(preview)
-    expect(status.textContent).toBe('Selected: none')
+    await expect.poll(() => status.textContent).toBe('Selected: none')
   } finally {
     vi.restoreAllMocks()
     story.destroy()
@@ -133,13 +133,28 @@ it('draws a noncollinear freehand lasso rather than its bounding rectangle', asy
     const pointer = (type: string, x: number, y: number): PointerEvent => new PointerEvent(type, {
       pointerId: 1, button: 0, clientX: bounds.left + x, clientY: bounds.top + y, bubbles: true,
     })
+    // Hold delivery of the collinear move's real GPU result until after release.
+    // The last pointer coordinate makes the triangle and selects the square.
+    const readPolygon = story.graph.findPointsInPolygonAsync.bind(story.graph)
+    let releaseMove!: () => void
+    const moveGate = new Promise<void>(resolve => { releaseMove = resolve })
+    const reads = vi.spyOn(story.graph, 'findPointsInPolygonAsync').mockImplementationOnce(async path => {
+      const ids = await readPolygon(path)
+      await moveGate
+      return ids
+    })
     overlay.dispatchEvent(pointer('pointerdown', 200, 180))
+    overlay.dispatchEvent(pointer('pointermove', 300, 180))
     overlay.dispatchEvent(pointer('pointermove', 450, 180))
     overlay.dispatchEvent(pointer('pointerup', 450, 280))
-    expect(overlay.querySelector('.selection-outline')!.getAttribute('d')).toBe('M 200 180 L 450 180 L 450 280 Z')
+    expect(overlay.querySelector('.selection-outline')!.getAttribute('d')).toBe('M 200 180 L 300 180 L 450 180 L 450 280 Z')
     // The circle is inside the bounds, but its entire footprint misses the diagonal.
     expect(story.graph.findPointsInRect([[200, 180], [450, 280]])).toEqual([0, 1])
-    expect(story.div.querySelector('[role="status"]')!.textContent).toBe('Selected: Square')
+    const status = story.div.querySelector('[role="status"]')!
+    await expect.poll(() => status.textContent).toBe('Selected: Square')
+    releaseMove()
+    expect(await reads.mock.results[0]!.value).toEqual([])
+    expect(status.textContent).toBe('Selected: Square')
   } finally {
     vi.restoreAllMocks()
     story.destroy()

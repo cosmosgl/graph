@@ -1,0 +1,20 @@
+{
+  "name": "cosmos-packed-webgpu-deck-consumer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build --target es2022",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@cosmos.gl/graph": "file:./graph.tgz",
+    "@cosmos.gl/deck-layers": "file:./deck-layers.tgz",
+    "@deck.gl/core": "10.0.0-alpha.1",
+    "@luma.gl/core": "10.0.0-alpha.14"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vite": "6.4.3"
+  }
+}

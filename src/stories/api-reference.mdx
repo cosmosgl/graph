@@ -635,7 +635,7 @@ Sets the zoom transform so that the given point positions fit in the viewport, w
 
 ### <a name="find_points_in_rect" href="#find_points_in_rect">#</a> graph.<b>findPointsInRect</b>(<i>rect</i>)
 
-Find points in a rectangular area using the `pointSelectionMode` configuration. The default mode, `'touch'`, selects points whose footprints overlap or touch the rectangle. Use `'center'` to select points whose centers are inside or on the rectangle boundary. Selection footprints use resolved target sizes throughout size transitions and exclude outline rings, as described for `findPointsInPolygon` below.
+This synchronous WebGL method finds points in a rectangular area using the `pointSelectionMode` configuration. The default mode, `'touch'`, selects points whose footprints overlap or touch the rectangle. Use `'center'` to select points whose centers are inside or on the rectangle boundary. Selection footprints use resolved target sizes throughout size transitions and exclude outline rings, as described for `findPointsInPolygon` below.
 
 **Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
@@ -645,15 +645,26 @@ Find points in a rectangular area using the `pointSelectionMode` configuration. 
 
 ### <a name="find_points_in_polygon" href="#find_points_in_polygon">#</a> graph.<b>findPointsInPolygon</b>(<i>polygonPath</i>)
 
-Find points in a polygon area using the `pointSelectionMode` configuration. The default mode, `'touch'`, selects points whose footprints overlap or touch the polygon. Use `'center'` to select points whose centers are inside or on the polygon boundary.
+This synchronous WebGL method finds points in a polygon area using the `pointSelectionMode` configuration. The default mode, `'touch'`, selects points whose footprints overlap or touch the polygon. Use `'center'` to select points whose centers are inside or on the polygon boundary.
 
-Both modes exclude points with a zero resolved target size. In `'touch'` mode, the footprint uses the target size throughout size transitions, with the current zoom, pixel-size floor, and hardware size cap. Outline rings are excluded from the footprint. Circles and squares use their shape geometry. Other shapes and images use a circular approximation, including `PointShape.None` without an image. Both modes can select points regardless of rendered visibility.
+For either preview, use the [async area methods](#async_area_selection) to get the IDs for the current view. Both modes exclude points with a zero resolved target size. In `'touch'` mode, the footprint uses the target size throughout size transitions, with the current zoom and pixel-size floor. WebGL also applies the device’s point-sprite size cap. Outline rings are excluded from the footprint. Circles and squares use their shape geometry. Other shapes and images use a circular approximation, including `PointShape.None` without an image. Both modes can select points regardless of rendered visibility.
 
 **Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
 * **`polygonPath`** (Array): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]`. The coordinates are in screen pixel coordinates. The polygon requires at least 3 points. Collinear or coincident vertices are accepted, and the selected points are those whose footprints or centers touch the resulting segments or location, according to the configured mode.
 
 **Returns:** A `number[]` of point indices that match the configured hit rule.
+
+### <a name="async_area_selection" href="#async_area_selection">#</a> graph.<b>findPointsInRectAsync</b>(<i>rect</i>) and graph.<b>findPointsInPolygonAsync</b>(<i>polygonPath</i>)
+
+Both previews provide these methods. After the graph has drawn, await the result before updating highlights.
+
+```ts
+const ids = await graph.findPointsInRectAsync([[24, 32], [120, 96]])
+if (ids !== null) graph.setConfigPartial({ highlightedPointIndices: ids })
+```
+
+They use the same screen coordinates and selection rules as the methods above. The query captures the positions and view at the time of the call. The promise resolves to the selected indices, or `null` if the graph or its data changed before the read finished, the device was lost, or the copy timed out.
 
 ### <a name="get_neighboring_point_indices" href="#get_neighboring_point_indices">#</a> graph.<b>getNeighboringPointIndices</b>(<i>pointIndices</i>)
 
@@ -709,17 +720,21 @@ This method allows you to monitor the coordinates of specific points over time. 
 
 * **`indices`** (Array): An array of numbers representing the indices of points to be tracked.
 
-To retrieve the current positions of the tracked points, use the [**getTrackedPointPositionsMap**](#get_tracked_point_positions_map) method, which returns a `Map` object containing the point coordinates.
+To request coordinates for this frame in either preview, await [getTrackedPointPositionsMapAsync()](#get_tracked_point_positions_map_async).
 
 ### <a name="get_tracked_point_positions_map" href="#get_tracked_point_positions_map">#</a> graph.<b>getTrackedPointPositionsMap</b>()
 
 This method retrieves the current positions of points that are being tracked. This method is particularly useful for monitoring the changing coordinates of specific points over time during the simulation. Using this method in conjunction with the [**trackPointPositionsByIndices**](#track_point_positions_by_indices) method allows for dynamic tracking and retrieval of point positions.
 
-Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest positions it has already handed back instead: while points move they trail the drawn frame, which suits overlays redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read after tracking starts or changes still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: an overlay that resumes appears in place. A non-blocking read can be behind on coordinates, never on which points exist: a removed point leaves the map at once, and a point that has just appeared is added once its position has been read.
+On WebGPU the synchronous getter returns the last completed sample, which can be empty when tracking starts. On WebGL the default read waits for the GPU. Pass `{ nonBlocking: true }` on WebGL to get the latest positions it has already handed back: while points move they trail the drawn frame, which suits overlays redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read after tracking starts or changes still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: an overlay that resumes appears in place. A non-blocking read can be behind on coordinates, never on which points exist: a removed point leaves the map at once, and a point that has just appeared is added once its position has been read.
 
 **Returns:**
 
 * A `Map` object where the keys are the indices of the tracked points and the values are their corresponding X and Y coordinates in the form of a `[number, number]` array.
+
+### <a name="get_tracked_point_positions_map_async" href="#get_tracked_point_positions_map_async">#</a> graph.<b>getTrackedPointPositionsMapAsync</b>()
+
+Captures the current coordinates of the tracked points and awaits the GPU copy. Use the resolved map to draw a label overlay. Absent points are omitted. The promise resolves to `null` if the tracked set or graph data was replaced before the copy completed, the device was lost, or the copy timed out.
 
 ### <a name="get_tracked_point_positions_array" href="#get_tracked_point_positions_array">#</a> graph.<b>getTrackedPointPositionsArray</b>()
 
@@ -741,7 +756,7 @@ The number of sampled points is determined by the `pointSamplingDistance` [confi
 
 The sample aims to distribute points evenly across the visible area.
 
-Both sampled point methods synchronously read the current sample by default. For an overlay updated during pan or zoom, poll either method with `{ nonBlocking: true }` to get the latest completed sample. It may describe an earlier view or layout. The result is empty until the first copy completes and after a point-data replacement or sampling grid reallocation until a new copy completes. Both methods share the same copy. Poll on later animation frames to get the result, including when the graph has settled or you drive its frames yourself.
+Both sampled point methods return the latest completed sample on WebGPU. WebGL reads the current sample synchronously by default. For an overlay updated during pan or zoom, poll either method with `{ nonBlocking: true }` to get the latest completed sample. It may describe an earlier view or layout. The result is empty until the first copy completes and after a point-data replacement or sampling grid reallocation until a new copy completes. Both methods share the same copy. Poll on later animation frames to get the result, including when the graph has settled or you drive its frames yourself.
 
 ```ts
 // In the overlay's animation frame, project the latest available sample.
@@ -770,7 +785,7 @@ The sample aims to distribute points evenly across the visible area.
 
 ### <a name="get_sampled_link_positions_map" href="#get_sampled_link_positions_map">#</a> graph.<b>getSampledLinkPositionsMap</b>()
 
-This method provides a sampling of link positions from the links that are currently visible on the screen. It returns a `Map` from link index to a tuple of midpoint coordinates and angle: `[x, y, angle]`. Positions are in data space; angle is in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
+This method provides a sampling of link positions from the links that are currently visible on the screen. The WebGPU getter returns the latest completed sample. Poll on a later frame if the first map is empty. It returns a `Map` from link index to a tuple of midpoint coordinates and angle: `[x, y, angle]`. Positions are in data space; angle is in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
 
 The number of sampled links is determined by the `linkSamplingDistance` [configuration property](../?path=/docs/configuration--docs). This property controls the density of the sampled links:
 * A higher value for `linkSamplingDistance` results in fewer sampled links.
@@ -849,9 +864,13 @@ This method converts a flat array of point positions into an array of tuple pair
 
 * **`pointPositions`** (Array): A flat array of numbers representing the x and y coordinates of points sequentially. For example, `[x1, y1, x2, y2, ..., xn, yn]`.
 
+### <a name="get_point_positions_async" href="#get_point_positions_async">#</a> graph.<b>getPointPositionsAsync</b>([<i>out</i>])
+
+Capture all point positions in either preview. The promise resolves to a `Float32Array` of world coordinates in point-index order. For point `i`, read `positions[2 * i]` and `positions[2 * i + 1]`. Pass a suitably sized `Float32Array` to reuse it for the result.
+
 ### <a name="get_point_positions" href="#get_point_positions">#</a> graph.<b>getPointPositions</b>()
 
-This method retrieves the current X and Y coordinates of all points in the graph as an array of numbers. The returned array is in the same order as the point positions were added to the graph.
+This synchronous WebGL method retrieves the current X and Y coordinates of all points in the graph as an array of numbers. For a fresh snapshot on either engine, await [getPointPositionsAsync()](#get_point_positions_async). The returned array is in the same order as the point positions were added to the graph.
 
 Positions are not confined to `[0, spaceSize]`: a layout that outgrows the space, or starts outside it, reads back with coordinates beyond it, negative ones included.
 
@@ -859,7 +878,7 @@ Positions are not confined to `[0, spaceSize]`: a layout that outgrows the space
 
 This method returns an array of cluster positions, where each pair of elements represents the x and y coordinates of a cluster.
 
-Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest centroids it has already handed back instead: while points move they trail the drawn frame, which suits cluster labels redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read, and the first after the clusters change, still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: cluster labels that resume appear in place.
+On WebGPU the getter returns the latest completed centroids. Await `graph.simulation.getClusterPositionsAsync()` for a fresh WebGPU sample. On WebGL the default read waits for the GPU. Pass `{ nonBlocking: true }` on WebGL to get the latest centroids it has already handed back: while points move they trail the drawn frame, which suits cluster labels redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read, and the first after the clusters change, still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: cluster labels that resume appear in place.
 
 ### <a name="ready" href="#ready">#</a> graph.<b>ready</b>
 
@@ -872,8 +891,8 @@ graph.setPointPositions(pointPositions)
 graph.render()
 
 await graph.ready
-// Graph is now fully initialized
-const positions = graph.getPointPositions()
+// Read the current layout after initialization.
+const positions = await graph.getPointPositionsAsync()
 ```
 
 ### <a name="is_ready" href="#is_ready">#</a> graph.<b>isReady</b>

@@ -20,6 +20,9 @@
       "./src/stories/tsconfig.json",
       "./test/tsconfig.json",
       "./integrations/deck-layers/tsconfig.typecheck.json",
+      "./experiments/cosmos-gpu-lab/tsconfig.json",
+      "./experiments/graph-webgpu/tsconfig.json",
+      "./experiments/graph-webgpu/fixtures/deck-consumer/tsconfig.json",
       "./website/tsconfig.json"
     ]
   },

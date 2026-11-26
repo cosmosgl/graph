@@ -1,0 +1,94 @@
+import type { ExperimentInstance } from '../../runtime/experiment'
+import { createPairedPickView } from './paired-pick-view'
+import { createSelectionTable } from './selection-table'
+import { runSparseTransition, type SparseSample, type SparseScenario } from './sparse-transition'
+
+const phases = new Map([
+  ['initial', 'Before removal'],
+  ['remove', 'Removal'],
+  ['restore', 'Restoration'],
+  ['remove-again', 'Second removal'],
+  ['restore-original', 'Return to x = 48'],
+  ['remove-on-return', 'Third removal'],
+  ['restore-to-80', 'Restore to x = 80'],
+  ['remove-at-68', 'Fourth removal'],
+  ['snap-remove', 'Immediate removal'],
+  ['snap-restore', 'Immediate restoration'],
+])
+
+const locations = {
+  old: { name: 'Original', x: 48 },
+  returnMidpoint: { name: 'Halfway back', x: 56 },
+  midpoint: { name: 'Midpoint', x: 64 },
+  removalCenter: { name: 'Removal center', x: 68 },
+  destination: { name: 'First target', x: 80 },
+}
+type Site = keyof typeof locations
+const threeSites = ['old', 'midpoint', 'destination'] as const
+const fourSites = ['old', 'returnMidpoint', 'midpoint', 'destination'] as const
+const previews: Record<SparseScenario, { initial: string; sites: readonly Site[] }> = {
+  complete: { initial: 'remove-500', sites: [] },
+  interrupted: { initial: 'restore-0', sites: ['old', 'destination'] },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'remove-again': { initial: 'remove-again-0', sites: threeSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'restore-original': { initial: 'restore-original-0', sites: threeSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'remove-on-return': { initial: 'remove-on-return-0', sites: fourSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'restore-to-80': { initial: 'restore-to-80-0', sites: fourSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'remove-at-68': { initial: 'remove-at-68-0', sites: ['old', 'returnMidpoint', 'midpoint', 'removalCenter', 'destination'] },
+}
+
+function selectionTable (samples: readonly (SparseSample['selections'] | undefined)[]): HTMLElement {
+  const regions = samples.find(sample => sample !== undefined)
+  if (!regions) return document.createElement('div')
+  return createSelectionTable({
+    description: 'Each local region is centered at y = 96 CSS px and uses a 4 × 4 CSS px rectangle and a diamond lasso of the same width and height. ' +
+      'The large region includes both other points.',
+    locationHeading: 'Region (x in CSS px)',
+    rows: regions.map(({ region }) => ({
+      label: region === 'all' ? 'All points' : `${locations[region].name} (${locations[region].x})`,
+      selections: samples.map(sample => sample?.find(probe => probe.region === region)),
+    })),
+  })
+}
+
+function describePoint (bounds: SparseSample['pointBounds'], ratio: number): string {
+  if (!bounds) return 'Point 1 has no visible pixels'
+  const center = (bounds[0]! + bounds[2]!) / (2 * ratio)
+  const width = (bounds[2]! - bounds[0]!) / ratio
+  return `Point 1 painted center x = ${center} CSS px · width ${width} CSS px`
+}
+
+export function createSparseView (host: HTMLElement, scenario: SparseScenario = 'complete'): ExperimentInstance {
+  const { initial, sites: probeSites } = previews[scenario]
+  const siteProbes = Object.fromEntries(probeSites.map(site => [site, `${locations[site].name} (${locations[site].x}, 96)`]))
+  if (scenario === 'complete') siteProbes.point = 'Edited point'
+  return createPairedPickView(host, {
+    probes: { ...siteProbes, link: 'Incident link', anchor: 'Other endpoint', control: 'Isolated point' },
+    initial,
+    run: async (engine, ratio) => (await runSparseTransition(engine, ratio, scenario)).samples.map((sample, index, samples) => {
+      const { phase, time, sites } = sample
+      const next = samples[index + 1]?.phase
+      let title = time === 500 && next && next !== phase ? `Before ${phases.get(next)!.toLowerCase()}` : phases.get(phase)!
+      if (phase !== 'initial' && !phase.startsWith('snap-')) title += ` · ${time} ms`
+      const picks: Record<string, string> = { ...sample.picks }
+      let detail = describePoint(sample.pointBounds, ratio)
+      if (sites) {
+        if (phase === 'restore' && time === 0) title += ' · After interruption'
+        const colors: string[] = []
+        for (const location of probeSites) {
+          const site = sites[location]
+          if (!site) continue
+          picks[location] = site.pick
+          colors.push(`${locations[location].name.toLowerCase()} (${site.rgb.join(', ')})`)
+        }
+        detail += ` · RGB at ${colors.join(', ')} and link (${sample.linkRgb.join(', ')})`
+      }
+      return { key: `${phase}-${time}`, title, pixels: sample.pixels, picks, results: sample.selections, detail }
+    }),
+    renderResults: selectionTable,
+  })
+}

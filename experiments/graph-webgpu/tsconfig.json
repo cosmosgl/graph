@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.typecheck.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "paths": {
+      "@/graph": ["src/"],
+      "@/graph/*": ["src/*"],
+      "@cosmos.gl/graph": ["experiments/graph-webgpu/src/index.ts"]
+    }
+  },
+  "include": ["src", "deck-layers", "test", "vite.config.ts", "vitest.config.ts", "../../src/stories"]
+}

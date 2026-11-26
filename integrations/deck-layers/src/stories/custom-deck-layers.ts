@@ -5,17 +5,18 @@ import { GraphSimulation, defaultConfigValues } from '@cosmos.gl/graph'
 import type { GraphSimulationConfig } from '@cosmos.gl/graph'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
+import { createStoryDevice } from './story-device'
 import { PointsLayer } from './custom-deck-layers/points-layer'
 import { LinksLayer } from './custom-deck-layers/links-layer'
 import './style.css'
 
 /**
- * A renderer of your own over the live position texture.
+ * A renderer of your own over live GPU positions.
  *
  * `CosmosGraphLayer` draws with cosmos.gl's renderer. This story draws with two deck
  * layers written for the purpose — the sources are in the panes — over a standalone
- * `GraphSimulation` on deck's device. Each layer `texelFetch`es the simulation's
- * position texture by instance index (`PositionTextureSource`), so positions never
+ * `GraphSimulation` on deck's device. Each layer fetches positions by index from
+ * the current GPU resource on every draw, so simulated positions never
  * leave the GPU, and the rest is ordinary deck: binary attributes for color and size,
  * `pickable` with hover and `autoHighlight`, and a drag that pins the grabbed point
  * and moves it through `setPointPosition`. The frame loop is the application's too:
@@ -45,10 +46,11 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
   status.className = 'status'
   div.appendChild(status)
 
+  const host = await createStoryDevice(div)
   let deck!: Deck<OrthographicView>
   const devicePromise = new Promise<Device>((resolve) => {
     deck = new Deck({
-      parent: div,
+      ...host.props,
       views: new OrthographicView({ flipY: false }), // cosmos's space has y up
       initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: -2, minZoom: -5, maxZoom: 2 },
       controller: true,
@@ -206,6 +208,7 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
       // The device belongs to deck: the simulation goes first
       simulation.destroy()
       deck.finalize()
+      host.destroy?.()
     },
   }
 }

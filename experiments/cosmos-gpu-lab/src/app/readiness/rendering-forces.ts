@@ -1,0 +1,416 @@
+import type { CaseReadiness } from './types'
+
+const packageCollision: CaseReadiness = {
+  badge: 'Positions and pixels match',
+  tone: 'pass',
+  finding: 'Every point coordinate and every canvas pixel matched WebGL on M3 at ticks 0 through 8.',
+  area: 'Integration',
+  status: 'Exact match on the collision fixture',
+  evidence: [
+    { tone: 'pass', text: 'All measured point slots agreed across packages.' },
+    { tone: 'pass', text: 'All 49,152 RGBA pixels agreed at each of the nine checkpoints.' },
+  ],
+  next: 'See the packaged Points comparison for fractional diameters and both pixel ratios.',
+}
+
+const packagePoints: CaseReadiness = {
+  badge: 'Fixture pixels match',
+  tone: 'pass',
+  finding: 'All eight shapes matched WebGL at both CSS offsets and the rounding ties on Apple M3 and SwiftShader.',
+  area: 'Integration',
+  status: 'Exact pixel parity on the packaged Points fixture',
+  evidence: [
+    { tone: 'pass', text: 'The opaque shape interiors and background passed the independent geometry check.' },
+    { tone: 'pass', text: 'All 2,608,320 device pixels per adapter agreed across the 26 frames.' },
+  ],
+  next: 'See the additional M3 size and offset checks for the remaining one-level edge differences.',
+}
+
+const packageLine: CaseReadiness = {
+  badge: 'Stroke and picks checked',
+  tone: 'review',
+  finding: 'The stroke stayed within the edge and color allowances. Both packages selected the expected objects before and after the endpoint moved.',
+  area: 'Integration',
+  status: 'Packaged link fixture passes the practical checks',
+  evidence: [
+    { tone: 'pass', text: 'The two packages passed on Apple M3 and SwiftShader at pixel ratios 1 and 2.' },
+    { tone: 'info', text: 'The results list the exact pixel counts for each style and adapter.' },
+  ],
+  next: 'See the endpoint-motion case for thin dashed links crossing a subpixel tie.',
+}
+
+const exactLine: CaseReadiness = {
+  ...packageLine,
+  badge: 'Pixels and picks match',
+  tone: 'pass',
+  finding: 'Every RGBA pixel matched on Apple M3 and SwiftShader at both ratios. The click callbacks selected the expected objects.',
+  status: 'Exact match on the packaged link fixture',
+}
+
+const packageForce: CaseReadiness = {
+  badge: 'Positions match',
+  tone: 'pass',
+  finding: 'Both packages returned the same coordinates at ticks 0, 1, 4 and 8 on Apple M3 and SwiftShader.',
+  area: 'Integration',
+  status: 'Exact positions on the single-force fixture',
+  evidence: [
+    { tone: 'pass', text: 'The first update moved the expected points. The pinned point and absent slot stayed fixed throughout.' },
+  ],
+  next: 'See the combined case for weighted springs, direct repulsion and collision acting in the same tick.',
+}
+
+const scaledForces: CaseReadiness = {
+  badge: 'Layout and picks checked',
+  tone: 'review',
+  finding: 'Both packages preserved the eight communities and the moving click targets.',
+  area: 'Integration',
+  status: 'Packaged layout and picking checks passed',
+  evidence: [
+    { tone: 'pass', text: 'The runs checked all 127 pins, the absent slot and every ordered link through tick 100.' },
+    { tone: 'info', text: 'The WebGPU layouts retained deeper overlaps at tick 100. The results give contact depth and residual motion for each engine.' },
+    { tone: 'warn', text: 'Click feedback passed on M3. WebGL frame p95 varied across controls and repeat trials, leaving relative frame speed unassessed.' },
+  ],
+  next: 'Compare overlap and settling on additional seeds and larger graphs.',
+}
+
+// Each summary refers to the named case and its recorded evidence. These are
+// editorial assessments, not verdicts from the current browser session.
+/* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment and case routes. */
+export const renderingAndForces: Record<string, CaseReadiness> = {
+  'production-lines/endpoint-motion': {
+    badge: 'Native motion checked',
+    tone: 'pass',
+    finding: 'Every complete dash remained visible as the endpoints crossed a pixel boundary on Apple M3. Reversing the sweep reproduced each frame.',
+    area: 'Integration',
+    status: 'Dashed links and solid controls pass the native motion checks',
+    evidence: [
+      { tone: 'pass', text: 'All 65 phases at both pixel ratios passed the outline, interior-color and flash checks.' },
+      { tone: 'pass', text: 'The stroke and its gap returned the expected link ID. Clear background returned a background click.' },
+      { tone: 'info', text: 'At 1× the worst dashed frame differed at six edge pixels, with a largest channel difference of 95/255.' },
+    ],
+    next: 'Recheck these phases if stroke geometry, interpolation or picking changes.',
+  },
+  'production-lines/straight': exactLine,
+  'production-lines/moving': exactLine,
+  'production-lines/gradient': exactLine,
+  'production-lines/curved': packageLine,
+  'production-lines/dashed': exactLine,
+  'production-lines/dotted': packageLine,
+  'production-lines/arrows': packageLine,
+  'production-lines/hover': packageLine,
+  'production-lines/zoom': exactLine,
+  'production-forces/gravity': packageForce,
+  'production-forces/springs': packageForce,
+  'production-forces/mouse': packageForce,
+  'production-forces/attractors': packageForce,
+  'production-forces/clusters': packageForce,
+  'production-forces/repulsion': packageForce,
+  'production-forces/dense': {
+    ...scaledForces,
+    finding: 'RMS position error peaked at 0.22% of the WebGL radius. All eight communities retained the same fraction of their members in both engines.',
+  },
+  'production-forces/hubs': {
+    ...scaledForces,
+    finding: 'The movable hub had 1,024 incident links. RMS error peaked at 0.44% of the WebGL radius. WebGPU recorded more overlap at tick 100.',
+  },
+  'production-forces/center': {
+    ...packageForce,
+    badge: 'Within 0.00025 units',
+    finding: 'Every coordinate stayed within 0.00025 graph units of WebGL on Apple M3 and SwiftShader through eight ticks.',
+    status: 'Centering passes the coordinate check',
+  },
+  'production-forces/hierarchy': {
+    badge: 'Layouts settled',
+    tone: 'pass',
+    finding: 'Both seeded 8,192-slot layouts spread and settled. Their final RMS position difference was 0.88% of the WebGL radius on each adapter.',
+    area: 'Integration',
+    status: 'Approximate repulsion passes the convergence check',
+    evidence: [
+      { tone: 'pass', text: 'The fixture preserved the pin and hole. Both layouts slowed to less than 5% of their first-tick motion.' },
+      { tone: 'info', text: 'The results include one native timing run with repeated WebGL controls.' },
+    ],
+    next: 'Open Dense communities and Hub to compare three active forces through tick 100.',
+  },
+  'production-forces/combined': {
+    badge: 'Positions and picks match',
+    tone: 'pass',
+    finding: 'The packages agreed on every live coordinate at ticks 0, 1, 4 and 8. Both drew and picked link 0 at its new midpoint.',
+    area: 'Integration',
+    status: 'Three forces, drawing and picking agree on the small combined graph',
+    evidence: [
+      { tone: 'pass', text: 'Removing each force in turn changed the WebGL trajectory. The pinned and absent slots stayed fixed with all three active.' },
+      { tone: 'pass', text: 'On M3 and SwiftShader, eight single steps reproduced the batch result, including paint and click IDs at all three probes.' },
+    ],
+    next: 'Open Dense communities and Hub for the 8,192-slot results and native frame and click timings.',
+  },
+  'production-points/dpr-1': packagePoints,
+  'production-points/dpr-2': packagePoints,
+  'production-force-collision/contacts': packageCollision,
+  'production-force-collision/hashed': packageCollision,
+  'point-rendering/circle-comparison': {
+    badge: 'Demo only',
+    tone: 'neutral',
+    finding: 'Visual comparison; pixel accuracy and picking are untested.',
+    area: 'Research',
+    status: 'Demo only',
+    evidence: [
+      { tone: 'unknown', text: 'Pixel agreement untested' },
+      { tone: 'unknown', text: 'Picking untested' },
+    ],
+    next: 'Compare rendered pixels and picking IDs.',
+  },
+  'ribbon-generation/compute-cache': {
+    badge: 'Not adopted',
+    tone: 'fail',
+    finding: 'A 100,000-link rebuild was slower on one GPU; a color check failed.',
+    area: 'Integration',
+    status: 'Not adopted',
+    evidence: [
+      { tone: 'pass', text: '64 selected curve controls preserved' },
+      { tone: 'fail', text: 'A larger color check failed' },
+      { tone: 'warn', text: '100,000-link rebuild was slower' },
+    ],
+    next: 'Keep the existing vertex renderer.',
+  },
+  'curved-links/curve-comparison': {
+    badge: 'Solid curves in pilot',
+    tone: 'review',
+    finding: 'All three frozen-curve checks passed with Cosmos padded picking on M3. Motion and performance remain untested by this suite.',
+    area: 'Integration',
+    status: 'Frozen padded-picking checks passed',
+    evidence: [
+      { tone: 'pass', text: 'Drawn-face picking preserved original colors and picked visible sources in all 64 cases' },
+      { tone: 'fail', text: '36 solid curve cases differed on strict color or picking checks' },
+    ],
+    next: 'Check curves during motion and measure integrated performance.',
+  },
+  'point-shapes/shapes': {
+    badge: '1 px boundary passes',
+    tone: 'review',
+    finding: 'Nine checks passed on M3. Shapes and strokes matched at half zoom under both sizing rules. Strict fractional circle edges still differ.',
+    area: 'Integration',
+    status: 'Frozen shapes pass the practical check',
+    evidence: [
+      { tone: 'pass', text: 'Closed WebGPU bounds matched the CPU circle mask at 1× and 2×. Every thin circle painted.' },
+      { tone: 'fail', text: 'Strict fractional parity failed. At 1× the 13.3 px circle had a fitted WebGL coordinate span of 13.25 px.' },
+    ],
+    next: 'Check moving subpixel circles, exact polygon-edge ties and another GPU.',
+  },
+  'point-picking/picking': {
+    badge: 'High pick cost',
+    tone: 'review',
+    finding: 'The prototype avoids invisible picks; dense requests remain expensive.',
+    area: 'Integration',
+    status: 'Pointer latency untested',
+    evidence: [
+      { tone: 'pass', text: 'Selected invisible picks avoided' },
+      { tone: 'warn', text: 'Dense 1,024-point requests exceeded 300 ms' },
+      { tone: 'unknown', text: 'Pointer-event latency untested' },
+    ],
+    next: 'Reduce dense picking cost and measure pointer latency.',
+  },
+  'point-images/images': {
+    badge: 'Compatibility failed',
+    tone: 'fail',
+    finding: 'The revised rule removed invisible picks in the overlap test. Color differences from production exceeded tolerance at 81 pixels.',
+    area: 'Integration',
+    status: 'Compatibility failed',
+    evidence: [
+      { tone: 'pass', text: '40 of 40 candidate rows passed' },
+      { tone: 'fail', text: 'Production compatibility failed' },
+    ],
+    next: 'Investigate production image and picking parity.',
+  },
+  'point-rings-greyout/effects': {
+    badge: 'Polygon checks fail',
+    tone: 'fail',
+    finding: 'Selected color checks pass; polygon boundary failures remain.',
+    area: 'Integration',
+    status: 'Checks failed',
+    evidence: [
+      { tone: 'pass', text: '96 color checks passed per environment' },
+      { tone: 'fail', text: 'Eight polygon-mask rows failed' },
+    ],
+    next: 'Resolve polygon boundaries and compare production colors.',
+  },
+  'straight-links/straight-comparison': {
+    badge: 'Solid links in pilot',
+    tone: 'review',
+    finding: 'Seven practical checks passed for isolated solid links on M3, including thin strokes and picking at a crossing.',
+    area: 'Integration',
+    status: 'Solid links checked on M3',
+    evidence: [
+      { tone: 'pass', text: 'Hard and antialiased diagonals agreed outside the one-device-pixel edge band' },
+      { tone: 'pass', text: 'When the foreground became invisible, picking returned the link underneath' },
+      { tone: 'warn', text: 'Dashed and dotted links remain outside the first WebGPU version' },
+    ],
+    next: 'Reopen if thin links vanish, picking disagrees with visibility or the pilot exceeds its edge tolerance.',
+  },
+  'smoothstep-coverage/line-edge': {
+    badge: 'Study closed',
+    tone: 'neutral',
+    finding: 'On one hard-edged line, WebGL drew the highlighted pixel and WebGPU left it empty.',
+    area: 'Research',
+    status: 'Closed',
+    evidence: [
+      { tone: 'warn', text: 'Formula change did not fix the difference' },
+      { tone: 'fail', text: '180 hard-edge IDs still differed' },
+    ],
+    next: 'Reopen if hard-edge ID parity is needed.',
+  },
+  'cluster-attraction/cluster-comparison': {
+    badge: 'Speed varies',
+    tone: 'review',
+    finding: 'Checks passed to 8,192 points; speed varied by group on one GPU.',
+    area: 'Integration',
+    status: 'Frame cost open',
+    evidence: [
+      { tone: 'pass', text: '45 comparison rows passed per backend' },
+      { tone: 'warn', text: 'Speed varied by group' },
+      { tone: 'unknown', text: 'Full-frame cost untested' },
+    ],
+    next: 'Check production setters and full-frame cost.',
+  },
+  'collision/collision-comparison': {
+    badge: 'Corrected checks passed',
+    tone: 'pass',
+    finding: 'Corrected small-graph checks passed; older arithmetic failed.',
+    area: 'Integration',
+    status: 'Cross-device checks open',
+    evidence: [
+      { tone: 'pass', text: '1,700 tick and trajectory checks passed each' },
+      { tone: 'fail', text: 'Earlier native arithmetic failed' },
+      { tone: 'unknown', text: 'Other devices untested' },
+    ],
+    next: 'Measure full-frame cost and check more devices.',
+  },
+  'collision/large-collision': {
+    badge: 'Force checks passed',
+    tone: 'pass',
+    finding: 'CPU and WebGL checks passed at 4,097 and 8,192 points on one GPU.',
+    area: 'Integration',
+    status: 'Broader workloads untested',
+    evidence: [
+      { tone: 'pass', text: 'Slot IDs matched WebGL exactly' },
+      { tone: 'pass', text: 'Force and position gates passed' },
+      { tone: 'warn', text: 'Two passes added 2.03 ms GPU work at 8,192' },
+    ],
+    next: 'Check denser, larger graphs and other GPUs.',
+  },
+  'center-mass/center-comparison': {
+    badge: 'Trajectory check failed',
+    tone: 'fail',
+    finding: 'Starting centers were close to the CPU. The faster force failed the 8,192-point trajectory check.',
+    area: 'Research',
+    status: 'Trajectory check failed',
+    evidence: [
+      { tone: 'info', text: 'Centers were close on the recorded input' },
+      { tone: 'info', text: 'Isolated force cost fell on one GPU' },
+      { tone: 'fail', text: '8,192-point trajectory failed' },
+    ],
+    next: 'Check trajectory behavior and full-frame cost.',
+  },
+  'many-body/exact-repulsion': {
+    badge: 'Paths diverged',
+    tone: 'review',
+    finding: 'Same-input checks passed; coincident trajectories diverged by tick two.',
+    area: 'Research',
+    status: 'Reference',
+    evidence: [
+      { tone: 'pass', text: 'Selected same-input checks passed' },
+      { tone: 'warn', text: 'Coincident trajectories diverged' },
+    ],
+    next: 'Check independent trajectories on more graph inputs.',
+  },
+  'many-body-grid/hierarchical-repulsion': {
+    badge: 'Dense checks passed',
+    tone: 'pass',
+    finding: 'Corrected dense cases passed on three CPU-anchored ticks.',
+    area: 'Integration',
+    status: 'CPU trajectories untested',
+    evidence: [
+      { tone: 'pass', text: '8,192 and 16,384-point checks passed' },
+      { tone: 'warn', text: 'Default inline path was not replaced' },
+      { tone: 'unknown', text: 'Independent CPU trajectories untested' },
+    ],
+    next: 'Compare the corrected path with independent CPU trajectories.',
+  },
+  'mouse-repulsion/pointer-force': {
+    badge: 'Pointer checks passed',
+    tone: 'pass',
+    finding: 'Both backends kept pinned and absent points unchanged in tests up to 8,192 points.',
+    area: 'Integration',
+    status: 'Frame latency untested',
+    evidence: [
+      { tone: 'pass', text: '22 active backend rows passed' },
+      { tone: 'fail', text: 'Earlier combined native path failed' },
+      { tone: 'warn', text: 'Corrected path passed; force cost rose' },
+    ],
+    next: 'Measure pointer responsiveness with all forces running.',
+  },
+  'neighborhood-forces/local-neighbors': {
+    badge: 'Speed varies',
+    tone: 'review',
+    finding: 'Checks passed; chunking helped dense cases but slowed a smaller one.',
+    area: 'Integration',
+    status: 'Full graph cost untested',
+    evidence: [
+      { tone: 'pass', text: '72 initial and 18 evolved checks passed' },
+      { tone: 'warn', text: '4,096-point case was 14–15% slower' },
+      { tone: 'unknown', text: 'Complete graph cost untested' },
+    ],
+    next: 'Check more densities and device types.',
+  },
+  'hub-springs/hub-cost': {
+    badge: 'Speed varies',
+    tone: 'review',
+    finding: 'Large hubs sped up on one GPU; smaller cases varied.',
+    area: 'Integration',
+    status: 'Broader performance open',
+    evidence: [
+      { tone: 'pass', text: '12 trajectory cases passed' },
+      { tone: 'warn', text: 'Benefit varied with hub degree' },
+    ],
+    next: 'Test graphs with multiple hubs and more devices.',
+  },
+  'point-attractors/attractor-comparison': {
+    badge: 'Slower force',
+    tone: 'review',
+    finding: 'Targets passed; WebGPU was slower than WebGL on one GPU.',
+    area: 'Integration',
+    status: 'Frame cost open',
+    evidence: [
+      { tone: 'pass', text: 'Attractor targets passed' },
+      { tone: 'warn', text: 'Isolated WebGPU force was slower' },
+      { tone: 'fail', text: 'Earlier related combined checks failed; corrected pointer passed' },
+    ],
+    next: 'Check production setters and full-frame cost.',
+  },
+  'weighted-links/weighted-springs': {
+    badge: 'Earlier reset unresolved',
+    tone: 'review',
+    finding: 'Later 100,000-point WebGL checks passed on one GPU; an earlier reset remains unexplained.',
+    area: 'Integration',
+    status: 'Full engine untested',
+    evidence: [
+      { tone: 'pass', text: 'Later 100,000-point WebGL checks passed' },
+      { tone: 'fail', text: 'Earlier direct path lost its context' },
+      { tone: 'unknown', text: 'Complete-engine behavior untested' },
+    ],
+    next: 'Investigate the earlier reset and check the full engine.',
+  },
+  'workgroup-repulsion/workgroup-memory': {
+    badge: 'Frozen checks matched',
+    tone: 'pass',
+    finding: 'Frozen cases matched; full-graph performance remains open.',
+    area: 'Integration',
+    status: 'Full graph cost untested',
+    evidence: [
+      { tone: 'pass', text: 'Four frozen inputs matched' },
+      { tone: 'warn', text: 'Some timing ranges overlapped' },
+      { tone: 'unknown', text: 'Full-graph cost for this variant untested' },
+    ],
+    next: 'Measure complete-graph performance and more devices.',
+  },
+}
+/* eslint-enable @typescript-eslint/naming-convention */

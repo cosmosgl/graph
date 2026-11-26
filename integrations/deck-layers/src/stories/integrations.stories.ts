@@ -20,6 +20,8 @@ import linksLayerRaw from './custom-deck-layers/links-layer?raw'
 import linksLayerUniformsRaw from './custom-deck-layers/links-layer-uniforms?raw'
 import blendParametersRaw from './custom-deck-layers/blend-parameters?raw'
 import styleRaw from './style.css?raw'
+import deviceRaw from './story-device?raw'
+import thumbnailBackgroundRaw from './thumbnail-background?raw'
 
 // Embedding cosmos.gl in deck.gl with `CosmosGraphLayer` from
 // @cosmos.gl/deck-layers: the layer the deck.gl way, the layer at scale on
@@ -42,6 +44,7 @@ export const GraphLayer: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: graphLayerRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'style.css', code: styleRaw },
     ],
   },
@@ -54,6 +57,7 @@ export const BigGraph: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: bigGraphRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'style.css', code: styleRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
@@ -67,6 +71,8 @@ export const MiniGraphs: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: miniGraphsRaw },
+      { name: 'thumbnail-background', code: thumbnailBackgroundRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'style.css', code: styleRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
@@ -80,6 +86,7 @@ export const GraphOnMap: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: graphOnMapRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'style.css', code: styleRaw },
     ],
   },
@@ -92,6 +99,7 @@ export const CustomDeckLayers: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: customDeckLayersRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'PointsLayer', code: pointsLayerRaw },
       { name: 'points-layer-uniforms', code: pointsLayerUniformsRaw },
       { name: 'LinksLayer', code: linksLayerRaw },

@@ -33,6 +33,8 @@ export interface PointTracker {
    * position has been read.
    */
   positions(options?: PositionsReadOptions): ReadonlyMap<number, [number, number]>;
+  /** Captures positions now and awaits the GPU copy. Returns null when the request expires or is invalidated. */
+  positionsAsync?(): Promise<ReadonlyMap<number, [number, number]> | null>;
   /**
    * The same positions as `[x0, y0, x1, y1, …]`, ordered like `indices`. An absent point,
    * or an index with no point behind it, keeps its slot as `NaN`, so the array stays aligned
@@ -63,6 +65,7 @@ export interface PointTrackerHost {
   requestTick: (() => boolean) | undefined;
   /** Draws the positions of the indices in `table` into `target`; `false` when it could not. */
   gatherTrackedPositions(table: Texture, target: Framebuffer): boolean;
+  readFramebufferPixelsAsync(target: Framebuffer, isCurrent: () => boolean): Promise<Float32Array | undefined>;
   removeTracker(tracker: PointTrackerImpl): void;
 }
 
@@ -176,6 +179,18 @@ export class PointTrackerImpl implements PointTracker {
     this.cachedPointList = pointList
     this.issuedVersion = version
     return this.cached
+  }
+
+  public async positionsAsync (): Promise<ReadonlyMap<number, [number, number]> | null> {
+    const { host, indices, positionsFbo } = this
+    if (!host || !indices.length) return new Map()
+    if (!positionsFbo || positionsFbo.destroyed) return null
+    this.gather()
+    if (this.gatheredVersion !== host.positionVersion) return null
+    const pointList = host.pointListVersion
+    const isCurrent = (): boolean => this.host === host && this.indices === indices && host.pointListVersion === pointList
+    const pixels = await host.readFramebufferPixelsAsync(positionsFbo, isCurrent)
+    return pixels && isCurrent() ? this.buildMap(pixels) : null
   }
 
   // TODO: Accept a `Float32Array` destination. deck.gl takes one as a binary attribute

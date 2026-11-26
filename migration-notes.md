@@ -1,5 +1,47 @@
 # Migration Guide
 
+## Preparing an application for the WebGPU candidate
+
+The private WebGPU candidate reads GPU positions and area selections asynchronously.
+These calls also work on WebGL 3.6.1, so an application can migrate its callers
+before switching engines.
+
+| WebGL synchronous call | Fresh result on either engine |
+| --- | --- |
+| `graph.getPointPositions()` or `graph.getPointPositionsArray(out)` | `await graph.getPointPositionsAsync(out)` returns a `Float32Array` |
+| `graph.findPointsInRect(rect)` | `await graph.findPointsInRectAsync(rect)` |
+| `graph.findPointsInPolygon(vertices)` | `await graph.findPointsInPolygonAsync(vertices)` |
+
+An area query returns an ordered array of IDs, or `null` when it cannot
+complete. When the user moves a selection, display only the most recent
+request's result. For layout measurements, record the simulation tick when
+requesting the snapshot and display that tick with the returned coordinates.
+
+WebGPU's synchronous label, tracker and cluster getters return the latest
+completed sample. The first result can be empty. For example, to place a label
+immediately after moving a tracked point, await
+`graph.getTrackedPointPositionsMapAsync()` or `tracker.positionsAsync()`.
+For centroids at a particular simulation tick, WebGPU provides
+`await simulation.getClusterPositionsAsync()`. Passing
+`{ nonBlocking: false }` to a synchronous getter still returns the cached
+sample on WebGPU.
+
+A custom WebGL renderer that samples `getPointPositionTexture()` needs a WebGPU
+storage-buffer binding. Call `getPointPositionBuffer()` on the Graph or simulation
+for each draw. The borrowed buffer holds four float32 values per point index,
+`[worldX, worldY, pinned, absent]`. Check the absence flag because a point can
+keep finite coordinates while it fades out. The simulation owns the buffer and
+can swap it after a step or an edit. A Deck layer that calls `drawToRenderPass()`
+can continue to let Cosmos bind the current positions.
+
+If an application imports `getMaxPointSize(device, pixelRatio)`, read
+`graph.maxPointSize` instead. WebGL reports its device's point-sprite limit,
+and WebGPU reports `Infinity` because it draws point shapes and images with
+triangles. The low-level WebGL `readPixels(device, framebuffer, …)` export
+also goes away. For graph coordinates use the async position APIs above.
+For a host-owned render target, copy the target to a readable buffer on the
+host's WebGPU device and await the buffer read.
+
 ## Migrating `@cosmos.gl/deck-layers` 3.5.0 → 3.5.1
 
 ### `CosmosGraphLayer` Draws With cosmos.gl's Renderer

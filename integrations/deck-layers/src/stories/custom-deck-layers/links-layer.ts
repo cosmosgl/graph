@@ -1,122 +1,11 @@
 import { Layer, project32, picking, UNIT } from '@deck.gl/core'
 import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
 import { Model, Geometry } from '@luma.gl/engine'
-import type { PositionTextureSource } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
-import { linksLayerUniforms } from './links-layer-uniforms'
-import type { LinksLayerModuleProps } from './links-layer-uniforms'
+import { linksLayerUniforms, linksShaders, drawLinks, type PositionSource } from './links-layer-uniforms'
 
 const DEFAULT_LINK_COLOR: [number, number, number, number] = [94, 115, 194, 64]
-
-const vs = /* glsl */ `\
-#version 300 es
-#define SHADER_NAME links-layer-vertex-shader
-
-in vec3 positions;
-
-in float instanceSourceIndices;
-in float instanceTargetIndices;
-in vec4 instanceColors;
-in float instanceWidths;
-in vec3 instancePickingColors;
-
-uniform sampler2D positionsTexture;
-
-out vec4 vColor;
-out vec2 uv;
-
-// Offset the vertex by half the link width, perpendicular to the link, in
-// screen space. offsetDirection is -1 (left) or 1 (right).
-vec2 getExtrusionOffset(vec2 lineClipspace, float offsetDirection, float width) {
-  vec2 dirScreenspace = normalize(lineClipspace * project.viewportSize);
-  dirScreenspace = vec2(-dirScreenspace.y, dirScreenspace.x);
-  return dirScreenspace * offsetDirection * width / 2.0;
-}
-
-// The engine's isPointIndex: an integer in [0, pointCount). A fraction would
-// truncate to a neighbour, NaN would make int() undefined.
-bool namesPoint(float index, float pointCount) {
-  return index >= 0.0 && index < pointCount && index == floor(index);
-}
-
-vec4 fetchPointPosition(float index, int textureSize) {
-  int pointIndex = int(index);
-  // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
-  return texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
-}
-
-void main(void) {
-  // An endpoint that names no point (an index outside the point count) is
-  // skipped, never dropped, so the instance index stays the link index — the
-  // rule the engine applies to the same pair in its link grouping. Its texel
-  // would be outside the live data.
-  float pointCount = linksLayer.pointCount;
-  bool namesNoPoint = !namesPoint(instanceSourceIndices, pointCount) || !namesPoint(instanceTargetIndices, pointCount);
-
-  int textureSize = int(linksLayer.pointsTextureSize);
-  vec4 sourcePosition = namesNoPoint ? vec4(0.0) : fetchPointPosition(instanceSourceIndices, textureSize);
-  vec4 targetPosition = namesNoPoint ? vec4(0.0) : fetchPointPosition(instanceTargetIndices, textureSize);
-
-  // A removed (absent) endpoint's texel is NaN — see PointPositionTexture;
-  // collapse the quad, as for an endpoint that names no point, so it clips away
-  if (namesNoPoint || isnan(sourcePosition.x) || isnan(targetPosition.x)) {
-    gl_Position = vec4(0.0);
-    vColor = vec4(0.0);
-    uv = vec2(0.0);
-    return;
-  }
-
-  vec3 sourceWorld = vec3(sourcePosition.xy, 0.0);
-  vec3 targetWorld = vec3(targetPosition.xy, 0.0);
-  geometry.worldPosition = sourceWorld;
-  geometry.worldPositionAlt = targetWorld;
-
-  vec4 sourceCommonspace;
-  vec4 targetCommonspace;
-  vec4 source = project_position_to_clipspace(sourceWorld, vec3(0.0), vec3(0.0), sourceCommonspace);
-  vec4 target = project_position_to_clipspace(targetWorld, vec3(0.0), vec3(0.0), targetCommonspace);
-
-  // positions.x selects the endpoint, positions.y the extrusion side
-  float segmentIndex = positions.x;
-  vec4 p = mix(source, target, segmentIndex);
-  geometry.position = mix(sourceCommonspace, targetCommonspace, segmentIndex);
-  uv = positions.xy;
-  geometry.uv = uv;
-  geometry.pickingColor = instancePickingColors;
-
-  float widthPixels = project_size_to_pixel(instanceWidths, linksLayer.widthUnits);
-
-  // The link's direction on screen: each end divided by its own w, which differs
-  // between the two under a pitched view
-  vec3 offset = vec3(getExtrusionOffset(target.xy / target.w - source.xy / source.w, positions.y, widthPixels), 0.0);
-  DECKGL_FILTER_SIZE(offset, geometry);
-  DECKGL_FILTER_GL_POSITION(p, geometry);
-  gl_Position = p + vec4(project_pixel_size_to_clipspace(offset.xy), 0.0, 0.0);
-
-  vColor = vec4(instanceColors.rgb, instanceColors.a * layer.opacity);
-  DECKGL_FILTER_COLOR(vColor, geometry);
-}
-`
-
-const fs = /* glsl */ `\
-#version 300 es
-#define SHADER_NAME links-layer-fragment-shader
-
-precision highp float;
-
-in vec4 vColor;
-in vec2 uv;
-
-out vec4 fragColor;
-
-void main(void) {
-  geometry.uv = uv;
-
-  fragColor = vColor;
-  DECKGL_FILTER_COLOR(fragColor, geometry);
-}
-`
 
 export type LinksLayerProps<DataT = unknown> = LinksLayerOwnProps<DataT> & LayerProps
 
@@ -131,9 +20,9 @@ type LinksLayerOwnProps<DataT> = {
   data: LayerDataSource<DataT>;
   /**
    * Where point positions come from: a `GraphSimulation` or a `Graph`.
-   * The layer reads them from its live position texture on every draw.
+   * The layer reads them from its live GPU positions on every draw.
    */
-  positionSource: PositionTextureSource;
+  positionSource: PositionSource;
   /**
    * Source point index accessor.
    * @default l => l.source
@@ -172,8 +61,8 @@ const defaultProps: DefaultProps<LinksLayerProps> = {
 
 /**
  * Renders every cosmos.gl link as an instanced quad stretched between its two
- * endpoints: the vertex shader `texelFetch`es both point positions from the
- * simulation's live GPU texture and extrudes the quad by half the link width
+ * endpoints. The vertex shader reads both positions from the simulation and
+ * extrudes the quad by half the link width
  * in screen space — no position attribute, no CPU copy, no per-frame attribute
  * updates. Endpoint indices, color and width are ordinary deck instanced
  * attributes, and picking works out of the box: the instance index is the
@@ -190,7 +79,7 @@ export class LinksLayer<DataT = unknown> extends Layer<Required<LinksLayerOwnPro
   declare public state: { model?: Model }
 
   public getShaders (): ReturnType<Layer['getShaders']> {
-    return super.getShaders({ vs, fs, modules: [project32, picking, linksLayerUniforms] })
+    return super.getShaders({ ...linksShaders, modules: [project32, picking, linksLayerUniforms] })
   }
 
   public initializeState (): void {
@@ -231,18 +120,8 @@ export class LinksLayer<DataT = unknown> extends Layer<Required<LinksLayerOwnPro
   }
 
   public draw (): void {
-    const positionInfo = this.props.positionSource.getPointPositionTexture()
     const { model } = this.state
-    if (!positionInfo || !model || positionInfo.pointCount === 0) return
-
-    const moduleProps: LinksLayerModuleProps = {
-      pointsTextureSize: positionInfo.textureSize,
-      widthUnits: UNIT[this.props.linkWidthUnits],
-      pointCount: positionInfo.pointCount,
-      positionsTexture: positionInfo.texture,
-    }
-    model.shaderInputs.setProps({ linksLayer: moduleProps })
-    model.draw(this.context.renderPass)
+    if (model) drawLinks(model, this.props.positionSource, UNIT[this.props.linkWidthUnits], this.context.renderPass)
   }
 
   private _getModel (): Model {

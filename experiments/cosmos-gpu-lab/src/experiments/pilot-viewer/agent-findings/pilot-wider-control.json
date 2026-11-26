@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "experiment": "pilot-viewer",
+  "status": "complete",
+  "recordedAt": "2026-11-19",
+  "question": "Does the running selection delay recur at a canvas width near the historical failing window?",
+  "result": "All four blocks passed. Of 1,200 complete frame intervals, 1,198 were within 33 ms. All 160 picks were within 50 ms. The slowest running pick took 32.3 ms in a normal block. Each block's 2,093 sampled pixels passed.",
+  "limits": "This bounded control used DPR 1. The historical wider window used DPR 2. Both historical picking failures and strict production color compatibility remain unresolved.",
+  "environment": "User's M3 and visible Codex inline Chromium 157, Apple WebGPU metal-3, fallback false, luma 10.0.0-alpha.15. Displayed 961.203125 × 540.671875 CSS pixels at DPR 1, logical canvas and attachment 961 × 541.",
+  "evidence": "Raw export, per-block analysis, declared protocol, resolved dependencies and source checksums in experiments/cosmos-gpu-lab/captures/pilot-wider-20261119-bk47ugag/. All 1,014 archived source files matched the frozen build directory after the run.",
+  "source": {
+    "revision": "d329feaffe12bfea0ea3e3f768befcb0ca0e6b4b",
+    "state": "modified",
+    "snapshot": "experiments/cosmos-gpu-lab/captures/pilot-wider-20261119-bk47ugag/source.tar.gz"
+  },
+  "reproduction": [
+    "Extract the recorded source, install its frozen lockfile, and build the lab before measuring.",
+    "Open the pilot in the visible Codex inline browser on the M3. This control used a 1,280 × 900 viewport override. Record the actual native adapter, displayed and logical viewport and DPR.",
+    "Follow the declared normal, traced, traced, normal sequence once and retain the original 50 ms feedback endpoint.",
+    "Export JSON into a unique capture directory. Retain completed blocks and any interrupted block. Compare the recorded responsiveness with the original requirements."
+  ],
+  "evidenceSection": "wider-window-control",
+  "replaySection": "run-and-retain-every-block"
+}

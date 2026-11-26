@@ -1,0 +1,106 @@
+// The canvas and host passes use the graph projection. Link picking crops it to one CSS texel.
+struct Params {
+  camera: vec4f,           // CSS translation, scale, DPR
+  region: vec4f,           // top-left and size of the target in backing pixels
+  point: vec4f,            // size scale, scale on zoom, point pick alpha, link pick offset
+  link: vec4f,             // width scale, scale on zoom, global opacity, blend
+  curve: vec4f,            // segments, weight, control distance, pick width padding (CSS)
+  visibility: vec4f,       // near/far distances, minimum alpha, gradient enabled
+  selected: vec4f,         // hovered point, focused point, hovered link, focused link
+  widths: vec4f,           // hovered/focused link increase, dash length/gap
+  modes: vec4f,            // pass (0 color, 1 host picking, 2 pointer), arrow scale, point count, link picking alpha
+  hoverColor: vec4f,       // negative alpha when the visible link color is retained
+  hoverRing: vec4f,
+  focusRing: vec4f,
+  transition: vec4f,       // eased progress, source point count, source link count, max link width (CSS)
+  shades: vec4f,           // stroke direction, stroke contrast, ring direction, ring contrast
+  pointViewport: vec4f,    // world origin and full CSS viewport
+  pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom
+  linkPickPixel: vec2f,    // top-left texel of WebGL's CSS-resolution pointer index pass
+  animateSizes: vec2f,     // point size and link width channels queued for this cycle
+  uniformLinkRgb: vec3f,  // shared solid-link color; opacity and width still vary per link
+  positionProgress: f32,
+  greyExitColor: vec4f,   // greyed version of the transparent black exit default
+  pointRings: vec4f,      // universal opacity, grey opacity (-1 for default), explicit grey color, host-hovered index
+  fragmentOffset: vec2f,  // convert framebuffer pixels to graph-view pixels, including crops and host subviewports
+  pointRecords: vec2u,     // physical current/previous records; zero selects dense point IDs
+  pointMaskOffset: u32,    // compact styles keep the highlight bitmap after the draw order
+}
+
+@group(0) @binding(0) var<uniform> params: Params;
+@group(0) @binding(1) var<storage, read> positions: array<vec4f>;
+@group(0) @binding(2) var<storage, read> points: array<Point>;
+@group(0) @binding(3) var<storage, read> links: array<Link>;
+@group(0) @binding(4) var<storage, read> pointOrder: array<u32>;
+@group(0) @binding(5) var atlas: texture_2d<f32>;
+@group(0) @binding(6) var atlasSampler: sampler;
+@group(0) @binding(7) var<storage, read> previousPoints: array<Point>;
+@group(0) @binding(8) var<storage, read> previousLinks: array<Link>;
+@group(0) @binding(9) var<storage, read> previousPositions: array<vec4f>;
+
+// Forces, queries and picking use current absence. Only drawing blends the two states.
+fn visualPresence(i: u32, absent: f32) -> f32 {
+  if (params.positionProgress < 1.0 && i < arrayLength(&previousPositions)) {
+    return 1.0 - mix(previousPositions[i].w, absent, params.positionProgress);
+  }
+  return 1.0 - absent;
+}
+
+fn applyPresence(style: Point, presence: f32) -> Point {
+  var p = style;
+  if (p.effects.y > 0.0) {
+    p.color = select(vec4f(p.color.rgb * 0.35 + params.greyExitColor.rgb, p.color.a), params.greyExitColor, params.pointRings.z > 0.0);
+  }
+  if (presence == 1.0) { return p; }
+  let defaults = u32(p.effects.w);
+  if ((defaults & 16u) != 0u) { p.metrics.x *= presence; }
+  let exitColor = select(vec4f(0), params.greyExitColor, p.effects.y > 0.0);
+  let usesDefault = (vec4u(defaults) & vec4u(1, 2, 4, 8)) != vec4u(0);
+  p.color = select(p.color, mix(exitColor, p.color, presence), usesDefault);
+  return p;
+}
+
+fn targetPoint(i: u32) -> Point {
+  var p = readCurrentPoint(i, params.pointRecords.x);
+  if (params.pointRecords.x != 0u) {
+    let grey = (pointOrder[params.pointMaskOffset + (i >> 5u)] & (1u << (i & 31u))) != 0u;
+    p.effects.x = select(params.pointRings.x, params.pointRings.y, grey && params.pointRings.y >= 0.0);
+    p.effects.y = select(0.0, 1.0, grey);
+  }
+  return p;
+}
+
+fn currentPoint(i: u32, presence: f32) -> Point {
+  let next = applyPresence(targetPoint(i), presence);
+  if (params.transition.x >= 1.0 || i >= u32(params.transition.y)) { return next; }
+  // The selection is live. Apply it to both raw fills at the current frame.
+  var previous = readPreviousPoint(i, params.pointRecords.y);
+  previous.effects.x = next.effects.x;
+  previous.effects.y = next.effects.y;
+  return interpolatePoint(applyPresence(previous, presence),next,params.transition.x,params.animateSizes.x);
+}
+
+fn currentLink(i: u32) -> Link {
+  let next = links[i];
+  if (params.transition.x >= 1.0 || i >= u32(params.transition.z)) { return next; }
+  return interpolateLink(previousLinks[i],next,params.transition.x,params.animateSizes.y);
+}
+
+fn screen(world: vec2f) -> vec2f {
+  return (world * vec2f(params.camera.z, -params.camera.z) + params.camera.xy) * params.camera.w;
+}
+
+fn clip(pixel: vec2f) -> vec4f {
+  let uv = (pixel - params.region.xy) / params.region.zw;
+  return vec4f(uv * vec2f(2,-2) + vec2f(-1,1), 0, 1);
+}
+
+fn sizeZoom(scalesWithZoom: f32) -> f32 {
+  return select(clamp(params.camera.z * 0.01, 1.0, 5.0), params.camera.z, scalesWithZoom > 0.0);
+}
+
+fn encodedId(index: u32, alpha: f32) -> vec4f {
+  let id = index + 1u;
+  return vec4f(f32(id & 255u) / 255.0, f32((id >> 8u) & 255u) / 255.0,
+               f32((id >> 16u) & 255u) / 255.0, alpha);
+}

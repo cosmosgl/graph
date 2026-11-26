@@ -238,18 +238,22 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
     hasFramed = true
   }
 
-  // Reads the positions back and refreshes the readout and the colours. The
-  // readback is a synchronous GPU stall (~2.4 MB at 300k points), so it runs on
-  // a timer and after a step burst, never per frame, and only when a tick has
-  // actually run since the last read.
-  const refresh = (force = false): void => {
+  // Read at most one snapshot of this layout at a time (2.4 MB for 300k points).
+  let pendingRead: Float32Array | undefined
+  const refresh = async (force = false): Promise<void> => {
     if (!hasPoints || disposed) return
     if (!hasFramed) frameSpace(0)
-    if (force || tick !== readTick) {
-      const positions = graph.getPointPositionsArray(readback)
+    positionBorder()
+    if (pendingRead === readback || (!force && tick === readTick)) return
+    const measuredTick = tick
+    const target = readback
+    pendingRead = target
+    try {
+      const positions = await graph.getPointPositionsAsync(target)
+      if (disposed || readback !== target) return
       if (positions.length >= pointsNumber * 2) {
         readback = positions
-        readTick = tick
+        readTick = measuredTick
         const { beyond, nonFinite, extent } = measureAndPaint(positions, pointsNumber, colors)
         // Where gravity 0.25 settles a layout of this size; without gravity
         // nothing does
@@ -260,7 +264,7 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
           `points: ${pointsNumber}`,
           `gravity: ${gravity}`,
           `state: ${isRunning ? 'running' : 'paused'}`,
-          `tick: ${tick}`,
+          `tick: ${measuredTick}`,
           `beyond space: ${((100 * beyond) / pointsNumber).toFixed(2)}% (${beyond})`,
           `extent: ${Math.round(extent)} (${equilibrium})`,
           `extent / spaceSize: ${(extent / SPACE_SIZE).toFixed(3)}`,
@@ -272,8 +276,11 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
         // finish, so snap it; `undefined` leaves alpha alone.
         graph.render(undefined, 0)
       }
+    } catch (error) {
+      if (!disposed && readback === target) readout.textContent = `Position read failed: ${String(error)}`
+    } finally {
+      if (pendingRead === target) pendingRead = undefined
     }
-    positionBorder()
   }
 
   // Every size or gravity change restarts from the same blob at tick 0, so each

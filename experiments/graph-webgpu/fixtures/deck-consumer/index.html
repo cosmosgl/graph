@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>Cosmos on Deck · WebGPU</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; color: #242424; margin: 24px; }
+      nav { display: flex; gap: 1.25rem; }
+      #host { position: relative; width: 320px; height: 192px; background: black; margin: 1rem 0; }
+      #status { display: block; margin: .5rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Cosmos on Deck</h1>
+    <nav aria-label="Examples"><a href="?owner=layer">Layer-owned graph</a><a href="?owner=app">App-supplied graph</a><a href="./standalone/">Script tag</a></nav>
+    <div id="host"><canvas aria-label="Two points connected by a link"></canvas></div>
+    <button id="resize" disabled>Resize canvas</button>
+    <output id="status" role="status"></output>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

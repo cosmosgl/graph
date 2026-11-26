@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" href="data:,">
+    <title>Cosmos from a script tag</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 24px; }
+      #graph { position: relative; width: 256px; height: 160px; }
+    </style>
+  </head>
+  <body>
+    <h1>Cosmos from a script tag</h1>
+    <div id="graph"></div>
+    <output id="hit" role="status"></output>
+    <script src="./index.min.js"></script>
+    <script>
+      const hit = document.getElementById('hit')
+      const graph = new Cosmos.Graph(document.getElementById('graph'), {
+        spaceSize: 512, pixelRatio: 1, backgroundColor: '#000', fitViewOnInit: false,
+        rescalePositions: false, enableSimulation: false, enableRenderLoop: false,
+        enableDrag: false, enableZoom: false, transitionDuration: 0,
+        pointDefaultSize: 16, linkDefaultWidth: 6, linkOpacity: 1, linkVisibilityMinTransparency: 1,
+        onPointClick: id => { hit.value = 'Point ' + id },
+        onLinkClick: id => { hit.value = 'Link ' + id },
+        onBackgroundClick: () => { hit.value = 'Background' },
+      })
+      graph.setPointPositions(Float32Array.of(192, 256, 320, 256), true)
+      graph.setPointColors(Float32Array.of(1, 0, 0, 1, 0, 1, 0, 1))
+      graph.setLinks(Float32Array.of(0, 1))
+      graph.setLinkColors(Float32Array.of(0, 0, 1, 1))
+      graph.render(0, 0)
+      window.standaloneGraph = graph.ready.then(() => {
+        graph.setViewTransform({ k: 1, x: 0, y: 0 }, [256, 160])
+        graph.renderOneFrame()
+        hit.value = 'Ready'
+        return graph
+      })
+    </script>
+  </body>
+</html>

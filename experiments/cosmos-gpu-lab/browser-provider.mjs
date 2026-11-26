@@ -1,0 +1,29 @@
+import { playwright } from '@vitest/browser-playwright'
+
+export function labBrowser () {
+  // Native is the default. Opt in to exercise both production packages on SwiftShader.
+  const args = process.env.LAB_DEFAULT_GPU_FLAGS !== '1' ? ['--enable-unsafe-webgpu'] : []
+  if (process.env.LAB_SWIFTSHADER === '1') {
+    args.push('--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader')
+  }
+  const residentStudy = process.env.VITE_LAB_RESIDENT_INTERACTION === '1' || process.env.VITE_LAB_RESIDENT_REAL_GRAPH === '1' ||
+    process.env.VITE_LAB_MOTION_STYLES === '1' || process.env.VITE_LAB_RESIDENT_READBACK === '1'
+  const provider = playwright({ launchOptions: {
+    channel: 'chrome',
+    args,
+  }, ...(residentStudy ? { contextOptions: { viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 } } : {}) })
+  const inline = process.env.LAB_INLINE_BROWSER === '1'
+  if (inline) {
+    provider.name = 'existing-browser'
+    provider.providerFactory = () => ({
+      name: 'existing-browser', supportsParallelism: false, getCommandsContext: () => ({}),
+      openPage: async (_session, url) => { process.stdout.write(`\nOpen test session: ${url}\n`) },
+      close: () => {},
+    })
+  }
+  return {
+    enabled: true, headless: !inline && process.env.LAB_NATIVE_VISIBLE !== '1', connectTimeout: inline ? 180000 : 60000,
+    screenshotFailures: false, provider, instances: [{ browser: 'chromium' }],
+    ...(residentStudy ? { ui: false, viewport: { width: 1080, height: 680 } } : {}),
+  }
+}

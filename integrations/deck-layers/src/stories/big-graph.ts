@@ -6,6 +6,7 @@ import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
+import { createStoryDevice } from './story-device'
 import './style.css'
 
 /**
@@ -48,8 +49,9 @@ export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => 
     status.textContent = `${counts} · ${state}`
   }
 
+  const host = await createStoryDevice(div)
   const deck = new Deck({
-    parent: div,
+    ...host.props,
     views: new OrthographicView({ flipY: false }), // cosmos's space has y up
     initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: -2.8, minZoom: -5, maxZoom: 2 },
     controller: true,
@@ -140,6 +142,7 @@ export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => 
       window.clearInterval(ticker)
       // The layer owns the graph: finalizing deck finalizes the layer, which destroys it
       deck.finalize()
+      host.destroy?.()
     },
   }
 }
