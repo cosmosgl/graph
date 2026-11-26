@@ -434,6 +434,24 @@ candidate private through hardware qualification and release review.
    the preceding site revision.
    [Consumer checks](../../scripts/check-packed-webgpu-deck.mjs) · [Recorded qualification](src/experiments/integrated-webgpu/host-ownership.md#recovery-with-the-signed-picking-and-camera-changes)
 
+#### Disposable public-package rehearsal
+
+A disposable copy of `cfaae9f7` built both public packages as
+`4.0.0-rehearsal.0` through their ordinary prepublish and pack commands on
+Node 22.23.5 and 24.2.0. All three Graph and all six Deck distribution files,
+including declarations, matched the qualified `12c2b599` packages byte for
+byte. The working branch still builds WebGL by default.
+
+The default Pages build indexed 46 stories. On SwiftShader, Quick Start picked
+point 2, the Deck Graph Layer drew and picked, and the website home drew 48,000
+points. The Lab loaded the frozen WebGL and promoted WebGPU files and both
+selected point 1 after it moved. The initial root typecheck reported 201
+errors in 15 historical WebGL test files, and its Vitest configuration missed
+all 13 WebGPU suites. The local capture keeps package reproduction, CI test
+porting and strict consumer checks separately under
+`captures/public-promotion-cfaae9f7-20261126/` in `REHEARSAL.md`,
+`ci-routing/` and `consumer/`.
+
 ### Historical replays
 
 At promotion, record the full Git revision of the last WebGL source, its frozen
