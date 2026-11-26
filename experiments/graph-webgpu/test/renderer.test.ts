@@ -369,8 +369,9 @@ it.each(['link widths', 'point colors and sizes'])('matches full uploads when %s
   }
 })
 
-it('applies a highlight to the target style and invalidates a pick from the preceding frame', async () => {
+it('applies a highlight to the displayed style and invalidates a pick from the preceding frame', async () => {
   const config = createDefaultConfig()
+  config.pointGreyoutColor = '#0f0'
   const scene = await createScene(config)
   const { data, view, renderer, framebuffer, readPixel } = scene
   try {
@@ -380,14 +381,18 @@ it('applies a highlight to the target style and invalidates a pick from the prec
     const halfway = { ...view, styleProgress: 0.5 }
     renderer.draw(halfway, framebuffer)
     expect(await readPixel(32, 64)).toEqual([128, 128, 128, 255])
+    expect(await readPixel(160, 64)).toEqual([0, 0, 255, 255])
 
     const pendingPick = renderer.pick(16, 32, halfway)
     config.highlightedPointIndices = [2]
     renderer.updatePointHighlights()
     expect(await pendingPick).toBeNull()
     renderer.draw(halfway, framebuffer)
-    expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
+    expect(await readPixel(32, 64)).toEqual([128, 128, 128, 255])
+    expect(await readPixel(160, 64)).toEqual([0, 255, 0, 255])
     expect(await renderer.pick(16, 32, halfway)).toEqual({ kind: 'point', index: 2 })
+    renderer.draw({ ...view, styleProgress: 1 }, framebuffer)
+    expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
     expect(scene.errors).toEqual([])
   } finally { scene.destroy() }
 })

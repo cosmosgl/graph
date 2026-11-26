@@ -48,6 +48,7 @@ function compareMidpointFrames (samples: SparseSample[], removal: 'remove-again'
 async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario): Promise<{
   samples: SparseSample[];
   comparisons: Comparison[];
+  referenceRenderer: string;
   repeatedMidpoint?: { webgl: PixelComparison; webgpu: PixelComparison };
   restoredOriginal?: { webgl: PixelComparison; webgpu: PixelComparison };
 }> {
@@ -80,7 +81,7 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
     expect(gl.deviceInfo.gpuType).not.toBe('cpu')
     expect(gpu.deviceInfo.fallback).toBe(false)
   }
-  return { samples: gl.samples, comparisons, repeatedMidpoint, restoredOriginal }
+  return { samples: gl.samples, comparisons, referenceRenderer: gl.deviceInfo.renderer, repeatedMidpoint, restoredOriginal }
 }
 
 it.each([1, 2] as const)('removes and restores a slot in both packages at %i×', async ratio => {
@@ -288,10 +289,10 @@ it.each([1, 2] as const)('removes the slot halfway through its return to the ori
 })
 
 it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third removal at %i×', async ratio => {
-  const { comparisons } = await compareSparseTransition(ratio, 'restore-to-80')
+  const { comparisons, referenceRenderer } = await compareSparseTransition(ratio, 'restore-to-80')
   const restoring = comparisons.filter(row => row.phase === 'restore-to-80')
   expect(restoring.map(row => row.time)).toEqual([
-    0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500, 513, 514, 529, 530, 683, 684, 724, 725, 750, 1000,
+    0, 1, 2, 16, 250, 275, 276, 374, 375, 376, 396, 397, 470, 471, 500, 513, 514, 529, 530, 682, 683, 684, 724, 725, 750, 1000,
   ])
   const before = comparisons[comparisons.indexOf(restoring[0]!) - 1]!
   expect(before).toMatchObject({ phase: 'remove-on-return', time: 500 })
@@ -311,6 +312,11 @@ it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third rem
   ])
   const background = 'Background'
   const point = 'Point 1'
+  // At the half-resolution pick-window edge, both packages switch a millisecond
+  // later at x=80 and a millisecond earlier at x=56 on SwiftShader than on Metal.
+  const swiftShader = /swiftshader/i.test(referenceRenderer)
+  const destinationHit = swiftShader ? 376 : 375
+  const midpointMiss = swiftShader ? 683 : 684
   for (const row of comparisons) {
     const label = `${row.phase} ${row.time} ms`
     const frame = row.webgl
@@ -323,9 +329,9 @@ it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third rem
     }
     if (row.phase === 'restore-to-80') {
       // At x=80 the link becomes pickable while it is still too faint to paint.
-      const destinationPick = row.time < 2 ? background : row.time < 375 ? 'Link 0' : point
+      const destinationPick = row.time < 2 ? background : row.time < destinationHit ? 'Link 0' : point
       expect.soft(clicks, label).toEqual([
-        row.time < 514 ? point : background, row.time < 684 ? point : background, point, destinationPick,
+        row.time < 514 ? point : background, row.time < midpointMiss ? point : background, point, destinationPick,
       ])
     }
     expect.soft(row.webgpu, label).toEqual(frame)

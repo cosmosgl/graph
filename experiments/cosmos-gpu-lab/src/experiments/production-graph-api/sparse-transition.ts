@@ -226,8 +226,10 @@ export async function runSparseTransition (
       if (removeOnReturn) await edit('remove-on-return', [NaN, NaN], returnMidpoint, 1000, restoreTo80 ? halfFadeTimes : fullFadeTimes)
       if (restoreTo80) {
         // Adjacent milliseconds bracket the four sites' click and area-selection changes on the x=56→80 leg.
-        const returnTimes = [0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500]
-        if (!removeAt68) returnTimes.push(513, 514, 529, 530, 683, 684, 724, 725, 750, 1000)
+        const returnTimes = [0, 1, 2, 16, 250, 275, 276, 374, 375]
+        if (!removeAt68) returnTimes.push(376)
+        returnTimes.push(396, 397, 470, 471, 500)
+        if (!removeAt68) returnTimes.push(513, 514, 529, 530, 682, 683, 684, 724, 725, 750, 1000)
         await edit('restore-to-80', restored, restored, 1000, returnTimes)
       }
       if (removeAt68) await edit('remove-at-68', [NaN, NaN], removalCenter, 1000, fullFadeTimes)

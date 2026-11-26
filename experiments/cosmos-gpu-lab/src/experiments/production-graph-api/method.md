@@ -169,7 +169,7 @@ Immediately after removal, every click returned Background and every local area 
 
 At 500 ms into the third fade, point 1 was still 12 CSS px wide at x = 56 and its link’s green channel was 128. All four clicks returned background and all local selections were empty. Restoring point 1 to x = 80 at that same instant cleared the point and link from the canvas. Clicks at x = 48, 56 and 64 immediately returned point 1. Both whole-graph selections changed from `[0, 2]` to `[0, 1, 2]`. [Replay the restoration to x = 80](#/production-graph-api?section=try-restore-to-80)
 
-The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS px. Times below are inclusive milliseconds after the restore, with adjacent whole milliseconds sampled at every handoff. Outside the listed selection windows the local result was `[]`.
+The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS px. The table gives inclusive milliseconds on M3, with adjacent whole milliseconds sampled at every handoff. Outside the listed selection windows the local result was `[]`.
 
 | Probe x | Click | Rectangle returns `[1]` | Lasso returns `[1]` |
 | ---: | --- | --- | --- |
@@ -178,7 +178,9 @@ The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS 
 | 64 | Point 1 throughout | 0–724 ms | 0–724 ms |
 | 80 | Background at 0–1 ms, link 0 at 2–374 ms, point 1 from 375 ms | 471–1,000 ms | 471–1,000 ms |
 
-At x = 80 the first link hit arrived while the pixel still read black. Halfway through the restore, the point was 12 CSS px wide at x = 68 and the link’s green channel was 128. At 1,000 ms the point was 24 CSS px wide at x = 80, the green channel was 255 and the full canvas matched the settled x = 80 frame after an uninterrupted restoration. Across 1× and 2× on M3, all 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed between packages.
+At x = 80 the first link hit arrived while the pixel still read black. Halfway through the restore, the point was 12 CSS px wide at x = 68 and the link’s green channel was 128. At 1,000 ms the point was 24 CSS px wide at x = 80, the green channel was 255 and the full canvas matched the settled x = 80 frame after an uninterrupted restoration. Across 1× and 2× on M3, all 98 frame pairs, 392 site clicks and 980 rectangle and lasso results agreed between packages.
+
+SwiftShader moved two click handoffs by one millisecond at both pixel ratios. At x = 80, WebGL and WebGPU still returned link 0 at 375 ms and returned point 1 at 376 ms. At x = 56 they returned point 1 at 682 ms and background at 683 ms. The same IDs and pixels were recorded before and after the WebGPU configuration-transition fix.
 
 ### Remove point 1 at x = 68 on its way to x = 80
 
