@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { cpus } from 'node:os'
 import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,7 +10,11 @@ import { calibrate, compare, formatComparison } from './migration-results.mjs'
 
 const lab = fileURLToPath(new URL('../', import.meta.url))
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
-const { values } = parseArgs({ options: { fixture: { type: 'string' }, smoke: { type: 'boolean' } } })
+const { values } = parseArgs({ options: {
+  fixture: { type: 'string' }, points: { type: 'string', default: '8192' }, smoke: { type: 'boolean' }, layout: { type: 'boolean' },
+} })
+const pointCount = Number(values.points)
+if (!Number.isSafeInteger(pointCount) || pointCount < 1026 || pointCount > 1000000) throw new Error('Expected 1,026–1,000,000 points')
 const kinds = values.fixture ? [values.fixture] : ['dense', 'hubs']
 if (!kinds.every(k => ['dense', 'hubs'].includes(k))) throw new Error('Expected --fixture dense or hubs')
 const cpu = cpus()[0]?.model ?? 'unknown'
@@ -31,7 +35,21 @@ source.arguments = process.argv.slice(2)
 await save('source', source)
 console.log(`Timing the two packages in ${relative(repo, capture)}`)
 const server = await createServer({ root: lab, server: { host: '127.0.0.1', watch: null } })
-const metrics = ['Steady frame p95', 'Click p95', 'First click', 'Slowest click']
+const metrics = ['Steady frame p95', 'Click p95', 'First click', 'Slowest click', 'Peak tracked memory']
+if (pointCount > 8192) metrics.push('Cold startup', 'Point update', 'Topology update', 'Full replacement', 'Resize')
+
+async function comparePositions(referencePath, coordinates, radius) {
+  const earlier = await readFile(referencePath)
+  if (earlier.length !== coordinates.length) throw new Error('Point counts differ')
+  const reference = new Float32Array(earlier.buffer, earlier.byteOffset, earlier.length / 4)
+  const xy = new Float32Array(coordinates.buffer, coordinates.byteOffset, coordinates.length / 4)
+  let sum = 0
+  for (let i = 0; i < xy.length; i++) {
+    if (i === 2 || i === 3) continue // the fixture's absent slot
+    sum += (xy[i] - reference[i]) ** 2
+  }
+  return Math.sqrt(sum / (xy.length / 2 - 1)) / radius
+}
 
 function distribution(samples) {
   const sorted = [...samples].sort((a, b) => a - b)
@@ -40,12 +58,12 @@ function distribution(samples) {
 }
 
 async function run(url, kind, engine, name) {
-  const entry = { kind, engine, name, stage: 'open', status: 'started', diagnostics: [], result: null }
+  const entry = { kind, engine, name, pointCount, stage: 'open', status: 'started', diagnostics: [], result: null }
   let browser
   let page
   const log = error => { if (entry.diagnostics.length < 25) entry.diagnostics.push(String(error).slice(0, 700)) }
   const snapshot = () => page.evaluate(() => window.forceTiming?.snapshot())
-  const timeout = setTimeout(() => { entry.timedOut = true; browser?.close().catch(log) }, 120000)
+  const timeout = setTimeout(() => { entry.timedOut = true; browser?.close().catch(log) }, values.layout && !values.smoke ? 240000 : 120000)
   try {
     browser = await chromium.launch({ channel: 'chrome', headless: false, timeout: 20000 })
     entry.browser = browser.version()
@@ -55,10 +73,29 @@ async function run(url, kind, engine, name) {
     await page.goto(url)
     await page.bringToFront()
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
-    await page.evaluate(([engine, kind]) => window.openForceTiming(engine, kind), [engine, kind])
+    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout])
     const bounds = await page.locator('#graph canvas').boundingBox()
     if (!bounds || bounds.width !== 961 || bounds.height !== 541 || bounds.x < 0 || bounds.y < 0 ||
       bounds.x + bounds.width > 1050 || bounds.y + bounds.height > 680) throw new Error('Canvas not fully visible')
+    if (values.layout) {
+      entry.result = await snapshot()
+      entry.result.checkpoints = []
+      for (const tick of values.smoke ? [0, 1] : [0, 1, 4, 8, 16, 31, 32, 99, 100]) {
+        entry.stage = `tick ${tick}`
+        const { positions, ...row } = await page.evaluate(tick => window.forceTiming.checkpoint(tick), tick)
+        const coordinates = Buffer.from(positions, 'base64')
+        const xyFile = join(capture, kind, `${name}-${tick}.f32`)
+        await writeFile(xyFile, coordinates)
+        entry.result.checkpoints.push(row)
+        await save(`${kind}/${name}`, entry)
+        console.log(`${kind} ${name}: tick ${tick}, collision RMS ${row.quality.overlap.rmsDepth.toFixed(3)} (stride ${row.quality.overlap.stride})`)
+      }
+      await page.evaluate(() => window.forceTiming.finish())
+      const { checkpoints } = entry.result
+      entry.result = { ...await snapshot(), checkpoints }
+      entry.stage = 'complete'; entry.status = 'complete'
+      return entry
+    }
     entry.stage = 'frames'
     await page.evaluate(smoke => window.forceTiming.run(smoke ? 3 : 8, smoke ? 8 : 48), !!values.smoke)
     for (let i = 0; i < (values.smoke ? 4 : 12); i++) {
@@ -69,7 +106,7 @@ async function run(url, kind, engine, name) {
       await page.mouse.click(bounds.x + x, bounds.y + y)
       await page.waitForFunction(i => window.forceTiming.snapshot().picked.length === i + 1, i, { timeout: 10000 })
     }
-    entry.stage = 'quality'
+    entry.stage = 'verify layout and public data updates'
     await page.evaluate(() => window.forceTiming.finish())
     entry.result = await snapshot()
     const { picked, quality, steady, refreshMs } = entry.result
@@ -101,6 +138,37 @@ try {
     await mkdir(join(capture, kind))
     if (values.smoke) {
       for (const engine of ['webgl', 'webgpu']) await run(url, kind, engine, `smoke-${engine}`)
+      continue
+    }
+    if (values.layout) {
+      const lanes = []
+      for (const [engine, name] of [['webgl', 'reference'], ['webgl', 'repeat'], ['webgpu', 'candidate']]) {
+        lanes.push(await run(url, kind, engine, name))
+      }
+      const rows = []
+      for (const [i, reference] of (lanes[0].result?.checkpoints ?? []).entries()) {
+        const file = name => join(capture, kind, `${name}-${reference.step}.f32`)
+        for (const lane of lanes.slice(1)) {
+          const probe = lane.result?.checkpoints?.[i]
+          if (!probe || reference.step !== probe.step) continue
+          if (lane.result.input !== lanes[0].result.input) throw new Error('Layout comparison used different public buffers or settings')
+          const rmsFraction = await comparePositions(file('reference'), await readFile(file(lane.name)), reference.motion.radius)
+          const radiusFraction = Math.abs(probe.motion.radius - reference.motion.radius) / reference.motion.radius
+          const retentionLoss = Math.max(...reference.quality.communities.map((group, index) => group.retainedFraction - probe.quality.communities[index].retainedFraction))
+          const within = rmsFraction < 0.05 && radiusFraction < 0.05 && retentionLoss <= 0.01
+          rows.push({ tick: probe.step, lane: lane.name, rmsFraction, radiusFraction, retentionLoss, within })
+          if (!within) process.exitCode = 1
+        }
+      }
+      const motion = lanes.map(lane => {
+        const rows = lane.result?.checkpoints ?? []
+        const first = rows.find(row => row.step === 1)?.motion.rmsDelta
+        const last = rows.find(row => row.step === 100)?.motion.rmsDelta
+        const cooled = first > 0 && last < first
+        if (!cooled) process.exitCode = 1
+        return { name: lane.name, first, last, cooled }
+      })
+      await save(`${kind}/layout-comparison`, { rows, motion, complete: lanes.every(lane => lane.status === 'complete') })
       continue
     }
     const controls = []

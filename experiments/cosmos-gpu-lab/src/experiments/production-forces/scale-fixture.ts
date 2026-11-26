@@ -49,8 +49,8 @@ export type ScaleFixture = {
   neighborhoodRadius: number;
 }
 
-function makeFixture (kind: ScaleCase): ScaleFixture {
-  const { input, graph, metadata } = createInteractiveFixture(8192, kind)
+function makeFixture (kind: ScaleCase, count: number): ScaleFixture {
+  const { input, graph, metadata } = createInteractiveFixture(count, kind)
   const { communityCount, circleRadius, neighborhoodRadius } = denseFixtureParameters
   const { pointCount, linkCount } = metadata
   const anchorCount = metadata.pinnedCount - 1
@@ -109,14 +109,15 @@ function makeFixture (kind: ScaleCase): ScaleFixture {
   }
 }
 
-const fixtures = new Map<ScaleCase, ScaleFixture>()
+const fixtures = new Map<string, ScaleFixture>()
 
 /** Both isolated Graph packages receive the same typed arrays in the same order. */
-export function scaleFixture (kind: ScaleCase): ScaleFixture {
-  let scene = fixtures.get(kind)
+export function scaleFixture (kind: ScaleCase, count = 8192): ScaleFixture {
+  const key = `${kind}:${count}`
+  let scene = fixtures.get(key)
   if (!scene) {
-    scene = makeFixture(kind)
-    fixtures.set(kind, scene)
+    scene = makeFixture(kind, count)
+    fixtures.set(key, scene)
   }
   return scene
 }

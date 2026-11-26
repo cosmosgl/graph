@@ -134,3 +134,21 @@ The same six clicks identified the isolated pin, the background, the gold link a
 SwiftShader passed the same nine layout checkpoints and every painted-color and click-ID probe. Its largest RMS position difference was 0.221% of the WebGL radius for dense communities at tick 100 and 0.404% for the hub at tick 99.
 
 With one moving Graph on the M3, WebGPU's measured frame p95 stayed near 17.6 ms. WebGL control variability left relative frame speed unassessed on both graphs after a repeat. Click feedback met the declared margins in both run orders, and all 288 trusted clicks returned the intended pin or background. [M3 frame and click timings](#/production-forces?section=doc-scale-timing)
+
+### One million points through tick 100
+
+In native Chrome 158 on Apple M3, two independent WebGL controls produced identical coordinates at every checkpoint on both million-point graphs. WebGPU stayed within the existing 5% allowance for RMS displacement and radius change, and within the one-percentage-point allowance for community retention. Each package kept the pinned points fixed, the single absent slot empty and every other position finite.
+
+| Measurement | Dense communities | Free hub |
+| --- | ---: | ---: |
+| Largest paired RMS difference as a fraction of WebGL radius | 0.283% | 0.341% |
+| Largest paired radius change | 0.00031% | 0.00315% |
+| Largest loss of community retention | 0 percentage points | 0.035 percentage points |
+| Last step RMS motion, WebGL / WebGPU | 1.771 / 1.754 | 4.073 / 3.994 |
+| Tick 100 RMS spring-length error, WebGL / WebGPU | 250.779 / 250.780 | 248.500 / 248.501 |
+| Tick 100 overlapping pairs, WebGL / WebGPU | 4,481,584 / 4,345,298 | 4,709,682 / 4,525,795 |
+| Tick 100 RMS overlap depth, WebGL / WebGPU | 1.567 / 1.524 | 1.649 / 1.590 |
+
+The final overlap calculation checked all million slots against their neighbors using the retained XY files. Both topologies had fewer overlapping pairs on WebGPU and slightly smaller RMS penetration there. Free hub 2 had 8,192 outgoing links and one incoming link. At tick 100 its displacement was 5,720.65 graph units in WebGL and 5,723.61 in WebGPU. Its incident link length p95 was 141.36 and 142.30 graph units respectively. Both engines ran from the same input buffers with the same configuration.
+
+The nine fixed checkpoints and binary positions are in `captures/packaged-force-timing-2026-11-26T09-50-35-971Z/`. Package hashes, luma versions and the source snapshot accompany the results. [Reproduction and thresholds](#/production-forces?section=doc-scale-method)

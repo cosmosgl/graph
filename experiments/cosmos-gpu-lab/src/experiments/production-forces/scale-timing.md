@@ -33,3 +33,23 @@ Two independent WebGL controls set the margin before each topology’s WebGPU tr
 Build both packages, then run `pnpm --filter @cosmos.gl/gpu-lab benchmark:packaged-forces` with no other GPU tests or builds active. Each block writes two WebGL controls and four paired captures per topology, including raw intervals, ticks, missed and coalesced frames, both click timestamps and feedback time. Chrome 158.0.8127.37 reported ANGLE Metal Apple M3 for WebGL and Apple metal-3, fallback false, for WebGPU. The Lab captures under `scale-forces-20261124/native-timing-fence/` and `native-timing-fence-repeat/` retain both source archives, package hashes and records.
 
 The earlier `native-timing/` capture used the luma fence completion promise alone. On WebGL that promise polls from a timer. Checking the public fence state at each animation opportunity found 30–47 completed WebGL fences per session before their timer notifications arrived. On WebGPU the fence state follows its queue completion notification. This observer correction supersedes the earlier 44% frame-speed estimate.
+
+## One million points
+
+All 144 trusted clicks returned the expected pinned point or background. In all 12 Chrome processes, 984,613 free points moved, 15,386 pinned points stayed fixed, the absent slot remained empty and all 999,990 links retained their ordered endpoints. After the clicks, both packages moved the requested point, replaced link 1, restored the full dataset and drew at the requested backing size. Each device's luma GPU allocation counter returned to zero after teardown.
+
+Each entry below gives the average of the paired WebGL and WebGPU runs, in that order. Timing verdicts use the predeclared margins and each pair's engine order. For example, the dense graph had lower observed WebGPU frame intervals, but the WebGL control spread exceeded the frame budget. Its full replacements exceeded the 4.2 ms allowance in both orders. The hub's repeatable cost increases also included startup, topology replacement and resize.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Steady frame p95 (ms) | 466.1 / 267.7 | Not assessed | 416.9 / 266.7 | Not assessed |
+| First click (ms) | 1,146.2 / 405.0 | Not assessed | 1,064.0 / 367.1 | Not assessed |
+| Click p95 and slowest of 12 (ms) | 1,261.1 / 424.0 | Not assessed | 1,064.0 / 433.8 | Not assessed |
+| Cold startup (ms) | 561.5 / 593.8 | Not assessed | 578.8 / 596.8 | Slower |
+| Point update (ms) | 131.3 / 79.9 | Not assessed | 136.9 / 96.5 | Not assessed |
+| Topology update (ms) | 472.0 / 559.5 | Not assessed | 397.6 / 599.9 | Slower |
+| Full replacement (ms) | 692.1 / 816.9 | Slower | 698.9 / 799.9 | Slower |
+| Resize (ms) | 72.4 / 113.1 | Not assessed | 51.6 / 105.1 | Slower |
+| Peak sampled GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+The initial qualification used Chrome 158.0.8127.37 on Apple M3. Both topologies' control distributions, margins, opposite-order trials and package hashes are in `captures/packaged-force-timing-2026-11-26T10-03-19-014Z/`. [Reproduction and what the timings include](#/production-forces?section=doc-scale-method)

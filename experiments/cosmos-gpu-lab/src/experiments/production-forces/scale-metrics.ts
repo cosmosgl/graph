@@ -2,9 +2,9 @@ import type { ScaleFixture } from './scale-fixture'
 
 export const scaleCheckpoints = [0, 1, 4, 8, 16, 31, 32, 99, 100] as const
 
-/** Exact pair count for the fixture's padded collision circles. Each earlier point occupies one bucket. */
-function overlaps (xy: Float32Array, radii: Float32Array): { pairs: number; maxDepth: number; rmsDepth: number } {
-  const width = 2 * Math.max(...radii)
+/** Count each pair once. On large fixtures sample the later endpoint and keep all possible neighbors. */
+export function overlaps (xy: Float32Array, radii: Float32Array, stride: number): { stride: number; pairs: number; maxDepth: number; rmsDepth: number } {
+  const width = 2 * radii.reduce((largest, radius) => Math.max(largest, radius), 0)
   const grid = new Map<string, number[]>()
   let pairs = 0
   let squaredDepth = 0
@@ -15,20 +15,22 @@ function overlaps (xy: Float32Array, radii: Float32Array): { pairs: number; maxD
     const y = xy[2 * i + 1]
     const col = Math.floor(x / width)
     const row = Math.floor(y / width)
-    for (let ix = col - 1; ix <= col + 1; ix++) {
-      for (let iy = row - 1; iy <= row + 1; iy++) {
-        const others = grid.get(`${ix},${iy}`)
-        if (!others) continue
-        for (const j of others) {
-          const dx = x - xy[2 * j]
-          const dy = y - xy[2 * j + 1]
-          const contact = radii[i] + radii[j]
-          const squared = dx * dx + dy * dy
-          if (squared >= contact * contact) continue
-          const depth = contact - Math.sqrt(squared)
-          pairs++
-          squaredDepth += depth * depth
-          maxDepth = Math.max(maxDepth, depth)
+    if (i % stride === 0) {
+      for (let ix = col - 1; ix <= col + 1; ix++) {
+        for (let iy = row - 1; iy <= row + 1; iy++) {
+          const others = grid.get(`${ix},${iy}`)
+          if (!others) continue
+          for (const j of others) {
+            const dx = x - xy[2 * j]
+            const dy = y - xy[2 * j + 1]
+            const contact = radii[i] + radii[j]
+            const squared = dx * dx + dy * dy
+            if (squared >= contact * contact) continue
+            const depth = contact - Math.sqrt(squared)
+            pairs++
+            squaredDepth += depth * depth
+            maxDepth = Math.max(maxDepth, depth)
+          }
         }
       }
     }
@@ -37,11 +39,11 @@ function overlaps (xy: Float32Array, radii: Float32Array): { pairs: number; maxD
     if (bucket) bucket.push(i)
     else grid.set(key, [i])
   }
-  return { pairs, maxDepth, rmsDepth: pairs ? Math.sqrt(squaredDepth / pairs) : 0 }
+  return { stride, pairs, maxDepth, rmsDepth: pairs ? Math.sqrt(squaredDepth / pairs) : 0 }
 }
 
 /** All distances are calculated from a fresh public XY read in graph units. */
-export function scaleMetrics (fixture: ScaleFixture, xy: Float32Array): {
+export function scaleMetrics (fixture: ScaleFixture, xy: Float32Array, overlapStride = 1): {
   communities: { members: number; retainedFraction: number; rmsSpread: number }[];
   springRmsError: number;
   overlap: ReturnType<typeof overlaps>;
@@ -84,7 +86,7 @@ export function scaleMetrics (fixture: ScaleFixture, xy: Float32Array): {
       return { members, retainedFraction: retained / members, rmsSpread: Math.sqrt(Math.max(0, stat.squares / members - meanSquared)) }
     }),
     springRmsError: Math.sqrt(sumSquaredSpringError / (links.length / 2)),
-    overlap: overlaps(xy, radii),
+    overlap: overlaps(xy, radii, overlapStride),
     hub: {
       id: hubId,
       displacement: Math.hypot(xy[hubId * 2] - positions[hubId * 2], xy[hubId * 2 + 1] - positions[hubId * 2 + 1]),

@@ -101,11 +101,11 @@ export function forcePositions (fixture: ForceCase): Float32Array {
   return xy
 }
 
-export function loadForce (graph: Graph, fixture: ForceCase, dimensions = viewport): void {
-  const xy = forcePositions(fixture)
+export function loadForce (graph: Graph, fixture: ForceCase, dimensions = viewport, count = 8192): void {
+  const scene = isScaleCase(fixture) ? scaleFixture(fixture, count) : undefined
+  const xy = scene?.positions ?? forcePositions(fixture)
   graph.setPointPositions(xy, true)
-  if (isScaleCase(fixture)) {
-    const scene = scaleFixture(fixture)
+  if (scene) {
     graph.setPinnedPoints(scene.pinned)
     graph.setPointSizes(scene.sizes)
     graph.setPointColors(scene.colors)

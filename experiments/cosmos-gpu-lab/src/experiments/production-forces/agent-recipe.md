@@ -135,3 +135,14 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu \
 ```
 
 The raw runs live in `captures/scale-forces-20261124/`. `native-reference-first/` holds the two controls and three force-off runs per topology. `final-5c378cfe-native/` and `final-5c378cfe-swiftshader/` hold the six test files on each adapter. Each run manifest records the exact Chrome version, package hashes, full commit and command. The timing study retains a source archive and hash, bundle hashes and the individual Chrome session records. Desktop and narrow physical-click and reset replays are in `captures/scaled-forces-20261124/ui/`. [Thresholds and coverage](#/production-forces?section=doc-scale-method) · [Native frame and click results](#/production-forces?section=doc-scale-timing)
+
+## Million-point production packages
+
+Build both packages with the commands at the top of this page. Run the fixed-tick check first and the foreground frame/click timing separately, while the GPU is free.
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab benchmark:packaged-forces --points 1000000 --layout
+pnpm --filter @cosmos.gl/gpu-lab benchmark:packaged-forces --points 1000000
+```
+
+To reproduce a single topology, add `--fixture dense` or `--fixture hubs`. Add `--smoke` to check initialization and the first tick on both packages in layout mode, or eight steady frames and four clicks per package in timing mode. Every invocation creates a separate capture directory. A failed run retains its stage, diagnostics and completed layout checkpoints. Compare partial measurements only where all required controls and both engine orders completed. [Million-point layout results](#/production-forces?section=doc-results) · [M3 timing and workflow results](#/production-forces?section=doc-scale-timing)
