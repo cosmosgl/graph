@@ -100,16 +100,23 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
       graph.renderOneFrame()
     }
 
-    const updateSelection = (vertices: Point[]): void => {
+    let queryVersion = 0
+    const updateSelection = async (vertices: Point[]): Promise<void> => {
+      const version = ++queryVersion
       const [first, , opposite] = vertices
-      let indices: number[] = []
-      if (first && opposite) {
-        indices = mode === 'Rectangle'
-          ? graph.findPointsInRect([first, opposite])
-          : graph.findPointsInPolygon(vertices)
+      try {
+        let ids: number[] | null = []
+        if (first && opposite) {
+          ids = mode === 'Rectangle'
+            ? await graph.findPointsInRectAsync([first, opposite])
+            : await graph.findPointsInPolygonAsync(vertices)
+        }
+        if (disposed || version !== queryVersion || ids === null) return
+        highlight(ids)
+        status.textContent = `Selected: ${ids.length ? ids.map(index => names[index]).join(', ') : 'none'}`
+      } catch (error) {
+        if (!disposed && version === queryVersion) status.textContent = `Selection failed: ${String(error)}`
       }
-      highlight(indices)
-      status.textContent = `Selected: ${indices.length ? indices.map(index => names[index]).join(', ') : 'none'}`
     }
 
     updateView = (): void => {

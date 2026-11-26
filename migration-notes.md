@@ -1,5 +1,22 @@
 # Migration Guide
 
+## Preparing an application for the WebGPU candidate
+
+The private WebGPU candidate reads GPU positions and area selections asynchronously.
+These calls also work on WebGL 3.6.1, so an application can migrate its callers
+before switching engines.
+
+| WebGL synchronous call | Fresh result on either engine |
+| --- | --- |
+| `graph.getPointPositions()` or `graph.getPointPositionsArray(out)` | `await graph.getPointPositionsAsync(out)` returns a `Float32Array` |
+| `graph.findPointsInRect(rect)` | `await graph.findPointsInRectAsync(rect)` |
+| `graph.findPointsInPolygon(vertices)` | `await graph.findPointsInPolygonAsync(vertices)` |
+
+An area query returns an ordered array of IDs, or `null` when it cannot
+complete. When the user moves a selection, display only the most recent
+request's result. For layout measurements, record the simulation tick when
+requesting the snapshot and display that tick with the returned coordinates.
+
 ## Migrating `@cosmos.gl/deck-layers` 3.5.0 → 3.5.1
 
 ### `CosmosGraphLayer` Draws With cosmos.gl's Renderer
