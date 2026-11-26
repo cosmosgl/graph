@@ -372,3 +372,26 @@ the clean build, tarballs and individual reports. The Graph archive SHA-256
 is `10aea9a7edefc19a21cfe4c5c43023c4b3f55bf9d1da5c9645ee0098ec962217`.
 The Deck archive SHA-256 is
 `88701ff882f934d0a37d5b772cc0eef7e17639eaaec7c22c5950b376878eaca7`.
+
+### Recovery with the signed picking and camera changes
+
+At `12c2b599`, all ten 65,536-point sessions restored their saved positions,
+camera, selection and pin. With either owner, the first resumed tick produced
+the uninterrupted cooling value of 0.44752006671965644. The packed app drew
+and picked the resized graph, released the layer-owned graph and could still
+edit the app-supplied graph after layer removal. The standalone script also
+passed all four paint and pick probes and removed its canvas on teardown.
+
+Chrome 158 on Apple Metal and SwiftShader exercised GPU-process loss. Firefox
+153, WebKit 26.5 and installed Safari 26.5.2 exercised device destruction.
+The four automated lanes checked 1× and 2× display ratios. Installed Safari
+ran at its native 2×. Firefox withheld its adapter vendor. These checks ran
+on the M3 host.
+
+The clean app used Deck 10.0.0-alpha.1 and one luma core 10.0.0-alpha.14.
+Every file in either tarball matched its installed copy. All 72 shared Graph
+story sources compiled against the installed declaration and the WebGL
+reference declaration. The source revision, tarballs and browser reports
+are in `captures/signed-graph-deck-12c2b599-odsn6xvz/`. The Graph archive
+SHA-256 is `2b79f877177f70369f88cc6cc528bb0811fd3c120bfa652fc7210c476781a3c2`.
+The Deck archive has the same SHA-256 as the subviewport build above.
