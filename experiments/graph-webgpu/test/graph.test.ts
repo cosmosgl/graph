@@ -4,6 +4,7 @@ import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation, PointShape, type GraphConfig } from '../src'
 import { Lines } from '../src/modules/Lines'
+import { GraphRenderer } from '../src/renderer'
 import { StyleTransition } from '../src/style-transition'
 
 const config: GraphConfig = {
@@ -43,6 +44,31 @@ async function expectBorrowedDeviceUsable (device: Device): Promise<void> {
 }
 
 describe('WebGPU Graph', () => {
+  it('paints a paused topology edit once and resumes automatic draws when unpaused', async () => {
+    const onSimulationTick = vi.fn()
+    const { graph, cleanup } = mountedGraph({ enableRenderLoop: true, onSimulationTick })
+    const frame = async (): Promise<void> => { await new Promise(requestAnimationFrame) }
+    try {
+      await graph.ready
+      // Let initial resize notifications and the first render finish.
+      await frame()
+      await frame()
+      const draw = vi.spyOn(GraphRenderer.prototype, 'draw')
+      graph.setLinks(Float32Array.of(1, 0))
+      graph.render(undefined, 0)
+      expect(draw).toHaveBeenCalledOnce()
+      await frame()
+      await frame()
+      expect(draw).toHaveBeenCalledOnce()
+      expect(graph.getConnectedPointIndices(0)).toEqual([1, 0])
+
+      onSimulationTick.mockClear()
+      graph.unpause()
+      await vi.waitFor(() => expect(onSimulationTick).toHaveBeenCalled())
+      expect(draw.mock.calls.length).toBeGreaterThan(1)
+    } finally { vi.restoreAllMocks(); cleanup() }
+  })
+
   it('retains the link buffer through color-only, size-only and interrupted point edits', async () => {
     const { graph, cleanup } = mountedGraph()
     try {

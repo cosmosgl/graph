@@ -110,6 +110,10 @@ export class Graph {
   public get progress (): number { return this.simulation.progress }
   public get maxPointSize (): number { return this.simulation.store.maxPointSize }
 
+  private get needsAnotherFrame (): boolean {
+    return this.isSimulationRunning || this.transition.isActive || !!this.mouseRepulsion || !!this.fpsMonitor
+  }
+
   public render (alpha?: number, transitionDuration?: number): void {
     this.whenReady(() => {
       this.transition.setDurationOverride(this.canvas && this.hasRendered ? transitionDuration : 0)
@@ -175,7 +179,9 @@ export class Graph {
           else this.fitView(this.config.fitViewDuration, this.config.fitViewPadding)
         }, this.config.fitViewDelay)
       }
-      this.requestFrame()
+      // The updated data has already been painted. A stationary graph receives
+      // another draw if a later hover read, resize or public edit changes it.
+      if (this.needsAnotherFrame) this.requestFrame()
     })
   }
 
@@ -214,7 +220,7 @@ export class Graph {
       // ResizeObserver can run after the caller’s animation callback. Draw the
       // new backing size immediately and consume any already scheduled idle paint.
       this.resize()
-      if (this.frame && !this.isSimulationRunning && !this.transition.isActive && !this.mouseRepulsion && !this.fpsMonitor) {
+      if (this.frame && !this.needsAnotherFrame) {
         cancelAnimationFrame(this.frame)
         this.frame = 0
       }
@@ -606,7 +612,7 @@ export class Graph {
         this.isFrameInFlight = false
       }
       fence.signaled.then(release, release)
-      if (this.hasRendered && (this.isSimulationRunning || this.transition.isActive || this.mouseRepulsion || this.fpsMonitor)) this.requestFrame()
+      if (this.hasRendered && this.needsAnotherFrame) this.requestFrame()
     })
   }
 
