@@ -8,8 +8,9 @@ const phases = new Map([
   ['remove', 'Removal'],
   ['restore', 'Restoration'],
   ['remove-again', 'Second removal'],
-  ['restore-original', 'Final return'],
+  ['restore-original', 'Return to x = 48'],
   ['remove-on-return', 'Third removal'],
+  ['restore-to-80', 'Restore to x = 80'],
   ['snap-remove', 'Immediate removal'],
   ['snap-restore', 'Immediate restoration'],
 ])
@@ -22,6 +23,7 @@ const locations = {
 }
 type Site = keyof typeof locations
 const threeSites = ['old', 'midpoint', 'destination'] as const
+const fourSites = ['old', 'returnMidpoint', 'midpoint', 'destination'] as const
 const previews: Record<SparseScenario, { initial: string; sites: readonly Site[] }> = {
   complete: { initial: 'remove-500', sites: [] },
   interrupted: { initial: 'restore-0', sites: ['old', 'destination'] },
@@ -30,7 +32,9 @@ const previews: Record<SparseScenario, { initial: string; sites: readonly Site[]
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
   'restore-original': { initial: 'restore-original-0', sites: threeSites },
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
-  'remove-on-return': { initial: 'remove-on-return-0', sites: ['old', 'returnMidpoint', 'midpoint', 'destination'] },
+  'remove-on-return': { initial: 'remove-on-return-0', sites: fourSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'restore-to-80': { initial: 'restore-to-80-0', sites: fourSites },
 }
 
 function selectionTable (samples: readonly (SparseSample['selections'] | undefined)[]): HTMLElement {
@@ -61,18 +65,15 @@ export function createSparseView (host: HTMLElement, scenario: SparseScenario = 
   return createPairedPickView(host, {
     probes: { ...siteProbes, link: 'Incident link', anchor: 'Other endpoint', control: 'Isolated point' },
     initial,
-    run: async (engine, ratio) => (await runSparseTransition(engine, ratio, scenario)).samples.map(sample => {
+    run: async (engine, ratio) => (await runSparseTransition(engine, ratio, scenario)).samples.map((sample, index, samples) => {
       const { phase, time, sites } = sample
-      let title = phases.get(phase)!
+      const next = samples[index + 1]?.phase
+      let title = time === 500 && next && next !== phase ? `Before ${phases.get(next)!.toLowerCase()}` : phases.get(phase)!
       if (phase !== 'initial' && !phase.startsWith('snap-')) title += ` · ${time} ms`
       const picks: Record<string, string> = { ...sample.picks }
       let detail = describePoint(sample.pointBounds, ratio)
       if (sites) {
-        if (phase === 'remove' && time === 500) title += ' · Before interruption'
         if (phase === 'restore' && time === 0) title += ' · After interruption'
-        if (scenario !== 'interrupted' && phase === 'restore' && time === 500) title += ' · Before removal'
-        if (scenario !== 'remove-again' && phase === 'remove-again' && time === 500) title = 'Before final return · 500 ms'
-        if (scenario === 'remove-on-return' && phase === 'restore-original' && time === 500) title = 'Before third removal · 500 ms'
         const colors: string[] = []
         for (const location of probeSites) {
           const site = sites[location]

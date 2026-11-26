@@ -97,6 +97,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Repeat this four-site comparison on another supported adapter.',
   },
+  'production-graph-api/restore-to-80': {
+    badge: 'Restoration to x = 80 matches',
+    tone: 'pass',
+    finding: 'Restoring point 1 from x = 56 cleared its pixels immediately. At x = 80 the click reached link 0 at 2 ms and point 1 at 375 ms.',
+    area: 'Integration',
+    status: '47 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed' },
+      { tone: 'pass', text: 'At x = 80 the rectangle first returned point 1 at 471 ms and the lasso at 725 ms' },
+      { tone: 'pass', text: 'At 1,000 ms the entire canvas matched the settled x = 80 frame from the uninterrupted restoration' },
+    ],
+    next: 'Repeat the restoration on another supported adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

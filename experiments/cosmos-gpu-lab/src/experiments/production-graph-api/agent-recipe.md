@@ -16,6 +16,8 @@ For the return to the original center, compare `remove-again` at 500 ms with `re
 
 For removal during the return trip, open `captures/remove-on-return-m3-release/package-sparse-remove-on-return-{1,2}x.json`. Compare `restore-original` at 500 ms with `remove-on-return` at 0 ms and 500 ms. In this case, `sites.returnMidpoint` and the matching selection region are at x = 56. The other local probes stay at x = 48, 64 and 80. The run’s `provenance.json` identifies the clean revision, device reports and bundle hashes.
 
+For restoration to x = 80 during the third fade, use `captures/restore-to-80-m3-release/package-sparse-restore-to-80-{1,2}x.json`. Compare `remove-on-return` at 500 ms with `restore-to-80` at 0 ms. Each later time is measured from that edit. Read `sites` for the four click IDs and canvas colors and `selections` for the ordered rectangle and lasso IDs. At each ratio, compare `settledAt80Sha256` with the same field in `package-sparse-transition-{1,2}x.json` to check the full canvas against an uninterrupted restoration. The run’s `provenance.json` identifies the revision, adapters and bundle hashes.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

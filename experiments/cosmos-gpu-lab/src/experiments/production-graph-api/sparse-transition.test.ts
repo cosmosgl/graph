@@ -11,6 +11,7 @@ function expectedSelections (phase: SparseSample['phase'], time: number, include
   let x = 48
   if (phase === 'restore') x += 32 * progress
   if (phase === 'restore-original') x = 64 - 16 * progress
+  if (phase === 'restore-to-80') x = 56 + 24 * progress
   const absent = phase === 'remove' || phase === 'remove-again' || phase === 'remove-on-return' || phase === 'snap-remove'
   const local = (region: 'old' | 'returnMidpoint' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
     region,
@@ -31,6 +32,12 @@ function expectedSelections (phase: SparseSample['phase'], time: number, include
 
 type Measurements = Omit<SparseSample, 'phase' | 'time' | 'pixels'>
 type Comparison = Pick<SparseSample, 'phase' | 'time'> & PixelComparison & { webgl: Measurements; webgpu: Measurements }
+
+async function settledFrameHash (samples: SparseSample[], phase: 'restore' | 'restore-to-80'): Promise<string> {
+  const frame = samples.find(sample => sample.phase === phase && sample.time === 1000)!
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', frame.pixels.data))
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
 
 function compareMidpointFrames (samples: SparseSample[], removal: 'remove-again' | 'remove-on-return'): PixelComparison {
   const restoration = removal === 'remove-again' ? 'restore' : 'restore-original'
@@ -62,8 +69,13 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
       webgpu: comparePixels(gpu.samples[0]!.pixels, gpu.samples.at(-1)!.pixels),
     }
     : undefined
+  // Record the same x=80 canvas in the full-fade control and the repeatedly interrupted replay.
+  const settledPhase = scenario === 'complete' ? 'restore' : scenario === 'restore-to-80' ? 'restore-to-80' : undefined
+  const settledAt80Sha256 = settledPhase
+    ? { webgl: await settledFrameHash(gl.samples, settledPhase), webgpu: await settledFrameHash(gpu.samples, settledPhase) }
+    : undefined
   await writeArtifact(`package-sparse-${suffix}-${ratio}x`, {
-    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons, repeatedMidpoint, restoredOriginal,
+    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons, repeatedMidpoint, restoredOriginal, settledAt80Sha256,
   })
   if (import.meta.env.LAB_NATIVE_GPU) {
     expect(gl.deviceInfo.gpuType).not.toBe('cpu')
@@ -270,6 +282,52 @@ it.each([1, 2] as const)('removes the slot halfway through its return to the ori
     if (row.phase === 'remove-on-return') {
       expect.soft([frame.sites?.old.pick, frame.sites?.midpoint?.pick, frame.sites?.destination.pick, frame.picks.link], label)
         .toEqual(['Background', 'Background', 'Background', 'Background'])
+    }
+    expect.soft(row.webgpu, label).toEqual(frame)
+    expect.soft(row.differingPixels, label).toBe(0)
+  }
+})
+
+it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third removal at %i×', async ratio => {
+  const { comparisons } = await compareSparseTransition(ratio, 'restore-to-80')
+  const restoring = comparisons.filter(row => row.phase === 'restore-to-80')
+  expect(restoring.map(row => row.time)).toEqual([
+    0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500, 513, 514, 529, 530, 683, 684, 724, 725, 750, 1000,
+  ])
+  const before = comparisons[comparisons.indexOf(restoring[0]!) - 1]!
+  expect(before).toMatchObject({ phase: 'remove-on-return', time: 500 })
+  const sites = ['old', 'returnMidpoint', 'midpoint', 'destination'] as const
+  const black = [0, 0, 0]
+  const paintFrames = [before, ...restoring.filter(row => [0, 1, 2, 16, 500, 1000].includes(row.time))]
+  expect(paintFrames.map(({ webgl }) => webgl.pointBounds?.map(value => value / ratio) ?? null)).toEqual([
+    [50, 90, 62, 102], null, null, null, null, [62, 90, 74, 102], [68, 84, 92, 108],
+  ])
+  expect(paintFrames.map(({ webgl }) => webgl.linkRgb[1])).toEqual([128, 0, 0, 0, 0, 128, 255])
+  const unpainted = [black, black, black, black]
+  expect(paintFrames.map(({ webgl }) => sites.map(site => webgl.sites?.[site]?.rgb))).toEqual([
+    [black, [64, 64, 0], [0, 128, 0], [0, 128, 0]],
+    unpainted, unpainted, unpainted, unpainted,
+    [black, black, [64, 0, 0], [0, 128, 0]],
+    [black, black, black, [255, 0, 0]],
+  ])
+  const background = 'Background'
+  const point = 'Point 1'
+  for (const row of comparisons) {
+    const label = `${row.phase} ${row.time} ms`
+    const frame = row.webgl
+    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, true))
+    expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
+    expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
+    const clicks = sites.map(site => frame.sites?.[site]?.pick)
+    if (row.phase === 'remove-on-return') {
+      expect.soft(clicks, label).toEqual([background, background, background, background])
+    }
+    if (row.phase === 'restore-to-80') {
+      // At x=80 the link becomes pickable while it is still too faint to paint.
+      const destinationPick = row.time < 2 ? background : row.time < 375 ? 'Link 0' : point
+      expect.soft(clicks, label).toEqual([
+        row.time < 514 ? point : background, row.time < 684 ? point : background, point, destinationPick,
+      ])
     }
     expect.soft(row.webgpu, label).toEqual(frame)
     expect.soft(row.differingPixels, label).toBe(0)

@@ -2,9 +2,9 @@ import type { DeviceInfo } from '@luma.gl/core'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import type { Engine } from './frame'
 
-type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'snap-remove' | 'snap-restore'
+type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'restore-to-80' | 'snap-remove' | 'snap-restore'
 type Point = [number, number]
-export type SparseScenario = 'complete' | 'interrupted' | 'remove-again' | 'restore-original' | 'remove-on-return'
+export type SparseScenario = 'complete' | 'interrupted' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'restore-to-80'
 type Site = { pick: string; rgb: number[] }
 const anchor: Point = [192, 96]
 const original: Point = [48, 96]
@@ -121,7 +121,8 @@ export async function runSparseTransition (
       Object.defineProperty(win.performance, 'now', { configurable: true, value: () => now })
       const samples: SparseSample[] = []
       const interrupted = scenario !== 'complete'
-      const removeOnReturn = scenario === 'remove-on-return'
+      const restoreTo80 = scenario === 'restore-to-80'
+      const removeOnReturn = scenario === 'remove-on-return' || restoreTo80
       const returnsToOriginal = scenario === 'restore-original' || removeOnReturn
       const repeatedRemoval = scenario === 'remove-again' || returnsToOriginal
       const areaProbes = createAreaProbes(removeOnReturn)
@@ -210,14 +211,21 @@ export async function runSparseTransition (
         await edit('snap-restore', original, original, 0, [0])
       }
       const fullFadeTimes = [0, 16, 250, 500, 750, 1000]
-      if (repeatedRemoval) await edit('remove-again', [NaN, NaN], midpoint, 1000, returnsToOriginal ? [0, 16, 250, 500] : fullFadeTimes)
+      const halfFadeTimes = [0, 16, 250, 500]
+      if (repeatedRemoval) await edit('remove-again', [NaN, NaN], midpoint, 1000, returnsToOriginal ? halfFadeTimes : fullFadeTimes)
       if (returnsToOriginal) {
         // Bracket the area boundaries and the x=80 click handoff from the returning point to its link.
         const returnTimes = [0, 16, 250, 314, 315, 358, 359, 500]
         if (!removeOnReturn) returnTimes.push(685, 686, 750, 1000)
         await edit('restore-original', original, original, 1000, returnTimes)
       }
-      if (removeOnReturn) await edit('remove-on-return', [NaN, NaN], returnMidpoint, 1000, fullFadeTimes)
+      if (removeOnReturn) await edit('remove-on-return', [NaN, NaN], returnMidpoint, 1000, restoreTo80 ? halfFadeTimes : fullFadeTimes)
+      if (restoreTo80) {
+        // Adjacent milliseconds bracket the four sites' click and area-selection changes on the x=56→80 leg.
+        await edit('restore-to-80', restored, restored, 1000, [
+          0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500, 513, 514, 529, 530, 683, 684, 724, 725, 750, 1000,
+        ])
+      }
       return { deviceInfo, samples }
     } finally { graph.destroy() }
   } finally { frame.remove() }

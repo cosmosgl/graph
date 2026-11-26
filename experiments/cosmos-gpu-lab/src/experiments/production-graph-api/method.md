@@ -102,6 +102,21 @@ The four probes share y = 96. Each uses a click, a 4 × 4 CSS px rectangle and a
 
 Immediately after removal, every click returned Background and every local area returned `[]`. The whole-graph rectangle and lasso retained `[0, 2]`. At 500 ms into the third fade, the entire canvas again matched the frame just before the edit, while point 1 and link 0 remained unavailable to all four probes. At 1,000 ms, both had disappeared. All 50 frame pairs matched pixel for pixel across packages.
 
+### Restore to x = 80 during the third fade
+
+At 500 ms into the third fade, point 1 was still 12 CSS px wide at x = 56 and its link’s green channel was 128. All four clicks returned background and all local selections were empty. Restoring point 1 to x = 80 at that same instant cleared the point and link from the canvas. Clicks at x = 48, 56 and 64 immediately returned point 1. Both whole-graph selections changed from `[0, 2]` to `[0, 1, 2]`. [Replay the restoration to x = 80](#/production-graph-api?section=try-restore-to-80)
+
+The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS px. Times below are inclusive milliseconds after the restore, with adjacent whole milliseconds sampled at every handoff. Outside the listed selection windows the local result was `[]`.
+
+| Probe x | Click | Rectangle returns `[1]` | Lasso returns `[1]` |
+| ---: | --- | --- | --- |
+| 48 | Point 1 through 513 ms, then background | 0–396 ms | Never |
+| 56 | Point 1 through 683 ms, then background | 0–529 ms | 0–275 ms |
+| 64 | Point 1 throughout | 0–724 ms | 397–470 ms |
+| 80 | Background at 0–1 ms, link 0 at 2–374 ms, point 1 from 375 ms | 471–1,000 ms | 725–1,000 ms |
+
+At x = 80 the first link hit arrived while the pixel still read black. Halfway through the restore, the point was 12 CSS px wide at x = 68 and the link’s green channel was 128. At 1,000 ms the point was 24 CSS px wide at x = 80, the green channel was 255 and the full canvas matched the settled x = 80 frame after an uninterrupted restoration. Across 1× and 2× on M3, all 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed between packages.
+
 ### Hover under a stationary cursor
 
 Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.
