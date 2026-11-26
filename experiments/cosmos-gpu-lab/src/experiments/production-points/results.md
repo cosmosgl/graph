@@ -33,3 +33,14 @@ At 22.3 CSS pixels, WebGL's measured sprite-coordinate span was **22.25 device p
 The first correction used the measured origin and span on Apple GPUs. Each shape used its requested diameter to calculate coverage. For the eight frames above, both the drawing buffers and the displayed canvases matched. Each WebGL frame also matched its saved pre-change pixels.
 
 The same eight frames also matched on Chromium's SwiftShader software adapter. There, the renderer uses the nominal sprite diameter and samples it relative to a center on a 1/16-device-pixel grid. Both ForceCollision fixtures retained exact positions and pixels through eight steps on each adapter.
+
+## Point-only occlusion
+
+The stock performance story draws 200,000 circles in twelve clusters with links and simulation disabled. On Apple M3 in a 720 × 480 canvas at 1×, the same story and its two controls ran against the WebGL reference (`74a216a7`) and signed WebGPU standalone (`b52a9c7f`). The audit recorded GPU draw calls and compared all 345,600 RGBA pixels after turning culling on, off and back on.
+
+| Package | Culling off | Culling on | Differing on/off pixels, opaque / mixed colors |
+| --- | --- | --- | ---: |
+| WebGL | One blended point draw, depth disabled | Opaque cores write depth, then fringes and translucent points blend with depth testing | 0 / 0 |
+| WebGPU | One blended point draw | The same point draw with depth writes disabled | 0 / 0 |
+
+The mixed preset gives 30% of the points alpha 0.4. Re-enabling culling also reproduced the first on-frame within each package. Across packages, 29 opaque-scene pixels and 19 mixed-scene pixels differed. Each difference was one channel level out of 255. The WebGPU renderer can skip dense links hidden by opaque points. This point-only story takes a different path. Draw counts establish the behavior of the toggle. A matched frame-time comparison is still needed to quantify its performance impact. The exact story source, probe and results are in `captures/signed-point-occlusion-20261126/`.
