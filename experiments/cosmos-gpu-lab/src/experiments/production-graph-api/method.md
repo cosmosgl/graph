@@ -47,6 +47,19 @@ At 2× all 163,840 device pixels matched in each frame. At 1×, 9, 6 and 10 of t
 
 WebGPU previously used the invisible shape’s fill color under the image and drew a requested 96 CSS px image at 64. An image-only point now starts with transparent black, and the atlas uses the same nearest-texel sampling as WebGL. The half-alpha red texel contributes about half its red in the shader and is blended with the background at half opacity. The separate opaque-image control measured the full requested widths of 48, 64, 80, 96 and 128 CSS px on both packages. At 96, a click 46 CSS px from center hit the point and a click 57 CSS px away returned background.
 
+### Cross a dashed link over a solid link
+
+A red dashed link crosses a green solid link at (128, 80) CSS px. Both are 8 CSS px wide. Moving the horizontal link 16 CSS px along its own path puts the same click in the middle of a dash or a gap. Swapping the two entries in `setLinks` also swaps their public IDs. [Replay the styled link crossing](#/production-graph-api?section=try-styled-link-crossing)
+
+| Link order in the array | On a dash · pixel and click | In a gap · pixel and click |
+| --- | --- | --- |
+| Solid 0, then dashed 1 | Red · dashed link 1 | Green · dashed link 1 |
+| Dashed 0, then solid 1 | Green · solid link 1 | Green · solid link 1 |
+
+The gap lets the green stroke show through. Both packages pick along the full dashed path, so the last link in the array still receives the click at the crossing. With the dashed link alone, the gap was black and the click returned link 0.
+
+All 16 paired canvases and all 80 paired click IDs and sampled colors matched on M3 at 1× and 2×, including the single-link controls. Reversing the links changed exactly the 8 × 8 CSS px overlap on a painted dash (64 device pixels at 1× and 256 at 2×). Reversing them in the gap changed zero pixels even though the click switched from the dashed link to the solid link.
+
 ### Remove and restore a point
 
 The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Choose a frame to see each package’s canvas, click results and selected IDs. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition)

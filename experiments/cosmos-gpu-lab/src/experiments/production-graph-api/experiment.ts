@@ -102,6 +102,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the pixels and click IDs in all three areas and 46 CSS px from the center before, during and after the crossing at 1× and 2×.',
     recorded: null,
   }, {
+    id: 'styled-link-crossing',
+    title: 'Cross a dashed link over a solid link',
+    kind: 'compare',
+    question: 'Which link shows through a dash gap, and which link receives a click at the crossing?',
+    description: 'Place a dash or a gap at the same intersection. Reverse the two links in the data to compare their drawing and picking order.',
+    reference: 'Both Graph packages draw and pick each link individually and together at the same coordinates.',
+    acceptance: 'Compare the crossing color, public click IDs and entire canvases in both orders at 1× and 2×.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -140,6 +149,7 @@ export const experiment = defineExperiment({
     if (caseId === 'remove-at-68') return (await import('./sparse-view')).createSparseView(host, 'remove-at-68')
     if (caseId === 'curved-link-crossing') return (await import('./curved-crossing-view')).createCurvedCrossingView(host)
     if (caseId === 'curved-link-image-crossing') return (await import('./image-crossing-view')).createImageCrossingView(host)
+    if (caseId === 'styled-link-crossing') return (await import('./styled-link-crossing-view')).createStyledLinkCrossingView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

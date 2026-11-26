@@ -29,7 +29,20 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'Both packages showed RGB (64, 127, 0) through the half-alpha band. Every pixel matched at 2×.' },
       { tone: 'warn', text: 'At 1×, 9, 6 and 10 pixels differed by one green level on curve edges also present in the link-only control.' },
     ],
-    next: 'Compare draw order and picking where two styled links overlap.',
+    next: 'See the styled-link crossing for the case where two links share a click target.',
+  },
+  'production-graph-api/styled-link-crossing': {
+    badge: 'Crossing pixels and click IDs match',
+    tone: 'pass',
+    finding: 'With the dashed link last, its gap shows green and clicking selects the red dashed link. With the solid link last, green wins both.',
+    area: 'Integration',
+    status: 'Two link orders, dash and gap, and single-link controls on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 16 paired canvases matched every RGBA byte. All 80 paired click IDs and sampled colors agreed.' },
+      { tone: 'pass', text: 'Reversing the order changed 64 pixels at 1× and 256 at 2× on the dash. In the gap it changed zero pixels.' },
+      { tone: 'pass', text: 'With the dashed link alone, the gap was black and the click returned link 0.' },
+    ],
+    next: 'Check ownership where arrowheads or translucent links overlap.',
   },
   'production-graph-api/point-style-updates': {
     badge: 'Area selection matches',

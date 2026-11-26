@@ -47,6 +47,18 @@ node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/image-alph
 node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/size-control.mjs
 ```
 
+## Dashed link crossing a solid link
+
+Build both standalone distributions from the repository root and use a fresh capture name. The packaged Graphs run the same paused scene and receive pointer events at the same five CSS coordinates.
+
+```sh
+LAB_ARTIFACT_RUN=styled-link-crossing-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/styled-link-crossing.test.ts
+```
+
+Translate the horizontal red link 16 CSS px along its path to put the center of a dash or gap at (128, 80). Keep the vertical green link and camera fixed. Test both link-array orders and each link alone. The single-link controls establish the paint and callback for each style, and reversing the order reveals which link takes precedence. Compare complete RGBA frames as well as the crossing, two sites on the dashed path, the exposed solid stroke and empty space.
+
+The M3 run in `captures/styled-link-crossing-m3-release/` contains the two `package-styled-link-crossing-{1,2}x.json` reports and the revision, bundle hashes and adapter details in `provenance.json`.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.
