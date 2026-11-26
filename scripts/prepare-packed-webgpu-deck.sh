@@ -2,16 +2,25 @@
 # Build the candidate tarballs under their public names, then install like an external consumer.
 set -eu
 repo_dir=$(cd "$(dirname "$0")/.." && pwd)
-app_dir=$(mktemp -d "${TMPDIR:-/tmp}/cosmos-packed-deck.XXXXXX")
+case $# in
+  0) app_dir=$(mktemp -d "${TMPDIR:-/tmp}/cosmos-packed-deck.XXXXXX") ;;
+  1)
+    app_dir=$(cd "$1" && pwd)
+    if [ -n "$(ls -A "$app_dir")" ]; then
+      echo "The packed consumer requires an empty output directory: $app_dir" >&2
+      exit 2
+    fi ;;
+  *) echo "Usage: $0 [empty-output-directory]" >&2; exit 2 ;;
+esac
 echo "Preparing standalone app in $app_dir"
 pnpm --dir "$repo_dir/experiments/graph-webgpu" run pack:public "$app_dir"
 pnpm --dir "$repo_dir/integrations/deck-layers" run pack:public "$app_dir"
 cd "$repo_dir/experiments/graph-webgpu/fixtures/deck-consumer"
-cp index.html main.ts package.json tsconfig.json "$app_dir/"
+cp index.html ./*.ts package.json tsconfig.json "$app_dir/"
 cd "$app_dir"
 mv cosmos.gl-graph-*.tgz graph.tgz
 mv cosmos.gl-deck-layers-*.tgz deck-layers.tgz
-npm install --no-fund --no-audit --ignore-scripts
+npm install --strict-peer-deps --no-fund --no-audit --ignore-scripts
 npm ls @cosmos.gl/graph @cosmos.gl/deck-layers @deck.gl/core @luma.gl/core @luma.gl/graph
 # Serve the installed package's CDN file as a plain script, outside Vite's module graph.
 mkdir -p public/standalone
