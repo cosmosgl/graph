@@ -404,6 +404,36 @@ pnpm --filter @cosmos.gl/gpu-lab typecheck
 pnpm --filter @cosmos.gl/gpu-lab build
 ```
 
+### Rehearse the production cutover
+
+Today the ordinary Graph and Deck prepublish hooks rebuild WebGL. The
+qualification script stages WebGPU under both public names with
+`private: true` and installs those archives into a clean app. Keep the
+candidate private through hardware qualification and release review.
+[Production Graph build](../../vite.config.ts) · [Deck manifest](../../integrations/deck-layers/package.json) · [Packed app](../../scripts/prepare-packed-webgpu-deck.sh)
+
+1. Once the cutover is accepted, make the ordinary public builds emit Graph's
+   ES module, standalone `dist/index.min.js` and declarations, and Deck's
+   WebGPU device and position-buffer host. Give both public manifests the
+   same new release version. Carry over the qualified runtime and declaration
+   dependencies, including Deck 10.0.0-alpha.1, luma 10.0.0-alpha.14 and
+   math.gl 5.0.0-beta.8. Verify the consumer resolves a single luma core.
+   [Graph packager](../graph-webgpu/pack-public.mjs) · [Deck packager](../../integrations/deck-layers/pack-public.mjs) · [Lockstep check](../../scripts/check-lockstep.mjs)
+2. Run CI against the promoted sources. Build Pages with its ordinary command,
+   open the default Storybook and verify that Quick Start and a Deck story
+   draw and pick on WebGPU. Point the Lab's WebGL pane at the frozen UMD
+   below and verify the hashes of the two files it actually loads.
+   [CI](../../.github/workflows/ci.yml) · [Pages build](../../.github/workflows/github_pages.yml) · [Storybook aliases](../../.storybook/main.ts) · [Lab loader](src/experiments/viewer-comparison/production-bundle.ts)
+3. Pack the two public manifests from a clean release revision. Install those
+   exact tarballs outside the workspace and record their SHA-256s. Typecheck
+   the consumer and shared stories, run the standalone script, then repeat
+   drawing, picking, resize, teardown and recovery under both Deck owners.
+   Use that verified pair for publication. Record the preceding public
+   versions and Pages deployment revision. To roll back, pin applications to
+   the preceding Graph and Deck pair with its compatible peers, and redeploy
+   the preceding site revision.
+   [Consumer checks](../../scripts/check-packed-webgpu-deck.mjs) · [Recorded qualification](src/experiments/integrated-webgpu/host-ownership.md#recovery-with-the-signed-picking-and-camera-changes)
+
 ### Historical replays
 
 At promotion, record the full Git revision of the last WebGL source, its frozen
