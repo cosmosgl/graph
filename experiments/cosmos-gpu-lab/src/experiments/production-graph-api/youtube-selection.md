@@ -8,6 +8,29 @@ In the correctness runs, a full position copy is also requested in the release h
 
 The selection IDs are Cosmos point indices in the prepared graph. The tracked IDs are spaced across the whole index range. Storybook's `CosmosLabels` receives the 1,000 returned coordinates, projects them and lets its label renderer cull overlaps. A correct read therefore covers more points than the number of labels visible at once.
 
+## Moving rectangles on the capacity build
+
+On M3, the WebGPU package from `c418e90a` returned the exact ordered IDs
+and all 1,000 label coordinates for every rectangle at both graph sizes.
+Each result was checked against a full position snapshot from its own
+pointer release. The million-point WebGPU drags selected 684,863, 12,378,
+142,550 and 22,973 points at ticks 4, 7, 10 and 13.
+
+The frozen WebGL package also matched all four 65,536-point snapshots.
+At one million points its asynchronous selection and label reads both
+returned `null` on all four drags. The first rectangle illustrates the
+difference between a timeout and an empty selection. Its release snapshot
+contained 463,961 points inside the rectangle at tick 9. A separate replay
+using WebGL’s synchronous API at the same tick returned exactly those
+463,961 IDs and all 1,000 coordinates. Its other three synchronous
+releases also matched their snapshots, at different ticks from the
+asynchronous run.
+
+The two captures are `captures/public-graph-youtube-uE8GFy/result.json`
+(ordinary asynchronous queries) and
+`captures/public-graph-youtube-e5oH0W/result.json` (WebGL synchronous
+control). Timing replays omit the position snapshot.
+
 ## Continuously moving million-point rectangles on the signed packages
 
 On M3, WebGPU returned ordered point IDs and all 1,000 tracked coordinates on all eight continuously moving million-point releases. WebGL returned `null` from both async queries at all eight releases. This held for both signed WebGPU builds below with the same WebGL control (`74a216a7`). In the latest run, WebGL took a median 1,006.9 ms for selection and 1,007.0 ms for labels before reporting the timeout.

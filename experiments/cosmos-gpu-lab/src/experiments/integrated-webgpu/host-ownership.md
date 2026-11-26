@@ -425,7 +425,7 @@ The clean app installed Graph archive `4074f410` and Deck archive `d2d9b440`. Al
 
 ### Replay the same archives on a second physical GPU
 
-The portable archive `captures/second-gpu-handoff-c418e90a/cosmos-webgpu-c418e90a.tar.gz` includes the source commit, both public packages, both historical and candidate engines, and the Roads and YouTube fixtures. Check its adjacent SHA-256 file and follow the enclosed README. A clean extraction verified all 24 inputs and built the consumer and both websites using local dependency caches.
+The portable archive `captures/second-gpu-handoff-c418e90a/cosmos-webgpu-c418e90a-v2.tar.gz` includes the source commit, the Graph and Deck packages, both engines, and the Roads and YouTube fixtures. Check its adjacent SHA-256 file and follow the enclosed README. Run `rectangles-correctness` for the release snapshots, `rectangles` for timing and `rectangles-webgl-blocking` for the separate synchronous control. The showcase report identifies the WebGL renderer from the context that drew the graph and records the WebGPU device’s storage limit.
 
 For a replay from an existing checkout, use a fresh checkout of `c418e90a` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-c418e90a-7np86iv8` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
 
@@ -450,14 +450,20 @@ cp "$pair/webgl.js" dist/index.min.js
 cp "$pair/webgpu.js" experiments/graph-webgpu/dist/index.min.js
 npm --prefix "$app" run build
 
-node scripts/check-packed-webgpu-deck.mjs "$app" --points 65536 --adapter-vendor "$vendor" > "$app/recovery.json"
+status=0
+node scripts/check-packed-webgpu-deck.mjs "$app" --points 65536 --adapter-vendor "$vendor" > "$app/recovery.json" || status=1
 force() { node "$lab/scripts/packaged-force-benchmark.mjs" --points 1000000 --bundles "$run" --adapter-vendor "$vendor" "$@"; }
-force --layout --composed
-force --matched-ticks
-force
+force --layout --composed || status=1
+force --matched-ticks || status=1
+force || status=1
 youtube() { node "$lab/scripts/public-graph-youtube.mjs" --webgl-bundle "$pair/webgl.js" --webgpu-bundle "$pair/webgpu.js" --adapter-vendor "$vendor" "$@"; }
-youtube --lasso --mode correctness --release-ticks 10,26,40,54
-youtube --mode timing
+youtube --lasso --mode correctness --release-ticks 10,26,40,54 || status=1
+youtube --mode correctness || status=1
+youtube --mode timing || status=1
+youtube 1000000 --engine webgl --mode blocking || status=1
+test "$status" -eq 0
 ```
 
-Run the browser commands one at a time in the foreground. The force trials collect fresh WebGL controls on this machine. Each YouTube command covers both graph sizes and verifies the prepared fixture digest. Keep the new `recovery.json` and generated Lab captures alongside the machine's browser and adapter details. [Force checks](#/production-forces?section=doc-scale-method) · [YouTube checks](#/production-graph-api?section=doc-youtube-selection)
+Run the browser commands one at a time in the foreground. The force trials collect fresh WebGL controls on this machine. Inspect each topology’s `calibration.json` and `comparison.json` for the relative timing verdicts. A timing command can finish successfully with a metric outside its allowance or controls too variable to assess it. [Force checks](#/production-forces?section=doc-scale-method)
+
+The lasso and rectangle correctness runs check all selected IDs and all 1,000 label positions against a snapshot at release on both graph sizes. The timing run measures the ordinary rectangle workflow without copying the full layout. The final million-point WebGL run uses synchronous reads to diagnose any asynchronous timeout. Each run saves its own report and the final shell status retains command failures. Keep the new `recovery.json` and generated Lab captures alongside the machine’s browser and adapter details. [YouTube checks](#/production-graph-api?section=doc-youtube-selection)
