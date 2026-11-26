@@ -1,7 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import { Graph } from '../src'
 import { GraphRenderer } from '../src/renderer'
-import { waitForGraphUpdate } from './wait-for-graph-update'
 
 it('coalesces stationary hover reads and drops superseded hits while the graph moves', async () => {
   const host = document.createElement('div')
@@ -45,7 +44,7 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     const canvas = host.querySelector('canvas')!
     const { left: x, top: y } = canvas.getBoundingClientRect()
     canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: x + 40, clientY: y + 60, bubbles: true, view: window }))
-    await waitForGraphUpdate(() => expect(picks).toHaveBeenCalledOnce())
+    await expect.poll(() => picks).toHaveBeenCalledOnce()
     graph.setPointPosition(0, 160, 100)
     for (const nextX of [100, 70, 40]) {
       graph.setPointPosition(1, nextX, 100)
@@ -53,7 +52,7 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     }
     expect(picks).toHaveBeenCalledOnce()
     release()
-    await waitForGraphUpdate(() => expect(entered.mock.calls.map(([id]) => id)).toEqual([1]))
+    await expect.poll(() => entered.mock.calls.map(([id]) => id)).toEqual([1])
     expect(picks).toHaveBeenCalledTimes(2)
     expect(left).not.toHaveBeenCalled()
     // Drawing identical frames must not spend more GPU reads on a parked cursor.
@@ -68,13 +67,13 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     expect(moved).toHaveBeenCalledTimes(3)
     expect(picks).toHaveBeenCalledTimes(2)
     canvas.dispatchEvent(new MouseEvent('click', { clientX: x + 40, clientY: y + 60, bubbles: true, view: window }))
-    await waitForGraphUpdate(() => expect(clicked.mock.calls.map(([id]) => id)).toEqual([1]))
+    await expect.poll(() => clicked.mock.calls.map(([id]) => id)).toEqual([1])
     expect(picks).toHaveBeenCalledTimes(3)
 
     graph.step()
     graph.renderOneFrame()
     expect((await graph.getPointPositionsAsync())[2]).toBeGreaterThan(55)
-    await waitForGraphUpdate(() => expect(left).toHaveBeenCalledOnce())
+    await expect.poll(() => left).toHaveBeenCalledOnce()
     // Leaving before the next hit is delivered must not restore the ring or re-enter point 1.
     const beforeReturn = picks.mock.calls.length
     const started = new Promise<void>(resolve => {
@@ -96,10 +95,10 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
 
     // A moving canvas can deliver the same client coordinates at another local pixel.
     repeat()
-    await waitForGraphUpdate(() => expect(entered.mock.calls.map(([id]) => id)).toEqual([1, 1]))
+    await expect.poll(() => entered.mock.calls.map(([id]) => id)).toEqual([1, 1])
     host.style.transform = 'translateX(30px)'
     repeat()
-    await waitForGraphUpdate(() => expect(left).toHaveBeenCalledTimes(2))
+    await expect.poll(() => left).toHaveBeenCalledTimes(2)
   } finally {
     release()
     picks.mockRestore()
@@ -150,10 +149,10 @@ it('resolves the pressed point, buffers early movement, preserves grab offset an
     }
     // Prime the old hover on point 0. Press directly on point 1 with no intervening mousemove.
     mouse('mousemove', 60, 60)
-    await waitForGraphUpdate(() => expect(onPointMouseOver.mock.calls[0]?.[0]).toBe(0))
+    await expect.poll(() => onPointMouseOver.mock.calls[0]?.[0]).toBe(0)
     mouse('mousedown', 144, 57, 1)
     mouse('mousemove', 155, 50, 1, window)
-    await waitForGraphUpdate(() => expect(onDrag).toHaveBeenCalledTimes(1))
+    await expect.poll(() => onDrag).toHaveBeenCalledTimes(1)
     expect(onDragStart).toHaveBeenCalledTimes(1)
     expect(onZoomStart).not.toHaveBeenCalled()
     expect(graph.isPointPinned(1)).toBe(true)
@@ -166,7 +165,7 @@ it('resolves the pressed point, buffers early movement, preserves grab offset an
     // The previous point remains in the hover cache. A background press must start a pan.
     mouse('mousedown', 20, 30, 1)
     mouse('mousemove', 32, 38, 1, window)
-    await waitForGraphUpdate(() => expect(onZoom).toHaveBeenCalledTimes(1))
+    await expect.poll(() => onZoom).toHaveBeenCalledTimes(1)
     mouse('mouseup', 32, 38, 0, window)
     expect(onDragStart).toHaveBeenCalledTimes(1)
     expect(graph.spaceToScreenPosition([60, 100])).toEqual([72, 68])
@@ -177,7 +176,7 @@ it('resolves the pressed point, buffers early movement, preserves grab offset an
     // Allow D3's one-turn click suppression after the preceding pan to expire.
     await new Promise(resolve => setTimeout(resolve, 0))
     mouse('click', 72, 68)
-    await waitForGraphUpdate(() => expect(onPointClick).toHaveBeenCalledTimes(1))
+    await expect.poll(() => onPointClick).toHaveBeenCalledTimes(1)
     expect(onPointClick.mock.calls[0]?.[0]).toBe(0)
     expect(onDragStart).toHaveBeenCalledTimes(1)
 
@@ -187,20 +186,20 @@ it('resolves the pressed point, buffers early movement, preserves grab offset an
     mouse('mousemove', 110, 80, 1, window)
     // A completed later GPU click provides a fence for the earlier invalidated press.
     mouse('click', 92, 88)
-    await waitForGraphUpdate(() => expect(onPointClick).toHaveBeenCalledTimes(2))
+    await expect.poll(() => onPointClick).toHaveBeenCalledTimes(2)
     mouse('mouseup', 110, 80, 0, window)
     expect(await graph.getPointPositionsAsync()).toEqual(new Float32Array([80, 80]))
     expect(onDragStart).toHaveBeenCalledTimes(1)
 
     graph.setPinnedPoint(0, false)
     mouse('mousedown', 92, 88, 1)
-    await waitForGraphUpdate(() => expect(graph.isPointPinned(0)).toBe(true))
+    await expect.poll(() => graph.isPointPinned(0)).toBe(true)
     window.dispatchEvent(new Event('blur'))
     expect(graph.isPointPinned(0)).toBe(false)
     expect(onDragEnd).toHaveBeenCalledTimes(2)
 
     mouse('mousedown', 30, 20, 1)
-    await waitForGraphUpdate(() => expect(onZoomStart).toHaveBeenCalledTimes(2))
+    await expect.poll(() => onZoomStart).toHaveBeenCalledTimes(2)
     graph.destroy()
     const zoomCalls = onZoom.mock.calls.length
     mouse('mousemove', 42, 28, 1, window)
@@ -244,11 +243,11 @@ it('keeps host link hover styling independent of canvas pointer picks', async ()
     }
     // The host hid the visible stroke; a canvas click still uses the pointer's own index.
     click(60)
-    await waitForGraphUpdate(() => expect(onLinkClick).toHaveBeenCalledTimes(1))
+    await expect.poll(() => onLinkClick).toHaveBeenCalledTimes(1)
     expect(onLinkClick.mock.calls[0]?.[0]).toBe(0)
     graph.setConfigPartial({ hoveredLinkColor: 'red' })
     click(67)
-    await waitForGraphUpdate(() => expect(onBackgroundClick).toHaveBeenCalledTimes(1))
+    await expect.poll(() => onBackgroundClick).toHaveBeenCalledTimes(1)
     expect(onLinkClick).toHaveBeenCalledTimes(1)
   } finally {
     graph.destroy()

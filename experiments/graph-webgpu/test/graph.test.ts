@@ -7,7 +7,6 @@ import { Lines } from '../src/modules/Lines'
 import { GraphRenderer } from '../src/renderer'
 import { AreaSelection } from '../src/modules/Points/area-selection'
 import { StyleTransition } from '../src/style-transition'
-import { waitForGraphUpdate } from './wait-for-graph-update'
 
 const config: GraphConfig = {
   enableRenderLoop: false,
@@ -66,7 +65,7 @@ describe('WebGPU Graph', () => {
 
       onSimulationTick.mockClear()
       graph.unpause()
-      await waitForGraphUpdate(() => expect(onSimulationTick).toHaveBeenCalled())
+      await expect.poll(() => onSimulationTick).toHaveBeenCalled()
       expect(draw.mock.calls.length).toBeGreaterThan(1)
     } finally { vi.restoreAllMocks(); cleanup() }
   })
@@ -352,7 +351,7 @@ describe('WebGPU Graph', () => {
         canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: left + x, clientY: top + y }))
       }
       clickMidpoint()
-      await waitForGraphUpdate(() => expect(onLinkClick).toHaveBeenCalledOnce())
+      await expect.poll(() => onLinkClick).toHaveBeenCalledOnce()
 
       // Direct applyData clears the simulation's pending flags. Its new endpoints must still reach the drawing buffers.
       graph.simulation.setLinks(Float32Array.of(0, 0, 1, 1))
@@ -360,7 +359,7 @@ describe('WebGPU Graph', () => {
       graph.setLinkWidths(Float32Array.of(16, 8))
       graph.render(undefined, 0)
       clickMidpoint()
-      await waitForGraphUpdate(() => expect(onBackgroundClick).toHaveBeenCalledOnce())
+      await expect.poll(() => onBackgroundClick).toHaveBeenCalledOnce()
     } finally { cleanup() }
   })
 
@@ -588,14 +587,14 @@ describe('WebGPU Graph', () => {
       await graph.ready
       graph.setPointRenderOrder([1, 0])
       graph.render()
-      await waitForGraphUpdate(() => expect([...graph.getSampledPointPositionsMap()]).toEqual([[0, [2000, 2048]]]))
-      await waitForGraphUpdate(() => expect(graph.getSampledLinks().indices).toEqual([0]))
+      await expect.poll(() => [...graph.getSampledPointPositionsMap()]).toEqual([[0, [2000, 2048]]])
+      await expect.poll(() => graph.getSampledLinks().indices).toEqual([0])
       expect(graph.getSampledLinks().positions).toEqual([2048, 2048])
       const independent = graph.simulation.trackPoints([1])
       graph.trackPointPositionsByIndices([1, 2])
-      await waitForGraphUpdate(() => expect([...graph.getTrackedPointPositionsMap()]).toEqual([[1, [2096, 2048]]]))
+      await expect.poll(() => [...graph.getTrackedPointPositionsMap()]).toEqual([[1, [2096, 2048]]])
       graph.setPointPosition(1, 2100, 2050)
-      await waitForGraphUpdate(() => expect(graph.getTrackedPointPositionsMap().get(1)).toEqual([2100, 2050]))
+      await expect.poll(() => graph.getTrackedPointPositionsMap().get(1)).toEqual([2100, 2050])
       graph.trackPointPositionsByIndices([0])
       expect((await independent.positionsAsync())?.get(1)).toEqual([2100, 2050])
       independent.destroy()

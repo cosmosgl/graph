@@ -17,7 +17,10 @@ export default defineConfig({
   },
   test: {
     include: ['test/**/*.test.ts'],
-    ...(software ? { testTimeout: 30000, maxWorkers: 1 } : {}),
+    // A first canvas submission can include software shader compilation. Poll
+    // for the actual readback or callback, sharing this budget with public tests.
+    expect: { poll: { timeout: software ? 30000 : 8000 } },
+    ...(software ? { testTimeout: 60000, maxWorkers: 1 } : {}),
     browser: {
       enabled: true,
       headless: true,
