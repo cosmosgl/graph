@@ -227,5 +227,5 @@ export const research: Record<string, ResearchSummary> = {
 
 // Editorial priority for the migration page. The linked study owns the evidence.
 export const migrationFocus = {
-  experiment: 'production-forces',
+  experiment: 'integrated-webgpu',
 } as const

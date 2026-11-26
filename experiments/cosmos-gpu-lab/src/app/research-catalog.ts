@@ -284,13 +284,13 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-graph-api': entry('production-graph-api', {
       reviewed: '2026-11-26',
-      conclusion: 'At the same four early M3 ticks, reducing link drawing cut million-point WebGPU readback from 291 to 247 ms. ' +
-        'Every ordered selection and all 1,000 label coordinates matched at both sizes.',
+      conclusion: 'Median feedback on moving million-point drags fell from 647 to 551 ms on M3. ' +
+        'All eight WebGPU long lassos returned the expected IDs and all 1,000 label coordinates.',
       variant: 'Packaged WebGL Graph and WebGPU Graph candidate',
       comparison: 'Gravity, dashed links crossing solid links, curves behind points and images, hover, area selection during removals and size edits, ' +
         'headless trackers and four moving selections with 1,000 YouTube labels',
       method: 'method',
-      next: 'Measure the remaining wait behind the early million-point frame on graphs with different link colors and point coverage.',
+      next: 'Replay selection, tracking and highlighting on a second physical GPU with the same packages and release ticks.',
       reproduce: 'Cross a dashed link over a solid link. Compare the colors and click IDs in both record orders at either pixel ratio.',
       investigations: [{
         page: 'youtube-selection',
@@ -402,13 +402,13 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [{ page: selectionEvidence.page, state: 'Current evidence', description: selectionCase.recorded.scope }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'The integrated graph simulates, draws and picks from shared GPU positions. The initial 1,024-point chain met the local pilot targets.',
-      reviewed: '2026-11-19',
-      variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
+      conclusion: 'The packed Graph and Deck packages restored both graph owners in ten browser sessions on the M3 host, including SwiftShader.',
+      reviewed: '2026-11-26',
+      variant: 'Resident WebGPU pilot and a clean consumer of the packed Graph and Deck packages',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       method: 'method',
-      evidence: 'findings',
-      next: 'Integrate the Lab readback contract with production Graph callers and verify end-to-end label and selection latency.',
+      evidence: 'host-ownership',
+      next: 'Bring the shared Graph timeline check into release CI, then test viewport dragging and stale bounds after data replacement.',
       reproduce: 'Press Run, pause the layout, then select and drag a point.',
       investigations: [
         { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
