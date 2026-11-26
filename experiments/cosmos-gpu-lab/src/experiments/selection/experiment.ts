@@ -4,8 +4,8 @@ import { selectionCase } from './case'
 
 export const experiment = defineExperiment({
   id: 'selection',
-  title: 'Rectangle and lasso selection',
-  summary: 'Draw a rectangle or lasso and compare the point IDs returned by WebGL and WebGPU.',
+  title: 'Rectangle and lasso selection in v3.6.0',
+  summary: 'Compare the historical WebGL v3.6.0 selection rules with the isolated WebGPU implementation.',
   tags: ['selection', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   howItWorks: false,

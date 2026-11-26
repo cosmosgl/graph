@@ -6,7 +6,7 @@ import { writeArtifact } from '../../testing/artifacts'
 import { createSelectionWebGL, createSelectionWebGPU } from './backend'
 import { runSelectionTrial, selectionGroups, selectionSeed } from './suite'
 
-it('matches exact ordered rectangle and polygon IDs against production shaders and the CPU reference', async () => {
+it('matches exact ordered rectangle and polygon IDs against the v3.6.0 shaders and the CPU reference', async () => {
   const apis = ['webgl', 'webgpu'] as const
   const canvases = apis.map(() => document.createElement('canvas'))
   const devices: Device[] = []

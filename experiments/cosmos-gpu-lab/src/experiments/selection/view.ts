@@ -126,7 +126,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       <div class="backend-panels selection-preview">${['WebGL', 'WebGPU'].map(name =>
     `<div class="backend-panel"><strong>${name}</strong><canvas aria-label="${name} selection preview"></canvas></div>`).join('')}</div>
       <p role="status"></p>
-      <p class="case-meta">The rectangle includes dots whose bounding boxes touch it. The lasso checks their centers.</p>`
+      <p class="case-meta">This v3.6.0 reference uses bounding boxes for rectangles and centers for lassos, with a 2,048-edge limit.
+        The <a href="#/production-graph-api?section=try-point-style-updates">current package replay</a> checks footprint selection.</p>`
     const canvases = Array.from(host.querySelectorAll('canvas'))
     const buttons = host.querySelectorAll<HTMLButtonElement>('button[data-tool]')
     const status = host.querySelector<HTMLElement>('[role="status"]')!

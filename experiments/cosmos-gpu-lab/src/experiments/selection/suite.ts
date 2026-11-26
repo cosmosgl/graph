@@ -153,7 +153,7 @@ export const selectionGroups: { heading: string; items: Trial[] }[] = [
         id: 'Exactly 2048 polygon edges',
         title: 'Exactly 2,048 edges',
         recorded: 'passed',
-        description: 'A square path padded with repeated vertices still selects the expected dots at the current edge limit.',
+        description: 'A square path padded with repeated vertices still selects the expected dots at the v3.6.0 edge limit.',
         points: edges,
         camera: base,
         query: { polygon: closedSquare },
