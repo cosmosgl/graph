@@ -48,6 +48,21 @@ The pointer read copies its texture into a 2,560-byte buffer. On luma.gl 10.0.0-
 
 Four M3 Chrome sessions ran the signed and trial bundles in opposite orders. Within each session, every target used both buffer settings in alternating order for 32 pairs. The extra allocation disappeared on all 512 directly mapped reads. All 1,024 fresh queries and 16 trusted public clicks returned the expected point, link or background. Across the 16 target/session combinations, the median reduction was 0.00–0.10 ms for the read and 0.00–0.15 ms for the full query, with zero median improvement in several cases. The release keeps the qualified buffer usage. The isolated bundle, replay, complete result references and per-order figures are in `captures/cosmos-direct-pick-read-4k339df1/`.
 
+### Clicks while the signed graphs keep moving
+
+With the ordinary animation loops running, both packages returned the requested point or background for all 144 trusted clicks. Across the two engine orders the first visible WebGPU response averaged 182.4 ms on dense communities and 281.9 ms on hubs. At the fixed simulation tick above it took 14–15 ms. The live figures include outstanding simulation and rendering work. They describe what an application experiences while the graph moves.
+
+| M3 with a million points | Dense WebGL / WebGPU | Hub WebGL / WebGPU |
+| --- | ---: | ---: |
+| Steady frame p95 | 333.2 / 185.0 ms | 425.4 / 275.0 ms |
+| First visible click | 995.1 / 182.4 ms | 1,107.8 / 281.9 ms |
+| Click p95 (slowest of 12) | 995.1 / 274.1 ms | 1,107.8 / 297.9 ms |
+| Cold startup | 563.4 / 437.5 ms | 655.5 / 431.4 ms |
+| Topology replacement | 351.6 / 273.4 ms | 441.3 / 289.4 ms |
+| Peak tracked allocation | 418.6 / 273.2 MiB | 418.6 / 273.2 MiB |
+
+Memory met its margin on both graphs, as did dense cold startup and topology replacement. Relative frame and click timing remain unassessed under the declared comparison rule. For example, dense WebGL control frame p95 was 318.2 and 318.1 ms. In the two paired trials it was 316.6 and 349.8 ms. Hub control click p95 ranged from 1,040.4 to 1,544.2 ms. Every trial preserved the pinned positions, missing slot and ordered endpoints, performed all four edits, and returned tracked GPU allocations to zero. The exact two packages, individual events, control thresholds and verdicts are in `captures/autonomous-million-12c2b599-20261126/`.
+
 ## Signed million-point packages before pointer filtering
 
 The release candidate at `e8fa6c3b` used the actual Graph tarball's standalone distribution (`b52a9c7f`, luma.gl 10.0.0-alpha.14) and the WebGL reference (`74a216a7`, luma.gl 9.3.6). The full package hashes and tarballs are in `captures/signed-graph-deck-release-xr98e9r4/`. Each number below is the average of the two paired trials, ordered WebGL / WebGPU. “A/A spread”, “WebGL drift” and “mixed orders” identify why a comparison remained unassessed.

@@ -10,35 +10,21 @@ The selection IDs are Cosmos point indices in the prepared graph. The tracked ID
 
 ## Continuously moving million-point rectangles on the signed packages
 
-On M3, the signed WebGPU Graph returned ordered rectangle IDs and all 1,000 tracked
-coordinates on **8 of 8 releases**. The WebGL Graph returned `null` for both queries
-on **all 8** with its existing one-second fence wait. The median times from pointer
-release until WebGL returned `null` were 1,008.2 ms for selection and 1,008.3 ms for
-labels. A successful interactive WebGL latency baseline remains open.
+On M3, WebGPU returned ordered point IDs and all 1,000 tracked coordinates on all eight continuously moving million-point releases. WebGL returned `null` from both async queries at all eight releases. This held for both signed WebGPU builds below with the same WebGL control (`74a216a7`). In the latest run, WebGL took a median 1,006.9 ms for selection and 1,007.0 ms for labels before reporting the timeout.
 
-| WebGPU stage | Median over eight releases |
-| --- | ---: |
-| Release until selected IDs available | 265.4 ms |
-| Release until all 1,000 tracked coordinates available | 265.7 ms |
-| Release until both queries complete | 265.7 ms |
-| Apply the highlighted IDs | 8.8 ms |
-| Redraw the labels | 9.9 ms |
-| Highlight setter start until the highlighted GPU frame completes | 466.4 ms |
-| Release until feedback | 695.4 ms |
+| Median WebGPU time over eight releases | Earlier package (`b52a9c7f`) | Current package (`c7c523be`) |
+| --- | ---: | ---: |
+| Release until selected IDs available | 265.4 ms | 250.9 ms |
+| Release until 1,000 tracked coordinates available | 265.7 ms | 251.1 ms |
+| Release until both queries complete | 265.7 ms | 251.1 ms |
+| Apply the highlighted IDs | 8.8 ms | 7.6 ms |
+| Redraw the labels | 9.9 ms | 9.1 ms |
+| Highlight setter start until the highlighted GPU frame completes | 466.4 ms | 555.1 ms |
+| Release until visible feedback | 695.4 ms | 775.8 ms |
 
-Visible Chrome 158 replayed all four rectangle drags in each of four fresh sessions,
-first WebGL then WebGPU, then in reverse order. The graph kept moving throughout.
-WebGPU released at ticks 4, 8, 11, 14 and 4, 8, 12, 15. WebGL released at ticks
-10, 17, 25, 33 and 9, 16, 23, 30. Both loads used the same hashed input arrays
-and native Apple adapters. WebGL `74a216a7` reported luma 9.3.6 and the WebGPU
-standalone `b52a9c7f` reported luma 10.0.0-alpha.14.
+Visible Chrome 158 replayed four trusted drags in fresh sessions, with both engine orders. During the latest replay WebGPU released at ticks 4, 7, 11, 15 and 4, 8, 11, 14. Both WebGL sessions released at ticks 9, 17, 25, 33. The layout kept moving and the timing runs omitted the full position copy. These values measure the observed workflows at those ticks. A paired million-point rectangle latency comparison requires a successful WebGL read. The earlier and latest timing captures are `captures/public-graph-youtube-tqhKGb/` and `captures/public-graph-youtube-CDH2Xg/`.
 
-These timing runs omit the full position copy. The WebGL timeouts precluded a
-paired correctness comparison for these releases. The fixed-tick lasso below
-independently checks IDs and coordinates at release. The rectangle results,
-including all timeouts, are in
-`captures/public-graph-youtube-tqhKGb/result.json` (SHA-256
-`c6c6a1860bb5dadaaff7ef7388d838dc9a0b215ae11ea6c98debc2e8a79ea14b`).
+With the latest pair at 65,536 points, all four rectangle selections on each engine matched its independently projected release snapshot, including the empty selection. Every set of 1,000 tracked coordinates matched. The results are in `captures/public-graph-youtube-HYzAES/`. The fixed-tick lassos below check the million-point IDs and coordinates against each package’s own snapshot.
 
 ## A 256-vertex lasso on the moving YouTube graph
 
@@ -88,6 +74,8 @@ blocking control above. At million-point tick 10 the WebGL selection
 and labels took 2.87 and 3.78 seconds from release on this run. The
 earlier timeouts remain relevant to interactive latency. The raw data and
 full hashes are in `captures/public-graph-youtube-Swh4J0/result.json`.
+
+The signed WebGPU package with live pointer filtering and preserved style transitions (`c7c523be`) repeated the same 16 M3 drags with WebGL `74a216a7`. All ordered IDs and all 1,000 tracked coordinate pairs at each release matched the previous result for that engine. At million-point tick 10, the WebGL lasso selected 251,132 IDs and the WebGPU lasso selected 251,241. Each agreed with its own full position snapshot. The complete captures are in `captures/public-graph-youtube-AFEsny/`.
 
 ## Why the readback wait changed
 
