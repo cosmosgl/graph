@@ -1,5 +1,14 @@
 # Replay moving selection and labels on Apple M3
 
+For the 3.6.1 geometry and transition replay, build both distributions and run the following from the repository root. The `selection-361-m3-6436b55a-01` captures record the packaged adapter reports and selected IDs. The six-point fixture covers both selectable modes, shape and image updates, and paths beyond 32,768 vertices.
+
+```sh
+LAB_ARTIFACT_RUN=area-modes-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu \
+  src/experiments/production-graph-api/area-selection.test.ts \
+  src/experiments/production-graph-api/point-style-updates.test.ts \
+  src/experiments/production-graph-api/sparse-transition.test.ts
+```
+
 For the sparse point replay, build both distributions as shown below, then run from the repository root with a fresh capture name. The test records the adapters, full-frame differences, click IDs, surviving coordinates and ordered rectangle and lasso IDs for each region.
 
 ```sh

@@ -47,7 +47,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'production-graph-api/point-style-updates': {
     badge: 'Area selection matches',
     tone: 'pass',
-    finding: 'Both packages use the target diameter for rectangles and the point center for lassos. WebGPU clicks follow the displayed diameter.',
+    finding: 'Both packages use the target footprint for rectangle and lasso selection by default. WebGPU clicks follow the displayed diameter.',
     area: 'Integration',
     status: 'Eight frames checked on M3 at 1× and 2×',
     evidence: [
@@ -55,7 +55,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'Zero link-record uploads in all four WebGPU edits on the 8,192-link control' },
       { tone: 'pass', text: 'At 24 CSS px the inner probe hit point 0 and the outer probe missed, both before and after the restart' },
       { tone: 'info', text: 'WebGL reported its last hit throughout the active size transition' },
-      { tone: 'pass', text: 'All 128 paired area results matched. The rectangle added point 0 as soon as the larger target was set.' },
+      { tone: 'pass', text: 'All 128 paired area results matched. Both area tools added point 0 as soon as the larger target was set.' },
     ],
     next: 'Repeat the interrupted-size comparison on another supported adapter.',
   },
@@ -74,7 +74,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'production-graph-api/sparse-transition': {
     badge: 'Removal and restoration match',
     tone: 'pass',
-    finding: 'Both packages dropped the ID on the first fade frame. On return, their destination rectangles selected it at 522 ms and their lassos at 750 ms.',
+    finding: 'Both packages dropped the ID on the first fade frame. On return, the destination rectangle and lasso both selected it at 522 ms.',
     area: 'Integration',
     status: 'Verified on M3 at 1× and 2×',
     evidence: [
@@ -119,7 +119,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     evidence: [
       { tone: 'pass', text: '46 paired frames matched pixel for pixel. The settled and initial canvases also matched within each package.' },
       { tone: 'pass', text: 'All 138 site clicks and all 368 rectangle and lasso results agreed' },
-      { tone: 'info', text: 'At x = 48 the rectangle selected point 1 at 315 ms and the lasso at 686 ms. The x = 80 click switched to link 0 at 359 ms.' },
+      { tone: 'info', text: 'At x = 48 both the rectangle and lasso selected point 1 at 315 ms. The x = 80 click switched to link 0 at 359 ms.' },
     ],
     next: 'Repeat the full return on another supported adapter.',
   },
@@ -144,7 +144,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     status: '47 checkpoints per pixel ratio on M3 at 1× and 2×',
     evidence: [
       { tone: 'pass', text: 'All 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed' },
-      { tone: 'pass', text: 'At x = 80 the rectangle first returned point 1 at 471 ms and the lasso at 725 ms' },
+      { tone: 'pass', text: 'At x = 80 both the rectangle and the lasso first returned point 1 at 471 ms' },
       { tone: 'pass', text: 'At 1,000 ms the entire canvas matched the settled x = 80 frame from the uninterrupted restoration' },
     ],
     next: 'Repeat the restoration on another supported adapter.',
@@ -157,7 +157,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     status: '43 checkpoints per pixel ratio on M3 at 1× and 2×',
     evidence: [
       { tone: 'pass', text: 'All 86 frame pairs, 430 site clicks and 1,032 rectangle and lasso results agreed' },
-      { tone: 'pass', text: 'Before removal four rectangles and only the x = 68 lasso selected point 1. Each returned an empty list after removal.' },
+      { tone: 'pass', text: 'Before removal both tools selected point 1 at x = 56, 64, 68 and 80. Each returned an empty list after removal.' },
       { tone: 'pass', text: 'At 500 ms into removal the entire canvas matched the pre-removal frame in each package' },
     ],
     next: 'Repeat the five-position comparison on another native adapter.',
@@ -263,7 +263,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'The packaged WebGPU Graph returned the expected moving rectangle IDs and 1,000 tracked coordinates at both YouTube graph sizes.' },
       { tone: 'warn', text: 'On replay, production WebGL and WebGPU agreed on both lasso edge points. The CPU reference placed each on the opposite side.' },
     ],
-    next: 'After PR #296 merges, match its footprint rules for both tools and replay the two lasso edge cases. ' +
+    next: 'Replay the two moving lasso edge cases through both packaged selection modes. ' +
       'Reduce the release-to-highlight delay in the million-point rectangle replay.',
   },
   'integrated-webgpu/tracked-positions': {

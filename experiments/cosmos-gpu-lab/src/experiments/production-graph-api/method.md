@@ -71,11 +71,11 @@ The destination rectangle and diamond lasso each span 4 × 4 CSS px. During the 
 | Time after restoration starts | Destination rectangle | Destination lasso |
 | --- | --- | --- |
 | 521 ms | `[]` | `[]` |
-| 522 ms | `[1]` | `[]` |
-| 749 ms | `[1]` | `[]` |
+| 522 ms | `[1]` | `[1]` |
+| 749 ms | `[1]` | `[1]` |
 | 750 ms through the sampled end at 1,000 ms | `[1]` | `[1]` |
 
-The rectangle uses the point’s full 12 CSS px target radius and starts selecting as the moving center reaches x = 66. The lasso starts selecting when the center reaches its left vertex at x = 78. The times are specific to this geometry and the default cubic easing. A region containing all three locations returned `[0, 2]` throughout removal and `[0, 1, 2]` from the start of restoration. The replay also checks removal and restoration with duration zero. Across 14 checkpoints at both ratios, all 224 pairs of ID lists and all 28 pairs of rendered frames matched.
+In the default `touch` mode, both regions reach the point when its center reaches x = 66. The 12 CSS px target radius then touches the left edge of the rectangle and the left vertex of the lasso at x = 78. The times are specific to this geometry and the default cubic easing. A region containing all three locations returned `[0, 2]` throughout removal and `[0, 1, 2]` from the start of restoration. The replay also checks removal and restoration with duration zero. Across 14 checkpoints at both ratios, all 224 pairs of ID lists and all 28 pairs of rendered frames matched.
 
 On M3, the original WebGPU removal differed from WebGL at 630 pixels halfway through the fade at 1× and 2,506 pixels at 2×. After the fix, all nine canvases at each ratio matched exactly. At the midpoint the outgoing point was 12 CSS pixels wide, the link was half as bright, and both clicks returned background. Halfway through restoration the center had moved 16 CSS pixels. A click at its destination, another 16 pixels away, already returned point 1 in both packages.
 
@@ -92,13 +92,13 @@ Each endpoint has a click probe, a 4 × 4 CSS px rectangle and a diamond lasso o
 | Just before restoration | Background | Background | `[] / []` | `[] / []` |
 | First restoration frame | Point 1 | Background | `[1] / [1]` | `[] / []` |
 | 16 ms into restoration | Point 1 | Link 0 | `[1] / [1]` | `[] / []` |
-| 250 ms | Point 1 | Link 0 | `[1] / []` | `[] / []` |
+| 250 ms | Point 1 | Link 0 | `[1] / [1]` | `[] / []` |
 | 500 ms | Point 1 | Point 1 | `[] / []` | `[] / []` |
-| 522 ms | Point 1 | Point 1 | `[] / []` | `[1] / []` |
+| 522 ms | Point 1 | Point 1 | `[] / []` | `[1] / [1]` |
 | 750 ms | Background | Point 1 | `[] / []` | `[1] / [1]` |
 | 1,000 ms | Background | Point 1 | `[] / []` | `[1] / [1]` |
 
-At 16 ms, the link runs beneath the new position and its green channel still rounds to zero there. At 500 ms, the painted point is 12 CSS px wide at x = 64. The click search window at either endpoint can reach point 1. Only the midpoint’s small rectangle and lasso select it. At the destination, the rectangle first returns `[1]` at 522 ms and the lasso at 750 ms. Each was empty one millisecond earlier. At 1,000 ms, the point is 24 CSS px wide at x = 80 and the link is fully bright. All 26 frame pairs matched pixel for pixel.
+At 16 ms, the link runs beneath the new position and its green channel still rounds to zero there. At 500 ms, the painted point is 12 CSS px wide at x = 64. The click search window at either endpoint can reach point 1. Only the midpoint’s small rectangle and lasso select it. At the destination, both first returned `[1]` at 522 ms. Each was empty one millisecond earlier. At 1,000 ms, the point is 24 CSS px wide at x = 80 and the link is fully bright. All 26 frame pairs matched pixel for pixel.
 
 ### Remove the point again halfway through restoration
 
@@ -125,13 +125,13 @@ The click column lists the results at x = 48, 64 and 80 in that order. The last 
 | --- | --- | --- | --- |
 | Just before the edit | Background / Background / Background | None | None |
 | 0 ms | Point 1 / Point 1 / Point 1 | 64 | 64 |
-| 315 ms | Point 1 / Point 1 / Point 1 | 48, 64 | None |
-| 359 ms | Point 1 / Point 1 / Link 0 | 48, 64 | None |
-| 500 ms | Point 1 / Point 1 / Link 0 | 48, 64 | None |
+| 315 ms | Point 1 / Point 1 / Point 1 | 48, 64 | 48, 64 |
+| 359 ms | Point 1 / Point 1 / Link 0 | 48, 64 | 48, 64 |
+| 500 ms | Point 1 / Point 1 / Link 0 | 48, 64 | 48, 64 |
 | 686 ms | Point 1 / Point 1 / Link 0 | 48 | 48 |
 | 1,000 ms | Point 1 / Point 1 / Link 0 | 48 | 48 |
 
-The point travels 16 CSS px left with the default cubic easing. Rectangles use the 12 CSS px target radius and lassos use the moving center. The click at x = 80 changes to the underlying link when the point leaves its picking window. Each of the three switches above was checked one millisecond earlier as well. At 500 ms the paint is 12 CSS px wide at x = 56, with link green back at 128/255. At 1,000 ms the 24 CSS px point and its link exactly reproduce the initial canvas and hit results in each package. All 46 paired frames matched pixel for pixel on M3 at 1× and 2×.
+The point travels 16 CSS px left with the default cubic easing. Both area tools use the 12 CSS px target radius at the moving center. The click at x = 80 changes to the underlying link when the point leaves its picking window. Each of the three switches above was checked one millisecond earlier as well. At 500 ms the paint is 12 CSS px wide at x = 56, with link green back at 128/255. At 1,000 ms the 24 CSS px point and its link exactly reproduce the initial canvas and hit results in each package. All 46 paired frames matched pixel for pixel on M3 at 1× and 2×.
 
 ### Remove the point halfway back
 
@@ -141,9 +141,9 @@ The four probes share y = 96. Each uses a click, a 4 × 4 CSS px rectangle and a
 
 | x (CSS px) | RGB before → after the edit | Click before | Rectangle before | Lasso before |
 | ---: | --- | --- | --- | --- |
-| 48 | (0, 0, 0) → (255, 0, 0) | Point 1 | `[1]` | `[]` |
+| 48 | (0, 0, 0) → (255, 0, 0) | Point 1 | `[1]` | `[1]` |
 | 56 | (64, 64, 0) → (255, 0, 0) | Point 1 | `[1]` | `[1]` |
-| 64 | (0, 128, 0) → (255, 0, 0) | Point 1 | `[1]` | `[]` |
+| 64 | (0, 128, 0) → (255, 0, 0) | Point 1 | `[1]` | `[1]` |
 | 80 | (0, 128, 0) → (0, 255, 0) | Link 0 | `[]` | `[]` |
 
 Immediately after removal, every click returned Background and every local area returned `[]`. The whole-graph rectangle and lasso retained `[0, 2]`. At 500 ms into the third fade, the entire canvas again matched the frame just before the edit, while point 1 and link 0 remained unavailable to all four probes. At 1,000 ms, both had disappeared. All 50 frame pairs matched pixel for pixel across packages.
@@ -156,10 +156,10 @@ The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS 
 
 | Probe x | Click | Rectangle returns `[1]` | Lasso returns `[1]` |
 | ---: | --- | --- | --- |
-| 48 | Point 1 through 513 ms, then background | 0–396 ms | Never |
-| 56 | Point 1 through 683 ms, then background | 0–529 ms | 0–275 ms |
-| 64 | Point 1 throughout | 0–724 ms | 397–470 ms |
-| 80 | Background at 0–1 ms, link 0 at 2–374 ms, point 1 from 375 ms | 471–1,000 ms | 725–1,000 ms |
+| 48 | Point 1 through 513 ms, then background | 0–396 ms | 0–396 ms |
+| 56 | Point 1 through 683 ms, then background | 0–529 ms | 0–529 ms |
+| 64 | Point 1 throughout | 0–724 ms | 0–724 ms |
+| 80 | Background at 0–1 ms, link 0 at 2–374 ms, point 1 from 375 ms | 471–1,000 ms | 471–1,000 ms |
 
 At x = 80 the first link hit arrived while the pixel still read black. Halfway through the restore, the point was 12 CSS px wide at x = 68 and the link’s green channel was 128. At 1,000 ms the point was 24 CSS px wide at x = 80, the green channel was 255 and the full canvas matched the settled x = 80 frame after an uninterrupted restoration. Across 1× and 2× on M3, all 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed between packages.
 
@@ -172,10 +172,10 @@ The probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS px. A
 | Probe x | RGB before removal | RGB on removal | Rectangle before | Lasso before |
 | ---: | --- | --- | --- | --- |
 | 48 | (0, 0, 0) | (0, 0, 0) | `[]` | `[]` |
-| 56 | (0, 0, 0) | (255, 0, 0) | `[1]` | `[]` |
-| 64 | (64, 0, 0) | (255, 0, 0) | `[1]` | `[]` |
+| 56 | (0, 0, 0) | (255, 0, 0) | `[1]` | `[1]` |
+| 64 | (64, 0, 0) | (255, 0, 0) | `[1]` | `[1]` |
 | 68 | (64, 64, 0) | (255, 0, 0) | `[1]` | `[1]` |
-| 80 | (0, 128, 0) | (0, 255, 0) | `[1]` | `[]` |
+| 80 | (0, 128, 0) | (0, 255, 0) | `[1]` | `[1]` |
 
 Halfway through removal, both packages reproduced every pixel of the pre-removal canvas. The point and its link still returned background, and both whole-graph selections retained `[0, 2]`. At 750 ms, the remaining point covered 2 CSS px horizontally at 1× and 1 CSS px at 2×. By 1,000 ms, both the point and the link had disappeared. WebGL and WebGPU agreed at each pixel ratio on all 86 frame pairs, 430 site clicks and 1,032 local and whole-graph rectangle and lasso results.
 
@@ -208,10 +208,12 @@ At the same checkpoints, the replay queries a rectangle and a trapezoidal lasso.
 | Checkpoint | Painted diameter, WebGL / WebGPU | Target diameter | Rectangle at all three offsets | Lasso at all three offsets |
 | --- | --- | --- | --- | --- |
 | Just before interruption | 24 / 24 px | 8 px | `[2]` | `[2]` |
-| First frame after interruption | 8 / 24 px | 40 px | `[0, 2]` | `[2]` |
-| Halfway through regrowth | 24 / 32 px | 40 px | `[0, 2]` | `[2]` |
+| First frame after interruption | 8 / 24 px | 40 px | `[0, 2]` | `[0, 2]` |
+| Halfway through regrowth | 24 / 32 px | 40 px | `[0, 2]` | `[0, 2]` |
 
-The rectangle expands its bounds by half the target diameter. At 10 px it can miss a point whose paint reaches into the rectangle. When the target grows, it can select the point before the paint reaches 18 px. The lasso checks the center. Moving the top edge 8 px above the center gave `[0, 2]` for both tools at every checkpoint. All 128 paired results matched across eight checkpoints, four offsets, two tools and two pixel ratios.
+Both tools intersect the target footprint with the selection. At 10 px they can miss a point whose paint reaches into the selection. When the target grows, they can select it before the paint reaches 18 px. Moving the top edge 8 px above the center gave `[0, 2]` for both tools at every checkpoint. All 128 paired results matched across eight checkpoints, four offsets, two tools and two pixel ratios.
+
+A separate packaged replay switches `pointSelectionMode` with the graph already drawn. A rectangle and matching polygon select an interior point, a boundary center and a tangent circle (`[0, 1, 2]`) by default. In `center` mode they return `[0, 1]`. Switching point 2 to a square takes its narrower edge outside the region. Adding an image restores its circular selection footprint. On M3 at 1× and 2× both packages also kept a center on a one-float32-step vertex and scanned the full 32,771-vertex lasso in either direction.
 
 Across packages, five of eight M3 frames matched every RGBA byte at each pixel ratio. Halfway through shrinking, 16 pixels at 1× and 32 at 2× differed by one channel level. The other two frames show the different restart sizes and colors. The endpoint gradient and the control link matched throughout. The regrowth midpoint also exercises a 32-pixel circle at a tile boundary. [Tile-origin control](#/production-points?section=doc-results)
 

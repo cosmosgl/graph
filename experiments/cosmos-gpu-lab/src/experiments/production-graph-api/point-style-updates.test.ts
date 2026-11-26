@@ -58,12 +58,12 @@ it.each([1, 2] as const)('draws, picks and selects point-only color and size edi
       expect.soft(sample.picks, label).toEqual(held
         ? { center: 'Point 2', edge: 'Point 2', outerEdge: 'Point 2', link: 'Point 2', control: 'Point 2' }
         : { center: 'Point 0', edge, outerEdge, link: 'Link 0', control: 'Point 2' })
-      // Rectangles intersect the requested footprint. Lassos include centers only.
+      // Both queries touch the requested footprint throughout a size transition.
       // Point 2 is inside every query and points 1 and 3 are always outside.
       expect.soft(sample.selections, label).toEqual([-8, 10, 14, 18].map(offset => ({
         offset,
         rectangle: offset <= requestedSizes[i]! / 2 ? [0, 2] : [2],
-        lasso: offset < 0 ? [0, 2] : [2],
+        lasso: offset <= requestedSizes[i]! / 2 ? [0, 2] : [2],
       })))
       // The gradient reads its current endpoint colors even while the point paint interpolates.
       const endpoint = [red, blue, blue, red, red, white, white, white][i]!

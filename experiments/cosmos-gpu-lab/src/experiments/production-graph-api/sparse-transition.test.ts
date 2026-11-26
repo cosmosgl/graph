@@ -15,10 +15,9 @@ function expectedSelections (phase: SparseSample['phase'], time: number, siteCou
   const absent = phase === 'remove' || phase === 'remove-again' || phase === 'remove-on-return' || phase === 'remove-at-68' || phase === 'snap-remove'
   const local = (region: Exclude<SparseSample['selections'][number]['region'], 'all'>, center: number): SparseSample['selections'][number] => ({
     region,
-    // The 4 px rectangle also reaches half the full requested 24 px diameter.
+    // Both 4 px regions reach the 12 px radius along their shared horizontal centerline.
     rectangle: !absent && Math.abs(center - x) <= 14 ? [1] : [],
-    // Along the diamond's middle row, its left edge is inclusive.
-    lasso: !absent && x >= center - 2 && x < center + 2 ? [1] : [],
+    lasso: !absent && Math.abs(center - x) <= 14 ? [1] : [],
   })
   const all = absent ? [0, 2] : [0, 1, 2]
   return [
