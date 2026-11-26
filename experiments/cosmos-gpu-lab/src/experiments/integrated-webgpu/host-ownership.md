@@ -347,3 +347,28 @@ The local capture `captures/packed-deck-final-20261126-FcFbxf/` contains
 the tarballs, consumer, declaration check and per-browser reports. Its
 Graph SHA-256 is `071a239639cc9804c39a096a070105ce9ae73424e385e1966bec28464b3b8932`.
 Its Deck Layers SHA-256 is `b4ea371f4f3074da8a4fe0bf0c20396dd8b994c4ba7f1adc33dc5d7f855c341b`.
+
+### Standalone and Deck archives at the subviewport fix
+
+A clean TypeScript app installed the Graph and Deck archives built from signed
+revision `e8fa6c3b` with Deck 10.0.0-alpha.1 and one luma core 10.0.0-alpha.14.
+All 72 shared Graph story TypeScript files compiled against both the installed
+WebGPU declaration and the WebGL distribution declaration. The page loading
+only `dist/index.min.js` painted red point 0, green point 1 and blue link 0.
+Clicks returned all three IDs plus a background miss, and teardown removed
+the canvas.
+
+Chrome 158, Firefox 153, Playwright WebKit 26.5, installed Safari 26.5.2 and
+Chrome on SwiftShader passed the standalone check and both Deck ownership
+cases. On each, both 65,536-point sessions recovered every coordinate, the
+camera, selection, pin and next cooling value. Resize moved drawing and
+picking to the new sites. Removing a layer released its owned graph, while
+the app-supplied graph still accepted edits. The shared device remained
+usable. Chrome and WebKit identified Apple hardware, as did retail Safari,
+which ran at its native 2× display ratio. Firefox withheld the vendor.
+
+The GPU Lab capture `captures/signed-graph-deck-release-xr98e9r4/` preserves
+the clean build, tarballs and individual reports. The Graph archive SHA-256
+is `10aea9a7edefc19a21cfe4c5c43023c4b3f55bf9d1da5c9645ee0098ec962217`.
+The Deck archive SHA-256 is
+`88701ff882f934d0a37d5b772cc0eef7e17639eaaec7c22c5950b376878eaca7`.
