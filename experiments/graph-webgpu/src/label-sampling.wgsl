@@ -30,23 +30,25 @@ fn label(i: u32) -> vec4f {
 }
 
 @compute @workgroup_size(64)
-fn selectCells(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= view.count) { return; }
-  let p = label(sourceId(id.x));
+fn selectCells(@builtin(global_invocation_id) invocation: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let id = invocation.x + invocation.y * groups.x * 64u;
+  if (id >= view.count) { return; }
+  let p = label(sourceId(id));
   let xy = view.translation + p.xy * vec2f(view.zoom, -view.zoom);
   let uv = (vec2f(xy.x, view.viewport.y - xy.y) + 0.5) / view.viewport;
   if (p.w != 0.0 || any(uv < vec2f(0)) || any(uv >= vec2f(1))) { return; }
   let cell = vec2u(uv * vec2f(view.grid));
-  atomicMax(&winners[cell.x + cell.y * view.grid.x], id.x + 1u);
+  atomicMax(&winners[cell.x + cell.y * view.grid.x], id + 1u);
 }
 
 @compute @workgroup_size(64)
-fn gatherCells(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= arrayLength(&result)) { return; }
-  let winner = atomicLoad(&winners[id.x]);
+fn gatherCells(@builtin(global_invocation_id) invocation: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let id = invocation.x + invocation.y * groups.x * 64u;
+  if (id >= arrayLength(&result)) { return; }
+  let winner = atomicLoad(&winners[id]);
   if (winner != 0u) {
     let i = sourceId(winner - 1u);
     let p = label(i);
-    result[id.x] = vec4u(i + 1u, bitcast<vec3u>(p.xyz));
+    result[id] = vec4u(i + 1u, bitcast<vec3u>(p.xyz));
   }
 }

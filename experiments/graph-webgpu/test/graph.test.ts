@@ -1,6 +1,7 @@
 import { Buffer, type Device, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/core/webgl'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
+import { Kernel } from '@luma.gl/graph'
 import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation, PointShape, type GraphConfig } from '../src'
 import { Lines } from '../src/modules/Lines'
@@ -599,6 +600,43 @@ describe('WebGPU Graph', () => {
       expect((await independent.positionsAsync())?.get(1)).toEqual([2100, 2050])
       independent.destroy()
       expect([...(await graph.getTrackedPointPositionsMapAsync())!]).toEqual([[0, [2000, 2048]]])
+    } finally { cleanup() }
+  })
+
+  it('selects points and samples point and link labels beyond the first dispatch row', async () => {
+    const { graph, cleanup } = mountedGraph({ enableSimulation: false, pointSamplingDistance: 20, linkSamplingDistance: 20 })
+    try {
+      await graph.ready
+      const last = 190
+      const xy = new Float32Array((last + 1) * 2).fill(NaN)
+      xy.set([2000, 2128])
+      xy.set([2096, 2128], last * 2)
+      const links = new Float32Array(xy.length)
+      for (let i = 0; i <= last; i++) links[2 * i + 1] = last
+      graph.setPointPositions(xy, true)
+      graph.setLinks(links)
+      graph.render(undefined, 0)
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [320, 200])
+
+      // Two groups per axis exercises the ten-million-point dispatch pattern
+      // with 191 slots and a 16 × 10 label grid on a real device.
+      const device = graph.simulation.device!
+      const limits = device.limits
+      const smallGrid = Object.create(limits, { maxComputeWorkgroupsPerDimension: { value: 2 } })
+      Object.defineProperty(device, 'limits', { value: smallGrid })
+      const dispatch = vi.spyOn(Kernel.prototype, 'dispatch')
+      try {
+        expect(await graph.findPointsInRectAsync([[205, 17], [211, 23]])).toEqual([last])
+        expect(await graph.findPointsInPolygonAsync([[100, 10], [220, 10], [220, 30], [100, 30]])).toEqual([0, last])
+        await expect.poll(() => [...graph.getSampledPointPositionsMap()]).toEqual([[0, [2000, 2128]], [last, [2096, 2128]]])
+        await expect.poll(() => graph.getSampledLinks().indices).toEqual([last])
+        expect(graph.getSampledLinks().positions).toEqual([2048, 2128])
+        expect(dispatch.mock.calls.some(([, grid]) => grid.x === 2 && grid.y === 2)).toBe(true)
+        expect(dispatch.mock.calls.every(([, { x, y = 1 }]) => x <= 2 && y <= 2)).toBe(true)
+      } finally {
+        dispatch.mockRestore()
+        Object.defineProperty(device, 'limits', { value: limits })
+      }
     } finally { cleanup() }
   })
 

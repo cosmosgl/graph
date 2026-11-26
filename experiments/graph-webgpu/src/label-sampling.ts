@@ -2,6 +2,7 @@ import { Buffer, type BindingDeclaration, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/graph'
 import type { GraphView } from './renderer'
 import type { PointPositionBuffer } from './simulation'
+import { workgroupGrid } from './modules/Shared/compute'
 import source from './label-sampling.wgsl?raw'
 
 type Entry = [number, number, number]
@@ -87,8 +88,9 @@ export class LabelSampling {
       resources.push(encoder)
       const pass = encoder.beginComputePass({})
       try {
-        this.select.dispatch(pass, { bindings, x: Math.ceil(count / 64) })
-        this.gather.dispatch(pass, { bindings: { ...bindings, result }, x: Math.ceil(cols * rows / 64) })
+        const limit = this.device.limits.maxComputeWorkgroupsPerDimension
+        this.select.dispatch(pass, { bindings, ...workgroupGrid(Math.ceil(count / 64), limit) })
+        this.gather.dispatch(pass, { bindings: { ...bindings, result }, ...workgroupGrid(Math.ceil(cols * rows / 64), limit) })
       } finally { pass.end() }
       this.device.submit(encoder.finish())
       const bytes = await result.readAsync()

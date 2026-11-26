@@ -3,6 +3,7 @@ import { Kernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '@/graph/config'
 import { PointShape, type GraphData } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
+import { workgroupGrid } from '../Shared/compute'
 import source from './area-selection.wgsl?raw'
 
 export type Pair = [number, number]
@@ -88,7 +89,8 @@ export class AreaSelection {
       resources.push(encoder)
       const pass = encoder.beginComputePass({})
       try {
-        this.kernel.dispatch(pass, { x: Math.ceil(count / 64), bindings: { points, footprints: this.footprints, path, mask, view: uniform } })
+        const grid = workgroupGrid(Math.ceil(count / 64), this.device.limits.maxComputeWorkgroupsPerDimension)
+        this.kernel.dispatch(pass, { ...grid, bindings: { points, footprints: this.footprints, path, mask, view: uniform } })
       } finally { pass.end() }
       this.device.submit(encoder.finish())
       const bytes = await mask.readAsync()

@@ -49,10 +49,11 @@ fn overlapsPolygon(center: vec2f, extent: f32, square: bool) -> bool {
 }
 
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= arrayLength(&mask)) { return; }
-  let p = points[id.x];
-  let footprint = footprints[id.x];
+fn main(@builtin(global_invocation_id) invocation: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let id = invocation.x + invocation.y * groups.x * 64u;
+  if (id >= arrayLength(&mask)) { return; }
+  let p = points[id];
+  let footprint = footprints[id];
   let size = abs(footprint) * view.sizeScale;
   if (p.w != 0.0 || size <= 0.0) { return; }
   let normalized = (p.xy - view.origin) * (2.0 / view.screenSize);
@@ -67,8 +68,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (view.pathLength == 0u) {
     let delta = center - clamp(center, view.bounds.xy, view.bounds.zw);
     let touches = select(dot(delta, delta) <= radius * radius, all(abs(delta) <= vec2f(extent)), square);
-    mask[id.x] = select(0u, 1u, touches);
+    mask[id] = select(0u, 1u, touches);
   } else {
-    mask[id.x] = select(0u, 1u, overlapsPolygon(center, extent, square));
+    mask[id] = select(0u, 1u, overlapsPolygon(center, extent, square));
   }
 }
