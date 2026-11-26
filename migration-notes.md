@@ -17,6 +17,14 @@ complete. When the user moves a selection, display only the most recent
 request's result. For layout measurements, record the simulation tick when
 requesting the snapshot and display that tick with the returned coordinates.
 
+A custom WebGL renderer that samples `getPointPositionTexture()` needs a WebGPU
+storage-buffer binding. Call `getPointPositionBuffer()` on the Graph or simulation
+for each draw. The borrowed buffer holds four float32 values per point index,
+`[worldX, worldY, pinned, absent]`. Check the absence flag because a point can
+keep finite coordinates while it fades out. The simulation owns the buffer and
+can swap it after a step or an edit. A Deck layer that calls `drawToRenderPass()`
+can continue to let Cosmos bind the current positions.
+
 ## Migrating `@cosmos.gl/deck-layers` 3.5.0 → 3.5.1
 
 ### `CosmosGraphLayer` Draws With cosmos.gl's Renderer
