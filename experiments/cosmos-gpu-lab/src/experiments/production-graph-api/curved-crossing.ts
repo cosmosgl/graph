@@ -1,4 +1,5 @@
 import type { DeviceInfo } from '@luma.gl/core'
+import type { Graph } from '../../../../../dist/index.js'
 import { lineConfig, lineViewport } from '../production-lines/fixture'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import type { Engine } from './frame'
@@ -26,8 +27,17 @@ function positions (endpointY: number, withPoint: boolean): Float32Array {
   return Float32Array.from(xy)
 }
 
-/** Move the same endpoints twice, first with only the link and then with point 2 at the crossing. */
-export async function runCurvedCrossing (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: CrossingSample[] }> {
+type CrossingFrame = Pick<CrossingSample, 'pixels' | 'phase' | 'time' | 'strokeY'> & {
+  click(x: number, y: number): Promise<string>;
+  rgb(x: number, y: number): number[];
+}
+
+/** Each foreground uses the same link-only control, camera, endpoints, clock and public pointer events. */
+export async function replayCurve<C, S> (engine: Engine, ratio: 1 | 2, scene: {
+  configurePoint?(graph: Graph): void;
+  control(frame: CrossingFrame): Promise<C>;
+  sample(frame: CrossingFrame, control: C): Promise<S>;
+}): Promise<{ deviceInfo: DeviceInfo; samples: S[] }> {
   const frame = document.createElement('iframe')
   frame.title = `${engine} curved link crossing`
   frame.tabIndex = -1
@@ -75,8 +85,8 @@ export async function runCurvedCrossing (engine: Engine, ratio: 1 | 2): Promise<
       }
       let now = win.performance.now()
       Object.defineProperty(win.performance, 'now', { configurable: true, value: () => now })
-      const controls: Control[] = []
-      const samples: CrossingSample[] = []
+      const controls: C[] = []
+      const samples: S[] = []
       for (const withPoint of [false, true]) {
         graph.setPointPositions(positions(72, withPoint), true)
         graph.setLinks(Float32Array.of(0, 1))
@@ -84,6 +94,7 @@ export async function runCurvedCrossing (engine: Engine, ratio: 1 | 2): Promise<
         const colors = [0.6, 0.6, 0.6, 1, 0.6, 0.6, 0.6, 1]
         if (withPoint) colors.push(1, 0, 0, 1)
         graph.setPointColors(Float32Array.from(colors))
+        if (withPoint) scene.configurePoint?.(graph)
         graph.render(undefined, 0)
         graph.pause()
         graph.setViewTransform({ k: 1, x: 0, y: 0 }, [width, height])
@@ -101,25 +112,28 @@ export async function runCurvedCrossing (engine: Engine, ratio: 1 | 2): Promise<
             const offset = 4 * (y * ratio * copy.width + x * ratio)
             return Array.from(pixels.data.subarray(offset, offset + 3))
           }
-          const pick = await click(128, 80)
-          if (!withPoint) {
-            controls.push({ pixels, pick, rgb: rgb(128, 80) })
-            continue
-          }
           // At t=1/4 on this quadratic, the left shoulder is 18 CSS px above its endpoints.
-          const strokeY = 54 + i * 32
-          samples.push({
-            phase,
-            time,
-            strokeY,
-            pixels,
-            linkOnly: controls[i]!,
-            picks: { point: pick, witness: await click(160, 83), stroke: await click(80, strokeY), background: await click(16, 16) },
-            colors: { point: rgb(128, 80), witness: rgb(160, 83), stroke: rgb(80, strokeY), background: rgb(16, 16) },
-          })
+          const capture = { phase, time, pixels, strokeY: 54 + i * 32, click, rgb }
+          if (withPoint) samples.push(await scene.sample(capture, controls[i]!))
+          else controls.push(await scene.control(capture))
         }
       }
       return { deviceInfo, samples }
     } finally { graph.destroy() }
   } finally { frame.remove() }
+}
+
+export function runCurvedCrossing (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: CrossingSample[] }> {
+  return replayCurve<Control, CrossingSample>(engine, ratio, {
+    control: async ({ pixels, click, rgb }) => ({ pixels, pick: await click(128, 80), rgb: rgb(128, 80) }),
+    sample: async ({ phase, time, strokeY, pixels, click, rgb }, linkOnly) => ({
+      phase,
+      time,
+      strokeY,
+      pixels,
+      linkOnly,
+      picks: { point: await click(128, 80), witness: await click(160, 83), stroke: await click(80, strokeY), background: await click(16, 16) },
+      colors: { point: rgb(128, 80), witness: rgb(160, 83), stroke: rgb(80, strokeY), background: rgb(16, 16) },
+    }),
+  })
 }

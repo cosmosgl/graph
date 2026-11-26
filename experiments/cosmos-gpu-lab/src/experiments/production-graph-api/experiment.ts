@@ -93,6 +93,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the painted overlap and click IDs with the link and background controls at 1× and 2×.',
     recorded: null,
   }, {
+    id: 'curved-link-image-crossing',
+    title: 'Move a curved link behind a point image',
+    kind: 'compare',
+    question: 'What shows through each part of a point image, and which object receives the click?',
+    description: 'Move green link 0 behind image point 2. From left to right the three areas are opaque red, translucent red and transparent.',
+    reference: 'Both Graph packages replay the same motion twice, with and without image point 2.',
+    acceptance: 'Compare the pixel color and click ID in all three areas before, during and after the crossing at 1× and 2×.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -130,6 +139,7 @@ export const experiment = defineExperiment({
     if (caseId === 'restore-to-80') return (await import('./sparse-view')).createSparseView(host, 'restore-to-80')
     if (caseId === 'remove-at-68') return (await import('./sparse-view')).createSparseView(host, 'remove-at-68')
     if (caseId === 'curved-link-crossing') return (await import('./curved-crossing-view')).createCurvedCrossingView(host)
+    if (caseId === 'curved-link-image-crossing') return (await import('./image-crossing-view')).createImageCrossingView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

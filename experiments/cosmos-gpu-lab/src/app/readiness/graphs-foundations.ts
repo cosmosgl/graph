@@ -16,7 +16,20 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'All three 2× canvases and their link-only controls matched every pixel' },
       { tone: 'warn', text: 'At 1×, 9, 9 and 10 curve pixels differed by one green-channel level before, during and after the crossing' },
     ],
-    next: 'Check what shows through a partially transparent point image and which object receives the click.',
+    next: 'Compare the same crossing with an image on point 2.',
+  },
+  'production-graph-api/curved-link-image-crossing': {
+    badge: 'Picks match, image paint differs',
+    tone: 'review',
+    finding: 'Both packages pick point 2 through a transparent texel. The half-transparent red band is brighter on WebGPU, and its image is smaller.',
+    area: 'Integration',
+    status: 'Three image areas before, during and after the crossing on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 36 paired clicks agreed. With the point omitted, the green link took the click at all three sites during the crossing.' },
+      { tone: 'warn', text: 'At alpha 128/255, WebGL showed RGB (64, 127, 0) over the link and WebGPU showed (128, 127, 0)' },
+      { tone: 'warn', text: 'WebGL drew the requested 96 CSS px image. WebGPU limited it to 64 CSS px.' },
+    ],
+    next: 'Match the image-only blend to WebGL and resolve the image-size limit for drawing and picking together.',
   },
   'production-graph-api/point-style-updates': {
     badge: 'Area selection matches',

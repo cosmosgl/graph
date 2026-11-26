@@ -30,6 +30,22 @@ Following the exposed curve with a click returned link 0 at all three times. An 
 
 All 30 paired click results agreed. At 1×, 9, 9 and 10 of the 40,960 pixels differed between packages before, during and after the crossing. Each differed by one green-channel level. The same differences appeared with point 2 omitted. At 2×, all three frames and their controls matched every RGBA byte.
 
+### Move the curve behind a point image
+
+Point 2 carries one 96 × 96 image with a horizontal strip of red texels. Its three bands have alpha bytes 255, 128 and 0. The point keeps its red fill color but has no shape beneath the image. At 500 ms, the green curve passes behind all three probes. Omitting point 2 turns every probe green and every click into link 0 on that frame. At 0 and 1,000 ms, the same three control probes show black and return background. [Replay the image crossing](#/production-graph-api?section=try-curved-link-image-crossing)
+
+| Image area | WebGL RGB over the link | WebGPU RGB over the link | Click in either package |
+| --- | --- | --- | --- |
+| Opaque | (255, 0, 0) | (255, 0, 0) | Point 2 |
+| Translucent (128/255) | (64, 127, 0) | (128, 127, 0) | Point 2 |
+| Transparent | (0, 255, 0) | (0, 255, 0) | Point 2 |
+
+All 36 paired standalone clicks agreed across 1× and 2× on M3. The canvas picker tests the point’s circular footprint, so even the transparent interior returned point 2 before, during and after the crossing.
+
+The translucent band also differed over black. WebGL drew (64, 0, 0) and WebGPU drew (128, 0, 0). WebGL mixes the image color with zero RGB when there is no shape, then applies its alpha when blending onto the canvas. WebGPU starts that mix with the configured point color even when the shape is absent. In a separate image-only control, changing only the hidden fill from red to black brought WebGPU’s red channel down from 128 to 64. WebGL stayed at 64.
+
+The packages also drew different image sizes. WebGL used the requested 96 CSS px. WebGPU clamped the image to 64 CSS px. The probes at (104, 82), (128, 80) and (152, 82) CSS px fall inside the respective bands at both sizes. In a separate control with a fully opaque 96 CSS px image, a click 46 CSS px from its center returned the point in WebGL and background in WebGPU at both pixel ratios.
+
 ### Remove and restore a point
 
 The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Choose a frame to see each package’s canvas, click results and selected IDs. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition)

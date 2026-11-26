@@ -14,6 +14,7 @@ type PickFrame<K extends string, R> = {
 export function createPairedPickView<K extends string, R> (host: HTMLElement, settings: {
   probes: Record<K, string>;
   initial?: string;
+  caption?: string;
   run(engine: Engine, ratio: 1 | 2): Promise<PickFrame<K, R>[]>;
   renderResults?(results: readonly (R | undefined)[]): HTMLElement;
 }): ExperimentInstance {
@@ -29,6 +30,7 @@ export function createPairedPickView<K extends string, R> (host: HTMLElement, se
   const frame = host.querySelector<HTMLSelectElement>('[data-frame]')!
   const replayButton = host.querySelector<HTMLButtonElement>('[data-replay]')!
   const status = host.querySelector<HTMLElement>('[role="status"]')!
+  if (settings.caption) host.querySelector('caption')!.textContent = settings.caption
   const rows = host.querySelector('tbody')!
   const frameResults = document.createElement('div')
   if (settings.renderResults) rows.closest('table')!.before(frameResults)

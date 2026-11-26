@@ -30,6 +30,18 @@ LAB_ARTIFACT_RUN=curved-crossing-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu sr
 
 The two endpoints of link 0 move together while point 2 stays at (128, 80) CSS px. Compare the same pixel and click twice at each checkpoint, once in the complete graph and once with only the endpoints and their link. The second graph reveals what the point covers. The M3 run in `captures/curved-crossing-m3-release/` includes the per-frame pixel comparisons, click callbacks, bundle hashes and reported adapters.
 
+## Curved link behind a point image
+
+Run the same native motion with one image on point 2. Keep the previous opaque-point replay as a control.
+
+```sh
+LAB_ARTIFACT_RUN=image-crossing-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/image-crossing.test.ts src/experiments/production-graph-api/curved-crossing.test.ts
+```
+
+At 0, 500 and 1,000 ms, compare the three fixed sites with the image present and with point 2 omitted. Record the displayed RGB and public click ID for each. The M3 results and the exact package and adapter identities are in `captures/curved-link-image-m3-release/`.
+
+Two isolated controls in that capture explain the discrepancies. With the Lab running on port 5180, run `node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/image-alpha-control.mjs` from the repository root to change only the invisible shape’s color under a half-alpha image. Run `size-control.mjs` from the same capture directory using the same working directory to sweep a fully opaque image from 48 to 128 CSS px. Both commands print the device reports and measurements.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.
