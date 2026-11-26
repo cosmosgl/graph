@@ -270,6 +270,37 @@ describe('WebGPU Graph', () => {
     expect(host.childElementCount).toBe(0)
   })
 
+  it('invalidates area reads when direct simulation edits change the point list or its footprints', async () => {
+    const { graph, cleanup } = mountedGraph()
+    const all = (): Promise<number[] | null> => graph.findPointsInRectAsync([[0, 0], [320, 200]])
+    const edge = (): Promise<number[] | null> => graph.findPointsInRectAsync([[128, 99], [129, 101]])
+    try {
+      await graph.ready
+      expect(await all()).toEqual([0, 1])
+      expect(await edge()).toEqual([])
+
+      const beforeRemoval = all()
+      graph.simulation.setPointPositions(Float32Array.of(2000, 2048, NaN, NaN, NaN, NaN), true)
+      graph.simulation.applyData()
+      expect(await beforeRemoval).toBeNull()
+      expect(await all()).toEqual([0])
+
+      const beforeShrink = all()
+      graph.simulation.setPointPositions(Float32Array.of(2000, 2048), true)
+      graph.render(0, 0)
+      expect(await beforeShrink).toBeNull()
+
+      expect(await edge()).toEqual([])
+      graph.simulation.setPointSizes(Float32Array.of(40))
+      graph.simulation.applyData()
+      expect(await edge()).toEqual([0])
+
+      const beforeStep = all()
+      graph.step()
+      expect(await beforeStep).toEqual([0])
+    } finally { cleanup() }
+  })
+
   it.each([1, 2])('selects touching footprints or centers on the boundary at %i×', async pixelRatio => {
     const { graph, cleanup } = mountedGraph({ pixelRatio, enableSimulation: false })
     try {

@@ -40,7 +40,7 @@ function watchLoss (device: Device, listener: () => void): () => void {
 interface SimulationHost {
   onDeviceLost(): void;
   onPositionEdit(index: number, record: Float32Array): void;
-  onDataApplied?(): void;
+  onDataApplied?(pointListChanged: boolean): void;
 }
 
 export class GraphSimulation {
@@ -127,7 +127,7 @@ export class GraphSimulation {
     applyConfig(this.config, config, true)
     this.applyConfigChanges(previous)
     // A host can edit the simulation directly. Its next Graph.render() must also refresh the drawn size and image fallback.
-    if (previous.pointDefaultSize !== this.config.pointDefaultSize) this.host?.onDataApplied?.()
+    if (previous.pointDefaultSize !== this.config.pointDefaultSize) this.host?.onDataApplied?.(false)
   }
 
   /** Synchronize a partial standalone update or a Graph update of the shared config. */
@@ -310,10 +310,12 @@ export class GraphSimulation {
       throw error
     }
     if (resize) { this.state?.destroy(); this.state = next; this.countGeneration++ }
+    let pointListChanged = false
     if (reset) {
       const previous = this.absentSlots
       this.absentSlots = absent
-      if (resize || previous?.length !== absent?.length || absent?.some((byte, i) => byte !== previous?.[i])) {
+      pointListChanged = resize || previous?.length !== absent?.length || !!absent?.some((byte, i) => byte !== previous?.[i])
+      if (pointListChanged) {
         const present = (id: number): boolean => id < count && !((absent?.[id >>> 3] ?? 0) & (1 << (id & 7)))
         for (const tracker of this.trackers) tracker.pointListChanged(present)
       }
@@ -323,7 +325,7 @@ export class GraphSimulation {
     this.isClustersDirty = this.isAttractorsDirty = false
     this.shouldSkipRescale = false
     if (alpha !== undefined) this.store.alpha = alpha
-    this.host?.onDataApplied?.()
+    this.host?.onDataApplied?.(pointListChanged)
   }
 
   public getPointPositionBuffer (): PointPositionBuffer | undefined {

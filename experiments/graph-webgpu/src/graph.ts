@@ -65,7 +65,12 @@ export class Graph {
     this.simulation = new GraphSimulation(undefined, devicePromise, this.config, canvas, {
       onDeviceLost: (): void => this.destroy(),
       onPositionEdit: (id, record): void => this.positionTransition?.edit(id, record),
-      onDataApplied: (): void => { this.shouldUpdateAllStyles = true },
+      onDataApplied: (pointListChanged): void => {
+        this.shouldUpdateAllStyles = true
+        // The public simulation can apply data directly, before Graph.render().
+        this.area?.invalidateFootprints()
+        if (pointListChanged) this.revision++
+      },
     })
     this.graph = this.simulation.data
     this.camera = new Zoom(this.simulation.store, this.config)
@@ -154,7 +159,8 @@ export class Graph {
         this.labels?.invalidate()
         this.clusterVersion = -1
       }
-      if (!linkWidthsOnly && (!pointStylesOnly || pointSizes)) this.area?.invalidateFootprints()
+      // Full data updates already invalidated the footprints through the simulation host.
+      if (pointStylesOnly && pointSizes) this.area?.invalidateFootprints()
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
       this.hasHoverSceneChanged = true
