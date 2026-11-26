@@ -134,6 +134,14 @@ node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs
 
 Keep the browser visible and run each session alone. At each size the driver opens fresh WebGL and WebGPU sessions to check correctness, then four more sessions to time the same four drags in WebGL/WebGPU and WebGPU/WebGL order. An individual run can be selected with a point count, `--engine webgl|webgpu` and `--mode correctness|timing`. Timing still runs both blocks. The driver exits with a failure if any required stage fails, after writing the available measurements for the other stages and sessions.
 
+For the second physical GPU, supply its actual vendor to the same fixed-tick replay. This example runs both graph sizes on NVIDIA graphics.
+
+```sh
+node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs --adapter-vendor nvidia --lasso --mode correctness --release-ticks 10,26,40,54
+```
+
+The runner checks each engine's live device before the first gesture. If a machine has both Intel and NVIDIA graphics, a WebGL session on Intel and a WebGPU session on NVIDIA fails the device check. The default remains the Apple M3 replay.
+
 To investigate an unavailable million-point WebGL read, run the following diagnostic separately.
 
 ```sh

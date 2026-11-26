@@ -313,6 +313,12 @@ node scripts/check-packed-webgpu-deck.mjs "$app_dir" --browser webkit --points 6
 node scripts/check-packed-webgpu-deck.mjs "$app_dir" --swiftshader --points 65536
 ```
 
+On a second physical machine, add `--adapter-vendor nvidia` (or its actual
+vendor) to the native Chrome command. The script checks the standalone Graph
+and each device before and after recovery. A browser that withholds the GPU
+vendor can still exercise ownership and recovery. Use a browser that reports
+the vendor for the hardware qualification.
+
 The local capture `captures/packed-deck-milestone-20261126/` retains the
 application, both tarballs, browser reports and the original Firefox compile
 error. Browser and adapter details and the SHA-256 of each tarball are in

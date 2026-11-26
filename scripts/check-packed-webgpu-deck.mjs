@@ -7,17 +7,20 @@ import { join } from 'node:path'
 import { isDeepStrictEqual, parseArgs } from 'node:util'
 import { chromium, firefox, webkit } from 'playwright'
 import { preview } from 'vite'
+import { checkNativeGpu, requestedGpuVendor } from './qualification-adapter.mjs'
 
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
   browser: { type: 'string', default: 'chrome' }, swiftshader: { type: 'boolean' },
-  points: { type: 'string', default: '2' },
+  points: { type: 'string', default: '2' }, 'adapter-vendor': { type: 'string' },
 } })
 if (positionals.length !== 1) throw new Error('Pass the standalone app directory')
 const app = await realpath(positionals[0])
 const pointCount = Number(values.points)
+const vendor = requestedGpuVendor(values['adapter-vendor'])
 assert.ok([2, 65536].includes(pointCount))
 assert.ok(['chrome', 'firefox', 'webkit'].includes(values.browser))
 assert.ok(!values.swiftshader || values.browser === 'chrome')
+assert.ok(!values.swiftshader || !vendor, 'Use a native adapter for vendor qualification')
 const launch = () => {
   if (values.browser === 'firefox') return firefox.launch({ headless: false })
   if (values.browser === 'webkit') return webkit.launch({ headless: false })
@@ -27,7 +30,8 @@ const launch = () => {
 }
 function checkAdapter(info) {
   assert.equal(info.type, 'webgpu')
-  if (values.swiftshader) assert.ok(info.fallback || /swiftshader/i.test(JSON.stringify(info)), 'Expected SwiftShader')
+  if (vendor) checkNativeGpu(info, 'webgpu', vendor)
+  else if (values.swiftshader) assert.ok(/swiftshader/i.test(info.gpuArchitecture), 'Expected SwiftShader')
   else assert.ok(!info.fallback && info.gpuType !== 'cpu', 'Expected a hardware adapter')
 }
 function summarize(checkpoint) {
@@ -37,7 +41,7 @@ function summarize(checkpoint) {
 }
 const site = join(app, 'dist')
 await readFile(join(site, 'index.html'))
-const report = { browser: values.browser, swiftshader: Boolean(values.swiftshader), pointCount, packages: {}, cases: [], recovery: [] }
+const report = { browser: values.browser, swiftshader: Boolean(values.swiftshader), requestedVendor: vendor, pointCount, packages: {}, cases: [], recovery: [] }
 for (const name of ['graph', 'deck-layers']) {
   report.packages[name] = createHash('sha256').update(await readFile(join(app, name + '.tgz'))).digest('hex')
 }

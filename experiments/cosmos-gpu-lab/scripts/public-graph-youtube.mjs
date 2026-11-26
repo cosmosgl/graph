@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { build } from 'vite'
 import { captureBenchmarkSource, sha256 } from './benchmark-source.mjs'
+import { checkNativeGpu, requestedGpuVendor } from '../../../scripts/qualification-adapter.mjs'
 
 const lab = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const root = resolve(lab, '../..')
@@ -15,7 +16,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     lasso: { type: 'boolean' }, mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' },
-    'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' },
+    'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' }, 'adapter-vendor': { type: 'string' },
   },
 })
 const counts = positionals.length ? positionals.map(Number) : [65536, 1000000]
@@ -26,7 +27,8 @@ assert.ok(!values.mode || diagnosticEngine || ['correctness', 'timing'].includes
 assert.ok(!values.engine || ['webgl', 'webgpu'].includes(values.engine), 'Expected --engine webgl or webgpu')
 assert.ok(!diagnosticEngine || !values.engine || values.engine === diagnosticEngine, `The ${values.mode} diagnostic requires ${diagnosticEngine}`)
 const cpu = cpus()[0]?.model ?? 'unknown'
-assert.match(cpu, /Apple M3/i, 'Requires the native M3 machine')
+const vendor = requestedGpuVendor(values['adapter-vendor'])
+if (!vendor) assert.match(cpu, /Apple M3/i, 'Set --adapter-vendor to qualify a different physical GPU')
 const boxes = [
   [[115, 54], [846, 487]], [[421, 221], [499, 292]],
   [[92, 137], [316, 434]], [[847, 475], [665, 202]],
@@ -50,9 +52,11 @@ const releaseTicks = values['release-ticks']?.split(',').map(Number)
 if (values.lasso) assert.ok(releaseTicks && ['blocking', 'correctness'].includes(values.mode),
   'The long-lasso comparison requires --release-ticks and correctness or blocking mode')
 if (releaseTicks) {
+  const pairedLasso = values.lasso && values.mode === 'correctness'
   const canTime = values.mode === 'timing' && values.engine === 'webgpu'
-  assert.ok(positionals.length === 1 && values.engine && (canTime || ['correctness', 'profile'].includes(values.mode) || (values.lasso && values.mode === 'blocking')),
-    '--release-ticks requires one point count and engine for correctness, WebGPU profile or WebGPU timing')
+  const singleLane = positionals.length === 1 && values.engine &&
+    (canTime || ['correctness', 'profile'].includes(values.mode) || (values.lasso && values.mode === 'blocking'))
+  assert.ok(pairedLasso || singleLane, 'Choose the lasso correctness replay or specify one point count, mode and engine for fixed release ticks')
   assert.ok(releaseTicks.length === boxes.length && releaseTicks.every((tick, i) =>
     Number.isSafeInteger(tick) && tick >= 4 && (!i || tick > releaseTicks[i - 1])),
   'Supply four strictly increasing integer release ticks starting at 4 or later')
@@ -77,7 +81,7 @@ const result = {
     webgpu: await sha256(selectedWebGPU),
   },
   fixtureSha256: await sha256(resolve(captureRoot, 'fixtures/youtube-million.bin')),
-  cpu, node: process.version, arguments: process.argv.slice(2), boxes, ...(values.lasso ? { paths } : {}), counts, runs: [],
+  cpu, requestedVendor: vendor ?? 'apple', node: process.version, arguments: process.argv.slice(2), boxes, ...(values.lasso ? { paths } : {}), counts, runs: [],
 }
 assert.equal(result.fixtureSha256, '1b4f834c6acf374905934cc4fd65ded5ef8116fd73016db5e15ee8177da0f8b5', 'unexpected SNAP YouTube fixture')
 async function save() {
@@ -127,13 +131,8 @@ await new Promise((resolve, reject) => server.once('error', reject).listen(0, '1
 const origin = `http://127.0.0.1:${server.address().port}`
 
 function assertAdapter(device, engine) {
-  assert.equal(device.type, engine)
-  assert.notEqual(device.gpuType, 'cpu')
-  if (engine === 'webgl') assert.match(device.renderer ?? '', /Apple M3/i)
-  else {
-    assert.match(JSON.stringify(device), /apple/i)
-    assert.equal(device.fallback, false)
-  }
+  checkNativeGpu(device, engine, vendor ?? 'apple')
+  if (!vendor && engine === 'webgl') assert.match(device.renderer ?? '', /Apple M3/i)
 }
 
 function checkSample(sample, index, mode, previousTick) {
