@@ -2,6 +2,34 @@ import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation } from '../src'
 
 describe('WebGPU graph lifecycle', () => {
+  it('shares completed centroids with Graph and invalidates in-flight reads on membership edits', async () => {
+    const graph = new Graph(null, { rescalePositions: false })
+    const simulation = graph.simulation
+    try {
+      graph.setPointPositions(Float32Array.of(10, 20, 30, 40))
+      graph.setPointClusters([0, 1])
+      graph.render(0, 0)
+      await graph.ready
+      const initial = await simulation.getClusterPositionsAsync()
+      expect(initial).toEqual([10, 20, 30, 40])
+      initial[0] = 0
+      expect(graph.getClusterPositions()).toEqual([10, 20, 30, 40])
+      const pending = graph.getClusterPositionsAsync()
+      simulation.setPointClusters([0, 0])
+      simulation.applyData(0)
+      expect(await pending).toEqual([])
+      expect(simulation.getClusterPositions()).toEqual([])
+      await expect.poll(() => graph.getClusterPositions()).toEqual([20, 30])
+      const moving = simulation.getClusterPositionsAsync()
+      simulation.step()
+      expect(await moving).toEqual([20, 30])
+      const discarded = simulation.getClusterPositionsAsync()
+      graph.destroy()
+      expect(await discarded).toEqual([])
+      expect(graph.getClusterPositions()).toEqual([])
+    } finally { graph.destroy() }
+  })
+
   it('replays mixed pre-ready simulation operations in order', async () => {
     const simulation = new GraphSimulation({
       simulationGravity: 1,

@@ -89,6 +89,8 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
         resize(20, 10)
         const start = sample(0)
         const midpoint = sample(500)
+        graph.create()
+        expect(sample(0)).toEqual(midpoint)
         graph.render()
         const redraw = sample(0)
         const complete = [start, midpoint, sample(500)]

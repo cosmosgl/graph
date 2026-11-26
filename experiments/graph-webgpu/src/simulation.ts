@@ -1,6 +1,7 @@
 import { Buffer, luma, type Device } from '@luma.gl/core'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { applyConfig, createDefaultConfig, validateConfig, type GraphConfigInterface, type GraphSimulationConfig } from '../../../src/config'
+import type { PositionsReadOptions } from '../../../src/simulation'
 import { isPointAbsent } from '../../../src/helper'
 import { GraphData } from '../../../src/modules/GraphData'
 import { ALPHA_MIN, Store } from '../../../src/modules/Store'
@@ -43,6 +44,15 @@ interface SimulationHost {
   onDataApplied?(pointListChanged: boolean): void;
 }
 
+enum DataUpload {
+  Positions = 1,
+  Samples = 2,
+  Topology = 4,
+  Sizes = 8,
+  Clusters = 16,
+  Attractors = 32,
+}
+
 export class GraphSimulation {
   public readonly config: GraphConfigInterface
   public readonly data: GraphData
@@ -62,12 +72,14 @@ export class GraphSimulation {
   private absentSlots?: Uint8Array
   private countGeneration = 0
   private version = 0
-  private isPositionsDirty = false
-  private shouldRefreshSamples = false
-  private isTopologyDirty = false
-  private isSizesDirty = false
-  private isClustersDirty = false
-  private isAttractorsDirty = false
+  // render()/applyData() resolves the setter inputs before consuming these channels.
+  private pendingUpdates = 0
+  // create() can upload the previous model once without spending an unresolved setter.
+  private pendingCreates = 0
+  private centroidPositions: readonly number[] = []
+  private isCentroidReadPending = false
+  private centroidVersion = -1
+  private centroidGeneration = 0
   private shouldSkipRescale = false
   private pinned = new Set<number>()
   private beforeReady: Array<() => void> = []
@@ -117,12 +129,7 @@ export class GraphSimulation {
 
   /** @internal A pure topology replacement can keep the renderer's point records. */
   public get hasOnlyLinkTopologyUpdate (): boolean {
-    return this.isTopologyDirty && !this.isPositionsDirty && !this.shouldRefreshSamples && !this.isSizesDirty &&
-      !this.isClustersDirty && !this.isAttractorsDirty
-  }
-
-  private get hasPendingLayoutUpdate (): boolean {
-    return this.isPositionsDirty || this.isTopologyDirty || this.isClustersDirty || this.isAttractorsDirty || this.shouldRefreshSamples
+    return this.pendingUpdates === DataUpload.Topology
   }
 
   public setConfig (config: GraphSimulationConfig): void {
@@ -147,7 +154,7 @@ export class GraphSimulation {
       this.state?.releaseForces()
     }
     if (enabling) {
-      this.shouldRefreshSamples = this.isTopologyDirty = this.isAttractorsDirty = this.isSizesDirty = true
+      this.queueUpload(DataUpload.Samples | DataUpload.Topology | DataUpload.Attractors | DataUpload.Sizes)
       this.applyData(1)
       this.store.simulationProgress = 0
       this.store.isSimulationRunning = true
@@ -165,56 +172,55 @@ export class GraphSimulation {
     if (this.defer(() => this.setPointPositions(xy, dontRescale))) return
     this.data.inputPointPositions = xy
     this.shouldSkipRescale = dontRescale
-    this.isPositionsDirty = true
-    this.shouldRefreshSamples = this.isTopologyDirty = this.isSizesDirty = true
+    this.queueUpload(DataUpload.Positions | DataUpload.Samples | DataUpload.Topology | DataUpload.Sizes)
   }
 
   public setLinks (links: Float32Array): void {
     if (this.defer(() => this.setLinks(links))) return
     this.data.inputLinks = links
-    this.isTopologyDirty = true
+    this.queueUpload(DataUpload.Topology)
   }
 
   public setLinkStrength (weights: Float32Array): void {
     if (this.defer(() => this.setLinkStrength(weights))) return
     this.data.inputLinkStrength = weights
-    this.isTopologyDirty = true
+    this.queueUpload(DataUpload.Topology)
   }
 
   public setPointSizes (sizes: Float32Array): void {
     if (this.defer(() => this.setPointSizes(sizes))) return
     this.data.inputPointSizes = sizes
-    this.isSizesDirty = true
+    this.queueUpload(DataUpload.Sizes)
   }
 
   public setPointClusters (groups: (number | undefined)[]): void {
     if (this.defer(() => this.setPointClusters(groups))) return
     this.data.inputPointClusters = groups
-    this.isClustersDirty = true
+    this.queueUpload(DataUpload.Clusters)
   }
 
   public setClusterPositions (targets: (number | undefined)[]): void {
     if (this.defer(() => this.setClusterPositions(targets))) return
     this.data.inputClusterPositions = targets
-    this.isClustersDirty = true
+    this.queueUpload(DataUpload.Clusters)
   }
 
   public setPointClusterStrength (strength: Float32Array): void {
     if (this.defer(() => this.setPointClusterStrength(strength))) return
     this.data.inputClusterStrength = strength
-    this.isClustersDirty = true
+    this.queueUpload(DataUpload.Clusters)
   }
 
   public setPointAttractors (targets: Float32Array): void {
     if (this.defer(() => this.setPointAttractors(targets))) return
     this.data.inputPointAttractors = targets
-    this.isAttractorsDirty = true
+    this.queueUpload(DataUpload.Attractors)
   }
 
   public setPointAttractorStrength (strength: Float32Array): void {
     if (this.defer(() => this.setPointAttractorStrength(strength))) return
     this.data.inputPointAttractorStrength = strength
-    this.isAttractorsDirty = true
+    this.queueUpload(DataUpload.Attractors)
   }
 
   public setPinnedPoints (indices: number[] | null): void {
@@ -257,13 +263,14 @@ export class GraphSimulation {
 
   /** @internal Apply point paint and footprints without walking link data. A direct simulation setter can still require a full update. */
   public applyPointStyleUpdate (colors: boolean, sizes: boolean, alpha?: number): boolean {
-    if (this.hasPendingLayoutUpdate || (this.isSizesDirty && !sizes)) return false
+    if (this.pendingUpdates && !(sizes && this.pendingUpdates === DataUpload.Sizes)) return false
     if (colors) this.data.updatePointColor()
     if (sizes) {
       this.data.updatePointSize()
       this.data.updatePointImageSizes()
       if (this.config.enableSimulation) this.state?.updateSizes(this.data)
-      this.isSizesDirty = false
+      this.pendingUpdates &= ~DataUpload.Sizes
+      this.pendingCreates &= ~DataUpload.Sizes
     }
     if (alpha !== undefined) this.store.alpha = alpha
     return true
@@ -271,7 +278,7 @@ export class GraphSimulation {
 
   /** @internal A width edit affects drawing only. Any simulation setter queued alongside it still needs a full data update. */
   public applyLinkWidthUpdate (alpha?: number): boolean {
-    if (this.hasPendingLayoutUpdate || this.isSizesDirty) return false
+    if (this.pendingUpdates) return false
     this.data.updateLinkWidth()
     if (alpha !== undefined) this.store.alpha = alpha
     return true
@@ -280,58 +287,22 @@ export class GraphSimulation {
   public applyData (alpha?: number): void {
     if (this.defer(() => this.applyData(alpha))) return
     this.data.update()
-    let next = this.state
-    const count = this.data.targetPointsNumber
-    const resize = count !== (next?.count ?? 0)
-    const reset = this.isPositionsDirty || resize
-    let absent: Uint8Array | undefined
-    try {
-      if (reset) {
-        const xy = this.data.pointPositions ?? new Float32Array()
-        const rescale = !this.shouldSkipRescale && (this.config.rescalePositions ?? !this.config.enableSimulation)
-        const scales = rescale ? positionScales(xy, this.store) : {}
-        if (!this.shouldSkipRescale) { this.scaleX = scales.x; this.scaleY = scales.y }
-        const packed = new Float32Array(count * 4)
-        for (let i = 0; i < count; i++) {
-          const x = xy[i * 2]!; const y = xy[i * 2 + 1]!
-          writePosition(packed, i * 4, scales.x ? scales.x(x) : x, scales.y ? scales.y(y) : y,
-            this.pinned.has(i), this.store.infiniteInputEdge)
-          if (packed[4 * i + 3]) {
-            absent ??= new Uint8Array(Math.ceil(count / 8))
-            absent[i >>> 3]! |= 1 << (i & 7)
-          }
-        }
-        if (resize) next = count ? createState(this.device!, packed, this.store, this.programs!) : undefined
-        else if (next) for (const pos of next.positions) pos.write(packed)
-      }
-      if (this.config.enableSimulation) {
-        if (resize || this.shouldRefreshSamples) next?.updateSamples()
-        if (resize || this.isTopologyDirty) next?.updateTopology(this.data)
-        if (resize || this.isAttractorsDirty) next?.updateAttractors(this.data)
-        if (resize || this.isSizesDirty) next?.updateSizes(this.data)
-      }
-      if (resize || this.isClustersDirty) next?.updateClusters(this.data)
-    } catch (error) {
-      if (next !== this.state) next?.destroy()
-      throw error
-    }
-    if (resize) { this.state?.destroy(); this.state = next; this.countGeneration++ }
-    let pointListChanged = false
-    if (reset) {
-      const previous = this.absentSlots
-      this.absentSlots = absent
-      pointListChanged = resize || previous?.length !== absent?.length || !!absent?.some((byte, i) => byte !== previous?.[i])
-      if (pointListChanged) {
-        const present = (id: number): boolean => id < count && !((absent?.[id >>> 3] ?? 0) & (1 << (id & 7)))
-        for (const tracker of this.trackers) tracker.pointListChanged(present)
-      }
-    }
-    if (reset || this.isClustersDirty) this.version++
-    this.isPositionsDirty = this.shouldRefreshSamples = this.isTopologyDirty = this.isSizesDirty = false
-    this.isClustersDirty = this.isAttractorsDirty = false
+    this.uploadChannels(this.pendingUpdates)
+    this.pendingUpdates = this.pendingCreates = 0
     this.shouldSkipRescale = false
     if (alpha !== undefined) this.store.alpha = alpha
-    this.host?.onDataApplied?.(pointListChanged)
+  }
+
+  /** @internal Upload channels requested by setters from the already processed model. */
+  public uploadResolvedData (): void {
+    if (!this.isReady || !this.pendingCreates) return
+    this.uploadChannels(this.pendingCreates)
+    // When create() ran after a setter, render() must still apply its unresolved
+    // input. An already uploaded position array must not rewind later GPU motion.
+    if ((this.pendingCreates & DataUpload.Positions) && this.data.pointPositions === this.data.inputPointPositions) {
+      this.pendingUpdates &= ~DataUpload.Positions
+    }
+    this.pendingCreates = 0
   }
 
   public getPointPositionBuffer (): PointPositionBuffer | undefined {
@@ -387,11 +358,40 @@ export class GraphSimulation {
   /** Internal notification after a Graph position-transition dispatch writes the live GPU buffer. */
   public markPositionsChanged (): void { this.version++ }
 
+  /** Latest completed centroid sample in XY order; the first call schedules a copy.
+   * WebGPU always reads without blocking. Await getClusterPositionsAsync() for this invocation's coordinates.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public getClusterPositions (_options?: PositionsReadOptions): readonly number[] {
+    if (!this.isReady || !this.state || !this.data.pointClusters) return []
+    if (this.version !== this.centroidVersion && !this.isCentroidReadPending) {
+      this.isCentroidReadPending = true
+      this.getClusterPositionsAsync().catch(error => {
+        if (this.isReady && !this.device?.isLost) console.error(error)
+      }).finally(() => { this.isCentroidReadPending = false })
+    }
+    return this.centroidPositions
+  }
+
+  /** Read the centroids of the clusters applied when the call was submitted. */
   public async getClusterPositionsAsync (): Promise<number[]> {
     const state = this.state
     if (!this.isReady || !state) return []
-    const result = await this.readWhileLive(state.readClusters())
-    return state === this.state && result ? result : []
+    const generation = this.centroidGeneration
+    const version = this.version
+    try {
+      const result = await this.readWhileLive(state.readClusters())
+      if (generation !== this.centroidGeneration || !result) return []
+      if (version >= this.centroidVersion) {
+        this.centroidVersion = version
+        this.centroidPositions = result.slice()
+      }
+      return result
+    } catch (error) {
+      // Replacing membership may release the old aggregate during readback.
+      if (generation !== this.centroidGeneration) return []
+      throw error
+    }
   }
 
   public applyMouseRepulsion (worldX: number, worldY: number): void {
@@ -479,6 +479,7 @@ export class GraphSimulation {
     this.host = undefined
     this.isReady = false
     this.beforeReady = []
+    this.invalidateCentroids()
     for (const tracker of this.trackers) tracker.destroy()
     this.absentSlots = undefined
     this.state?.destroy()
@@ -487,6 +488,72 @@ export class GraphSimulation {
     this.programs = undefined
     this.store.isSimulationRunning = false
     this.releaseDevice()
+  }
+
+  private queueUpload (channels: DataUpload): void {
+    if (channels & (DataUpload.Positions | DataUpload.Clusters)) this.invalidateCentroids()
+    this.pendingUpdates |= channels
+    this.pendingCreates |= channels
+  }
+
+  private uploadChannels (channels: number): void {
+    let next = this.state
+    const count = this.data.targetPointsNumber
+    const resize = count !== (next?.count ?? 0)
+    const reset = !!(channels & DataUpload.Positions) || resize
+    let absent: Uint8Array | undefined
+    try {
+      if (reset) {
+        const xy = this.data.pointPositions ?? new Float32Array()
+        const rescale = !this.shouldSkipRescale && (this.config.rescalePositions ?? !this.config.enableSimulation)
+        const scales = rescale ? positionScales(xy, this.store) : {}
+        if (!this.shouldSkipRescale) { this.scaleX = scales.x; this.scaleY = scales.y }
+        const packed = new Float32Array(count * 4)
+        for (let i = 0; i < count; i++) {
+          const x = xy[i * 2]!; const y = xy[i * 2 + 1]!
+          writePosition(packed, i * 4, scales.x ? scales.x(x) : x, scales.y ? scales.y(y) : y,
+            this.pinned.has(i), this.store.infiniteInputEdge)
+          if (packed[4 * i + 3]) {
+            absent ??= new Uint8Array(Math.ceil(count / 8))
+            absent[i >>> 3]! |= 1 << (i & 7)
+          }
+        }
+        if (resize) next = count ? createState(this.device!, packed, this.store, this.programs!) : undefined
+        else if (next) for (const pos of next.positions) pos.write(packed)
+      }
+      if (this.config.enableSimulation) {
+        if (resize || (channels & DataUpload.Samples)) next?.updateSamples()
+        if (resize || (channels & DataUpload.Topology)) next?.updateTopology(this.data)
+        if (resize || (channels & DataUpload.Attractors)) next?.updateAttractors(this.data)
+        if (resize || (channels & DataUpload.Sizes)) next?.updateSizes(this.data)
+      }
+      if (resize || (channels & DataUpload.Clusters)) next?.updateClusters(this.data)
+    } catch (error) {
+      if (next !== this.state) next?.destroy()
+      throw error
+    }
+    if (resize) { this.state?.destroy(); this.state = next; this.countGeneration++ }
+    let pointListChanged = false
+    if (reset) {
+      const previous = this.absentSlots
+      this.absentSlots = absent
+      pointListChanged = resize || previous?.length !== absent?.length || !!absent?.some((byte, i) => byte !== previous?.[i])
+      if (pointListChanged) {
+        const present = (id: number): boolean => id < count && !((absent?.[id >>> 3] ?? 0) & (1 << (id & 7)))
+        for (const tracker of this.trackers) tracker.pointListChanged(present)
+      }
+    }
+    if (reset || (channels & DataUpload.Clusters)) {
+      this.version++
+      this.invalidateCentroids()
+    }
+    this.host?.onDataApplied?.(pointListChanged)
+  }
+
+  private invalidateCentroids (): void {
+    this.centroidGeneration++
+    this.centroidPositions = []
+    this.centroidVersion = -1
   }
 
   // Preserve invocation order across mixed setters, uploads, sparse writes and ticks before ready.

@@ -39,9 +39,6 @@ export class Graph {
   private renderer?: GraphRenderer
   private area?: AreaSelection
   private labels?: LabelSampling
-  private clusterPositions: readonly number[] = []
-  private clusterRead?: Promise<void>
-  private clusterVersion = -1
   private tracker?: PointTracker
   private mouseRepulsion?: Pair
   private positionTransition?: PositionTransition
@@ -50,6 +47,7 @@ export class Graph {
   private containerSize?: Pair
   private isFrameInFlight = false
   private isDestroyed = false
+  private hasStyleUpload = false
   private shouldUpdateAllStyles = false
   private hasRendered = false
   private fitTimer?: ReturnType<typeof setTimeout>
@@ -69,7 +67,7 @@ export class Graph {
       onDeviceLost: (): void => this.destroy(),
       onPositionEdit: (id, record): void => this.positionTransition?.edit(id, record),
       onDataApplied: (pointListChanged): void => {
-        this.shouldUpdateAllStyles = true
+        this.hasStyleUpload = this.shouldUpdateAllStyles = true
         // The public simulation can apply data directly, before Graph.render().
         this.area?.invalidateFootprints()
         if (pointListChanged) this.revision++
@@ -159,12 +157,9 @@ export class Graph {
         from?.destroy()
         throw error
       }
-      this.shouldUpdateAllStyles = false
+      this.hasStyleUpload = this.shouldUpdateAllStyles = false
       this.transition.start()
-      if (!linkWidthsOnly && !pointStylesOnly) {
-        this.labels?.invalidate()
-        this.clusterVersion = -1
-      }
+      if (!linkWidthsOnly && !pointStylesOnly) this.labels?.invalidate()
       // Full data updates already invalidated the footprints through the simulation host.
       if (pointStylesOnly && pointSizes) this.area?.invalidateFootprints()
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
@@ -176,12 +171,40 @@ export class Graph {
       if (isFirst && this.canvas && this.config.fitViewOnInit && this.config.initialZoomLevel === undefined) {
         this.fitTimer = setTimeout(() => {
           if (this.config.fitViewByPointIndices) this.fitViewByPointIndices(this.config.fitViewByPointIndices, this.config.fitViewDuration, this.config.fitViewPadding)
-          else if (this.config.fitViewByPointsInRect) this.fitViewByPointPositions(this.config.fitViewByPointsInRect.flat(), this.config.fitViewDuration, this.config.fitViewPadding)
+          else if (this.config.fitViewByPointsInRect) this.fitViewByPointPositions(this.flatten(this.config.fitViewByPointsInRect), this.config.fitViewDuration, this.config.fitViewPadding)
           else this.fitView(this.config.fitViewDuration, this.config.fitViewPadding)
         }, this.config.fitViewDelay)
       }
       this.requestFrame()
     })
+  }
+
+  /** Upload already processed channels and request a redraw. Call render() to ingest pending setters. */
+  public create (): void {
+    this.whenReady(() => {
+      this.simulation.uploadResolvedData()
+      if (this.hasStyleUpload) {
+        this.renderer?.update({ continueTransition: this.transition.isActive })
+        this.hasStyleUpload = false
+        this.hasRendered = !!this.graph.pointsNumber
+        this.hasHoverSceneChanged = true
+        this.hoverRequest++
+        this.area?.invalidateFootprints()
+        this.labels?.invalidate()
+        if (!this.hasRendered) this.clearHover()
+      }
+      this.requestFrame()
+    })
+  }
+
+  /** Return a fresh flat array of XY coordinates in input order. */
+  public flatten (pointPositions: [number, number][]): number[] { return pointPositions.flat() }
+
+  /** Return fresh XY pairs, dropping a trailing coordinate without a partner. */
+  public pair (pointPositions: number[]): [number, number][] {
+    const pairs: [number, number][] = []
+    for (let i = 0; i + 1 < pointPositions.length; i += 2) pairs.push([pointPositions[i]!, pointPositions[i + 1]!])
+    return pairs
   }
 
   public renderOneFrame (): void {
@@ -252,10 +275,10 @@ export class Graph {
   }
 
   public setLinks (links: Float32Array): void {
-    this.whenReady(() => {
+    this.queueStyleData(() => {
       this.invalidateQueries()
       this.simulation.setLinks(links)
-    })
+    }, false)
   }
 
   public setPointPosition (id: number, x: number, y: number): void { this.setPointPositionsByIndices([id], [x, y]) }
@@ -272,7 +295,7 @@ export class Graph {
   public setPinnedPoint (id: number, pinned: boolean): void { this.whenReady(() => this.simulation.setPinnedPoint(id, pinned)) }
   public isPointPinned (id: number): boolean { return this.simulation.isPointPinned(id) }
   public setPointSizes (sizes: Float32Array): void {
-    this.whenReady(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) })
+    this.queueStyleData(() => { this.simulation.setPointSizes(sizes); this.transition.queue(TransitionProperty.PointSizes) }, false)
   }
 
   public setLinkStrength (weights: Float32Array): void { this.whenReady(() => this.simulation.setLinkStrength(weights)) }
@@ -283,20 +306,10 @@ export class Graph {
   public setPointAttractorStrength (value: Float32Array): void { this.whenReady(() => this.simulation.setPointAttractorStrength(value)) }
   public getClusterPositionsAsync (): Promise<number[]> { return this.simulation.getClusterPositionsAsync() }
   /** WebGPU always returns the latest completed sample. Await getClusterPositionsAsync for a fresh one. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public getClusterPositions (_options?: PositionsReadOptions): readonly number[] {
-    const version = this.getPointPositionBuffer()?.version
-    if (version !== undefined && version !== this.clusterVersion && !this.clusterRead) {
-      const revision = this.revision
-      this.clusterRead = this.getClusterPositionsAsync().then(xy => {
-        if (revision === this.revision) { this.clusterPositions = xy; this.clusterVersion = version }
-      }).catch(error => this.reportReadError(error)).finally(() => { this.clusterRead = undefined })
-    }
-    return this.clusterPositions
-  }
+  public getClusterPositions (options?: PositionsReadOptions): readonly number[] { return this.simulation.getClusterPositions(options) }
 
   public setPointColors (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) })
+    this.queueStyleData(() => { this.graph.inputPointColors = value; this.transition.queue(TransitionProperty.PointColors) }, false)
   }
 
   public setPointShapes (value: Float32Array): void { this.queueStyleData(() => { this.graph.inputPointShapes = value }) }
@@ -311,7 +324,7 @@ export class Graph {
   }
 
   public setLinkWidths (value: Float32Array): void {
-    this.whenReady(() => { this.graph.inputLinkWidths = value; this.transition.queue(TransitionProperty.LinkWidths) })
+    this.queueStyleData(() => { this.graph.inputLinkWidths = value; this.transition.queue(TransitionProperty.LinkWidths) }, false)
   }
 
   public setLinkColors (value: Float32Array): void {
@@ -504,9 +517,10 @@ export class Graph {
     this.simulation.runSimulationStep(forceExecution, pointer, blocked, measureOccupancy)
   }
 
-  private queueStyleData (setter: () => void): void {
+  private queueStyleData (setter: () => void, updateAll = true): void {
     this.whenReady(() => {
-      this.shouldUpdateAllStyles = true
+      if (updateAll) this.shouldUpdateAllStyles = true
+      this.hasStyleUpload = true
       setter()
     })
   }
@@ -607,8 +621,6 @@ export class Graph {
     this.revision++
     this.fitRequest++
     this.tracker?.setIndices(this.tracker.indices)
-    this.clusterVersion = -1
-    this.clusterPositions = []
     this.labels?.invalidate()
     // A setter queues data. Keep the displayed hover until render applies it and
     // the next pick identifies what now occupies the same screen location.
