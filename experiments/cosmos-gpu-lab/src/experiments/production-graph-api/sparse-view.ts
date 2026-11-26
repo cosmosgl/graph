@@ -11,6 +11,7 @@ const phases = new Map([
   ['restore-original', 'Return to x = 48'],
   ['remove-on-return', 'Third removal'],
   ['restore-to-80', 'Restore to x = 80'],
+  ['remove-at-68', 'Fourth removal'],
   ['snap-remove', 'Immediate removal'],
   ['snap-restore', 'Immediate restoration'],
 ])
@@ -19,6 +20,7 @@ const locations = {
   old: { name: 'Original', x: 48 },
   returnMidpoint: { name: 'Halfway back', x: 56 },
   midpoint: { name: 'Midpoint', x: 64 },
+  removalCenter: { name: 'Removal center', x: 68 },
   destination: { name: 'First target', x: 80 },
 }
 type Site = keyof typeof locations
@@ -35,6 +37,8 @@ const previews: Record<SparseScenario, { initial: string; sites: readonly Site[]
   'remove-on-return': { initial: 'remove-on-return-0', sites: fourSites },
   // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
   'restore-to-80': { initial: 'restore-to-80-0', sites: fourSites },
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Match the replay's scenario name.
+  'remove-at-68': { initial: 'remove-at-68-0', sites: ['old', 'returnMidpoint', 'midpoint', 'removalCenter', 'destination'] },
 }
 
 function selectionTable (samples: readonly (SparseSample['selections'] | undefined)[]): HTMLElement {

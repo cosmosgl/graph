@@ -72,7 +72,8 @@ export const validationContracts: Record<string, ValidationContract> = {
       'Check exact area IDs as the point fades and crosses each destination boundary. ' +
       'When restoration interrupts a fade, compare the painted frame and the click, rectangle and lasso results at both positions. ' +
       'Check all three positions through a second removal and a return to the original center. Compare the final canvas and hits to the initial state. ' +
-      'Check paint, clicks, rectangles and lassos at x = 48, 56, 64 and 80 during the third removal and the next restoration to x = 80. ' +
+      'Check paint, clicks, rectangles and lassos during the third removal and restoration to x = 80. ' +
+      'Remove the point halfway back at x = 68 and repeat the checks at x = 48, 56, 64, 68 and 80. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
       'Check point colors, sizes and endpoint gradients through an interruption. WebGPU edge clicks must follow the displayed diameter. ' +
       'Check exact rectangle and lasso IDs near the changing edge at both pixel ratios. ' +

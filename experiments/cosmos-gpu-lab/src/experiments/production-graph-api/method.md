@@ -117,6 +117,22 @@ The four probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS 
 
 At x = 80 the first link hit arrived while the pixel still read black. Halfway through the restore, the point was 12 CSS px wide at x = 68 and the link’s green channel was 128. At 1,000 ms the point was 24 CSS px wide at x = 80, the green channel was 255 and the full canvas matched the settled x = 80 frame after an uninterrupted restoration. Across 1× and 2× on M3, all 94 frame pairs, 376 site clicks and 940 rectangle and lasso results agreed between packages.
 
+### Remove point 1 at x = 68 on its way to x = 80
+
+At 500 ms into the return to x = 80, point 1 was 12 CSS px wide at x = 68. Removing it on that clock tick kept the center in place, restarted the fade at 24 CSS px and brought the link’s green channel from 128 to 255. All five clicks switched from point 1 to background, including the click at x = 80 over the bright green link. [Replay the fourth removal](#/production-graph-api?section=try-remove-at-68)
+
+The probes share y = 96. Each rectangle and diamond lasso spans 4 × 4 CSS px. All ten local area queries returned `[]` from the first removal frame through the end of the fade.
+
+| Probe x | RGB before removal | RGB on removal | Rectangle before | Lasso before |
+| ---: | --- | --- | --- | --- |
+| 48 | (0, 0, 0) | (0, 0, 0) | `[]` | `[]` |
+| 56 | (0, 0, 0) | (255, 0, 0) | `[1]` | `[]` |
+| 64 | (64, 0, 0) | (255, 0, 0) | `[1]` | `[]` |
+| 68 | (64, 64, 0) | (255, 0, 0) | `[1]` | `[1]` |
+| 80 | (0, 128, 0) | (0, 255, 0) | `[1]` | `[]` |
+
+Halfway through removal, both packages reproduced every pixel of the pre-removal canvas. The point and its link still returned background, and both whole-graph selections retained `[0, 2]`. At 750 ms, the remaining point covered 2 CSS px horizontally at 1× and 1 CSS px at 2×. By 1,000 ms, both the point and the link had disappeared. WebGL and WebGPU agreed at each pixel ratio on all 86 frame pairs, 430 site clicks and 1,032 local and whole-graph rectangle and lasso results.
+
 ### Hover under a stationary cursor
 
 Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.

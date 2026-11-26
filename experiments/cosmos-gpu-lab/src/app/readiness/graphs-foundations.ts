@@ -110,6 +110,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Repeat the restoration on another supported adapter.',
   },
+  'production-graph-api/remove-at-68': {
+    badge: 'Fourth removal matches',
+    tone: 'pass',
+    finding: 'Removing point 1 at x = 68 doubled its painted diameter from 12 to 24 CSS px. All five clicks switched to background on that frame.',
+    area: 'Integration',
+    status: '43 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 86 frame pairs, 430 site clicks and 1,032 rectangle and lasso results agreed' },
+      { tone: 'pass', text: 'Before removal four rectangles and only the x = 68 lasso selected point 1. Each returned an empty list after removal.' },
+      { tone: 'pass', text: 'At 500 ms into removal the entire canvas matched the pre-removal frame in each package' },
+    ],
+    next: 'Repeat the five-position comparison on another native adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

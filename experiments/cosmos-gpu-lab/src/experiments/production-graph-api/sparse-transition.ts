@@ -2,19 +2,20 @@ import type { DeviceInfo } from '@luma.gl/core'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import type { Engine } from './frame'
 
-type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'restore-to-80' | 'snap-remove' | 'snap-restore'
+export type SparseScenario = 'complete' | 'interrupted' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'restore-to-80' | 'remove-at-68'
+type Phase = 'initial' | 'remove' | 'restore' | 'snap-remove' | 'snap-restore' | Exclude<SparseScenario, 'complete' | 'interrupted'>
 type Point = [number, number]
-export type SparseScenario = 'complete' | 'interrupted' | 'remove-again' | 'restore-original' | 'remove-on-return' | 'restore-to-80'
 type Site = { pick: string; rgb: number[] }
 const anchor: Point = [192, 96]
 const original: Point = [48, 96]
 const returnMidpoint: Point = [56, 96]
 const midpoint: Point = [64, 96]
+const removalCenter: Point = [68, 96]
 const restored: Point = [80, 96]
 const control: Point = [128, 40]
 const linkProbe: Point = [144, 96]
 
-type Region = 'old' | 'returnMidpoint' | 'midpoint' | 'destination' | 'all'
+type Region = 'old' | 'returnMidpoint' | 'midpoint' | 'removalCenter' | 'destination' | 'all'
 type Probe = { region: Region; rect: [Point, Point]; lasso: Point[] }
 
 function localProbe (region: Region, [x, y]: Point): Probe {
@@ -25,11 +26,12 @@ function localProbe (region: Region, [x, y]: Point): Probe {
   }
 }
 
-function createAreaProbes (includeReturnMidpoint: boolean): Probe[] {
+function createAreaProbes (siteCount: 3 | 4 | 5): Probe[] {
   return [
     localProbe('old', original),
-    ...(includeReturnMidpoint ? [localProbe('returnMidpoint', returnMidpoint)] : []),
+    ...(siteCount >= 4 ? [localProbe('returnMidpoint', returnMidpoint)] : []),
     localProbe('midpoint', midpoint),
+    ...(siteCount === 5 ? [localProbe('removalCenter', removalCenter)] : []),
     localProbe('destination', restored),
     { region: 'all', rect: [[20, 16], [220, 132]], lasso: [[32, 16], [208, 16], [220, 132], [20, 132]] },
   ]
@@ -40,7 +42,7 @@ export type SparseSample = {
   time: number;
   pixels: ImageData;
   picks: { point: string; link: string; anchor: string; control: string };
-  sites?: { old: Site; returnMidpoint?: Site; midpoint?: Site; destination: Site };
+  sites?: { old: Site; returnMidpoint?: Site; midpoint?: Site; removalCenter?: Site; destination: Site };
   midpointPicks?: string[];
   selections: { region: Region; rectangle: number[]; lasso: number[] }[];
   survivors: number[];
@@ -121,11 +123,12 @@ export async function runSparseTransition (
       Object.defineProperty(win.performance, 'now', { configurable: true, value: () => now })
       const samples: SparseSample[] = []
       const interrupted = scenario !== 'complete'
-      const restoreTo80 = scenario === 'restore-to-80'
+      const removeAt68 = scenario === 'remove-at-68'
+      const restoreTo80 = scenario === 'restore-to-80' || removeAt68
       const removeOnReturn = scenario === 'remove-on-return' || restoreTo80
       const returnsToOriginal = scenario === 'restore-original' || removeOnReturn
       const repeatedRemoval = scenario === 'remove-again' || returnsToOriginal
-      const areaProbes = createAreaProbes(removeOnReturn)
+      const areaProbes = createAreaProbes(removeAt68 ? 5 : removeOnReturn ? 4 : 3)
       const sample = async (phase: Phase, time: number, point: Point): Promise<void> => {
         graph.renderOneFrame()
         if (canvas.width !== copy.width || canvas.height !== copy.height) throw new Error(`Unexpected drawing buffer size for ${engine}`)
@@ -160,6 +163,7 @@ export async function runSparseTransition (
           sites = { old: await readSite(original), destination: await readSite(restored) }
           if (repeatedRemoval) sites.midpoint = await readSite(midpoint)
           if (removeOnReturn) sites.returnMidpoint = await readSite(returnMidpoint)
+          if (removeAt68) sites.removalCenter = await readSite(removalCenter)
         }
         let midpointPicks: string[] | undefined
         if (phase === 'restore' && time === 500) {
@@ -222,10 +226,11 @@ export async function runSparseTransition (
       if (removeOnReturn) await edit('remove-on-return', [NaN, NaN], returnMidpoint, 1000, restoreTo80 ? halfFadeTimes : fullFadeTimes)
       if (restoreTo80) {
         // Adjacent milliseconds bracket the four sites' click and area-selection changes on the x=56→80 leg.
-        await edit('restore-to-80', restored, restored, 1000, [
-          0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500, 513, 514, 529, 530, 683, 684, 724, 725, 750, 1000,
-        ])
+        const returnTimes = [0, 1, 2, 16, 250, 275, 276, 374, 375, 396, 397, 470, 471, 500]
+        if (!removeAt68) returnTimes.push(513, 514, 529, 530, 683, 684, 724, 725, 750, 1000)
+        await edit('restore-to-80', restored, restored, 1000, returnTimes)
       }
+      if (removeAt68) await edit('remove-at-68', [NaN, NaN], removalCenter, 1000, fullFadeTimes)
       return { deviceInfo, samples }
     } finally { graph.destroy() }
   } finally { frame.remove() }

@@ -3,7 +3,7 @@ import { comparePixels, type PixelComparison } from '../../runtime/compare-pixel
 import { writeArtifact } from '../../testing/artifacts'
 import { runSparseTransition, type SparseSample, type SparseScenario } from './sparse-transition'
 
-function expectedSelections (phase: SparseSample['phase'], time: number, includeReturnMidpoint = false): SparseSample['selections'] {
+function expectedSelections (phase: SparseSample['phase'], time: number, siteCount: 3 | 4 | 5 = 3): SparseSample['selections'] {
   // The default cubic easing gives the live center on each restoration leg,
   // including its first frame when the point has no paint.
   const t = time / 1000
@@ -12,8 +12,8 @@ function expectedSelections (phase: SparseSample['phase'], time: number, include
   if (phase === 'restore') x += 32 * progress
   if (phase === 'restore-original') x = 64 - 16 * progress
   if (phase === 'restore-to-80') x = 56 + 24 * progress
-  const absent = phase === 'remove' || phase === 'remove-again' || phase === 'remove-on-return' || phase === 'snap-remove'
-  const local = (region: 'old' | 'returnMidpoint' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
+  const absent = phase === 'remove' || phase === 'remove-again' || phase === 'remove-on-return' || phase === 'remove-at-68' || phase === 'snap-remove'
+  const local = (region: Exclude<SparseSample['selections'][number]['region'], 'all'>, center: number): SparseSample['selections'][number] => ({
     region,
     // The 4 px rectangle also reaches half the full requested 24 px diameter.
     rectangle: !absent && Math.abs(center - x) <= 14 ? [1] : [],
@@ -23,8 +23,9 @@ function expectedSelections (phase: SparseSample['phase'], time: number, include
   const all = absent ? [0, 2] : [0, 1, 2]
   return [
     local('old', 48),
-    ...(includeReturnMidpoint ? [local('returnMidpoint', 56)] : []),
+    ...(siteCount >= 4 ? [local('returnMidpoint', 56)] : []),
     local('midpoint', 64),
+    ...(siteCount === 5 ? [local('removalCenter', 68)] : []),
     local('destination', 80),
     { region: 'all', rectangle: all, lasso: all },
   ]
@@ -39,11 +40,10 @@ async function settledFrameHash (samples: SparseSample[], phase: 'restore' | 're
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function compareMidpointFrames (samples: SparseSample[], removal: 'remove-again' | 'remove-on-return'): PixelComparison {
-  const restoration = removal === 'remove-again' ? 'restore' : 'restore-original'
-  const restoring = samples.find(row => row.phase === restoration && row.time === 500)!
+function compareMidpointFrames (samples: SparseSample[], removal: 'remove-again' | 'remove-on-return' | 'remove-at-68'): PixelComparison {
+  const beforeRemoval = samples[samples.findIndex(row => row.phase === removal) - 1]!
   const removing = samples.find(row => row.phase === removal && row.time === 500)!
-  return comparePixels(restoring.pixels, removing.pixels)
+  return comparePixels(beforeRemoval.pixels, removing.pixels)
 }
 
 async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario): Promise<{
@@ -60,7 +60,7 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
     return { phase, time, ...comparePixels(pixels, other), webgl, webgpu }
   })
   const suffix = scenario === 'complete' ? 'transition' : scenario === 'interrupted' ? 'interruption' : scenario
-  const repeatedMidpoint = scenario === 'remove-again' || scenario === 'remove-on-return'
+  const repeatedMidpoint = scenario === 'remove-again' || scenario === 'remove-on-return' || scenario === 'remove-at-68'
     ? { webgl: compareMidpointFrames(gl.samples, scenario), webgpu: compareMidpointFrames(gpu.samples, scenario) }
     : undefined
   const restoredOriginal = scenario === 'restore-original'
@@ -274,7 +274,7 @@ it.each([1, 2] as const)('removes the slot halfway through its return to the ori
   for (const row of comparisons) {
     const label = `${row.phase} ${row.time} ms`
     const frame = row.webgl
-    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, true))
+    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, 4))
     expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
     expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
     const absent = row.phase === 'remove' || row.phase === 'remove-again' || row.phase === 'remove-on-return'
@@ -315,7 +315,7 @@ it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third rem
   for (const row of comparisons) {
     const label = `${row.phase} ${row.time} ms`
     const frame = row.webgl
-    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, true))
+    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, 4))
     expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
     expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
     const clicks = sites.map(site => frame.sites?.[site]?.pick)
@@ -328,6 +328,48 @@ it.each([1, 2] as const)('restores point 1 at x=80 halfway through its third rem
       expect.soft(clicks, label).toEqual([
         row.time < 514 ? point : background, row.time < 684 ? point : background, point, destinationPick,
       ])
+    }
+    expect.soft(row.webgpu, label).toEqual(frame)
+    expect.soft(row.differingPixels, label).toBe(0)
+  }
+})
+
+it.each([1, 2] as const)('removes point 1 at x=68 halfway through its return to x=80 at %i×', async ratio => {
+  const { comparisons, repeatedMidpoint } = await compareSparseTransition(ratio, 'remove-at-68')
+  const fading = comparisons.filter(row => row.phase === 'remove-at-68')
+  expect(fading.map(row => row.time)).toEqual([0, 16, 250, 500, 750, 1000])
+  const before = comparisons[comparisons.indexOf(fading[0]!) - 1]!
+  expect(before).toMatchObject({ phase: 'restore-to-80', time: 500 })
+  const sites = ['old', 'returnMidpoint', 'midpoint', 'removalCenter', 'destination'] as const
+  expect(sites.map(site => before.webgl.sites?.[site]?.pick)).toEqual(Array(5).fill('Point 1'))
+
+  const halfBounds = [62, 90, 74, 102]
+  const fullBounds = [56, 84, 80, 108]
+  const boundsAt250 = ratio === 1 ? [57, 85, 79, 107] : [56.5, 85, 79, 107.5]
+  const boundsAt750 = ratio === 1 ? [67, 95, 69, 97] : [67.5, 95.5, 68.5, 96.5]
+  expect([before, ...fading].map(({ webgl }) => webgl.pointBounds?.map(value => value / ratio) ?? null)).toEqual([
+    halfBounds, fullBounds, fullBounds, boundsAt250, halfBounds, boundsAt750, null,
+  ])
+  expect(fading.map(({ webgl }) => webgl.linkRgb[1])).toEqual([255, 255, 239, 128, 16, 0])
+  const black = [0, 0, 0]
+  const red = [255, 0, 0]
+  const halfFade = [black, black, [64, 0, 0], [64, 64, 0], [0, 128, 0]]
+  const paintFrames = [before, ...fading.filter(row => row.time % 500 === 0)]
+  expect(paintFrames.map(({ webgl }) => sites.map(site => webgl.sites?.[site]?.rgb))).toEqual([
+    halfFade, [black, red, red, red, [0, 255, 0]], halfFade, sites.map(() => black),
+  ])
+  // Only the pre-removal frame is interactive, even though the two halfway canvases are identical.
+  expect(repeatedMidpoint?.webgl.differingPixels).toBe(0)
+  expect(repeatedMidpoint?.webgpu.differingPixels).toBe(0)
+  for (const row of comparisons) {
+    const label = `${row.phase} ${row.time} ms`
+    const frame = row.webgl
+    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, 5))
+    expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
+    expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
+    if (row.phase === 'remove-at-68') {
+      expect.soft(sites.map(site => frame.sites?.[site]?.pick), label).toEqual(Array(5).fill('Background'))
+      expect.soft(frame.picks.link, label).toBe('Background')
     }
     expect.soft(row.webgpu, label).toEqual(frame)
     expect.soft(row.differingPixels, label).toBe(0)
