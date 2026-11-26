@@ -406,6 +406,28 @@ pnpm --filter @cosmos.gl/gpu-lab build
 
 ### Historical replays
 
+At promotion, record the full Git revision of the last WebGL source, its frozen
+lockfile and the SHA-256 of the standalone file used for qualification. Build
+the reference in a separate directory so the new production build can use the
+normal `dist/` path. This rehearsal reproduced the WebGL file used by the two
+packaged engines on M3.
+
+```sh
+webgl_ref=fad6e487a23ce1f4d94b7d05add2bab18eeac559
+webgl_build=$(mktemp -d)
+git archive "$webgl_ref" | tar -x -C "$webgl_build"
+pnpm --dir "$webgl_build" install --frozen-lockfile --ignore-scripts
+pnpm --dir "$webgl_build" exec vite build --mode umd
+shasum -a 256 "$webgl_build/dist/index.min.js"
+# 74a216a70550c0a990b2e113e7638086ec4099ef172e0704dc5b3d7692c8813e
+```
+
+For a fixed-tick timing replay, place that file under `captures/<run>/webgl.js`
+and the qualified Graph tarball's `dist/index.min.js` under
+`captures/<run>/webgpu.js`. The packaged force benchmark's `--matched-ticks
+--bundles <run>` options load those exact bytes and save both hashes. The
+development Lab continues to use the workspace build by default.
+
 To repeat a recorded study, use its source revision or archived source snapshot
 with the dependencies and commands documented for that run. The broader set of
 Lab UI, tooling and experimental tests is available at commit `08e5ff5d`.
