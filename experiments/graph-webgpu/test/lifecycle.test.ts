@@ -69,6 +69,26 @@ describe('WebGPU graph lifecycle', () => {
     } finally { graph.destroy() }
   })
 
+  it('draws a manual resize immediately and consumes the pending idle frame', async () => {
+    const host = document.createElement('div')
+    host.style.cssText = 'width:120px;height:80px'
+    document.body.append(host)
+    const graph = new Graph(host, { pixelRatio: 2, enableSimulation: false, fitViewOnInit: false })
+    try {
+      await graph.ready
+      graph.setPointPositions(Float32Array.of(20, 20))
+      graph.render(0, 0)
+      const canvas = host.querySelector('canvas')!
+      host.style.width = '150px'
+      graph.renderOneFrame()
+      expect([canvas.width, canvas.height]).toEqual([300, 160])
+      const draw = vi.spyOn(graph, 'renderOneFrame')
+      await new Promise(requestAnimationFrame)
+      await new Promise(requestAnimationFrame)
+      expect(draw).not.toHaveBeenCalled()
+    } finally { graph.destroy(); host.remove() }
+  })
+
   it('coalesces autonomous draws behind a busy GPU and delivers the requested redraw after a pause', async () => {
     const host = document.createElement('div')
     host.style.cssText = 'width:120px;height:80px'

@@ -44,7 +44,8 @@ export class Graph {
   private mouseRepulsion?: Pair
   private positionTransition?: PositionTransition
   private frame = 0
-  private shouldMeasureNextFrame = false
+  private isAutomaticFrame = false
+  private containerSize?: Pair
   private isFrameInFlight = false
   private isDestroyed = false
   private shouldUpdateAllStyles = false
@@ -181,9 +182,16 @@ export class Graph {
   public renderOneFrame (): void {
     if (!this.isReady) { this.whenReady(() => this.renderOneFrame()); return }
     if (!this.canvas || this.isDestroyed) return
-    const measureOccupancy = this.shouldMeasureNextFrame
-    this.shouldMeasureNextFrame = false
-    this.runSimulationStep(false, measureOccupancy)
+    if (!this.isAutomaticFrame) {
+      // ResizeObserver can run after the caller’s animation callback. Draw the
+      // new backing size immediately and consume any already scheduled idle paint.
+      this.resize()
+      if (this.frame && !this.isSimulationRunning && !this.transition.isActive && !this.mouseRepulsion) {
+        cancelAnimationFrame(this.frame)
+        this.frame = 0
+      }
+    }
+    this.runSimulationStep(false, this.isAutomaticFrame && this.simulation.ownsDevice)
     this.drawFrame()
   }
 
@@ -524,7 +532,8 @@ export class Graph {
     const w = Math.max(1, Math.round(cssWidth * this.config.pixelRatio))
     const h = Math.max(1, Math.round(cssHeight * this.config.pixelRatio))
     const { store } = this.simulation
-    if (store.screenSize[0] === cssWidth && store.screenSize[1] === cssHeight && this.canvas.width === w && this.canvas.height === h) return
+    if (this.containerSize?.[0] === cssWidth && this.containerSize[1] === cssHeight && this.canvas.width === w && this.canvas.height === h) return
+    this.containerSize = [cssWidth, cssHeight]
     const center = this.screenToSpacePosition([store.screenSize[0] / 2, store.screenSize[1] / 2])
     const hadSize = store.screenSize[0] > 0
     store.updateScreenSize(cssWidth, cssHeight)
@@ -559,8 +568,8 @@ export class Graph {
         this.requestFrame()
         return
       }
-      this.shouldMeasureNextFrame = this.simulation.ownsDevice
-      try { this.renderOneFrame() } finally { this.shouldMeasureNextFrame = false }
+      this.isAutomaticFrame = true
+      try { this.renderOneFrame() } finally { this.isAutomaticFrame = false }
       if (this.isDestroyed || device.isLost) return
       const fence = device.createFence()
       this.isFrameInFlight = true
