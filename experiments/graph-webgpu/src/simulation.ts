@@ -115,6 +115,12 @@ export class GraphSimulation {
   public get progress (): number { return this.store.simulationProgress }
   public get isSimulationRunning (): boolean { return this.isReady && this.store.isSimulationRunning }
 
+  /** @internal A pure topology replacement can keep the renderer's point records. */
+  public get hasOnlyLinkTopologyUpdate (): boolean {
+    return this.isTopologyDirty && !this.isPositionsDirty && !this.shouldRefreshSamples && !this.isSizesDirty &&
+      !this.isClustersDirty && !this.isAttractorsDirty
+  }
+
   private get hasPendingLayoutUpdate (): boolean {
     return this.isPositionsDirty || this.isTopologyDirty || this.isClustersDirty || this.isAttractorsDirty || this.shouldRefreshSamples
   }

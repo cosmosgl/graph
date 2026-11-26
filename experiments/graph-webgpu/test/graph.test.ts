@@ -166,7 +166,7 @@ describe('WebGPU Graph', () => {
     } finally { cleanup() }
   })
 
-  it('uploads only the link-width channel when a width edit is the only pending setter', async () => {
+  it('retains point records for link-only edits and observes a point edit in the same render', async () => {
     const { graph, cleanup } = mountedGraph()
     try {
       await graph.ready
@@ -190,6 +190,21 @@ describe('WebGPU Graph', () => {
         graph.render(undefined, 0)
         expect(uploadedBytes('cosmos-point-style')).toBeGreaterThan(0)
         expect(uploadedBytes('cosmos-point-order')).toBeGreaterThan(0)
+        for (const links of [Float32Array.of(1, 0, 0, 1), new Float32Array(), Float32Array.of(0, 1)]) {
+          writes.mockClear()
+          allocations.mockClear()
+          graph.setLinks(links)
+          graph.render(undefined, 0)
+          expect(uploadedBytes('cosmos-point-style')).toBe(0)
+          expect(uploadedBytes('cosmos-point-order')).toBe(0)
+          expect(graph.getConnectedPointIndices(0)).toEqual(Array.from(links.slice(0, 2)))
+        }
+        // A setter on the composed simulation can change a point without going through Graph.
+        graph.simulation.setPointSizes(Float32Array.of(18, 10, NaN))
+        graph.setLinks(Float32Array.of(1, 0))
+        graph.render(undefined, 0)
+        expect(uploadedBytes('cosmos-point-style')).toBeGreaterThan(0)
+        expect(graph.getPointRadiusByIndex(0)).toBe(18)
         for (const [width, duration] of [[4, 0], [12, 1000], [2, 1000]] as const) {
           writes.mockClear()
           allocations.mockClear()

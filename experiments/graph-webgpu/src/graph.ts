@@ -123,6 +123,7 @@ export class Graph {
       }
       const from = animate && newPositions && oldSource ? copyPositions(oldSource) : undefined
       const partial = this.hasRendered && !this.shouldUpdateAllStyles
+      const linkTopologyOnly = partial && !this.transition.isActive && !this.transition.isPending && this.simulation.hasOnlyLinkTopologyUpdate
       let pointStylesOnly = false
       let linkWidthsOnly = false
       try {
@@ -135,6 +136,7 @@ export class Graph {
         this.renderer?.update({
           pointChannels: pointStylesOnly ? { colors: pointColors, sizes: pointSizes } : undefined,
           linkWidthsOnly,
+          linkTopologyOnly,
           animate,
           previousProgress: this.transition.progress,
           animatePointSizes: pointSizes,
@@ -248,7 +250,10 @@ export class Graph {
   }
 
   public setLinks (links: Float32Array): void {
-    this.queueStyleData(() => { this.invalidateQueries(); this.simulation.setLinks(links) })
+    this.whenReady(() => {
+      this.invalidateQueries()
+      this.simulation.setLinks(links)
+    })
   }
 
   public setPointPosition (id: number, x: number, y: number): void { this.setPointPositionsByIndices([id], [x, y]) }

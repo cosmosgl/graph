@@ -77,6 +77,7 @@ type StyleUpdate = {
   animateLinkWidths?: boolean;
   continueTransition?: boolean;
   linkWidthsOnly?: boolean;
+  linkTopologyOnly?: boolean;
   pointChannels?: PointChannels;
 }
 type EncodeOptions = {
@@ -207,6 +208,8 @@ export class GraphRenderer {
         if (result.previous && previous) previous.points = result.previous
         if (result.colors) this.highlightPass.setColors(result.colors)
         this.pointSizes = sizes
+      } else if (options.linkTopologyOnly && this.pointBuffer && this.pointCount === this.data.pointsNumber) {
+        this.lines.update(this.data, this.config, false)
       } else if (widthsOnly) {
         const snapshot = this.lines.updateWidths(this.data, !!previous && previous.links === this.lines.buffer)
         if (snapshot && previous) previous.links = snapshot
