@@ -3,14 +3,40 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
-import { chromium } from 'playwright'
+import { isDeepStrictEqual, parseArgs } from 'node:util'
+import { chromium, firefox, webkit } from 'playwright'
 import { preview } from 'vite'
 
-if (!process.argv[2]) throw new Error('Pass the standalone app directory')
-const app = await realpath(process.argv[2])
+const { positionals, values } = parseArgs({ allowPositionals: true, options: {
+  browser: { type: 'string', default: 'chrome' }, swiftshader: { type: 'boolean' },
+  points: { type: 'string', default: '2' },
+} })
+if (positionals.length !== 1) throw new Error('Pass the standalone app directory')
+const app = await realpath(positionals[0])
+const pointCount = Number(values.points)
+assert.ok([2, 65536].includes(pointCount))
+assert.ok(['chrome', 'firefox', 'webkit'].includes(values.browser))
+assert.ok(!values.swiftshader || values.browser === 'chrome')
+const launch = () => {
+  if (values.browser === 'firefox') return firefox.launch({ headless: false })
+  if (values.browser === 'webkit') return webkit.launch({ headless: false })
+  return chromium.launch({ channel: 'chrome', headless: false,
+    args: values.swiftshader ? ['--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu'] : [],
+  })
+}
+function checkAdapter(info) {
+  assert.equal(info.type, 'webgpu')
+  if (values.swiftshader) assert.ok(info.fallback || /swiftshader/i.test(JSON.stringify(info)), 'Expected SwiftShader')
+  else assert.ok(!info.fallback && info.gpuType !== 'cpu', 'Expected a hardware adapter')
+}
+function summarize(checkpoint) {
+  const { positions, ...fields } = checkpoint
+  const xy = Float32Array.from(positions)
+  return { ...fields, points: xy.length / 2, positionBytes: xy.byteLength, positionsSha256: createHash('sha256').update(new Uint8Array(xy.buffer)).digest('hex') }
+}
 const site = join(app, 'dist')
 await readFile(join(site, 'index.html'))
-const report = { packages: {}, cases: [], recovery: [] }
+const report = { browser: values.browser, swiftshader: Boolean(values.swiftshader), pointCount, packages: {}, cases: [], recovery: [] }
 for (const name of ['graph', 'deck-layers']) {
   report.packages[name] = createHash('sha256').update(await readFile(join(app, name + '.tgz'))).digest('hex')
 }
@@ -20,7 +46,9 @@ const url = server.resolvedUrls.local[0]
 
 // Read Chrome's composited canvas. This path is independent of Deck's picking pass.
 async function sample(page, coords) {
-  const png = await page.locator('canvas').screenshot({ scale: 'css' })
+  const clip = await page.locator('canvas').boundingBox()
+  assert.ok(clip, 'missing Deck canvas')
+  const png = await page.screenshot({ scale: 'css', clip })
   return page.evaluate(async ({ png, coords }) => {
     const bytes = Uint8Array.from(atob(png), c => c.charCodeAt(0))
     const image = await createImageBitmap(new Blob([bytes], { type: 'image/png' }))
@@ -32,6 +60,18 @@ async function sample(page, coords) {
   }, { png: png.toString('base64'), coords })
 }
 
+// Submission and compositing are independent on Firefox. Observe the first
+// expected paint without asking Deck to draw another frame or changing the scene.
+async function waitForPaint(page, coords, expected, label) {
+  const deadline = Date.now() + 6000
+  let pixels
+  do {
+    pixels = await sample(page, coords)
+    if (isDeepStrictEqual(pixels, expected)) return pixels
+    await page.evaluate(() => new Promise(requestAnimationFrame))
+  } while (Date.now() < deadline)
+  assert.deepEqual(pixels, expected, label)
+}
 const black = [0, 0, 0, 255]
 const colors = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255], black]
 // flipY:false, zoom 0, eye centered on (1000,1000). The midpoint is on link 0.
@@ -76,16 +116,17 @@ function sessionLocations(session, width, height) {
 
 async function verifyRecovery(owner) {
   // A fresh Chrome process/profile per loss keeps the two GPU process crashes independent.
-  const browser = await chromium.launch({ channel: 'chrome', headless: false })
+  const browser = await launch()
   try {
     const page = await browser.newPage({ viewport: { width: 820, height: 640 }, deviceScaleFactor: 2 })
     page.setDefaultTimeout(30000)
     const errors = observeErrors(page)
-    await page.goto(url + '?owner=' + owner)
+    await page.goto(url + '?owner=' + owner + '&points=' + pointCount)
+    await page.bringToFront()
     await page.waitForFunction(() => window.consumer !== undefined)
     const previousAdapter = await page.evaluate(async () => (await window.consumer).adapter)
-    assert.equal(previousAdapter.fallback, false)
-    const { checkpoint: before, nextTickAlpha } = await page.evaluate(async () => {
+    checkAdapter(previousAdapter)
+    const { checkpoint: before, checkpointMs, nextTickAlpha } = await page.evaluate(async () => {
       window.preLossConsumer = window.consumer
       const app = await window.consumer
       await app.setSize(480, 288)
@@ -97,11 +138,12 @@ async function verifyRecovery(owner) {
     assert.deepEqual(before.pins, [0])
     assert.deepEqual(before.view, { target: [1012, 995, 0], zoom: 0.25 })
     assert.deepEqual(before.positions.slice(0, 2), [940, 982])
-    assert.notDeepEqual(before.positions.slice(2), [1082, 1034])
+    assert.equal(before.positions.length, 2 * pointCount)
+    assert.notDeepEqual(before.positions.slice(2, 4), [1082, 1034])
     assert.equal(before.spring, 0.05)
     const checkpointCoords = sessionLocations(before, before.width, before.height)
     const expectedColors = [colors[0], [255, 255, 0, 255], colors[2], black]
-    await page.exposeFunction('readRestoredCanvas', () => sample(page, checkpointCoords))
+    await page.exposeFunction('readRestoredCanvas', () => waitForPaint(page, checkpointCoords, expectedColors, owner + ' restored paint'))
     await page.evaluate(coords => {
       window.inspectRestoredFrame = async pick => {
         const pixels = await window.readRestoredCanvas()
@@ -110,18 +152,22 @@ async function verifyRecovery(owner) {
         window.firstRestoredDraw = { coords, pixels, picks }
       }
     }, checkpointCoords)
-    const cdp = await browser.newBrowserCDPSession()
-    await cdp.send('Browser.crashGpuProcess')
+    const crashProcess = values.browser === 'chrome'
+    if (crashProcess) {
+      const cdp = await browser.newBrowserCDPSession()
+      await cdp.send('Browser.crashGpuProcess')
+    } else {
+      await page.evaluate(async () => (await window.consumer).simulateDeviceLoss())
+    }
     await page.waitForFunction(() => window.consumer !== window.preLossConsumer)
     const { recovery, adapter, firstRestoredDraw } = await page.evaluate(async () => {
       const { recovery, adapter } = await window.consumer
       return { recovery, adapter, firstRestoredDraw: window.firstRestoredDraw }
     })
-    assert.equal(recovery.reason, 'unknown')
+    assert.equal(recovery.reason, crashProcess ? 'unknown' : 'destroyed')
     assert.equal(recovery.distinctDevice, true)
     assert.equal(recovery.previousGraphReleased, true)
-    assert.equal(adapter.type, 'webgpu')
-    assert.equal(adapter.fallback, false)
+    checkAdapter(adapter)
     assert.deepEqual(recovery.restored, { ...before, running: false })
     assert.deepEqual(firstRestoredDraw.pixels, expectedColors, owner + ' first restored paint')
     assert.deepEqual(firstRestoredDraw.picks, expectedPicks(owner), owner + ' first restored picks')
@@ -141,13 +187,12 @@ async function verifyRecovery(owner) {
     assert.equal(live.running, true)
     assert.ok(live.alpha > 0 && live.alpha < before.alpha)
     assert.deepEqual(live.positions.slice(0, 2), before.positions.slice(0, 2))
-    assert.notDeepEqual(live.positions.slice(2), before.positions.slice(2))
+    assert.notDeepEqual(live.positions.slice(2, 4), before.positions.slice(2, 4))
     const draws = []
     for (const [width, height] of [[480, 288], [512, 320]]) {
       if (width !== 480) await page.evaluate(async ([w, h]) => (await window.consumer).setSize(w, h), [width, height])
       const coords = sessionLocations(live, width, height)
-      const pixels = await sample(page, coords)
-      assert.deepEqual(pixels, expectedColors, owner + ' restored selection, points and link')
+      const pixels = await waitForPaint(page, coords, expectedColors, owner + ' restored selection, points and link')
       const picks = await readPicks(page, coords)
       assert.deepEqual(picks, expectedPicks(owner))
       draws.push({ width, height, coords, pixels, picks })
@@ -158,7 +203,9 @@ async function verifyRecovery(owner) {
     const borrowedDeviceReadback = await page.evaluate(async () => (await window.consumer).finish())
     assert.deepEqual(borrowedDeviceReadback, [17, 33, 65, 129])
     assert.deepEqual(errors, [], owner + ' browser errors during recovery')
-    return { owner, previousAdapter, adapter, before, ...recovery, firstRestoredDraw, nextTickAlpha, firstTickAlpha, live, draws, removed, borrowedDeviceReadback }
+    return { owner, previousAdapter, adapter, loss: crashProcess ? 'GPU process crash' : 'device.destroy',
+      before: summarize(before), ...recovery, restored: summarize(recovery.restored), checkpointMs,
+      firstRestoredDraw, nextTickAlpha, firstTickAlpha, live: summarize(live), draws, removed, borrowedDeviceReadback }
   } finally {
     await browser.close()
   }
@@ -166,20 +213,22 @@ async function verifyRecovery(owner) {
 
 let browser
 try {
-  browser = await chromium.launch({ channel: 'chrome', headless: false })
-  report.chrome = browser.version()
-  const cdp = await browser.newBrowserCDPSession()
-  report.gpus = (await cdp.send('SystemInfo.getInfo')).gpu.devices.map(d => d.deviceString)
+  browser = await launch()
+  report.version = browser.version()
+  if (values.browser === 'chrome') {
+    const cdp = await browser.newBrowserCDPSession()
+    report.gpus = (await cdp.send('SystemInfo.getInfo')).gpu.devices.map(d => d.deviceString)
+  }
   const cases = [1, 2].flatMap(deviceScaleFactor => ['layer', 'app'].map(owner => ({ owner, deviceScaleFactor })))
   for (const { owner, deviceScaleFactor } of cases) {
     const page = await browser.newPage({ viewport: { width: 820, height: 640 }, deviceScaleFactor })
     page.setDefaultTimeout(25000)
     const errors = observeErrors(page)
-    await page.goto(url + '?owner=' + owner)
+    await page.goto(url + '?owner=' + owner + '&points=' + pointCount)
+    await page.bringToFront()
     await page.waitForFunction(() => window.consumer !== undefined)
     const info = await page.evaluate(async () => (await window.consumer).adapter)
-    assert.equal(info.type, 'webgpu')
-    assert.equal(info.fallback, false, 'Expected a native WebGPU adapter')
+    checkAdapter(info)
     const result = { owner, deviceScaleFactor, adapter: info, draws: [] }
     for (const [width, height] of [[320, 192], [512, 320]]) {
       // Observe the first frame a visitor sees before any resize or forced redraw.
@@ -190,8 +239,7 @@ try {
         coords.push(locations(320, 192)[0])
         expectedColors.push(black)
       }
-      const pixels = await sample(page, coords)
-      assert.deepEqual(pixels, expectedColors, `${owner} draw at ${width}×${height}, display DPR ${deviceScaleFactor}`)
+      const pixels = await waitForPaint(page, coords, expectedColors, `${owner} draw at ${width}×${height}, display DPR ${deviceScaleFactor}`)
       const picks = await readPicks(page, coords)
       const expected = expectedPicks(owner)
       while (expected.length < coords.length) expected.push(null)
@@ -202,7 +250,7 @@ try {
     const supplied = owner === 'app'
     assert.deepEqual(removed, { graphReady: supplied, hasBuffer: supplied, pointAfterEdit: supplied ? [1090, 1040] : null })
     const coords = locations(512, 320)
-    assert.deepEqual(await sample(page, coords), coords.map(() => black), owner + ' draw after removal')
+    await waitForPaint(page, coords, coords.map(() => black), owner + ' draw after removal')
     assert.deepEqual(await readPicks(page, coords), coords.map(() => null), owner + ' picks after removal')
     const borrowedDeviceReadback = await page.evaluate(async () => (await window.consumer).finish())
     assert.deepEqual(borrowedDeviceReadback, [17, 33, 65, 129])
@@ -215,7 +263,7 @@ try {
   await browser.close()
   for (const owner of ['layer', 'app']) {
     report.recovery.push(await verifyRecovery(owner))
-    console.error(owner + ' restored the live session after Chrome GPU process loss')
+    console.error(owner + ' restored the live session on ' + values.browser)
   }
   console.log(JSON.stringify(report, null, 2))
 } finally {

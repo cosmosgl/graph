@@ -266,10 +266,49 @@ remained usable after teardown.
 
 The application retains the graph records and reads the checkpoint before loss.
 Motion resumes at that snapshot, so the interval between checkpoints determines
-how much recent motion can be lost. The test covers Chrome GPU-process loss on
-M3 with two points and one link. The cost of checkpointing a large graph and
-the recovery behavior on other browsers and adapters remain open.
+how much recent motion can be lost. The original Chrome GPU-process loss test used two points and one link.
 
 The same packed-app verifier runs the four normal ownership and display-ratio
 cases and both recovery cases. The M3 run is in
 `captures/packed-deck-recovery-m3-N6YbONc6/results.json`.
+
+
+### Checkpointing 65,536 points
+
+The clean TypeScript app installs local Graph and Deck Layers 3.6.1 tarballs
+with Deck 10.0.0-alpha.1 and luma 10.0.0-alpha.14. The larger fixture contains
+65,536 points and 32,768 springs. The CPU checkpoint stores 524,288
+bytes of Float32 XY coordinates as a JavaScript array. It also saves the camera, viewport, pins, selected IDs,
+spring strength, cooling and running state. Both ownership modes reproduced
+every coordinate and the first resumed cooling value. Deck returned the
+original picks before and after resize and the supplied device remained usable
+after teardown.
+
+| Browser on the M3 host | Loss exercised | Checkpoint, layer / app (ms) | Remount through restored state, layer / app (ms) |
+| --- | --- | ---: | ---: |
+| Chrome 158, Apple Metal | Test browser's GPU process crash | 8.8 / 9.1 | 211 / 224 |
+| Firefox 153, non-fallback, adapter name unavailable | Explicit destruction of the test device | 34 / 47 | 198 / 187 |
+| WebKit 26.5, Apple | Explicit destruction of the test device | 11 / 11 | 124 / 107 |
+| Chrome 158, SwiftShader | Test browser's GPU process crash | 3,359 / 2,731 | 5,442 / 4,532 |
+
+These are individual observations, with the camera and first rendered pixels
+checked separately. Firefox and WebKit both delivered the device-loss
+notification and restored the session on a new device. A retail Safari
+WebDriver run still requires Remote Automation to be enabled. Additional
+physical GPU families need their own qualification runs.
+
+Run the same checks from the repository root. The preparation script prints
+the temporary application directory to use for each command.
+
+```sh
+sh scripts/prepare-packed-webgpu-deck.sh
+node scripts/check-packed-webgpu-deck.mjs "$app_dir" --points 65536
+node scripts/check-packed-webgpu-deck.mjs "$app_dir" --browser firefox --points 65536
+node scripts/check-packed-webgpu-deck.mjs "$app_dir" --browser webkit --points 65536
+node scripts/check-packed-webgpu-deck.mjs "$app_dir" --swiftshader --points 65536
+```
+
+The local capture `captures/packed-deck-milestone-20261126/` retains the
+application, both tarballs, browser reports and the original Firefox compile
+error. Browser and adapter details and the SHA-256 of each tarball are in
+each report.

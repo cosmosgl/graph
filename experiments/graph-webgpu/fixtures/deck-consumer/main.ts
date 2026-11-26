@@ -4,11 +4,19 @@ import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer, type CosmosGraphLayerConfig, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
+const query = new URLSearchParams(location.search)
 const points = [
   { id: 'left', x: 940, y: 982 },
   { id: 'right', x: 1060, y: 1022 },
 ]
 const links = [{ id: 'edge', source: 'left', target: 'right' }]
+// Extra disjoint springs exercise the same checkpoint without covering the three reference pixels.
+if (query.get('points') === '65536') {
+  for (let i = 2; i < 65536; i++) {
+    points.push({ id: String(i), x: 3000 + i % 256, y: 3000 + Math.floor(i / 256) })
+    if (i % 2 === 1) links.push({ id: String(i), source: String(i - 1), target: String(i) })
+  }
+}
 const config: CosmosGraphLayerConfig = {
   rescalePositions: false,
   simulationGravity: 0,
@@ -23,7 +31,7 @@ const canvas = document.querySelector('canvas')!
 const host = document.querySelector<HTMLElement>('#host')!
 const status = document.querySelector<HTMLOutputElement>('#status')!
 const resize = document.querySelector<HTMLButtonElement>('#resize')!
-const owner = new URLSearchParams(location.search).get('owner') === 'app' ? 'app' : 'layer'
+const owner = query.get('owner') === 'app' ? 'app' : 'layer'
 
 type Hit = {
   layer?: string;
@@ -50,12 +58,14 @@ type Recovery = {
   previousGraphReleased: boolean;
   distinctDevice: boolean;
   restored: Checkpoint;
+  mountMs: number;
   firstTickAlpha?: number;
 }
 type Consumer = {
   adapter: Device['info'];
   recovery?: Recovery;
-  checkpointMovingSession(): Promise<{ checkpoint: Checkpoint; nextTickAlpha: number }>;
+  checkpointMovingSession(): Promise<{ checkpoint: Checkpoint; checkpointMs: number; nextTickAlpha: number }>;
+  simulateDeviceLoss(): void;
   pauseAndInspect(): Promise<Checkpoint>;
   setSize(width: number, height: number): Promise<void>;
   pick(x: number, y: number): Promise<Hit | null>;
@@ -89,6 +99,8 @@ function showError (error: unknown): void { status.value = String(error); consol
 async function mount (
   checkpoint: Checkpoint, previous?: { device: Device; graph: Graph; reason: string }
 ): Promise<Consumer> {
+  const mountStart = performance.now()
+  let requestedLoss = false
   // Both Deck and the Graph borrow the application's device.
   const device = await luma.createDevice({
     type: 'webgpu',
@@ -154,15 +166,15 @@ async function mount (
     graph = new Graph(null, sessionConfig, Promise.resolve(device))
     await graph.ready
     graph.setPointPositions(Float32Array.from(checkpoint.positions))
-    graph.setPointColors(new Float32Array([1, 0, 0, 1, 0, 1, 0, 1]))
-    graph.setLinks(new Float32Array([0, 1]))
-    graph.setLinkColors(new Float32Array([0, 0, 1, 1]))
+    graph.setPointColors(Float32Array.from(points.flatMap((_, i) => i === 0 ? [1, 0, 0, 1] : [0, 1, 0, 1])))
+    graph.setLinks(Float32Array.from({ length: links.length * 2 }, (_, i) => i))
+    graph.setLinkColors(Float32Array.from({ length: links.length * 4 }, (_, i) => i % 4 >= 2 ? 1 : 0))
     graph.render(0)
     graph.pause()
     layer = new CosmosGraphLayer({ id: 'cosmos', pickable: true, graph })
   }
   deck.setProps({ layers: [layer] })
-  await until(() => layer.isLoaded && graph?.getPointPositionBuffer()?.pointCount === 2, 'Layer did not load both points')
+  await until(() => layer.isLoaded && graph?.getPointPositionBuffer()?.pointCount === points.length, 'Layer did not load every point')
   graph.pause()
   if (graph.simulation.device !== device) throw new Error('Graph created a second device')
   graph.setPinnedPoints(checkpoint.pins)
@@ -221,12 +233,14 @@ async function mount (
     graph.start(0.45)
     const startTick = ticks
     await until(() => ticks >= startTick + 3, 'Deck did not advance the live graph')
+    const checkpointStart = performance.now()
     saved = await pauseAndInspect()
+    const checkpointMs = performance.now() - checkpointStart
     let nextTickAlpha: number | undefined
     recordNextTick = (value): void => { nextTickAlpha = value }
     graph.unpause()
     await until(() => nextTickAlpha !== undefined, 'Original session did not continue from the checkpoint')
-    return { checkpoint: structuredClone(saved), nextTickAlpha: nextTickAlpha! }
+    return { checkpoint: structuredClone(saved), checkpointMs, nextTickAlpha: nextTickAlpha! }
   }
 
   // The host owns the device, its camera and the last completed CPU checkpoint.
@@ -237,13 +251,14 @@ async function mount (
       distinctDevice: device !== previous.device,
       previousGraphReleased: !previous.graph.isReady && !previous.graph.getPointPositionBuffer(),
       restored: await inspect(),
+      mountMs: performance.now() - mountStart,
     }
     // The verifier can inspect the restored draw and its pick pass before Deck advances the layout.
     await window.inspectRestoredFrame?.(pick)
     if (checkpoint.running) graph.unpause()
   }
   device.lost.then(info => {
-    if (!active || info.reason === 'destroyed') return
+    if (!active || (info.reason === 'destroyed' && !requestedLoss)) return
     active = false
     window.consumer = (async (): Promise<Consumer> => {
       try { deck.finalize() } finally { if (owner === 'app') graph.destroy() }
@@ -251,6 +266,13 @@ async function mount (
     })()
     window.consumer.catch(showError)
   })
+
+  // Browsers without a GPU-process crash hook can exercise their real device.lost
+  // promise by destroying this fixture's own device. Normal teardown does not recover.
+  function simulateDeviceLoss (): void {
+    requestedLoss = true
+    device.destroy()
+  }
 
   async function setSize (width: number, height: number): Promise<void> {
     host.style.width = `${width}px`
@@ -299,7 +321,7 @@ async function mount (
   resize.disabled = false
   resize.onclick = (): Promise<void> => canvas.width === 320 ? setSize(512, 320) : setSize(320, 192)
   status.value = owner === 'app' ? 'App-supplied graph' : 'Layer-owned graph'
-  return { adapter: device.info, recovery, checkpointMovingSession, pauseAndInspect, setSize, pick, remove, finish }
+  return { adapter: device.info, recovery, checkpointMovingSession, simulateDeviceLoss, pauseAndInspect, setSize, pick, remove, finish }
 }
 
 declare global {
