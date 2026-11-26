@@ -53,3 +53,27 @@ Each entry below gives the average of the paired WebGL and WebGPU runs, in that 
 | Peak sampled GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
 
 The initial qualification used Chrome 158.0.8127.37 on Apple M3. Both topologies' control distributions, margins, opposite-order trials and package hashes are in `captures/packaged-force-timing-2026-11-26T10-03-19-014Z/`. [Reproduction and what the timings include](#/production-forces?section=doc-scale-method)
+
+### Rechecking full replacements and resize
+
+On an isolated million-point dense graph, the median of three full replacements fell from 795.9 to 642.7 ms after reusing the seeded samplers. JavaScript submission fell from 696.1 to 518.7 ms, including spring topology preparation dropping from 163.9 to 85.9 ms. Consuming a pending resize in a manual draw reduced three draws to one and the first resize from 105.2 to 36.2 ms. These diagnostics are recorded in `captures/replacement-profile-20261126/`.
+
+A fresh opposing-order block on the combined sampler and resize changes measured dense full replacement at 590.9 / 533.3 ms, within its 16.9 ms allowance in both orders. Dense steady frame p95 was 317.1 / 192.0 ms and also within margin. For the hub, full replacement was 850.1 / 733.2 ms; the paired WebGL measurements drifted beyond their control limit, leaving the comparative verdict unassessed. Dense resize was 48.4 / 54.4 ms with variable WebGL controls. Hub resize was 58.5 / 61.8 ms with mixed paired verdicts. Hub topology replacement measured 467.4 / 625.2 ms and was also unassessed. The complete block and its per-metric verdicts are in `captures/packaged-force-timing-2026-11-26T10-26-57-901Z/`.
+
+### Final build with link-only replacements
+
+The final block used fresh WebGL controls and paired the WebGL distribution `1b589639` with WebGPU `b5236d3c` after the engine began retaining point records for link-only changes. All 144 clicks, all original ordered endpoints and each public edit passed. Both devices again reported zero tracked GPU bytes after teardown. Hub startup and both peak allocation comparisons met their calibrated margins. Other timings remain unassessed because paired measurements drifted, controls varied, or opposite engine orders disagreed.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Steady frame p95 (ms) | 425.6 / 218.0 | Not assessed | 474.4 / 325.3 | Not assessed |
+| First click (ms) | 1,210.6 / 305.1 | Not assessed | 1,193.0 / 472.9 | Not assessed |
+| Click p95 (ms) | 1,497.9 / 465.6 | Not assessed | 1,193.0 / 498.5 | Not assessed |
+| Cold startup (ms) | 559.0 / 441.3 | Not assessed | 570.8 / 438.8 | Within margin |
+| Point update (ms) | 132.9 / 109.2 | Not assessed | 123.2 / 123.3 | Not assessed |
+| Topology update (ms) | 377.2 / 350.4 | Not assessed | 427.2 / 437.6 | Not assessed |
+| Full replacement (ms) | 659.1 / 640.6 | Not assessed | 684.1 / 716.7 | Not assessed |
+| Resize (ms) | 60.4 / 65.5 | Not assessed | 50.8 / 61.6 | Not assessed |
+| Peak tracked memory (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+The means describe the measured runs. For example, dense topology replacement averaged 350.4 ms on WebGPU and 377.2 ms on WebGL, but the paired WebGL runs drifted beyond the control limit. The complete build hashes, independent controls, both engine orders, individual observations and per-metric reasons are in `captures/packaged-force-timing-2026-11-26T10-50-24-553Z/`.
