@@ -57,6 +57,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the pixels and exact IDs at the original position, midpoint and first target on each return frame.',
     recorded: null,
   }, {
+    id: 'remove-on-return',
+    title: 'Remove a point on its return to the original position',
+    kind: 'compare',
+    question: 'Where does point 1 fade, and which positions still select it when you remove it at x = 56?',
+    description: 'Remove point 1 as it travels from x = 64 back to x = 48. Compare the drawing and IDs on both sides of that edit.',
+    reference: 'Both built packages receive the same timed edits and click, rectangle and diamond lasso probes at x = 48, 56, 64 and 80.',
+    acceptance: 'Compare each painted frame and the exact IDs at all four positions through the third removal.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -90,6 +99,7 @@ export const experiment = defineExperiment({
     if (caseId === 'interrupted-removal') return (await import('./sparse-view')).createSparseView(host, 'interrupted')
     if (caseId === 'remove-again') return (await import('./sparse-view')).createSparseView(host, 'remove-again')
     if (caseId === 'restore-original') return (await import('./sparse-view')).createSparseView(host, 'restore-original')
+    if (caseId === 'remove-on-return') return (await import('./sparse-view')).createSparseView(host, 'remove-on-return')
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

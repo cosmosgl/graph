@@ -84,6 +84,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Repeat the full return on another supported adapter.',
   },
+  'production-graph-api/remove-on-return': {
+    badge: 'Third removal matches',
+    tone: 'pass',
+    finding: 'Point 1 stayed at x = 56 and grew from 12 to 24 CSS px on the edit frame. All four clicks immediately returned background.',
+    area: 'Integration',
+    status: '25 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: '50 frame pairs, 200 site clicks and 500 area ID lists agreed' },
+      { tone: 'pass', text: 'At 500 ms into the third fade, both packages reproduced the full canvas from just before the removal' },
+      { tone: 'info', text: 'The bright link at x = 80 stopped picking on the same frame as its removed endpoint' },
+    ],
+    next: 'Repeat this four-site comparison on another supported adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

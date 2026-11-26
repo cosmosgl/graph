@@ -14,6 +14,8 @@ For the second removal, inspect `captures/repeated-removal-m3-release/package-sp
 
 For the return to the original center, compare `remove-again` at 500 ms with `restore-original` at 0 ms in `captures/restore-original-m3-release/package-sparse-restore-original-{1,2}x.json`. The three click sites are x = 48 (`old`), 64 (`midpoint`) and 80 (`destination`, the first restoration target). The `restoredOriginal` fields compare the initial and settled canvases within each package. The run’s `provenance.json` identifies the clean revision and package bundles.
 
+For removal during the return trip, open `captures/remove-on-return-m3-release/package-sparse-remove-on-return-{1,2}x.json`. Compare `restore-original` at 500 ms with `remove-on-return` at 0 ms and 500 ms. In this case, `sites.returnMidpoint` and the matching selection region are at x = 56. The other local probes stay at x = 48, 64 and 80. The run’s `provenance.json` identifies the clean revision, device reports and bundle hashes.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

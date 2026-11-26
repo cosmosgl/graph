@@ -3,7 +3,7 @@ import { comparePixels, type PixelComparison } from '../../runtime/compare-pixel
 import { writeArtifact } from '../../testing/artifacts'
 import { runSparseTransition, type SparseSample, type SparseScenario } from './sparse-transition'
 
-function expectedSelections (phase: SparseSample['phase'], time: number): SparseSample['selections'] {
+function expectedSelections (phase: SparseSample['phase'], time: number, includeReturnMidpoint = false): SparseSample['selections'] {
   // The default cubic easing gives the live center on each restoration leg,
   // including its first frame when the point has no paint.
   const t = time / 1000
@@ -11,8 +11,8 @@ function expectedSelections (phase: SparseSample['phase'], time: number): Sparse
   let x = 48
   if (phase === 'restore') x += 32 * progress
   if (phase === 'restore-original') x = 64 - 16 * progress
-  const absent = phase === 'remove' || phase === 'remove-again' || phase === 'snap-remove'
-  const local = (region: 'old' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
+  const absent = phase === 'remove' || phase === 'remove-again' || phase === 'remove-on-return' || phase === 'snap-remove'
+  const local = (region: 'old' | 'returnMidpoint' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
     region,
     // The 4 px rectangle also reaches half the full requested 24 px diameter.
     rectangle: !absent && Math.abs(center - x) <= 14 ? [1] : [],
@@ -20,15 +20,22 @@ function expectedSelections (phase: SparseSample['phase'], time: number): Sparse
     lasso: !absent && x >= center - 2 && x < center + 2 ? [1] : [],
   })
   const all = absent ? [0, 2] : [0, 1, 2]
-  return [local('old', 48), local('midpoint', 64), local('destination', 80), { region: 'all', rectangle: all, lasso: all }]
+  return [
+    local('old', 48),
+    ...(includeReturnMidpoint ? [local('returnMidpoint', 56)] : []),
+    local('midpoint', 64),
+    local('destination', 80),
+    { region: 'all', rectangle: all, lasso: all },
+  ]
 }
 
 type Measurements = Omit<SparseSample, 'phase' | 'time' | 'pixels'>
 type Comparison = Pick<SparseSample, 'phase' | 'time'> & PixelComparison & { webgl: Measurements; webgpu: Measurements }
 
-function compareMidpointFrames (samples: SparseSample[]): PixelComparison {
-  const restoring = samples.find(row => row.phase === 'restore' && row.time === 500)!
-  const removing = samples.find(row => row.phase === 'remove-again' && row.time === 500)!
+function compareMidpointFrames (samples: SparseSample[], removal: 'remove-again' | 'remove-on-return'): PixelComparison {
+  const restoration = removal === 'remove-again' ? 'restore' : 'restore-original'
+  const restoring = samples.find(row => row.phase === restoration && row.time === 500)!
+  const removing = samples.find(row => row.phase === removal && row.time === 500)!
   return comparePixels(restoring.pixels, removing.pixels)
 }
 
@@ -46,7 +53,9 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
     return { phase, time, ...comparePixels(pixels, other), webgl, webgpu }
   })
   const suffix = scenario === 'complete' ? 'transition' : scenario === 'interrupted' ? 'interruption' : scenario
-  const repeatedMidpoint = scenario === 'remove-again' ? { webgl: compareMidpointFrames(gl.samples), webgpu: compareMidpointFrames(gpu.samples) } : undefined
+  const repeatedMidpoint = scenario === 'remove-again' || scenario === 'remove-on-return'
+    ? { webgl: compareMidpointFrames(gl.samples, scenario), webgpu: compareMidpointFrames(gpu.samples, scenario) }
+    : undefined
   const restoredOriginal = scenario === 'restore-original'
     ? {
       webgl: comparePixels(gl.samples[0]!.pixels, gl.samples.at(-1)!.pixels),
@@ -226,4 +235,43 @@ it.each([1, 2] as const)('restores the original position halfway through the sec
     expect.soft(row.differingPixels, label).toBe(0)
   }
   expect(comparisons.at(-1)!.webgl).toEqual(comparisons[0]!.webgl)
+})
+
+it.each([1, 2] as const)('removes the slot halfway through its return to the original position at %i×', async ratio => {
+  const { comparisons, repeatedMidpoint } = await compareSparseTransition(ratio, 'remove-on-return')
+  const returning = comparisons.filter(row => row.phase === 'restore-original')
+  const fading = comparisons.filter(row => row.phase === 'remove-on-return')
+  expect(returning.map(row => row.time)).toEqual([0, 16, 250, 314, 315, 358, 359, 500])
+  expect(fading.map(row => row.time)).toEqual([0, 16, 250, 500, 750, 1000])
+  expect(comparisons.indexOf(fading[0]!)).toBe(comparisons.indexOf(returning.at(-1)!) + 1)
+  const before = returning.at(-1)!.webgl
+  const siteColors = (frame: Measurements): (number[] | undefined)[] => [
+    frame.sites?.old.rgb, frame.sites?.returnMidpoint?.rgb, frame.sites?.midpoint?.rgb, frame.sites?.destination.rgb,
+  ]
+  expect(before.pointBounds?.map(value => value / ratio)).toEqual([50, 90, 62, 102])
+  expect(before.linkRgb).toEqual([0, 128, 0])
+  expect(siteColors(before)).toEqual([[0, 0, 0], [64, 64, 0], [0, 128, 0], [0, 128, 0]])
+  expect(siteColors(fading[0]!.webgl)).toEqual([[255, 0, 0], [255, 0, 0], [255, 0, 0], [0, 255, 0]])
+  expect([before.sites?.old.pick, before.sites?.returnMidpoint?.pick, before.sites?.midpoint?.pick, before.sites?.destination.pick])
+    .toEqual(['Point 1', 'Point 1', 'Point 1', 'Link 0'])
+  expect(fading.filter(row => row.time % 500 === 0).map(row => row.webgl.pointBounds?.map(value => value / ratio) ?? null))
+    .toEqual([[44, 84, 68, 108], [50, 90, 62, 102], null])
+  expect(fading.map(row => row.webgl.linkRgb[1])).toEqual([255, 255, 239, 128, 16, 0])
+  expect(repeatedMidpoint?.webgl.differingPixels).toBe(0)
+  expect(repeatedMidpoint?.webgpu.differingPixels).toBe(0)
+  for (const row of comparisons) {
+    const label = `${row.phase} ${row.time} ms`
+    const frame = row.webgl
+    expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time, true))
+    expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
+    expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
+    const absent = row.phase === 'remove' || row.phase === 'remove-again' || row.phase === 'remove-on-return'
+    expect.soft(frame.sites?.returnMidpoint?.pick, label).toBe(absent ? 'Background' : 'Point 1')
+    if (row.phase === 'remove-on-return') {
+      expect.soft([frame.sites?.old.pick, frame.sites?.midpoint?.pick, frame.sites?.destination.pick, frame.picks.link], label)
+        .toEqual(['Background', 'Background', 'Background', 'Background'])
+    }
+    expect.soft(row.webgpu, label).toEqual(frame)
+    expect.soft(row.differingPixels, label).toBe(0)
+  }
 })
