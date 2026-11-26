@@ -36,11 +36,16 @@ The same eight frames also matched on Chromium's SwiftShader software adapter. T
 
 ## Point-only occlusion
 
-The stock performance story draws 200,000 circles in twelve clusters with links and simulation disabled. On Apple M3 in a 720 × 480 canvas at 1×, the same story and its two controls ran against the WebGL reference (`74a216a7`) and signed WebGPU standalone (`b52a9c7f`). The audit recorded GPU draw calls and compared all 345,600 RGBA pixels after turning culling on, off and back on.
+The stock performance story draws 200,000 circles in twelve seeded clusters. The simulation is paused and there are no links. On a 720 × 480 canvas at 1× on Apple M3, the WebGL reference (`74a216a7`) drew opaque cores front-to-back into depth, then painted translucent points and antialiased edges. The previous WebGPU standalone (`b52a9c7f`) used one blended point draw with the toggle in either position. It could use opaque point coverage to skip work on dense links.
 
-| Package | Culling off | Culling on | Differing on/off pixels, opaque / mixed colors |
-| --- | --- | --- | ---: |
-| WebGL | One blended point draw, depth disabled | Opaque cores write depth, then fringes and translucent points blend with depth testing | 0 / 0 |
-| WebGPU | One blended point draw | The same point draw with depth writes disabled | 0 / 0 |
+WebGPU now uses two point draws for sufficiently overlapping sprites on its own canvas. The first paints only fully opaque samples, giving points later in the public draw order a nearer depth. The second blends in the original order and the depth test rejects samples already hidden by an opaque point. The probe compared all 345,600 RGBA pixels with culling on, off and back on. Both the opaque preset and the preset with 30% translucent points matched the previous WebGPU framebuffer byte-for-byte. WebGL's own on/off frames also matched exactly. Across engines, 29 pixels in the opaque scene and 19 in the mixed scene differed by one channel level out of 255.
 
-The mixed preset gives 30% of the points alpha 0.4. Re-enabling culling also reproduced the first on-frame within each package. Across packages, 29 opaque-scene pixels and 19 mixed-scene pixels differed. Each difference was one channel level out of 255. The WebGPU renderer can skip dense links hidden by opaque points. This point-only story takes a different path. Draw counts establish the behavior of the toggle. A matched frame-time comparison is still needed to quantify its performance impact. The exact story source, probe and results are in `captures/signed-point-occlusion-20261126/`.
+| Completed draw on M3 | Opaque, culling on / off | Mixed, culling on / off |
+| --- | --- | --- |
+| WebGL reference | 4.55–5.10 / 29.05–29.30 ms | 3.70–5.20 / 28.05–29.00 ms |
+| Previous WebGPU | 44.75–44.95 / 44.00–45.40 ms | 44.55–47.50 / 44.20–44.85 ms |
+| WebGPU with ranked depth | 7.65–8.30 / 50.40–51.45 ms | 7.15–8.20 / 46.25–46.65 ms |
+
+Each range spans two independent process medians. The host requested and waited for one complete frame at a time, with three warmups and five timed draws per state, twice per process. Reversing engine, alpha and toggle order kept the improvement visible in both runs. These are completed-draw measurements with the stock data and camera. The story normally runs its own animation loop.
+
+A separate 1–16 px diameter sweep showed why the renderer keeps one draw for small points. At 7 px the estimated sprite area was 28 times the backing-canvas area and the advantage was marginal. At 9 px it was 47 times and the ranked passes saved at least 2.3 ms in each order. The renderer enables this path at 40 times the canvas area. Its estimate samples up to 64 point sizes and colors when styles change. Picking, highlighted point groups and host-owned depth retain their existing draws. The stock story replay, exact package bytes, per-frame results and diameter sweep are recorded in `captures/signed-point-occlusion-20261126/`.

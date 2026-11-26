@@ -18,9 +18,9 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   return (floor(scaled) + step(vec2f(0.5), fract(scaled))) / subdivisions;
 }
 
-@vertex fn pointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
+fn spriteVertex(vertex: u32, rank: u32) -> Sprite {
   var out: Sprite;
-  let i = pointOrder[instance];
+  let i = pointOrder[rank];
   let position = positions[i];
   out.position = vec4f(2,2,2,1);
   if (position.w > 0.5 && params.modes.x > 0.0) { return out; }
@@ -84,6 +84,26 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   }
   out.position = clip(edge * windowAxes);
   return out;
+}
+
+@vertex fn pointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
+  return spriteVertex(vertex, instance);
+}
+
+// Later entries in the public paint order are nearer. Each point gets the
+// same depth in both passes, strictly between the near plane and clear depth.
+fn rankedSprite(vertex: u32, rank: u32) -> Sprite {
+  var out = spriteVertex(vertex, rank);
+  out.position.z = (params.modes.z - f32(rank)) / (params.modes.z + 1.0);
+  return out;
+}
+
+@vertex fn pointCoreVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
+  return rankedSprite(vertex, u32(params.modes.z) - 1u - instance);
+}
+
+@vertex fn pointFringeVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Sprite {
+  return rankedSprite(vertex, instance);
 }
 
 fn shadePoint(input: Sprite) -> vec4f {
@@ -163,4 +183,10 @@ fn shadePoint(input: Sprite) -> vec4f {
 @fragment fn opaquePointFragment(input: Sprite) -> @location(0) vec4f {
   if (shadePoint(input).a != 1.0) { discard; }
   return vec4f(0);
+}
+
+@fragment fn pointCoreFragment(input: Sprite) -> @location(0) vec4f {
+  let color = shadePoint(input);
+  if (color.a != 1.0) { discard; }
+  return color;
 }

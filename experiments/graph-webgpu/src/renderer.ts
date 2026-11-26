@@ -12,6 +12,7 @@ import { focusedPointRingOpacity, hoveredPointRingOpacity } from '../../../src/v
 import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
 import { Points, pointStride, shadeDirection, type PointChannels } from './modules/Points'
+import { estimateOpaqueArea } from './modules/Points/occlusion'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import { captureSizes, displayedSize, type SizeValues } from './size-transition'
@@ -62,7 +63,7 @@ export interface GraphPick {
 type Rgba = [number, number, number, number]
 type PositionSource = { buffer: Buffer; pointCount: number }
 type DrawKind = 'point' | 'pointRing' | 'pointerPoint' | 'link' | 'solidLink' | 'uniformRgbLink'
-type CoverageMode = 'none' | 'mark' | 'test'
+type CoverageMode = 'none' | 'mark' | 'test' | 'pointCore' | 'pointFringe'
 type PreviousStyles = {
   points?: Buffer; links?: Buffer;
   pointCount: number; linkCount: number;
@@ -86,6 +87,7 @@ type EncodeOptions = {
   linkPickPixel?: [number, number];
   fragmentOffset?: readonly [number, number];
   coverLinks?: boolean;
+  coverPoints?: boolean;
 }
 const layout: ShaderLayout = {
   attributes: [],
@@ -144,6 +146,7 @@ export class GraphRenderer {
   private order?: Uint32Array
   private baseOrder?: Uint32Array
   private pointSizes: SizeValues = 0
+  private opaquePointArea = 0
   private previous?: PreviousStyles
   private interpolation: StyleTransition
   private pointCount = 0
@@ -209,6 +212,7 @@ export class GraphRenderer {
         if (result.previous && previous) previous.points = result.previous
         if (result.colors) this.highlightPass.setColors(result.colors)
         this.pointSizes = sizes
+        this.opaquePointArea = estimateOpaqueArea(this.data)
       } else if (options.linkTopologyOnly && this.pointBuffer && this.pointCount === this.data.pointsNumber) {
         this.lines.update(this.data, this.config, false)
       } else if (widthsOnly) {
@@ -289,17 +293,25 @@ export class GraphRenderer {
   public draw (view: GraphView, target?: Framebuffer): void {
     const framebuffer = target ?? this.device.canvasContext?.getCurrentFramebuffer()
     if (!framebuffer || this.isDisposed) return
-    // On the owned canvas the existing depth attachment can reject link
-    // fragments hidden by opaque points. Reserve the extra point draw for
-    // dense graphs with at least one link per device pixel.
-    const coverLinks = !!this.options.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
-      !!framebuffer.depthStencilAttachment && framebuffer.colorAttachments[0]!.texture.samples === 1 &&
-      this.config.renderLinks && this.lines.count >= framebuffer.width * framebuffer.height && this.canUseSolidLinks(view)
+    // External framebuffers and open host passes retain their existing depth.
+    // On the owned canvas, dense solid links get first use of opaque coverage.
+    const ownsDepth = !!this.options.ownsCanvas && !target && this.config.pointOcclusionCulling && this.config.pointOpacity === 1 &&
+      !!framebuffer.depthStencilAttachment && framebuffer.colorAttachments[0]!.texture.samples === 1
+    const pixels = framebuffer.width * framebuffer.height
+    const coverLinks = ownsDepth && this.config.renderLinks && this.lines.count >= pixels && this.canUseSolidLinks(view)
+    const zoom = this.config.scalePointsOnZoom ? view.scale : Math.min(5, Math.max(1, view.scale * 0.01))
+    const diameterScale = this.config.pointSizeScale * zoom * view.pixelRatio
+    // The 200k-point M3 sweep had a marginal gain at 28 sprite pixels per
+    // canvas pixel and a repeatable gain at 47. Sparse clouds keep one draw.
+    // At most 2^23 ranks fit distinctly with room for the clear depth.
+    const coverPoints = ownsDepth && !coverLinks && this.config.highlightedPointIndices === undefined &&
+      this.opaquePointArea * diameterScale ** 2 >= 40 * pixels &&
+      this.pointCount <= 2 ** 23 && this.pointCount === this.positionSource()?.pointCount
     const pass = this.device.beginRenderPass({
-      framebuffer, clearColor: this.transparentBackground, clearDepth: coverLinks ? 1 : false, clearStencil: false,
+      framebuffer, clearColor: this.transparentBackground, clearDepth: coverLinks || coverPoints ? 1 : false, clearStencil: false,
     })
     try {
-      this.encode(pass, framebuffer, view, [0, 0, framebuffer.width, framebuffer.height], { coverLinks })
+      this.encode(pass, framebuffer, view, [0, 0, framebuffer.width, framebuffer.height], { coverLinks, coverPoints })
     } finally { pass.end() }
     this.device.submit()
     if ((view.styleProgress ?? 1) >= 1) this.releasePrevious()
@@ -382,6 +394,7 @@ export class GraphRenderer {
     this.orderBuffer = orderBuffer
     this.pointSizes = pointSizes
     this.pointCount = pointCount
+    this.opaquePointArea = estimateOpaqueArea(data)
     const [r, g, b, a] = clearColor
     this.transparentBackground = [r * a, g * a, b * a, a]
     this.greyExitColor = greyExitColor
@@ -453,22 +466,27 @@ export class GraphRenderer {
     let kernel = this.kernels.get(key)
     if (!kernel) {
       const source = kind === 'point' ? this.pointSource : kind === 'pointerPoint' ? pointerShader : kind === 'pointRing' ? pointRingShader : this.linkSource
+      const ranked = coverage === 'pointCore' || coverage === 'pointFringe'
+      const vertexKind = ranked ? coverage : kind === 'uniformRgbLink' ? 'solidLink' : kind
+      const fragmentKind = coverage === 'pointCore' ? coverage : coverage === 'mark' ? 'opaquePoint' : kind
+      const depthWriteEnabled = coverage === 'mark' || coverage === 'pointCore'
+      const depthCompare = coverage === 'test' || ranked ? 'less' : 'always'
       kernel = new RenderKernel(this.device, {
         id: `cosmos-${key}`,
         vertexSource: source,
         fragmentSource: source,
-        vertexEntryPoint: kind === 'uniformRgbLink' ? 'solidLinkVertex' : `${kind}Vertex`,
-        fragmentEntryPoint: coverage === 'mark' ? 'opaquePointFragment' : `${kind}Fragment`,
+        vertexEntryPoint: `${vertexKind}Vertex`,
+        fragmentEntryPoint: `${fragmentKind}Fragment`,
         topology: 'triangle-strip',
         shaderLayout: layout,
         colorAttachmentFormats: [color],
         depthStencilAttachmentFormat: depth,
         parameters: {
-          ...(depth ? { depthWriteEnabled: coverage === 'mark', depthCompare: coverage === 'test' ? 'less' as const : 'always' as const } : {}),
+          ...(depth ? { depthWriteEnabled, depthCompare } : {}),
           colorMask: coverage === 'mark' ? 0 : 0xf,
           sampleCount: samples,
           cullMode: 'none',
-          blend: !picking && coverage !== 'mark',
+          blend: !picking && !depthWriteEnabled,
           blendColorOperation: 'add',
           blendColorSrcFactor: 'src-alpha',
           blendColorDstFactor: 'one-minus-src-alpha',
@@ -484,7 +502,7 @@ export class GraphRenderer {
 
   private encode (
     pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number],
-    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, fragmentOffset, coverLinks = false }: EncodeOptions
+    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, fragmentOffset, coverLinks = false, coverPoints = false }: EncodeOptions
   ): void {
     const position = this.positionSource()
     if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.lines.buffer || !this.points.atlas) return
@@ -539,7 +557,12 @@ export class GraphRenderer {
     }
     if (options.points === false) return
     if (linkPickPixel) pass.setParameters({ viewport: [0, 0, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE] })
-    this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking).draw(pass, {
+    if (coverPoints) {
+      this.kernel(framebuffer, 'point', false, 'pointCore').draw(pass, {
+        vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
+      })
+    }
+    this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking, coverPoints ? 'pointFringe' : 'none').draw(pass, {
       vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
     })
     if (!picking && (view.hoveredPoint !== undefined || view.hostHoveredPoint !== undefined || c.focusedPointIndex !== undefined)) {
