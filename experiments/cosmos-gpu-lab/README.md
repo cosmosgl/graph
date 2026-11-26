@@ -498,6 +498,23 @@ the reproducible CI patch and the original failures under
 TypeScript results in its sibling `consumer/` directory.
 [Reference Deck contracts](../../test/deck-layers.test.ts) · [Candidate host contracts](../graph-webgpu/test/host.test.ts) · [CI workflow](../../.github/workflows/ci.yml)
 
+#### Linux release rehearsal
+
+On Debian 12 arm64, Node 22.23.5 passed the frozen strict-peer install,
+lockstep, lint, typecheck, public builds, pack commands and Pages build.
+All nine Graph and Deck distribution files matched the signed `951ec4d7`
+packages byte for byte. The production dependency audit reported zero
+known vulnerabilities.
+
+Chromium 151 read a GPU buffer on Linux, then lost the device on its first
+canvas clear. Both SwiftShader runs initially passed 39 of 63 tests. Adding
+`--enable-features=Vulkan` and `--use-vulkan=swiftshader` made a red texel
+visible in the browser screenshot. All 63 tests then passed on native Debian
+arm64 and on Ubuntu 26.04 amd64 under emulation. The local capture includes
+the Linux-only launch patch, both sets of logs and the plain WebGPU control
+in `captures/linux-public-promotion-951ec4d7-20261126/`. GitHub's hosted
+Ubuntu runner and a second physical GPU still need their own runs.
+
 ### Historical replays
 
 At promotion, record the full Git revision of the last WebGL source, its frozen
