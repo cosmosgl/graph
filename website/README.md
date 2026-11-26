@@ -40,7 +40,13 @@ The full WebGL benchmark also rendered 10,000,000 points. On the tested WebGPU
 device that selection needed 160,000,000 bytes for positions, exceeding the
 134,217,728-byte limit granted to this device for a single storage binding.
 Chrome reported a 4,294,967,292-byte binding limit on the underlying adapter.
-The page reported the limit before generating the points. The full Roads
-dataset has 1,890,815 points and 2,315,222 links. Its WebGPU point styles alone
-would require 181,518,240 bytes at 96 bytes per point. Both full-size examples
-remain outside the WebGPU candidate’s verified million-point range.
+The page reported the limit before generating the points.
+
+The full California–Nevada Roads page drew all 1,890,815 points and 2,315,222
+links with the frozen WebGL package. With the WebGPU package from `78f957f7`
+it stopped before its first draw. The point style buffer required 181,518,240
+bytes at 96 bytes per point. On the same M3, a browser probe that requested a
+256 MiB binding let the unchanged page draw both full counts. The ordinary
+Graph constructor still receives 128 MiB. The Lab roadmap tracks both
+showcases before the public site switches engines.
+[Migration roadmap](../experiments/cosmos-gpu-lab/src/docs/roadmap.md#what-remains)
