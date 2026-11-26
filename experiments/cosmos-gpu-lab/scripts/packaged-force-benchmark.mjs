@@ -7,6 +7,7 @@ import { isDeepStrictEqual, parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { captureBenchmarkSource, sha256 } from './benchmark-source.mjs'
+import { measureClickPhases, summarizeClickPhases } from './profile-click-phases.mjs'
 import { installWorkflowTrace } from './force-workflow-trace.mjs'
 import { calibrate, compare, formatComparison } from './migration-results.mjs'
 
@@ -15,10 +16,14 @@ const repo = fileURLToPath(new URL('../../../', import.meta.url))
 const { values } = parseArgs({ options: {
   fixture: { type: 'string' }, points: { type: 'string', default: '8192' }, smoke: { type: 'boolean' }, layout: { type: 'boolean' },
   composed: { type: 'boolean' }, 'webgl-controls': { type: 'string' }, 'adapter-vendor': { type: 'string' },
-  'matched-ticks': { type: 'boolean' }, bundles: { type: 'string' }, 'trace-engine': { type: 'string' },
+  'click-phases': { type: 'boolean' }, 'matched-ticks': { type: 'boolean' }, bundles: { type: 'string' }, 'trace-engine': { type: 'string' },
 } })
 const matched = !!values['matched-ticks']
 const useBundleCopies = matched || !!values.bundles
+const clickPhases = !!values['click-phases']
+if (clickPhases && (!matched || !values.bundles || !values.fixture || values.smoke || values.layout || values['trace-engine'])) {
+  throw new Error('Use --click-phases with --matched-ticks, a frozen --bundles directory and one --fixture')
+}
 const traceEngine = values['trace-engine']
 if (traceEngine && (!matched || !values.fixture || !['webgl', 'webgpu'].includes(traceEngine))) {
   throw new Error('Trace one --fixture with --matched-ticks and --trace-engine webgl or webgpu')
@@ -141,6 +146,14 @@ async function run(url, kind, engine, name) {
     const bounds = await page.locator('#graph canvas').boundingBox()
     if (!bounds || bounds.width !== 961 || bounds.height !== 541 || bounds.x < 0 || bounds.y < 0 ||
       bounds.x + bounds.width > 1050 || bounds.y + bounds.height > 680) throw new Error('Canvas not fully visible')
+    if (clickPhases) {
+      entry.stage = 'balanced click phases'
+      entry.result = await measureClickPhases(page, bounds)
+      entry.stage = 'complete'
+      entry.status = 'complete'
+      console.log(`${kind} ${name}: ${entry.result.phases.length} trusted releases at tick 58`)
+      return entry
+    }
     if (values.layout) {
       entry.result = await snapshot()
       entry.result.checkpoints = []
@@ -236,9 +249,17 @@ try {
   const calibrations = new Map()
   for (const kind of kinds) {
     await mkdir(join(capture, kind))
-    if (matched && !values.smoke && !traceEngine) calibrations.set(kind, await runControls(kind))
+    if (matched && !values.smoke && !traceEngine && !clickPhases) calibrations.set(kind, await runControls(kind))
   }
   for (const kind of kinds) {
+    if (clickPhases) {
+      const trials = []
+      for (const [index, engine] of ['webgl', 'webgpu', 'webgpu', 'webgl'].entries()) {
+        trials.push(await run(url, kind, engine, `phase-${index + 1}-${engine}`))
+      }
+      await save(`${kind}/phase-comparison`, summarizeClickPhases(trials))
+      continue
+    }
     if (traceEngine) {
       await run(url, kind, traceEngine, `trace-${traceEngine}`)
       continue

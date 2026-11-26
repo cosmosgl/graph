@@ -1,4 +1,48 @@
-## Final signed million-point packages
+## Fresh pointer picking at one million points
+
+At the center of the million-point hub fixture, WebGPU spent 4.06 ms drawing the point pick window and another 4.06 ms drawing the link beneath it. Clearing an empty window took less than the GPU timer resolution. The same costs appeared over the isolated link and empty background. A fresh click submitted four vertices for each of one million points and 999,990 links, regardless of how many could reach the pointer.
+
+On M3, filtering the live positions and rasterizing the surviving instances in their original order reduced GPU time at all four locations. A point anywhere in the pick window takes precedence over the link. For a positive-size pointer sprite centered strictly inside the window, its minimum radius of one pick texel guarantees that it covers a sample. In that case the GPU can omit the link draw. The normal point shader still decides which point wins.
+
+| Median GPU time at tick 58 | Point 0 | Link 999,989 | Background | Crowded Point 984,615 |
+| --- | ---: | ---: | ---: | ---: |
+| Original signed WebGPU | 8.13 ms | 8.13 ms | 8.13 ms | 9.50 ms |
+| First-to-last candidate range | 1.31 ms | 1.38 ms | 1.28 ms | 10.58 ms |
+| Ordered candidates with point priority | 1.41 ms | 1.44 ms | 1.34 ms | 2.72 ms |
+
+The first draft still drew almost every instance when the first and last candidates were far apart in draw order. The ordered list removed those gaps. With the final prototype, the fresh renderer query through readback took 2.20–2.35 ms over the first three targets and 3.55 ms over the crowded point. Small graphs, transitions, curved or unblended links, and host-supplied draw passes keep the original raster path.
+
+For this diagnostic only, the final pinned edge connects Point 0 to the first community anchor, is 6 CSS pixels wide, and that anchor comes last in point order. Each real package click returned the expected ID. The timing harness takes six GPU samples per target after two warmups, rotates the targets and draw masks, and includes the filtering passes in the GPU totals. Replay it with `node experiments/cosmos-gpu-lab/scripts/profile-packaged-pick.mjs --bundles NAME` from the repository root. The signed, range and final prototype captures are `pointer-pass-2026-11-26T12-53-55-798Z`, `pointer-pass-2026-11-26T12-54-08-186Z` and `pointer-pass-2026-11-26T13-02-52-805Z` under `captures/`. The official release comparison below uses the original edges and point order and times the first visible frame.
+
+### Original fixed-tick release comparison
+
+The clean tarball from `12c2b599` (`c7c523be`) and the WebGL control (`74a216a7`) ran the original dense and hub fixtures. Both WebGPU first clicks now produced visible feedback within one display interval in each engine order. The hub passed the 4.175 ms relative allowance in both orders. The dense result remains **unassessed** because the paired outcomes disagreed.
+
+| First trusted click at tick 58 | WebGL callback | WebGPU callback | WebGL visible | WebGPU visible | Relative result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Dense, WebGL first | 6.5 ms | 9.5 ms | 8.2 ms | 14.2 ms | 6.0 ms over WebGL |
+| Dense, WebGPU first | 7.9 ms | 7.8 ms | 15.5 ms | 14.4 ms | Within allowance |
+| Hub, WebGL first | 12.5 ms | 9.2 ms | 15.7 ms | 14.8 ms | Within allowance |
+| Hub, WebGPU first | 12.3 ms | 8.3 ms | 12.5 ms | 14.3 ms | Within allowance |
+
+In the first dense order, 3.0 ms of the 6.0 ms difference elapsed before the callback and 3.0 ms between callback and visible feedback. The second dense order reversed the end-to-end result. All 144 trusted clicks, ordered endpoints, fixed points, absence and public edits passed. Peak tracked allocation was 418.6 MiB on WebGL and 273.2 MiB on WebGPU, and every device released its tracked allocations. Resize passed on both topologies, as did dense topology updates. The steady frame and click p95 comparisons remained unassessed because paired WebGL results drifted. All predeclared metrics, original inputs, controls, orders and package hashes are in `captures/packaged-force-timing-2026-11-26T13-08-14-368Z/`.
+
+### Dense clicks across the refresh interval
+
+When the cursor has settled, WebGL dispatches the hover ID and coordinates it already holds. WebGPU makes a fresh query for each click. At million-point tick 58, this difference was visible even with the two engines receiving input across the same four quarters of the refresh interval.
+
+| Repeated release | WebGL callback | WebGPU callback | WebGL visible | WebGPU visible |
+| --- | ---: | ---: | ---: | ---: |
+| Point 0, WebGL first | 0.46 ms | 7.09 ms | 8.81 ms | 13.96 ms |
+| Point 0, WebGPU first | 0.59 ms | 6.94 ms | 8.63 ms | 15.37 ms |
+| Background, WebGL first | 0.45 ms | 5.89 ms | 9.30 ms | 14.55 ms |
+| Background, WebGPU first | 0.60 ms | 5.97 ms | 9.10 ms | 15.23 ms |
+
+The 48 WebGPU point releases each made one fresh pick followed by one coordinate read. Median durations in the two orders were 5.20 / 5.25 ms for picking and 1.40 / 1.30 ms for coordinates. Background releases needed only the pick, with medians of 5.45 / 5.50 ms. This measures the part a combined fresh ID-and-coordinate result could save. Reusing hover can return the wrong ID after the application changes the projection.
+
+Each of the four fresh sessions alternated the original point and background, placed mouse-down before the scheduled release, and held the graph at tick 58. All 192 releases were trusted and correct. Each target received six requested releases per quarter, with the order rotated across repetitions. Actual phases were measured from the most recent animation-frame timestamp. All four quarters were represented in each session and target. The table weights their measured means equally and retains off-target arrivals. The graph stayed still while the input waited, so the first-click qualification remains the comparison in the preceding section. Replay with `--matched-ticks --click-phases --fixture dense --points 1000000 --bundles NAME` on the packaged force benchmark. The requested and observed phases, method durations and retained inputs are in `captures/packaged-force-timing-2026-11-26T13-19-14-895Z/`.
+
+## Signed million-point packages before pointer filtering
 
 The release candidate at `e8fa6c3b` used the actual Graph tarball's standalone distribution (`b52a9c7f`, luma.gl 10.0.0-alpha.14) and the WebGL reference (`74a216a7`, luma.gl 9.3.6). The full package hashes and tarballs are in `captures/signed-graph-deck-release-xr98e9r4/`. Each number below is the average of the two paired trials, ordered WebGL / WebGPU. “A/A spread”, “WebGL drift” and “mixed orders” identify why a comparison remained unassessed.
 
