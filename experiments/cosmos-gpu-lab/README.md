@@ -474,6 +474,13 @@ control passed both full checks after the app installed its two missing D3
 type packages. Qualify the dependency family against these imports before
 promising full declaration checking for Deck.
 
+The external consumer from `78f957f7` also passed strict application checks
+on TypeScript 7.0.2. With dependency checks enabled, the Graph-only app passed
+on 6.0.3 and 7.0.2. The full two-owner app failed on both at the same luma
+`GPUCanvasConfigurationOut` declaration. The three compiler versions, two
+apps and both settings are recorded under
+`captures/signed-graph-deck-78f957f7-jo49x0fh/strict-consumers/`.
+
 In the scratch checkout, the ordinary typecheck covered the WebGPU source,
 shared stories, integration and website. The default browser job selected
 all 13 candidate test files and a public Deck test file on Chromium's
@@ -488,15 +495,31 @@ it once per distinct timeline tick. After Deck finalized the first layer,
 its pick returned `null` and the survivor kept stepping and picking point 0.
 Both results and the replay are in
 `captures/signed-graph-deck-951ec4d7-bi347zmj/shared-timeline/`.
-Add that case to default CI, then port dragging through the active viewport and bounds reads
-interrupted by a data replacement. Also port setters queued during
-initialization or configuration changes, camera fitting at million-unit
-coordinates, repulsion around distant outliers and concave or collapsed
-selections. The capture contains a file-by-file coverage map,
+The original capture contains a file-by-file coverage map,
 the reproducible CI patch and the original failures under
 `captures/public-promotion-cfaae9f7-20261126/ci-routing/`, with the external
 TypeScript results in its sibling `consumer/` directory.
 [Reference Deck contracts](../../test/deck-layers.test.ts) · [Candidate host contracts](../graph-webgpu/test/host.test.ts) · [CI workflow](../../.github/workflows/ci.yml)
+
+The branch's WebGPU CI job installs bundled Chromium and runs the candidate
+suite with `COSMOS_TEST_SWIFTSHADER=1`. It then builds and installs both
+tarballs into a clean TypeScript app. The packed check covers the standalone
+script, four ownership and display-density combinations, a shared timeline,
+two viewport drags and two stale bounds completions. In the quarter-scale
+thumbnail, Deck 10 originally reported the press coordinates throughout a
+drag. The same gesture on the corrected package moved point 0 to its new
+location and a fresh pick at the old position missed. The geometry suite runs
+unchanged against both engines. The public config tests exercise callbacks
+that replace data or destroy the graph during initialization.
+[Packed app contracts](../graph-webgpu/fixtures/deck-consumer/contracts.ts) · [Shared geometry cases](../../test/public-geometry.ts) · [Config and pending edits](../graph-webgpu/test/config-change-pending-data.test.ts)
+
+For the full website Roads check, both builds loaded the original compressed
+DIMACS dataset (SHA-256 `c6039f43`). On M3 the frozen WebGL package drew
+1,890,815 points and 2,315,222 road links. The default WebGPU device stopped
+before drawing because the 181,518,240-byte point style buffer exceeded its
+128 MiB per-binding grant. Changing only that grant to 256 MiB in the browser
+probe let the signed package draw both counts. The screenshots, validation
+error and replay are in `captures/full-roads-754a02b6-20261126/`.
 
 #### Linux release rehearsal
 
@@ -514,6 +537,21 @@ arm64 and on Ubuntu 26.04 amd64 under emulation. The local capture includes
 the Linux-only launch patch, both sets of logs and the plain WebGPU control
 in `captures/linux-public-promotion-951ec4d7-20261126/`. GitHub's hosted
 Ubuntu runner and a second physical GPU still need their own runs.
+
+The candidate CI suite at `2b2c17a4` ran on a clean Linux source archive.
+On the first cold software run, the label, click, hover and camera tests
+finished their observation windows before the GPU had supplied the result.
+The tests now poll the actual value with a longer allowance on SwiftShader.
+All 84 source cases and all ten packed browser checks passed on Debian arm64
+with Node 22.23.5 and Chromium 151.0.7922.34. The full logs are under
+`captures/private-webgpu-ci-78f957f7-20261126/final/`. On macOS the reference job's
+single-worker schedule passed 293 WebGL and Deck cases with one opt-in skip.
+A parallel run during qualification had three failures, including two WebGL
+area queries that returned `null`. The package pair also passed a fresh
+offline `npm ci --strict-peer-deps` and production app build with npm lifecycle
+scripts enabled. The macOS and Linux Graph tarballs contain identical files
+and tar metadata. Only the OS byte in their gzip headers differs. The two Deck
+archives match byte for byte.
 
 ### Historical replays
 

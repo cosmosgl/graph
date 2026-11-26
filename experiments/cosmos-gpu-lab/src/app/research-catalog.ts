@@ -408,7 +408,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       method: 'method',
       evidence: 'host-ownership',
-      next: 'Bring the shared Graph timeline check into release CI, then test viewport dragging and stale bounds after data replacement.',
+      next: 'Run the packed Deck ownership and recovery checks on a second physical GPU when one becomes available.',
       reproduce: 'Press Run, pause the layout, then select and drag a point.',
       investigations: [
         { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
