@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { cpus } from 'node:os'
+import { cpus, loadavg } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual, parseArgs } from 'node:util'
@@ -13,7 +13,11 @@ const repo = fileURLToPath(new URL('../../../', import.meta.url))
 const { values } = parseArgs({ options: {
   fixture: { type: 'string' }, points: { type: 'string', default: '8192' }, smoke: { type: 'boolean' }, layout: { type: 'boolean' },
   composed: { type: 'boolean' }, 'webgl-controls': { type: 'string' }, 'adapter-vendor': { type: 'string' },
+  'matched-ticks': { type: 'boolean' }, bundles: { type: 'string' },
 } })
+const matched = !!values['matched-ticks']
+if (matched && values.layout) throw new Error('Choose either fixed-tick timings or the layout replay')
+if (values.bundles && !matched) throw new Error('Use --bundles with --matched-ticks')
 if (values.composed && !values.layout) throw new Error('Use --composed with --layout for the eight-force fixed-tick replay')
 if (values['webgl-controls'] && (!values.layout || values.smoke)) throw new Error('Reuse controls only for a complete fixed-tick replay')
 const pointCount = Number(values.points)
@@ -34,13 +38,27 @@ await mkdir(resolve(capture, '..'), { recursive: true })
 await mkdir(capture)
 const save = (name, object) => writeFile(join(capture, `${name}.json`), `${JSON.stringify(object, null, 2)}\n`)
 const source = await captureBenchmarkSource(repo, lab, capture)
+const pinned = {}
+if (matched) {
+  const directory = values.bundles ? resolve(root, values.bundles) : null
+  if (directory && !directory.startsWith(root + sep)) throw new Error('Choose a saved bundle directory under captures/')
+  const defaults = { webgl: join(repo, 'dist/index.min.js'), webgpu: join(repo, 'experiments/graph-webgpu/dist/index.min.js') }
+  for (const engine of ['webgl', 'webgpu']) {
+    pinned[engine] = await readFile(directory ? join(directory, `${engine}.js`) : defaults[engine])
+    await writeFile(join(capture, `${engine}.js`), pinned[engine])
+  }
+  source.productionSha256 = await sha256(join(capture, 'webgl.js'))
+  source.bundlesFrom = directory ? relative(root, directory) : 'workspace distributions'
+  source.workspaceLuma = source.luma
+  source.luma = {}
+}
 if (controlsDir) {
   const previous = JSON.parse(await readFile(join(controlsDir, 'source.json'), 'utf8'))
   if (source.productionSha256 !== previous.productionSha256) throw new Error('WebGL control bundle hash changed')
   if (cpu !== previous.cpu || vendor !== (previous.adapterVendor ?? 'apple')) throw new Error('WebGL controls used a different CPU or GPU vendor')
   source.webglControls = relative(root, controlsDir)
 }
-source.webgpuSha256 = await sha256(join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
+source.webgpuSha256 = await sha256(matched ? join(capture, 'webgpu.js') : join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
 source.adapterVendor = vendor
 source.cpu = cpu
 source.node = process.version
@@ -50,7 +68,10 @@ await save('source', source)
 console.log(`Timing the two packages in ${relative(repo, capture)}`)
 const server = await createServer({ root: lab, server: { host: '127.0.0.1', watch: null } })
 const metrics = ['Steady frame p95', 'Click p95', 'First click', 'Slowest click', 'Peak tracked memory']
-if (pointCount > 8192) metrics.push('Cold startup', 'Point update', 'Topology update', 'Full replacement', 'Resize')
+if (pointCount > 8192) {
+  if (!matched) metrics.push('Cold startup')
+  metrics.push('Point update', 'Topology update', 'Full replacement', 'Resize')
+}
 
 async function comparePositions(referencePath, coordinates, radius) {
   const earlier = await readFile(referencePath)
@@ -73,6 +94,7 @@ function distribution(samples) {
 
 async function run(url, kind, engine, name) {
   const entry = { kind, engine, name, pointCount, stage: 'open', status: 'started', diagnostics: [], result: null }
+  if (matched) entry.host = { started: new Date().toISOString(), loadBefore: loadavg() }
   let browser
   let page
   const log = error => { if (entry.diagnostics.length < 25) entry.diagnostics.push(String(error).slice(0, 700)) }
@@ -84,10 +106,18 @@ async function run(url, kind, engine, name) {
     page = await browser.newPage({ viewport: { width: 1050, height: 680 }, deviceScaleFactor: 2 })
     page.on('pageerror', log)
     page.on('console', message => { if (message.type() === 'error') log(message.text()) })
+    // Serve the exact immutable UMD bytes from this run's archive. Another build
+    // can replace either workspace dist long after this browser process starts.
+    if (matched) await page.route('**/__force_package__.js', route => route.fulfill({ contentType: 'application/javascript', body: pinned[engine] }))
     await page.goto(url)
     await page.bringToFront()
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
-    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed, vendor])
+    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed, vendor,
+      matched, matched ? '/__force_package__.js' : undefined])
+    if (matched && !source.luma[engine]) {
+      source.luma[engine] = await page.evaluate(() => window.luma.VERSION)
+      await save('source', source)
+    }
     const bounds = await page.locator('#graph canvas').boundingBox()
     if (!bounds || bounds.width !== 961 || bounds.height !== 541 || bounds.x < 0 || bounds.y < 0 ||
       bounds.x + bounds.width > 1050 || bounds.y + bounds.height > 680) throw new Error('Canvas not fully visible')
@@ -140,6 +170,13 @@ async function run(url, kind, engine, name) {
     await page.evaluate(() => window.forceTiming.finish())
     entry.result = await snapshot()
     const { picked, quality, steady, refreshMs } = entry.result
+    if (matched) {
+      const first = values.smoke ? 3 : 8
+      const last = first + (values.smoke ? 8 : 48)
+      const editTick = last + 2 * picked.length
+      if (steady.ticks.some((tick, i) => tick !== first + i) || picked.some((p, i) => p.inputTick !== last + 2 * (i + 1) || p.tick !== p.inputTick) ||
+          entry.result.editTick !== editTick || entry.result.submittedTicks !== editTick) throw new Error('Mismatched steady, click or edit ticks')
+    }
     entry.result.click = distribution(picked.map(p => p.ms))
     entry.result.callback = distribution(picked.map(p => p.callbackAt - p.clickAt))
     entry.result.feedback = distribution(picked.map(p => p.feedbackAt - p.callbackAt))
@@ -156,6 +193,7 @@ async function run(url, kind, engine, name) {
     if (!entry.result && page && !page.isClosed()) entry.result = await snapshot().catch(() => null)
   } finally {
     clearTimeout(timeout)
+    if (matched) Object.assign(entry.host, { ended: new Date().toISOString(), loadAfter: loadavg() })
     try { await save(`${kind}/${name}`, entry) } finally { await browser?.close() }
   }
   return entry
@@ -164,8 +202,19 @@ async function run(url, kind, engine, name) {
 try {
   await server.listen(0)
   const url = `http://127.0.0.1:${server.httpServer.address().port}/packaged-force-benchmark.html`
+  async function runControls(kind) {
+    const controls = []
+    for (const name of ['control-1', 'control-2']) controls.push(await run(url, kind, 'webgl', name))
+    const calibration = calibrate(controls, metrics)
+    await save(`${kind}/calibration`, calibration)
+    return { controls, calibration }
+  }
+  const calibrations = new Map()
   for (const kind of kinds) {
     await mkdir(join(capture, kind))
+    if (matched && !values.smoke) calibrations.set(kind, await runControls(kind))
+  }
+  for (const kind of kinds) {
     if (values.smoke) {
       for (const engine of ['webgl', 'webgpu']) await run(url, kind, engine, `smoke-${engine}`)
       continue
@@ -211,15 +260,18 @@ try {
       await save(`${kind}/layout-comparison`, { rows, motion, complete: lanes.every(lane => lane.status === 'complete') })
       continue
     }
-    const controls = []
-    for (const name of ['control-1', 'control-2']) controls.push(await run(url, kind, 'webgl', name))
-    const calibration = calibrate(controls, metrics)
-    await save(`${kind}/calibration`, calibration)
+    const { controls, calibration } = calibrations.get(kind) ?? await runControls(kind)
     const pairs = []
     for (const [index, order] of [['webgl', 'webgpu'], ['webgpu', 'webgl']].entries()) {
       const pair = {}
       for (const engine of order) pair[engine] = await run(url, kind, engine, `pair-${index + 1}-${engine}`)
       pairs.push(pair)
+    }
+    if (matched) {
+      const lanes = [...controls, ...pairs.flatMap(pair => [pair.webgl, pair.webgpu])].filter(lane => lane.status === 'complete')
+      if (new Set(lanes.map(lane => lane.result.input)).size > 1 || new Set(lanes.map(lane => lane.browser)).size > 1) {
+        throw new Error('The matched controls and paired trials used different inputs or browsers')
+      }
     }
     const rows = compare(pairs, calibration)
     await save(`${kind}/comparison`, rows)

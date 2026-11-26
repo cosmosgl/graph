@@ -5,7 +5,7 @@ import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import { forceConfig, loadForce } from './fixture'
 import { scaleFixture, type ScaleCase } from './scale-fixture'
 import { layoutCheckpoints } from './scale-layout'
-import { measureScaleUpdates } from './scale-updates'
+import { measureScaleUpdates, type EditPhases } from './scale-updates'
 import { composedChannels, composedConfig, loadComposedChannels } from './scale-composed'
 
 const viewport = { width: 961, height: 541, pixelRatio: 2 }
@@ -15,7 +15,7 @@ const feedback = document.querySelector<HTMLOutputElement>('#feedback')!
 
 type Pick = {
   sample: number; requested: string; id: string; clickAt: number; callbackAt: number; feedbackAt: number;
-  trusted: boolean; tick: number; ms: number; xy: [number, number];
+  trusted: boolean; inputTick?: number; tick: number; ms: number; xy: [number, number];
 }
 function distribution (samples: number[]): { p50: number; p95: number; max: number } {
   const sorted = [...samples].sort((a, b) => a - b)
@@ -26,7 +26,10 @@ function distribution (samples: number[]): { p50: number; p95: number; max: numb
   }
 }
 
-async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false, composed = false, vendor = 'apple'): Promise<void> {
+async function open (
+  engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false, composed = false, vendor = 'apple',
+  matched = false, bundleUrl?: string
+): Promise<void> {
   if (navigator.userAgent.includes('HeadlessChrome') || devicePixelRatio !== viewport.pixelRatio) throw new Error('Requires foreground Chrome at DPR 2')
   const fixture = scaleFixture(kind, pointCount)
   const channels = composed ? composedChannels(fixture) : undefined
@@ -46,8 +49,8 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
     const hash = await crypto.subtle.digest('SHA-256', bytes.slice())
     return [key, [...new Uint8Array(hash)].map(x => x.toString(16).padStart(2, '0')).join('')]
   }))
-  const settings = { ...forceConfig(kind), ...(composed ? composedConfig : {}), enableRenderLoop: !layout, pixelRatio: viewport.pixelRatio }
-  const input = JSON.stringify({ arrays: Object.fromEntries(digests), settings, viewport })
+  const settings = { ...forceConfig(kind), ...(composed ? composedConfig : {}), enableRenderLoop: !layout && !matched, pixelRatio: viewport.pixelRatio }
+  const input = JSON.stringify({ arrays: Object.fromEntries(digests), settings, viewport, matched: matched || undefined })
   let hidden = document.visibilityState !== 'visible'
   document.addEventListener('visibilitychange', () => { hidden ||= document.visibilityState !== 'visible' })
   let error = ''
@@ -66,7 +69,8 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   let destroyed = false
   let peakBytes = 0
   function sampleMemory (): void { peakBytes = Math.max(peakBytes, memory.count) }
-  let current: { sample: number; requested: string; xy: [number, number] } | undefined
+  let current: { sample: number; requested: string; xy: [number, number]; inputTick?: number } | undefined
+  window.addEventListener('click', () => { if (current) current.inputTick = tick }, { capture: true })
   const picked: Pick[] = []
   function onPick (id: string, event: MouseEvent): void {
     const callbackAt = performance.now()
@@ -90,7 +94,7 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
       })
     })
   }
-  const GRAPH = await loadGraphPackage(engine)
+  const GRAPH = await loadGraphPackage(engine, document, bundleUrl)
   const startupStart = performance.now()
   const graph = new GRAPH(host, {
     ...settings,
@@ -190,7 +194,12 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   async function frames (count: number): Promise<void> {
     const target = observer.frames.length + count
     const deadline = performance.now() + 45000
-    while (observer.frames.length < target) await observer.after(observer.frames.at(-1)?.frame ?? 0, deadline - performance.now())
+    while (observer.frames.length < target) {
+      const last = observer.frames.at(-1)?.frame ?? 0
+      if (matched) graph.renderOneFrame()
+      const completed = await observer.after(last, deadline - performance.now())
+      if (matched && (completed.frame !== last + 1 || completed.tick !== tick)) throw new Error('A host frame skipped or coalesced a simulation tick')
+    }
     health()
   }
   const result = {
@@ -209,6 +218,8 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
     get submittedTicks (): number { return tick },
     startupMs,
     updates: {} as Partial<Awaited<ReturnType<typeof measureScaleUpdates>>>,
+    editTick: undefined as number | undefined,
+    editPhases: matched ? {} as Partial<Record<keyof Awaited<ReturnType<typeof measureScaleUpdates>>, EditPhases>> : undefined,
     memoryAfterTeardown: undefined as number | undefined,
     get peakBytes (): number { return peakBytes },
     get readyBeforeNotification (): number { return readyBeforeNotification },
@@ -248,8 +259,10 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
       async finish (): Promise<void> {
         health()
         graph.pause()
+        result.editTick = tick
+        if (matched) graph.setConfig({ enableRenderLoop: true })
         result.quality = await quality()
-        if (!layout && pointCount > 8192) result.updates = await measureScaleUpdates(graph, host, fixture, readPositions, sampleMemory)
+        if (!layout && pointCount > 8192) result.updates = await measureScaleUpdates(graph, host, fixture, readPositions, sampleMemory, result.editPhases)
         sampleMemory()
         destroyed = true
         observer.destroy()

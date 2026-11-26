@@ -77,3 +77,30 @@ The final block used fresh WebGL controls and paired the WebGL distribution `1b5
 | Peak tracked memory (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
 
 The means describe the measured runs. For example, dense topology replacement averaged 350.4 ms on WebGPU and 377.2 ms on WebGL, but the paired WebGL runs drifted beyond the control limit. The complete build hashes, independent controls, both engine orders, individual observations and per-metric reasons are in `captures/packaged-force-timing-2026-11-26T10-50-24-553Z/`.
+
+### Which ticks the autonomous trial measured
+
+Both independent controls and both paired WebGL trials took their 48 steady intervals from ticks 9–57 on each topology. WebGPU took them from ticks 8–56. No steady frame was coalesced. By the last click the WebGL callbacks had reached ticks 118–122, compared with ticks 98–99 on WebGPU. At teardown after the edits, WebGL had submitted 119–123 ticks and WebGPU 98–99. The old trial recorded the callback tick and final submission count. It did not record the tick when the browser delivered the click or the edit sequence began.
+
+Different layouts explain only part of the measurement problem. At exactly ticks 9–57 the dense WebGL controls measured frame p95 of 317.6 and 316.3 ms. The paired WebGL trials then measured 317.6 ms in the first order and 533.6 ms in the reverse order. On the hub, independent WebGL click p95 varied by 801.9 ms against a 16.7 ms cap. The hub's full replacements differed by 90.1 ms against 66.0 ms allowed. Successful picks and a healthy device confirmed the workload ran correctly in all cases.
+
+### A matched tick and an empty input queue
+
+Using the same archived distributions, the host completed ticks 8–56 consecutively, held every click at ticks 58, 60, …, 80, and paused at tick 80 for editing. All 144 click IDs, 999,990 ordered link endpoints, fixed points and the absent slot passed. Each graph released all tracked GPU bytes. The M3 ran on AC power. The raw capture includes both standalone files, their SHA-256 hashes, the host load averages, edit phases, callback times and every frame interval in `captures/packaged-force-timing-2026-11-26T11-19-02-647Z/`. WebGPU used luma.gl 10.0.0-alpha.15.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Host-driven frame p95 (ms) | 334.8 / 192.5 | A/A spread exceeded cap | 399.4 / 275.3 | Paired WebGL drift |
+| First click (ms) | 15.6 / 31.8 | Slower | 16.0 / 32.4 | Slower |
+| Click p95 and slowest of 12 (ms) | 43.5 / 32.3 | Within margin | 53.8 / 34.1 | Paired WebGL drift |
+| Point update (ms) | 166.8 / 91.6 | Paired WebGL drift | 157.8 / 92.5 | Paired WebGL drift |
+| Topology update (ms) | 315.2 / 374.9 | Slower | 349.9 / 433.3 | Paired WebGL drift |
+| Full replacement (ms) | 559.2 / 525.1 | Within margin | 625.0 / 567.0 | Paired WebGL drift |
+| Resize (ms) | 66.6 / 58.3 | Within margin | 65.5 / 66.7 | Within margin |
+| Peak sampled GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+**Dense topology replacement** exceeded the 16.4 ms allowance in both orders. Synchronous public submission was similar at 227–234 ms. From the manual draw to the GPU fence notification, WebGL waited 77.8 and 83.6 ms and WebGPU waited 131.7 and 148.9 ms. Each trial made one manual draw. The fence interval includes driver work and completion delivery. Distinguishing individual GPU passes requires a trace.
+
+**The first click on pinned Point 0** cost about one extra display interval in WebGPU on both topologies. On dense, the public callback arrived in 6.8 and 7.8 ms on WebGL and 20.7 and 17.9 ms on WebGPU. Across all twelve dense clicks, WebGPU met the original allowance. Emptying the queue changed the control substantially. Dense WebGL's slowest clicks dropped from 941.9 / 947.5 ms in the autonomous controls to 40.4 / 40.7 ms here. In both experiments most of the slowest click elapsed before its public callback.
+
+The host uses the public single-frame path. WebGL's autonomous loop additionally performs adaptive near-field occupancy reads when sample counts are unset. The host also delays its next step until visible click feedback. These differences limit the timing verdicts to this scheduling pattern. Dense WebGL frame controls still differed by 13.8 ms against the 12.5 ms limit. Hub WebGL controls agreed at 333.3 / 334.5 ms, but its last paired WebGL trial reached 467.0 ms at the same ticks. The captures establish this run-order variation. They do not identify its physical cause. [Timing protocol](#/production-forces?section=doc-scale-method)

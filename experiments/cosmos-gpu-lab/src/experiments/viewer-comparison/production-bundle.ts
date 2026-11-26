@@ -9,9 +9,9 @@ const bundles = import.meta.glob<string>([
   '../../../../graph-webgpu/dist/index.min.js',
 ], { query: '?url', eager: true, import: 'default' })
 
-async function loadPackage (engine: 'webgl' | 'webgpu', frame: Document): Promise<CosmosPackage> {
+async function loadPackage (engine: 'webgl' | 'webgpu', frame: Document, bundleUrl?: string): Promise<CosmosPackage> {
   const production = engine === 'webgl'
-  const url = bundles[production ? '../../../../../dist/index.min.js' : '../../../../graph-webgpu/dist/index.min.js']
+  const url = bundleUrl ?? bundles[production ? '../../../../../dist/index.min.js' : '../../../../graph-webgpu/dist/index.min.js']
   const command = production ? 'pnpm run build' : 'pnpm --filter @cosmos.gl/graph-webgpu build'
   if (!url) throw new Error(`Build the ${engine} package with ${command}, then restart or rebuild the Lab.`)
   await new Promise<void>((resolve, reject) => {
@@ -26,8 +26,8 @@ async function loadPackage (engine: 'webgl' | 'webgpu', frame: Document): Promis
   return cosmos
 }
 
-export async function loadGraphPackage (engine: 'webgl' | 'webgpu', frame: Document = document): Promise<typeof Graph> {
-  const cosmos = await loadPackage(engine, frame)
+export async function loadGraphPackage (engine: 'webgl' | 'webgpu', frame: Document = document, bundleUrl?: string): Promise<typeof Graph> {
+  const cosmos = await loadPackage(engine, frame, bundleUrl)
   if (!cosmos.Graph) throw new Error(`The ${engine} package did not expose a Graph constructor`)
   return cosmos.Graph
 }
