@@ -9,7 +9,7 @@ function expectedSelections (phase: SparseSample['phase'], time: number): Sparse
   const t = time / 1000
   const progress = t < 0.5 ? 4 * t ** 3 : 1 - 4 * (1 - t) ** 3
   const x = phase === 'restore' ? 48 + 32 * progress : 48
-  const absent = phase === 'remove' || phase === 'snap-remove'
+  const absent = phase === 'remove' || phase === 'remove-again' || phase === 'snap-remove'
   const local = (region: 'old' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
     region,
     // The 4 px rectangle also reaches half the full requested 24 px diameter.
@@ -24,7 +24,17 @@ function expectedSelections (phase: SparseSample['phase'], time: number): Sparse
 type Measurements = Omit<SparseSample, 'phase' | 'time' | 'pixels'>
 type Comparison = Pick<SparseSample, 'phase' | 'time'> & PixelComparison & { webgl: Measurements; webgpu: Measurements }
 
-async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario): Promise<{ samples: SparseSample[]; comparisons: Comparison[] }> {
+function compareMidpointFrames (samples: SparseSample[]): PixelComparison {
+  const restoring = samples.find(row => row.phase === 'restore' && row.time === 500)!
+  const removing = samples.find(row => row.phase === 'remove-again' && row.time === 500)!
+  return comparePixels(restoring.pixels, removing.pixels)
+}
+
+async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario): Promise<{
+  samples: SparseSample[];
+  comparisons: Comparison[];
+  repeatedMidpoint?: { webgl: PixelComparison; webgpu: PixelComparison };
+}> {
   const gl = await runSparseTransition('webgl', ratio, scenario)
   const gpu = await runSparseTransition('webgpu', ratio, scenario)
   const comparisons = gl.samples.map(({ phase, time, pixels, ...webgl }, i) => {
@@ -32,15 +42,16 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
     expect([otherPhase, otherTime]).toEqual([phase, time])
     return { phase, time, ...comparePixels(pixels, other), webgl, webgpu }
   })
-  const name = scenario === 'interrupted' ? 'package-sparse-interruption' : 'package-sparse-transition'
-  await writeArtifact(`${name}-${ratio}x`, {
-    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons,
+  const suffix = scenario === 'complete' ? 'transition' : scenario === 'interrupted' ? 'interruption' : 'remove-again'
+  const repeatedMidpoint = scenario === 'remove-again' ? { webgl: compareMidpointFrames(gl.samples), webgpu: compareMidpointFrames(gpu.samples) } : undefined
+  await writeArtifact(`package-sparse-${suffix}-${ratio}x`, {
+    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons, repeatedMidpoint,
   })
   if (import.meta.env.LAB_NATIVE_GPU) {
     expect(gl.deviceInfo.gpuType).not.toBe('cpu')
     expect(gpu.deviceInfo.fallback).toBe(false)
   }
-  return { samples: gl.samples, comparisons }
+  return { samples: gl.samples, comparisons, repeatedMidpoint }
 }
 
 it.each([1, 2] as const)('removes and restores a slot in both packages at %i×', async ratio => {
@@ -121,5 +132,48 @@ it.each([1, 2] as const)('restores the slot halfway through its removal fade at 
     expect.soft([row.webgl.picks.anchor, row.webgl.picks.control], label).toEqual(['Point 0', 'Point 2'])
     expect.soft(row.webgpu, label).toEqual(row.webgl)
     expect.soft(row.differingPixels, label).toBe(0)
+  }
+})
+
+it.each([1, 2] as const)('removes the slot again halfway through its restoration at %i×', async ratio => {
+  const { comparisons, repeatedMidpoint } = await compareSparseTransition(ratio, 'remove-again')
+  expect(comparisons.map(row => [row.phase, row.time])).toEqual([
+    ['initial', 0], ['remove', 0], ['remove', 500], ['restore', 0], ['restore', 16], ['restore', 250], ['restore', 500],
+    ['remove-again', 0], ['remove-again', 16], ['remove-again', 250], ['remove-again', 500], ['remove-again', 750], ['remove-again', 1000],
+  ])
+  const point = 'Point 1'
+  const link = 'Link 0'
+  const background = 'Background'
+  const initialFrames = comparisons.filter(row => row.phase !== 'remove-again')
+  expect(initialFrames.map(({ webgl: { sites } }) => [sites?.old.pick, sites?.midpoint?.pick, sites?.destination.pick])).toEqual([
+    [point, point, link], [background, background, background], [background, background, background],
+    [point, point, background], [point, point, link], [point, point, link], [point, point, point],
+  ])
+  const midpointBounds = [58, 90, 70, 102]
+  const fullBounds = [52, 84, 76, 108]
+  const secondFade = comparisons.filter(row => row.phase === 'remove-again')
+  const before = initialFrames.at(-1)!.webgl
+  expect(before.pointBounds?.map(value => value / ratio)).toEqual(midpointBounds)
+  expect(before.linkRgb).toEqual([0, 128, 0])
+  expect(secondFade.filter(row => row.time % 500 === 0).map(({ webgl }) => webgl.pointBounds?.map(value => value / ratio) ?? null))
+    .toEqual([fullBounds, midpointBounds, null])
+  expect(secondFade.map(({ webgl }) => webgl.linkRgb[1])).toEqual([255, 255, 239, 128, 16, 0])
+  // The two half-painted frames look identical even though only the first is interactive.
+  expect(repeatedMidpoint?.webgl.differingPixels).toBe(0)
+  expect(repeatedMidpoint?.webgpu.differingPixels).toBe(0)
+  for (const row of comparisons) {
+    for (const engine of ['webgl', 'webgpu'] as const) {
+      const frame = row[engine]
+      const label = `${engine} ${row.phase} ${row.time} ms`
+      expect.soft(frame.selections, label).toEqual(expectedSelections(row.phase, row.time))
+      expect.soft(frame.survivors, label).toEqual([320, 240, 256, 296])
+      expect.soft([frame.picks.anchor, frame.picks.control], label).toEqual(['Point 0', 'Point 2'])
+      if (row.phase === 'remove-again') {
+        expect.soft([frame.sites?.old.pick, frame.sites?.midpoint?.pick, frame.sites?.destination.pick, frame.picks.link], label)
+          .toEqual(['Background', 'Background', 'Background', 'Background'])
+      }
+    }
+    expect.soft(row.webgpu, `${row.phase} ${row.time} ms`).toEqual(row.webgl)
+    expect.soft(row.differingPixels, `${row.phase} ${row.time} ms`).toBe(0)
   }
 })

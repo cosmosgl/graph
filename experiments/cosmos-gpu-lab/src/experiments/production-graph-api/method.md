@@ -54,6 +54,21 @@ Each endpoint has a click probe, a 4 × 4 CSS px rectangle and a diamond lasso o
 
 At 16 ms, the link runs beneath the new position and its green channel still rounds to zero there. At 500 ms, the painted point is 12 CSS px wide at x = 64. The click search window at either endpoint can reach point 1. Only the midpoint’s small rectangle and lasso select it. At the destination, the rectangle first returns `[1]` at 522 ms and the lasso at 750 ms. Each was empty one millisecond earlier. At 1,000 ms, the point is 24 CSS px wide at x = 80 and the link is fully bright. All 26 frame pairs matched pixel for pixel.
 
+### Remove the point again halfway through restoration
+
+Point 1 starts at x = 48, begins returning toward x = 80 halfway through its first removal, and is removed again when it reaches x = 64. The replay samples the frame before and after that second removal at the same clock time. At each position it clicks the center and queries a 4 × 4 CSS px rectangle and diamond lasso. [Compare the second removal](#/production-graph-api?section=try-remove-again)
+
+| Frame | Painted point at the midpoint | Link green channel | Clicks at old / midpoint / new | Rectangle IDs at old / midpoint / new | Lasso IDs at old / midpoint / new |
+| --- | --- | ---: | --- | --- | --- |
+| Just before second removal | 12 CSS px wide | 128/255 | Point 1 / Point 1 / Point 1 | `[] / [1] / []` | `[] / [1] / []` |
+| First frame after second removal | 24 CSS px wide | 255/255 | Background at all three | `[] / [] / []` | `[] / [] / []` |
+| 500 ms into the second fade | 12 CSS px wide | 128/255 | Background at all three | `[] / [] / []` | `[] / [] / []` |
+| 1,000 ms into the second fade | No visible pixels | 0/255 | Background at all three | `[] / [] / []` | `[] / [] / []` |
+
+Before the edit, the click search window at each endpoint could reach the returning point 16 CSS px away. The small area probes selected it only at the midpoint. The second removal froze its current position and started the outgoing fade from fully present, because the previous edit had restored the slot. Clicks and area queries saw the new absence flag immediately. The whole-graph rectangle and lasso returned `[0, 2]` through the second fade.
+
+The frames halfway through restoration and halfway through the second fade matched byte for byte within each package, even though all three click results changed. Across packages, all 26 frame pairs matched pixel for pixel on M3 at 1× and 2×.
+
 ### Hover under a stationary cursor
 
 Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.

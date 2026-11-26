@@ -71,6 +71,7 @@ export const validationContracts: Record<string, ValidationContract> = {
     acceptance: 'Keep the manual-step pin and absent slot. Match every pixel, click ID and surviving position at all removal and restoration checkpoints. ' +
       'Check exact area IDs as the point fades and crosses each destination boundary. ' +
       'When restoration interrupts a fade, compare the painted frame and the click, rectangle and lasso results at both positions. ' +
+      'When a second removal interrupts restoration, repeat those checks at the old center, midpoint and destination. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
       'Check point colors, sizes and endpoint gradients through an interruption. WebGPU edge clicks must follow the displayed diameter. ' +
       'Check exact rectangle and lasso IDs near the changing edge at both pixel ratios. ' +

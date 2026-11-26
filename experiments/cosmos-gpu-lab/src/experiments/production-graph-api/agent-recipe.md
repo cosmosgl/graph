@@ -10,6 +10,8 @@ The M3 replay is in `captures/sparse-area-m3-release`. Its `provenance.json` rec
 
 The same test also runs the interrupted-removal case. It sends the restoration edit on the frozen 500 ms removal frame and gives the return its own 1,000 ms transition. In `captures/interrupted-removal-m3-release/package-sparse-interruption-{1,2}x.json`, compare `remove` at 500 ms with `restore` at 0 ms. Each package’s `sites.old` and `sites.destination` record the actual click and pixel color. The `selections` field records the ordered ID lists. The run’s `provenance.json` identifies the adapter, clean revision and both bundle hashes.
 
+For the second removal, inspect `captures/repeated-removal-m3-release/package-sparse-remove-again-{1,2}x.json`. The `restore` sample at 500 ms and the `remove-again` sample at 0 ms share the same clock time. Compare the three sites’ click IDs and RGB values, the rectangle and lasso results, the point’s painted bounds and the sampled link color. The run’s `provenance.json` identifies the clean revision and both package bundles.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

@@ -39,6 +39,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the drawn point and link with the click, rectangle and lasso IDs at the old and new positions throughout restoration.',
     recorded: null,
   }, {
+    id: 'remove-again',
+    title: 'Remove a point halfway through restoration',
+    kind: 'compare',
+    question: 'What happens to point 1 and its link when the point is removed halfway to its new position?',
+    description: 'Restore point 1 halfway through its fade, then remove it again as it reaches the midpoint. Inspect both frames at that edit.',
+    reference: 'Both built Graph packages receive identical edits, transition times and probes at the old center, midpoint and destination.',
+    acceptance: 'Compare the painted point and link, click targets and selected point IDs at all three positions before and after the second removal.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -70,6 +79,7 @@ export const experiment = defineExperiment({
   create: async (host, caseId) => {
     if (caseId === 'sparse-transition') return (await import('./sparse-view')).createSparseView(host)
     if (caseId === 'interrupted-removal') return (await import('./sparse-view')).createSparseView(host, 'interrupted')
+    if (caseId === 'remove-again') return (await import('./sparse-view')).createSparseView(host, 'remove-again')
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

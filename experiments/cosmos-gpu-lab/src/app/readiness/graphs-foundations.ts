@@ -58,6 +58,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Repeat the interrupted removal on another supported adapter.',
   },
+  'production-graph-api/remove-again': {
+    badge: 'Second removal matches',
+    tone: 'pass',
+    finding: 'The second fade started at full size and brightness at the midpoint. Clicks and area queries dropped point 1 on that frame.',
+    area: 'Integration',
+    status: '13 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 26 frame pairs matched pixel for pixel, including the jump from 12 to 24 CSS px at the midpoint' },
+      { tone: 'pass', text: 'All 78 clicks at the three positions and all 208 rectangle and lasso results agreed' },
+      { tone: 'info', text: 'The two half-faded canvases were identical. All three clicks hit point 1 during restoration and background during removal.' },
+    ],
+    next: 'Replay the second removal on another supported adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

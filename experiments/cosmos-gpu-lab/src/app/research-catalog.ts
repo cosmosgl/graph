@@ -291,7 +291,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         'headless trackers and four moving selections with 1,000 YouTube labels',
       method: 'method',
       next: 'Measure the remaining wait behind the early million-point frame on graphs with different link colors and point coverage.',
-      reproduce: 'Choose a checkpoint before or after restoring a fading point. Compare both packages at either pixel ratio.',
+      reproduce: 'Choose the frames before and after a restoration or second removal. Compare the pixels and selected IDs at either pixel ratio.',
       investigations: [{
         page: 'youtube-selection',
         state: 'Current evidence',

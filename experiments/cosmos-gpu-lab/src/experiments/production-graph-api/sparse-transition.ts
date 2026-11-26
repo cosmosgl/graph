@@ -2,12 +2,13 @@ import type { DeviceInfo } from '@luma.gl/core'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import type { Engine } from './frame'
 
-type Phase = 'initial' | 'remove' | 'restore' | 'snap-remove' | 'snap-restore'
+type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'snap-remove' | 'snap-restore'
 type Point = [number, number]
-export type SparseScenario = 'complete' | 'interrupted'
+export type SparseScenario = 'complete' | 'interrupted' | 'remove-again'
 type Site = { pick: string; rgb: number[] }
 const anchor: Point = [192, 96]
 const original: Point = [48, 96]
+const midpoint: Point = [64, 96]
 const restored: Point = [80, 96]
 const control: Point = [128, 40]
 const linkProbe: Point = [144, 96]
@@ -25,7 +26,7 @@ function localProbe (region: Region, [x, y]: Point): Probe {
 
 const areaProbes: Probe[] = [
   localProbe('old', original),
-  localProbe('midpoint', [64, 96]),
+  localProbe('midpoint', midpoint),
   localProbe('destination', restored),
   { region: 'all', rect: [[20, 16], [220, 132]], lasso: [[32, 16], [208, 16], [220, 132], [20, 132]] },
 ]
@@ -35,7 +36,7 @@ export type SparseSample = {
   time: number;
   pixels: ImageData;
   picks: { point: string; link: string; anchor: string; control: string };
-  sites?: { old: Site; destination: Site };
+  sites?: { old: Site; midpoint?: Site; destination: Site };
   midpointPicks?: string[];
   selections: { region: Region; rectangle: number[]; lasso: number[] }[];
   survivors: number[];
@@ -144,11 +145,10 @@ export async function runSparseTransition (
         const xy = await graph.getPointPositionsAsync()
         const picks = { point: await click(point), link: await click(linkProbe), anchor: await click(anchor), control: await click(control) }
         let sites: SparseSample['sites']
-        if (scenario === 'interrupted') {
-          sites = {
-            old: { pick: point === original ? picks.point : await click(original), rgb: rgb(original) },
-            destination: { pick: point === restored ? picks.point : await click(restored), rgb: rgb(restored) },
-          }
+        if (scenario !== 'complete') {
+          const readSite = async (site: Point): Promise<Site> => ({ pick: point === site ? picks.point : await click(site), rgb: rgb(site) })
+          sites = { old: await readSite(original), destination: await readSite(restored) }
+          if (scenario === 'remove-again') sites.midpoint = await readSite(midpoint)
         }
         let midpointPicks: string[] | undefined
         if (phase === 'restore' && time === 500) {
@@ -190,13 +190,15 @@ export async function runSparseTransition (
         }
       }
       await sample('initial', 0, original)
-      const interrupted = scenario === 'interrupted'
+      const interrupted = scenario !== 'complete'
       await edit('remove', [NaN, NaN], original, 1000, interrupted ? [0, 500] : [0, 500, 1000])
-      // The final removal sample and first restoration sample share a clock instant.
-      // Both runs bracket destination entry for the rectangle and diamond lasso.
-      const restoreTimes = [500, 521, 522, 749, 750, 751, 1000]
-      await edit('restore', restored, restored, 1000, [...(interrupted ? [0, 16, 250] : [0]), ...restoreTimes])
-      if (!interrupted) {
+      // At each interruption, the new edit starts on the preceding sample's clock.
+      const restoreTimes = interrupted ? [0, 16, 250, 500] : [0, 500]
+      if (scenario !== 'remove-again') restoreTimes.push(521, 522, 749, 750, 751, 1000)
+      await edit('restore', restored, restored, 1000, restoreTimes)
+      if (scenario === 'remove-again') {
+        await edit('remove-again', [NaN, NaN], midpoint, 1000, [0, 16, 250, 500, 750, 1000])
+      } else if (!interrupted) {
         await edit('snap-remove', [NaN, NaN], restored, 0, [0])
         await edit('snap-restore', original, original, 0, [0])
       }
