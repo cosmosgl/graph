@@ -396,14 +396,35 @@ are in `captures/signed-graph-deck-12c2b599-odsn6xvz/`. The Graph archive
 SHA-256 is `2b79f877177f70369f88cc6cc528bb0811fd3c120bfa652fc7210c476781a3c2`.
 The Deck archive has the same SHA-256 as the subviewport build above.
 
+### Recovery after the selection scheduling change
+
+At `951ec4d7`, the clean consumer installed Graph archive
+`098f54c99f31b3b54421a2e9eb7d26f437e7b37e44fe38f3cf0e68519472aeb2`.
+The installed standalone script matched the new build
+(`6a6f1cebf0803009994fedbf52b2d2d7640ac1dfac545c4af104ff41adb2888a`).
+The Deck archive was byte-identical to the previous qualified pair.
+All 72 shared Graph story TypeScript files compiled against each engine's
+declarations.
+
+All ten 65,536-point sessions restored every coordinate, selection, pin,
+camera and the next cooling value. Chrome 158 on Apple Metal 3 and SwiftShader
+recovered from a GPU-process crash. Firefox 153, WebKit 26.5 and installed
+Safari 26.5.2 recovered from device destruction. WebKit and Safari reported
+Apple adapters. Firefox withheld the vendor. All five drew, picked and
+resized both graphs. Removing the layer released its own graph and left
+the app-supplied graph usable. The standalone script picked both points,
+the link and background. The four automated lanes
+checked 1× and 2×, and installed Safari matched all 40 color and 40 pick
+probes at its native 2× display ratio.
+
 ### Replay the same archives on a second physical GPU
 
-Use a fresh qualification checkout with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-12c2b599-odsn6xvz` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
+Use a fresh checkout of `951ec4d7` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-951ec4d7-bi347zmj` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
 
 ```sh
 set -eu
 lab=experiments/cosmos-gpu-lab
-run=signed-graph-deck-12c2b599-odsn6xvz
+run=signed-graph-deck-951ec4d7-bi347zmj
 pair="$PWD/$lab/captures/$run"
 vendor=nvidia
 app=$(mktemp -d)
