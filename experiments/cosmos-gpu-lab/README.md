@@ -412,23 +412,24 @@ qualification script stages WebGPU under both public names with
 candidate private through hardware qualification and release review.
 [Production Graph build](../../vite.config.ts) · [Deck manifest](../../integrations/deck-layers/package.json) · [Packed app](../../scripts/prepare-packed-webgpu-deck.sh)
 
-1. Once the cutover is accepted, make the ordinary public builds emit Graph's
+1. Prepare the replacement in a separate production PR based on `main`.
+   Keep the GPU Lab on its research branch. Make the ordinary public builds emit Graph's
    ES module, standalone `dist/index.min.js` and declarations, and Deck's
    WebGPU device and position-buffer host. Give both public manifests the
    same new release version. Carry over the qualified runtime and declaration
    dependencies, including Deck 10.0.0-alpha.1, luma 10.0.0-alpha.14 and
    math.gl 5.0.0-beta.8. Verify the consumer resolves a single luma core.
    [Graph packager](../graph-webgpu/pack-public.mjs) · [Deck packager](../../integrations/deck-layers/pack-public.mjs) · [Lockstep check](../../scripts/check-lockstep.mjs)
-2. Run CI against the promoted sources. Build Pages with its ordinary command,
+2. Run Cosmos CI against the promoted sources in the production PR. Build Pages with its ordinary command,
    open the default Storybook and verify that Quick Start and a Deck story
-   draw and pick on WebGPU. Point the Lab's WebGL pane at the frozen UMD
+   draw and pick on WebGPU. In the Lab checkout, point the WebGL pane at the frozen UMD
    below and verify the hashes of the two files it actually loads.
    [CI](../../.github/workflows/ci.yml) · [Pages build](../../.github/workflows/github_pages.yml) · [Storybook aliases](../../.storybook/main.ts) · [Lab loader](src/experiments/viewer-comparison/production-bundle.ts)
 3. Pack the two public manifests from a clean release revision. Install those
    exact tarballs outside the workspace and record their SHA-256s. Typecheck
    the consumer and shared stories, run the standalone script, then repeat
    drawing, picking, resize, teardown and recovery under both Deck owners.
-   Use that verified pair for publication. Record the preceding public
+   After release acceptance, publish that verified pair. Record the preceding public
    versions and Pages deployment revision. To roll back, pin applications to
    the preceding Graph and Deck pair with its compatible peers, and redeploy
    the preceding site revision.
@@ -532,9 +533,10 @@ the reproducible CI patch and the original failures under
 TypeScript results in its sibling `consumer/` directory.
 [Reference Deck contracts](../../test/deck-layers.test.ts) · [Candidate host contracts](../graph-webgpu/test/host.test.ts) · [CI workflow](../../.github/workflows/ci.yml)
 
-The branch's WebGPU CI job installs bundled Chromium and runs the candidate
-suite with `COSMOS_TEST_SWIFTSHADER=1`. It then builds and installs both
-tarballs into a clean TypeScript app. The packed check covers the standalone
+The Lab branch uses the existing Cosmos CI workflow. The temporary WebGPU
+job ran the candidate suite in bundled Chromium with `COSMOS_TEST_SWIFTSHADER=1`
+and installed both tarballs into a clean TypeScript app. The same candidate
+and packed-app checks are available locally. The packed check covers the standalone
 script, four ownership and display-density combinations, a shared timeline,
 two viewport drags and two stale bounds completions. In the quarter-scale
 thumbnail, Deck 10 originally reported the press coordinates throughout a

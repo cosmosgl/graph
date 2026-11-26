@@ -1,6 +1,6 @@
-**WebGPU will replace WebGL in the production Graph.** Applications will continue to call `new Graph(container, config)`. WebGPU will be the sole runtime for both `Graph` and `GraphSimulation`. Support for the WebGL version ends at cutover.
+**WebGPU will replace WebGL in a separate production PR based on `main`.** Applications will continue to call `new Graph(container, config)`. WebGPU will be the sole runtime for both `Graph` and `GraphSimulation`. Support for the WebGL version ends at cutover.
 
-During development, the Lab can keep loading the production WebGL build from the main workspace's `dist/index.min.js`. Build the WebGPU candidate separately and run the same Storybook stories against both packages. Once WebGPU passes the release checks, it takes over the main package and its build output. The last WebGL revision remains available for historical comparisons.
+The GPU Lab, its experiments and its comparison previews stay on `experiment/cosmos-gpu-lab`. During development, the Lab loads the workspace WebGL build from `dist/index.min.js`. The two Storybook previews run the same stories against WebGL and the separately built WebGPU candidate. The production PR must build and pass Cosmos CI from a checkout without `experiments/cosmos-gpu-lab`.
 
 Both built packages passed the million-point dense and hub layout checks on Apple M3. Two WebGL controls provide a baseline at nine fixed ticks. With all eight forces active, the largest RMS position difference was under 0.256% of the WebGL layout radius, against a 5% budget. Both topologies retained their communities through tick 100. After correcting the fractional mouse position, 39 of 999,999 live points in each fixture differed by more than one backing pixel on the first step. With candidate `c418e90a`, all 288 trusted clicks returned the requested target or background. On both topologies the first WebGPU click at fixed tick 58 was visible in 14.6–16.1 ms and met the relative allowance in both engine orders. With simulation running, the first WebGPU click took 184–230 ms across the four paired trials. The reference varied too much for a relative live-speed verdict. Both packages released their tracked GPU allocations. [Timing and controls](#/production-forces?section=doc-scale-timing)
 [Prototype results](#/viewer-comparison?section=doc-migration-results) · [Packaged results](#/production-forces?section=doc-scale-timing)
@@ -75,7 +75,7 @@ On M3 both real packages completed all eight fixed-tick YouTube lassos with the 
 
 Exercise standalone Graph, headless simulation and the real `CosmosGraphLayer` on one supported luma family. Verify draw and pick in a host-owned pass, shared-device lifetime, initialization failure and recovery after device loss. Repeat the release scenarios on the supported browser and GPU range. Check the packaged builds, public types, Storybook and migration notes for async reads and custom host renderers.
 
-At cutover, record the final WebGL revision and point historical comparisons to that build. Promote WebGPU to the main package and its normal distribution path. Publish Graph and the Deck integration in lockstep. The public Storybook then runs the WebGPU release, and the WebGL reference remains reproducible.
+In the production PR, move the qualified engine into the public Graph package and update the Deck integration, their tests, the public Storybook and migration notes. Run Cosmos CI against those sources and verify the ordinary Graph and Deck tarballs in a clean application. At cutover, publish both packages in lockstep. Record the final WebGL revision and point the historical comparisons on the Lab branch at that frozen build.
 
 ### Working candidate and remaining release checks
 
@@ -109,7 +109,7 @@ The remaining work is release qualification and the public switch.
 
 1. **Qualify another physical GPU family.** M3 has passed the fixed-tick first-click gate in both orders. Chrome, Firefox and Safari exercised the same M3. SwiftShader adds software coverage. A second machine or remote service is currently unavailable. On another machine verify both owners of a Deck graph, drawing and picking, moving YouTube selection and both million-point layouts. The portable kit includes the exact source, packages, fixtures and commands. [Replay the sealed archives](#/integrated-webgpu?section=doc-host-ownership-replay-the-same-archives-on-a-second-physical-gpu)
 2. **Review moving-click latency at release.** On M3 the first WebGPU click averaged 223 ms on dense communities and 193 ms on hubs with normal simulation running. WebGL averaged 1,445 and 1,413 ms in those paired trials, but its controls varied beyond the declared limits. The measurements establish the observed delays. A relative live-speed claim still needs repeatable controls. Collect them on the second GPU as part of the same replay. [Timing method](#/production-forces?section=doc-scale-method) · [Individual engine orders](#/production-forces?section=doc-scale-timing)
-3. **Resolve the PR sign-off check and promote Graph and Deck together after acceptance.** Both hosted CI jobs passed at `592fd779`. The DCO app could retrieve only part of the PR’s 402 commits. A separate comparison with the complete GitHub range found a matching author sign-off on each commit. The app’s verdict remains open. The public packages still build WebGL. At cutover publish both versions in lockstep, switch the public Storybook and retain the final WebGL distribution. The packed application compiles in strict mode on TypeScript 5.9.3, 6.0.3 and 7.0.2 with the fixture settings. The full Deck app also passes dependency checking on 6.0.3 and 7.0.2 with the verified browser type packages. A disposable public build produced all nine expected distribution files and passed Pages and Lab smoke checks. The release review still needs to accept the pinned Deck and luma prerelease versions. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
+3. **Prepare the production PR and publish after release acceptance.** The PR can be reviewed while hardware qualification is pending. Verify CI and commit sign-offs on its own changes. Release review also needs to accept the pinned Deck and luma prerelease versions. The packed application compiles in strict mode on TypeScript 5.9.3, 6.0.3 and 7.0.2 with the fixture settings. The full Deck app also passes dependency checking on 6.0.3 and 7.0.2 with the verified browser type packages. A disposable public build produced all nine expected distribution files and passed Pages and Lab smoke checks. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
 
 ### Local qualification
 
@@ -126,11 +126,14 @@ suite passed all 218 cases with the packaged candidate and frozen WebGL
 reference. A local Ubuntu 26.04 x86_64 container ran the same CI job under emulation
 using Chromium SwiftShader. All 95 source cases and ten installed-package
 cases passed. Both platforms produced identical Graph and Deck distribution
-files. The hosted Ubuntu run at `592fd779` also passed both CI jobs. It
+files. Before the candidate CI job was retired, the hosted Ubuntu run at
+`592fd779` passed both jobs on the Lab PR. It
 ran 293 WebGL and Deck tests and 95 WebGPU tests, installed the actual
 Graph and Deck tarballs and exercised the packed app on SwiftShader.
 The package and Pages builds, production dependency audit and both CodeQL analyses
-passed. [Hosted CI](https://github.com/cosmosgl/graph/actions/runs/45872530472) · [DCO check](https://github.com/cosmosgl/graph/runs/140091330854)
+passed. On that revision, the DCO app retrieved only part of the Lab PR’s
+402 commits. A separate check found a matching author sign-off on all 402.
+[Hosted CI](https://github.com/cosmosgl/graph/actions/runs/45872530472) · [Lab PR sign-off check](https://github.com/cosmosgl/graph/runs/140091330854)
 
 The packed app also passed the independent browser recovery replay.
 Chrome on Metal and SwiftShader, Firefox, WebKit and retail Safari each
