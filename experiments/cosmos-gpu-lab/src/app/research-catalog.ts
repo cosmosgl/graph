@@ -311,7 +311,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'production-forces': entry('production-forces', {
       reviewed: '2026-11-26',
-      conclusion: 'Both million-point layouts and all 288 click targets passed on M3. The first fixed-tick WebGPU click took 14–15 ms.',
+      conclusion: 'Both million-point layouts passed on M3. In the comparison with WebGPU build c7c523be, ' +
+        'all 288 clicks returned the expected target and the first fixed-tick WebGPU click took 14–15 ms.',
       variant: 'Workspace WebGL Graph and WebGPU Graph candidate',
       comparison: 'Fixed-tick layouts, local overlap and public picks, plus matched moving-frame intervals and trusted-click feedback on M3',
       method: 'method',
@@ -411,8 +412,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       next: 'Run the packed Deck ownership and recovery checks on a second physical GPU when one becomes available.',
       reproduce: 'Press Run, pause the layout, then select and drag a point.',
       investigations: [
-        { page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' },
-        { page: 'host-ownership', state: 'Supporting investigation', description: 'Borrowed luma device, shared draw pass and explicit checkpoint restart.' },
+        { page: 'host-ownership', state: 'Current evidence', description: 'Packed Graph and Deck ownership, shared drawing and recovery after device loss.' },
+        { page: 'findings', state: 'Historical baseline', description: 'Layout, picking and frame measurements from the November 2026 prototype.' },
         {
           page: 'tracked-points',
           state: 'Supporting investigation',

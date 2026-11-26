@@ -22,7 +22,9 @@ integrated canvas rendered successfully before evaluation.
 | --- | --- |
 | Strict compatibility | **Not established.** Historical exact raster, polygon, faint-alpha and ribbon failures retain their verdicts. The new small whole-tick CPU check passes its unchanged tolerance; it does not approve the renderer. |
 | First-slice usability | **Bounded local evidence.** Repeated 1,024 communities and 8,192 chain/communities controls pass. Cooled Karate Club is visually usable after Fit, but its all-point picking sweep reaches 68.2 ms. That run and the 8,192 star remain rejected; broader quality and latency repeatability remain open. |
-| Full migration readiness | **Not ready.** Advanced styles, remaining forces, collision, host integration, recovery, broader data and the parked investigations remain open. |
+| Full migration readiness | **The November 2026 prototype was not ready for release.** Its checks left advanced styles, forces, collision, host integration, recovery and larger workloads open. |
+
+The packed Graph later ran all eight forces together on million-point layouts. The packed Deck app also recovered its layout after device loss with both layer-owned and app-supplied graphs. [Packaged force results](#/production-forces?section=doc-results) · [Packed host recovery](#/integrated-webgpu?section=doc-host-ownership) · [Current release checks](#/roadmap?section=what-remains)
 
 ## Complete frame and interaction results
 
