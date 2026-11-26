@@ -124,7 +124,7 @@ export class GraphSimulation {
   }
 
   public get ownsDevice (): boolean { return this.shouldDestroyDevice }
-  public get progress (): number { return this.store.simulationProgress }
+  public get progress (): number { return this.isDestroyed ? 0 : this.store.simulationProgress }
   public get isSimulationRunning (): boolean { return this.isReady && this.store.isSimulationRunning }
 
   /** @internal A pure topology replacement can keep the renderer's point records. */
@@ -482,6 +482,7 @@ export class GraphSimulation {
     this.invalidateCentroids()
     for (const tracker of this.trackers) tracker.destroy()
     this.absentSlots = undefined
+    this.scaleX = this.scaleY = undefined
     this.state?.destroy()
     this.state = undefined
     this.programs?.destroy()

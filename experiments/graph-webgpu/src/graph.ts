@@ -108,7 +108,7 @@ export class Graph {
 
   public get isSimulationRunning (): boolean { return this.simulation.isSimulationRunning }
   public get progress (): number { return this.simulation.progress }
-  public get maxPointSize (): number { return this.simulation.store.maxPointSize }
+  public get maxPointSize (): number { return this.isDestroyed ? 0 : this.simulation.store.maxPointSize }
 
   private get needsAnotherFrame (): boolean {
     return this.isSimulationRunning || this.transition.isActive || !!this.mouseRepulsion || !!this.fpsMonitor
@@ -345,9 +345,9 @@ export class Graph {
 
   public getPointPositionBuffer (): PointPositionBuffer | undefined { return this.simulation.getPointPositionBuffer() }
   public getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> { return this.simulation.getPointPositionsAsync(out) }
-  public getNeighboringPointIndices (ids: number | number[]): number[] { return this.graph.getNeighboringPointIndices(ids) }
-  public getConnectedLinkIndices (ids: number | number[]): number[] { return this.graph.getConnectedLinkIndices(ids) }
-  public getConnectedPointIndices (ids: number | number[]): number[] { return this.graph.getConnectedPointIndices(ids) }
+  public getNeighboringPointIndices (ids: number | number[]): number[] { return this.isDestroyed ? [] : this.graph.getNeighboringPointIndices(ids) }
+  public getConnectedLinkIndices (ids: number | number[]): number[] { return this.isDestroyed ? [] : this.graph.getConnectedLinkIndices(ids) }
+  public getConnectedPointIndices (ids: number | number[]): number[] { return this.isDestroyed ? [] : this.graph.getConnectedPointIndices(ids) }
   /** The displayed shape size or, for a point with a larger image, its image size. */
   public getPointRadiusByIndex (index: number): number | undefined {
     if (this.isDestroyed || !this.graph.isPointIndex(index)) return undefined
@@ -362,21 +362,37 @@ export class Graph {
     return width ?? this.graph.getResolvedLinkWidth(index)
   }
 
-  public getPointSizes (): Float32Array { return Float32Array.from({ length: this.graph.pointsNumber ?? 0 }, (_, id) => this.graph.getResolvedPointSize(id)) }
-  public getLinkWidths (): Float32Array { return Float32Array.from({ length: this.graph.linksNumber ?? 0 }, (_, id) => this.graph.getResolvedLinkWidth(id)) }
-  public getPointColors (): Float32Array { return Float32Array.from({ length: 4 * (this.graph.pointsNumber ?? 0) }, (_, i) => this.graph.getResolvedPointColorChannel(Math.floor(i / 4), i % 4)) }
-  public getLinkColors (): Float32Array { return Float32Array.from({ length: 4 * (this.graph.linksNumber ?? 0) }, (_, i) => this.graph.getResolvedLinkColorChannel(Math.floor(i / 4), i % 4)) }
-  public getLinkStyles (): Float32Array { return this.graph.linkStyles ?? new Float32Array(0) }
+  public getPointSizes (): Float32Array {
+    if (this.isDestroyed || !this.graph.pointSizes) return new Float32Array()
+    return this.graph.pointSizes.map((_, id) => this.graph.getResolvedPointSize(id))
+  }
+
+  public getLinkWidths (): Float32Array {
+    if (this.isDestroyed || !this.graph.linkWidths) return new Float32Array()
+    return this.graph.linkWidths.map((_, i) => this.graph.getResolvedLinkWidth(i))
+  }
+
+  public getPointColors (): Float32Array {
+    if (this.isDestroyed || !this.graph.pointColors) return new Float32Array()
+    return this.graph.pointColors.map((_, i) => this.graph.getResolvedPointColorChannel(Math.floor(i / 4), i % 4))
+  }
+
+  public getLinkColors (): Float32Array {
+    if (this.isDestroyed || !this.graph.linkColors) return new Float32Array()
+    return this.graph.linkColors.map((_, i) => this.graph.getResolvedLinkColorChannel(Math.floor(i / 4), i % 4))
+  }
+
+  public getLinkStyles (): Float32Array { return this.isDestroyed ? new Float32Array() : this.graph.linkStyles ?? new Float32Array() }
 
   public setConfig (config: GraphConfig): void { this.updateConfig(config, true) }
   public setConfigPartial (config: GraphConfig): void { this.updateConfig(config, false) }
 
-  public spaceToScreenPosition (point: Pair): Pair { return this.camera.convertSpaceToScreenPosition(point) }
-  public screenToSpacePosition (point: Pair): Pair { return this.camera.convertScreenToSpacePosition(point) }
-  public spaceToScreenRadius (radius: number): number { return this.camera.convertSpaceToScreenRadius(radius) }
+  public spaceToScreenPosition (point: Pair): Pair { return this.isDestroyed ? [0, 0] : this.camera.convertSpaceToScreenPosition(point) }
+  public screenToSpacePosition (point: Pair): Pair { return this.isDestroyed ? [0, 0] : this.camera.convertScreenToSpacePosition(point) }
+  public spaceToScreenRadius (radius: number): number { return this.isDestroyed ? 0 : this.camera.convertSpaceToScreenRadius(radius) }
   public getScaleX (): ((x: number) => number) | undefined { return this.simulation.scaleX }
   public getScaleY (): ((y: number) => number) | undefined { return this.simulation.scaleY }
-  public getZoomLevel (): number { return this.camera.eventTransform.k }
+  public getZoomLevel (): number { return this.isDestroyed ? 0 : this.camera.eventTransform.k }
 
   public setViewTransform (transform: { k: number; x: number; y: number }, size?: Pair): void {
     this.whenReady(() => {
@@ -407,6 +423,7 @@ export class Graph {
   }
 
   public fitViewByPointPositions (xy: number[], duration = 250, padding = 0.1, enableSimulation = true): void {
+    if (this.isDestroyed) return
     this.setZoomTransformByPointPositions(Float32Array.from(xy), duration, undefined, padding, enableSimulation)
   }
 
