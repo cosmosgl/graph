@@ -68,6 +68,17 @@ Translate the horizontal red link 16 CSS px along its path to put the center of 
 
 The M3 run in `captures/styled-link-crossing-m3-release/` contains the two `package-styled-link-crossing-{1,2}x.json` reports and the revision, bundle hashes and adapter details in `provenance.json`.
 
+## Overlapping translucent arrowheads
+
+Open `#/production-graph-api?section=try-translucent-arrow-crossing`. Build both standalone Graph distributions, then run the same check on each adapter with a fresh capture name.
+
+```sh
+LAB_ARTIFACT_RUN=arrow-heads-native pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/translucent-arrow-crossing.test.ts
+LAB_ARTIFACT_RUN=arrow-heads-software LAB_SWIFTSHADER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/translucent-arrow-crossing.test.ts
+```
+
+The five frames per ratio include both record orders, each link alone and the same crossing with arrowheads disabled. The control frames supply each link’s coverage across the entire image, allowing a one-channel-level rounding allowance when reconstructing the composite. The five probe colors and click IDs must match their expected values exactly. The runs in `captures/translucent-arrows-{m3,swiftshader}-20261126/` contain the measured pixels, clicks, adapter reports and source provenance.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

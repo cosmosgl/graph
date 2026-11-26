@@ -111,6 +111,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the crossing color, public click IDs and entire canvases in both orders at 1× and 2×.',
     recorded: null,
   }, {
+    id: 'translucent-arrow-crossing',
+    title: 'Cross two translucent arrows',
+    kind: 'compare',
+    question: 'How do two translucent arrowheads blend and which link receives a click where their heads overlap?',
+    description: 'Reverse the link order and compare the same crossing with each link alone and with its arrowheads turned off.',
+    reference: 'Both packages render 50%-opaque links at the same positions.',
+    acceptance: 'Check interior colors and click IDs at the arrowhead overlap, the shafts and the background at both pixel ratios.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -149,6 +158,7 @@ export const experiment = defineExperiment({
     if (caseId === 'remove-at-68') return (await import('./sparse-view')).createSparseView(host, 'remove-at-68')
     if (caseId === 'curved-link-crossing') return (await import('./curved-crossing-view')).createCurvedCrossingView(host)
     if (caseId === 'curved-link-image-crossing') return (await import('./image-crossing-view')).createImageCrossingView(host)
+    if (caseId === 'translucent-arrow-crossing') return (await import('./translucent-arrow-crossing')).createArrowCrossingView(host)
     if (caseId === 'styled-link-crossing') return (await import('./styled-link-crossing-view')).createStyledLinkCrossingView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)

@@ -60,6 +60,19 @@ The gap lets the green stroke show through. Both packages pick along the full da
 
 All 16 paired canvases and all 80 paired click IDs and sampled colors matched on M3 at 1× and 2×, including the single-link controls. Reversing the links changed exactly the 8 × 8 CSS px overlap on a painted dash (64 device pixels at 1× and 256 at 2×). Reversing them in the gap changed zero pixels even though the click switched from the dashed link to the solid link.
 
+### Cross two translucent arrows
+
+At (120, 72) CSS px the two arrowheads overlap beyond the edges of both 8 CSS px shafts. Turning both arrows off leaves black at that position and a click returns background. The shafts still cross at (128, 80). Each link is 50% opaque over a black background. [Replay the arrow crossing](#/production-graph-api?section=try-translucent-arrow-crossing)
+
+| Links drawn in array order | RGB at arrowhead overlap | Click at overlap |
+| --- | --- | --- |
+| Green 0, then red 1 | (128, 64, 0) | Red link 1 |
+| Red 0, then green 1 | (64, 128, 0) | Green link 1 |
+| Red alone | (128, 0, 0) | Red link 0 |
+| Green alone | (0, 128, 0) | Green link 0 |
+
+The last link receives the click while part of the first link’s color remains visible. Across M3 and SwiftShader at 1× and 2×, both packages matched every pixel in all 20 paired frames and returned the same IDs at all 100 sampled sites. Reversing the order changed pixels only where both links painted. At 1× it changed 450 pixels on M3 and 451 on SwiftShader. At 2× the counts were 1,722 and 1,723 respectively.
+
 ### Remove and restore a point
 
 The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Choose a frame to see each package’s canvas, click results and selected IDs. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition)
