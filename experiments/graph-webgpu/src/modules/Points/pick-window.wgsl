@@ -5,7 +5,7 @@ struct PickSprite {
   @location(1) local: vec2f,
 }
 
-@vertex fn pointerPointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> PickSprite {
+fn pointerSprite(vertex: u32, instance: u32) -> PickSprite {
   var out: PickSprite;
   out.position = vec4f(2,2,2,1);
   let i = pointOrder[instance];
@@ -34,4 +34,13 @@ struct PickSprite {
 @fragment fn pointerPointFragment(input: PickSprite) -> @location(0) vec4f {
   if (dot(input.local, input.local) > 1.0) { discard; }
   return encodedId(input.index, 1.0);
+}
+
+@group(0) @binding(10) var<storage,read> pickOrder: array<u32>;
+
+@vertex fn pointerPointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> PickSprite {
+  return pointerSprite(vertex, instance);
+}
+@vertex fn compactPointVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> PickSprite {
+  return pointerSprite(vertex, pickOrder[instance]);
 }

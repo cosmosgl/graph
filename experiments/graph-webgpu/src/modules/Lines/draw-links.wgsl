@@ -255,3 +255,9 @@ fn linkPatternMask(input: Ribbon) -> f32 {
   }
   return vec4f(color,alpha);
 }
+
+@group(0) @binding(10) var<storage,read> pickOrder: array<u32>;
+
+@vertex fn compactLinkVertex(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> Ribbon {
+  return linkRibbon(vertex, pickOrder[instance]);
+}

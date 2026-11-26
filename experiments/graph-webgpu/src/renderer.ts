@@ -16,6 +16,7 @@ import { estimateOpaqueArea } from './modules/Points/occlusion'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import { captureSizes, displayedSize, type SizeValues } from './size-transition'
+import { PointerCandidates } from './pointer-candidates'
 import records from './style-records.wgsl?raw'
 import common from './draw-common.wgsl?raw'
 import applePointCoordinates from './modules/Points/apple-point-coordinates.wgsl?raw'
@@ -87,6 +88,8 @@ type EncodeOptions = {
   linkPickPixel?: [number, number];
   fragmentOffset?: readonly [number, number];
   coverLinks?: boolean;
+  candidates?: PointerCandidates;
+  position?: PositionSource;
   coverPoints?: boolean;
 }
 const layout: ShaderLayout = {
@@ -103,6 +106,11 @@ const layout: ShaderLayout = {
     { name: 'previousLinks', type: 'read-only-storage', group: 0, location: 8 },
     { name: 'previousPositions', type: 'read-only-storage', group: 0, location: 9 },
   ],
+}
+
+const compactLayout: ShaderLayout = {
+  ...layout,
+  bindings: [...layout.bindings!, { name: 'pickOrder', type: 'read-only-storage', group: 0, location: 10 }],
 }
 
 const pointShader = [records, common, shapes, applePointCoordinates, points].join('\n')
@@ -138,6 +146,7 @@ export class GraphRenderer {
   private readonly points: Points
   private readonly linkSource: string
   private readonly pointSource: string
+  private pointerCandidates?: PointerCandidates
   private pointBuffer?: Buffer
   private readonly lines: Lines
   private orderBuffer?: Buffer
@@ -318,11 +327,14 @@ export class GraphRenderer {
     const { width, height } = getPickingBufferSize(view.width, view.height)
     const window = getPickingWindow(width, height, xCss, view.height - yCss, view.width, view.height)
     const framebuffer = this.pickFramebuffer
-    const pass = this.device.beginRenderPass({ framebuffer, clearColor: transparent, clearDepth: false, clearStencil: false })
     // The WebGL link index is CSS-resolution and uses lower-left coordinates.
     // Integer mouse y lies on a texel boundary and selects the sample above it.
     const linkPixel: [number, number] = [Math.floor(xCss), Math.max(0, Math.ceil(yCss) - 1)]
-    try { this.encode(pass, framebuffer, view, [window.x, window.y, width, height], { linkPickPixel: linkPixel }) } finally { pass.end() }
+    const region: [number, number, number, number] = [window.x, window.y, width, height]
+    const position = this.positionSource()
+    const candidates = this.findPointerCandidates(view, region, linkPixel, position)
+    const pass = this.device.beginRenderPass({ framebuffer, clearColor: transparent, clearDepth: false, clearStencil: false })
+    try { this.encode(pass, framebuffer, view, region, { linkPickPixel: linkPixel, candidates, position }) } finally { pass.end() }
     // Take one snapshot of both passes before another query can overwrite the target.
     const staging = this.device.createBuffer({
       id: 'cosmos-pick-read', byteLength: pickBytesPerRow * framebuffer.height, usage: Buffer.COPY_DST | Buffer.COPY_SRC,
@@ -343,6 +355,7 @@ export class GraphRenderer {
     this.isDisposed = true
     this.kernels.forEach(kernel => kernel.destroy())
     this.kernels.clear()
+    this.pointerCandidates?.destroy()
     this.interpolation.destroy()
     this.releasePrevious()
     this.pickFramebuffer?.destroy()
@@ -360,6 +373,23 @@ export class GraphRenderer {
     this.hostEncoder = undefined
     this.uniforms?.destroy()
     this.vertices?.destroy()
+  }
+
+  private findPointerCandidates (view: GraphView, region: [number, number, number, number], pixel: [number, number],
+    position?: PositionSource): PointerCandidates | undefined {
+    const c = this.config
+    const projection = view.pointProjection
+    const points = Math.min(this.pointCount, position?.pointCount ?? 0)
+    const links = c.renderLinks ? this.lines.count : 0
+    const count = Math.max(points, links)
+    // Transition bounds and curved ribbons stay with the ordinary raster pass.
+    if (count < 65536 || count > 0xffffff || (links > 0 && (c.curvedLinks || !c.linkBlending)) || this.previous || view.previousPositions ||
+        !projection || !position || !this.pointBuffer || !this.orderBuffer || !this.lines.buffer ||
+        Math.ceil(count / 128) > this.device.limits.maxComputeWorkgroupsPerDimension) return undefined
+    this.pointerCandidates ??= new PointerCandidates(this.device)
+    this.pointerCandidates.select(c, view, projection, region, pixel, points, links,
+      position.buffer, this.pointBuffer, this.orderBuffer, this.lines.buffer)
+    return this.pointerCandidates
   }
 
   private updateAllStyles (previous?: PreviousStyles): void {
@@ -452,11 +482,11 @@ export class GraphRenderer {
       view.hoveredLink === undefined && (!this.previous || (view.styleProgress ?? 1) >= 1)
   }
 
-  private kernel (framebuffer: Framebuffer, kind: DrawKind, picking: boolean, coverage: CoverageMode = 'none'): RenderKernel {
+  private kernel (framebuffer: Framebuffer, kind: DrawKind, picking: boolean, coverage: CoverageMode = 'none', compact = false): RenderKernel {
     const color = framebuffer.colorAttachments[0]!.texture.format as TextureFormatColor
     const depth = framebuffer.depthStencilAttachment?.texture.format as TextureFormatDepthStencil | undefined
     const samples = framebuffer.colorAttachments[0]!.texture.samples
-    const key = [kind, color, depth, samples, picking, coverage].join('/')
+    const key = [kind, color, depth, samples, picking, coverage, compact].join('/')
     let kernel = this.kernels.get(key)
     if (!kernel) {
       const source = kind === 'point' ? this.pointSource : kind === 'pointerPoint' ? pointerShader : kind === 'pointRing' ? pointRingShader : this.linkSource
@@ -469,10 +499,10 @@ export class GraphRenderer {
         id: `cosmos-${key}`,
         vertexSource: source,
         fragmentSource: source,
-        vertexEntryPoint: `${vertexKind}Vertex`,
+        vertexEntryPoint: compact ? (kind === 'pointerPoint' ? 'compactPointVertex' : 'compactLinkVertex') : `${vertexKind}Vertex`,
         fragmentEntryPoint: `${fragmentKind}Fragment`,
         topology: 'triangle-strip',
-        shaderLayout: layout,
+        shaderLayout: compact ? compactLayout : layout,
         colorAttachmentFormats: [color],
         depthStencilAttachmentFormat: depth,
         parameters: {
@@ -496,9 +526,11 @@ export class GraphRenderer {
 
   private encode (
     pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number],
-    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, fragmentOffset, coverLinks = false, coverPoints = false }: EncodeOptions
+    {
+      uniforms = this.uniforms, draw: options = {}, linkPickPixel, fragmentOffset, coverLinks = false, coverPoints = false,
+      candidates, position = this.positionSource(),
+    }: EncodeOptions
   ): void {
-    const position = this.positionSource()
     if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.lines.buffer || !this.points.atlas) return
     const picking = !!options.picking || !!linkPickPixel
     const c = this.config
@@ -545,9 +577,16 @@ export class GraphRenderer {
       }
       const useSolid = !picking && this.canUseSolidLinks(view)
       const kind = useSolid ? (this.lines.uniformRgb ? 'uniformRgbLink' : 'solidLink') : 'link'
-      this.kernel(framebuffer, kind, picking, coverLinks ? 'test' : 'none').draw(pass, {
-        vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.lines.count, bindings,
-      })
+      const kernel = this.kernel(framebuffer, kind, picking, coverLinks ? 'test' : 'none', !!candidates)
+      if (candidates) {
+        kernel.drawIndirect(pass, {
+          vertexArray: this.vertices, indirectBuffer: candidates.draws, bindings: { ...bindings, pickOrder: candidates.links },
+        })
+      } else {
+        kernel.draw(pass, {
+          vertexArray: this.vertices, vertexCount: 2 * (segments + 1), instanceCount: this.lines.count, bindings,
+        })
+      }
     }
     if (options.points === false) return
     if (linkPickPixel) pass.setParameters({ viewport: [0, 0, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE] })
@@ -556,9 +595,16 @@ export class GraphRenderer {
         vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
       })
     }
-    this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking, coverPoints ? 'pointFringe' : 'none').draw(pass, {
-      vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
-    })
+    const kernel = this.kernel(framebuffer, linkPickPixel ? 'pointerPoint' : 'point', picking, coverPoints ? 'pointFringe' : 'none', !!candidates)
+    if (candidates) {
+      kernel.drawIndirect(pass, {
+        vertexArray: this.vertices, indirectBuffer: candidates.draws, indirectOffset: 16, bindings: { ...bindings, pickOrder: candidates.points },
+      })
+    } else {
+      kernel.draw(pass, {
+        vertexArray: this.vertices, vertexCount: 4, instanceCount: pointCount, bindings,
+      })
+    }
     if (!picking && (view.hoveredPoint !== undefined || view.hostHoveredPoint !== undefined || c.focusedPointIndex !== undefined)) {
       this.kernel(framebuffer, 'pointRing', false).draw(pass, {
         vertexArray: this.vertices, vertexCount: 4, instanceCount: 3, bindings,
