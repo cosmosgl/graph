@@ -51,6 +51,8 @@ Separate full-copy rectangle replays returned identical ordered-ID and tracked-X
 
 Capture directories under `captures/public-graph-youtube-*` use these suffixes in session order. The fixed-tick profiles are `HNvrtD/UclNLC/4CtMzc/Wlut2E`, the ordinary sessions are `Qgdvon/0KAzzI/kTIbdb/caWpeH` and the full-copy checks are `RzRF2Z/19tti3` (65,536) and `sYj2Dv/lwu4mo` (one million, before/after). The callback trace is in `QDxNU6`, and the one-point WebGL/WebGPU reproduction and both paired summaries are in `captures/cosmos-selection-frame-vg3saqgb/`.
 
+The final signed WebGPU bundle `6a6f1ceb` also completed eight ordinary million-point rectangle drags against WebGL `74a216a7`. WebGPU returned ordered IDs and 1,000 label positions on every release. Median time to both reads was 250.7 ms. Updating the highlight took 9.4 ms on the CPU, redrawing the labels took 10.7 ms, and the completed highlighted frame arrived 303.1 ms after the highlight update began. Median release-to-feedback was 540.6 ms. Each stage has its own median. WebGL returned null for both reads on all eight releases. This run allowed the graphs to advance independently and omitted the full position copy. The fixed-tick replay above checks the boundary IDs and coordinates. The raw package run is in `captures/public-graph-youtube-CnOQq4/`.
+
 ## A 256-vertex lasso on the moving YouTube graph
 
 On 26 November 2026, both real packages selected the expected IDs and returned all
