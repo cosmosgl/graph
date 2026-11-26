@@ -94,7 +94,7 @@ fn shadePoint(input: Sprite) -> vec4f {
   if (swiftShaderPointRaster) {
     // SwiftShader samples the nominal diameter at the fragment's device-pixel
     // center relative to the full canvas.
-    let pixel = input.position.xy + params.region.xy;
+    let pixel = input.position.xy + params.fragmentOffset;
     let inverseDiameter = 1.0 / (2.0 * input.spriteRadius);
     uv = (pixel - input.center) * inverseDiameter * vec2f(1, -1) + 0.5;
   }
@@ -102,7 +102,7 @@ fn shadePoint(input: Sprite) -> vec4f {
   if (applePointRaster) {
     let height = round(params.pointViewport.w * params.camera.w);
     let windowOrigin = vec2f(0, height);
-    let pixel = (input.position.xy + params.region.xy) * vec2f(1, -1) + windowOrigin;
+    let pixel = (input.position.xy + params.fragmentOffset) * vec2f(1, -1) + windowOrigin;
     orientedUV = applePointCoordinates(pixel, input.originAndGradient.xy + windowOrigin,
                                        input.originAndGradient.zw, input.slope);
   }

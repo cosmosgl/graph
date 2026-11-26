@@ -22,6 +22,7 @@ struct Params {
   positionProgress: f32,
   greyExitColor: vec4f,   // greyed version of the transparent black exit default
   pointRings: vec4f,      // universal opacity, grey opacity (-1 for default), explicit grey color, host-hovered index
+  fragmentOffset: vec2f,  // convert framebuffer pixels to graph-view pixels, including crops and host subviewports
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

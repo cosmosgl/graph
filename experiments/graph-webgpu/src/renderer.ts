@@ -84,6 +84,7 @@ type EncodeOptions = {
   draw?: GraphDrawOptions;
   uniforms?: Buffer;
   linkPickPixel?: [number, number];
+  fragmentOffset?: readonly [number, number];
   coverLinks?: boolean;
 }
 const layout: ShaderLayout = {
@@ -178,7 +179,7 @@ export class GraphRenderer {
     this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 20 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 21 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
       this.pickTexture = device.createTexture({
         id: 'cosmos-pick', width: PICKING_WINDOW_SIZE, height: PICKING_WINDOW_SIZE + 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC,
@@ -279,7 +280,10 @@ export class GraphRenderer {
     const uniforms = this.hostUniforms[index] ??= this.device.createBuffer({
       id: 'cosmos-host-view', byteLength: this.uniforms.byteLength, usage: Buffer.UNIFORM | Buffer.COPY_DST,
     })
-    this.encode(pass, framebuffer, view, [0, 0, view.width * view.pixelRatio, view.height * view.pixelRatio], { uniforms, draw: options })
+    const viewport = pass.getParameters().viewport
+    this.encode(pass, framebuffer, view, [0, 0, view.width * view.pixelRatio, view.height * view.pixelRatio], {
+      uniforms, draw: options, fragmentOffset: viewport && [-viewport[0], -viewport[1]],
+    })
   }
 
   public draw (view: GraphView, target?: Framebuffer): void {
@@ -480,7 +484,7 @@ export class GraphRenderer {
 
   private encode (
     pass: RenderPass, framebuffer: Framebuffer, view: GraphView, region: [number, number, number, number],
-    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, coverLinks = false }: EncodeOptions
+    { uniforms = this.uniforms, draw: options = {}, linkPickPixel, fragmentOffset, coverLinks = false }: EncodeOptions
   ): void {
     const position = this.positionSource()
     if (!position || !this.pointCount || !this.pointBuffer || !this.orderBuffer || !this.lines.buffer || !this.points.atlas) return
@@ -506,6 +510,7 @@ export class GraphRenderer {
       ...(this.lines.uniformRgb ?? [0, 0, 0]), view.previousPositions ? view.styleProgress ?? 1 : 1,
       ...this.greyExitColor,
       c.pointOpacity, c.pointGreyoutOpacity ?? -1, c.pointGreyoutColor ? 1 : 0, view.hostHoveredPoint ?? -1,
+      fragmentOffset?.[0] ?? region[0], fragmentOffset?.[1] ?? region[1],
     ]))
     const bindings = {
       params: uniforms,

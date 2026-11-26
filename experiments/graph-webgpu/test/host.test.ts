@@ -39,9 +39,10 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     device.submit()
     return Array.from(await staging.readAsync(0, 4))
   }
-  const draw = (isPicking = false, pixelRatio?: number): void => {
+  const draw = (isPicking = false, pixelRatio?: number, viewport?: [number, number, number, number]): void => {
     const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
     try {
+      if (viewport) pass.setParameters({ viewport })
       graph.drawToRenderPass(pass, {
         pixelRatio,
         picking: isPicking ? { alpha: 7 / 255, linkIndexOffset: 1000 } : undefined,
@@ -66,6 +67,18 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     // A dash gap belongs to the link in the host's picking pass.
     expect(await pixel(50, 32)).toEqual([233, 3, 0, 7])
     expect(await pixel(16, 46)).toEqual([0, 0, 0, 0])
+    // Deck thumbnails move the render viewport inside a shared target. The
+    // shader still receives framebuffer-relative fragment coordinates there.
+    const thumbnail: [number, number, number, number] = [32, 16, 48, 32]
+    graph.setViewTransform({ k: 0.5, x: 12, y: 8 }, [48, 32])
+    expect(graph.spaceToScreenPosition([32, 64])).toEqual([8, 16])
+    draw(false, 1, thumbnail)
+    expect(await pixel(40, 32)).toEqual([255, 0, 0, 255])
+    expect(await pixel(72, 32)).toEqual([0, 255, 0, 255])
+    draw(true, 1, thumbnail)
+    expect(await pixel(40, 32)).toEqual([1, 0, 0, 7])
+    expect(await pixel(72, 32)).toEqual([2, 0, 0, 7])
+    graph.setViewTransform({ k: 1, x: 0, y: 0 }, [width, height])
     draw()
     expect(await pixel(50, 32)).toEqual([0, 0, 0, 0])
     expect(await pixel(16, 41)).toEqual([0, 0, 0, 0])
