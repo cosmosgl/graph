@@ -481,6 +481,37 @@ on 6.0.3 and 7.0.2. The full two-owner app failed on both at the same luma
 apps and both settings are recorded under
 `captures/signed-graph-deck-78f957f7-jo49x0fh/strict-consumers/`.
 
+The same packed Graph and Deck app passed **full dependency checking** on
+TypeScript 6.0.3 and 7.0.2 with the following browser declarations. Each run
+installed the tarballs using `npm ci --strict-peer-deps`, checked the real
+Deck WebGPU adapter import and built the app. To reproduce the check in the
+prepared consumer, install these development dependencies and extend its
+existing `tsconfig.json`.
+
+```sh
+npm install --save-dev --save-exact --strict-peer-deps typescript@6.0.3 @types/web@0.0.250 @webgpu/types@0.1.74 @types/node@22.20.7
+```
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@types/web", "@webgpu/types"],
+    "skipLibCheck": false
+  }
+}
+```
+
+Save this as `tsconfig.dependencies.json` and run
+`npx tsc -p tsconfig.dependencies.json`. These DOM declarations provide
+the browser APIs and leave the GPU declarations to the WebGPU Working Group
+package. The Node 22 declarations also agree with this DOM version on
+`URLPattern`. TypeScript 5.9.3 still reports missing float16 types in math.gl
+and loaders.gl with this profile. Its ordinary strict app build passes.
+The compiler outputs, lockfiles and package digests are in
+`captures/full-types-m63miukc/`.
+
 In the scratch checkout, the ordinary typecheck covered the WebGPU source,
 shared stories, integration and website. The default browser job selected
 all 13 candidate test files and a public Deck test file on Chromium's
