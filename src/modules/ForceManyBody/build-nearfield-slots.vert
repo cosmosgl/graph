@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 
 // One depth-peeling pass of a per-cell point-slot build. Shared by the

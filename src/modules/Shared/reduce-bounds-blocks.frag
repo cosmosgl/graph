@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 precision highp float;
 // Fragment shaders default int to mediump; keep the loop counters highp like
 // the other two passes'.

@@ -1,4 +1,5 @@
 #version 300 es
+precision highp sampler2D;
 #ifdef GL_ES
 precision highp float;
 // isFiniteVector reads the exponent bits of a 32-bit float.
