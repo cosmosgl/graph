@@ -4,6 +4,8 @@ import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer, type CosmosGraphLayerConfig, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
+import { publicContracts } from './contracts'
+
 const query = new URLSearchParams(location.search)
 const points = [
   { id: 'left', x: 940, y: 982 },
@@ -63,6 +65,7 @@ type Recovery = {
 }
 type Consumer = {
   adapter: Device['info'];
+  contracts: ReturnType<typeof publicContracts>;
   recovery?: Recovery;
   checkpointMovingSession(): Promise<{ checkpoint: Checkpoint; checkpointMs: number; nextTickAlpha: number }>;
   simulateDeviceLoss(): void;
@@ -321,7 +324,8 @@ async function mount (
   resize.disabled = false
   resize.onclick = (): Promise<void> => canvas.width === 320 ? setSize(512, 320) : setSize(320, 192)
   status.value = owner === 'app' ? 'App-supplied graph' : 'Layer-owned graph'
-  return { adapter: device.info, recovery, checkpointMovingSession, simulateDeviceLoss, pauseAndInspect, setSize, pick, remove, finish }
+  const contracts = publicContracts(deck, graph, until, () => ticks, () => renderedFrames)
+  return { adapter: device.info, contracts, recovery, checkpointMovingSession, simulateDeviceLoss, pauseAndInspect, setSize, pick, remove, finish }
 }
 
 declare global {

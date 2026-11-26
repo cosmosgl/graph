@@ -7,10 +7,12 @@ import { join } from 'node:path'
 import { isDeepStrictEqual, parseArgs } from 'node:util'
 import { chromium, firefox, webkit } from 'playwright'
 import { preview } from 'vite'
+import { swiftShaderArgs } from './chromium-swiftshader.mjs'
+import { checkPublicContracts } from './check-packed-deck-contracts.mjs'
 import { checkNativeGpu, requestedGpuVendor } from './qualification-adapter.mjs'
 
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
-  browser: { type: 'string', default: 'chrome' }, swiftshader: { type: 'boolean' },
+  browser: { type: 'string', default: 'chrome' }, swiftshader: { type: 'boolean' }, ci: { type: 'boolean' },
   points: { type: 'string', default: '2' }, 'adapter-vendor': { type: 'string' },
 } })
 if (positionals.length !== 1) throw new Error('Pass the standalone app directory')
@@ -18,14 +20,14 @@ const app = await realpath(positionals[0])
 const pointCount = Number(values.points)
 const vendor = requestedGpuVendor(values['adapter-vendor'])
 assert.ok([2, 65536].includes(pointCount))
-assert.ok(['chrome', 'firefox', 'webkit'].includes(values.browser))
-assert.ok(!values.swiftshader || values.browser === 'chrome')
+assert.ok(['chrome', 'chromium', 'firefox', 'webkit'].includes(values.browser))
+assert.ok(!values.swiftshader || ['chrome', 'chromium'].includes(values.browser))
 assert.ok(!values.swiftshader || !vendor, 'Use a native adapter for vendor qualification')
 const launch = () => {
   if (values.browser === 'firefox') return firefox.launch({ headless: false })
   if (values.browser === 'webkit') return webkit.launch({ headless: false })
-  return chromium.launch({ channel: 'chrome', headless: false,
-    args: values.swiftshader ? ['--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu'] : [],
+  return chromium.launch({ channel: values.browser, headless: Boolean(values.ci),
+    args: values.swiftshader ? swiftShaderArgs : [],
   })
 }
 function checkAdapter(info) {
@@ -303,10 +305,13 @@ try {
     await page.close()
     console.error(`${owner} passed drawing, picking, resize and teardown at display DPR ${deviceScaleFactor}`)
   }
+  if (values.ci) report.contracts = await checkPublicContracts(browser, url, checkAdapter, observeErrors)
   await browser.close()
-  for (const owner of ['layer', 'app']) {
-    report.recovery.push(await verifyRecovery(owner))
-    console.error(owner + ' restored the live session on ' + values.browser)
+  if (!values.ci) {
+    for (const owner of ['layer', 'app']) {
+      report.recovery.push(await verifyRecovery(owner))
+      console.error(owner + ' restored the live session on ' + values.browser)
+    }
   }
   console.log(JSON.stringify(report, null, 2))
 } finally {
