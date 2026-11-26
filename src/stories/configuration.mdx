@@ -71,7 +71,7 @@ All configuration properties are optional. When creating a graph or calling `set
 | enableZoom | Enables zooming interactions | `true` |
 | enableSimulationDuringZoom | Keep simulation running during zoom operations. Note: initialization zoom (e.g. `fitViewOnInit`) always runs with simulation enabled regardless of this setting. Individual zoom method calls can override this value via their `enableSimulation` parameter. | `false` |
 | enableDrag | Enable/disable point dragging | `false` |
-| pointSelectionMode | Hit rule for `findPointsInRect()` and `findPointsInPolygon()`. With `'touch'`, a point is selected when its footprint overlaps or touches the selection area. With `'center'`, a point is selected when its center is inside or on the boundary. | `'touch'` |
+| pointSelectionMode | Hit rule for rectangle and lasso queries, including `findPointsInRectAsync()` and `findPointsInPolygonAsync()`. With `'touch'`, a point is selected when its footprint overlaps or touches the selection area. With `'center'`, a point is selected when its center is inside or on the boundary. | `'touch'` |
 | fitViewOnInit | Auto-zoom to fit all points on initialization | `true` |
 | fitViewDelay | Delay before fitting view when enabled in milliseconds | `250` |
 | fitViewPadding | Extra space around points when fitting view | `0.1` |
