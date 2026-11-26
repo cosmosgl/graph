@@ -152,3 +152,9 @@ In native Chrome 158 on Apple M3, two independent WebGL controls produced identi
 The final overlap calculation checked all million slots against their neighbors using the retained XY files. Both topologies had fewer overlapping pairs on WebGPU and slightly smaller RMS penetration there. Free hub 2 had 8,192 outgoing links and one incoming link. At tick 100 its displacement was 5,720.65 graph units in WebGL and 5,723.61 in WebGPU. Its incident link length p95 was 141.36 and 142.30 graph units respectively. Both engines ran from the same input buffers with the same configuration.
 
 The nine fixed checkpoints and binary positions are in `captures/packaged-force-timing-2026-11-26T09-50-35-971Z/`. Package hashes, luma versions and the source snapshot accompany the results. [Reproduction and thresholds](#/production-forces?section=doc-scale-method)
+
+### All eight forces together
+
+With all eight forces on the million-point fixtures, both packages received the same trusted right-button hold during ticks 1–8 and reached alpha 0.001 at tick 100. Across both topologies and all checkpoints, the largest paired RMS position difference was 0.256% of the WebGL radius. Neither topology lost community retention relative to its WebGL control, and every free point moved. Each WebGL repeat reproduced its first run exactly.
+
+The global layout measure averages the whole graph. In the dense graph, the initial fractional right-button movement also revealed a local difference. WebGL received a pointer at CSS (698.117, 269.689), while WebGPU read its compatibility mouse event at (698, 269). In the first step 787 points differed by more than one backing pixel, with a maximum of 6.13 pixels. Moving the pointer to integer coordinates reduced that count to 35. Releasing it gave 36. The complete original layouts and the separate input probe are in `captures/packaged-force-timing-2026-11-26T10-20-04-579Z/` and `captures/packaged-composed-pointer-20261126/`.

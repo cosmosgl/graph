@@ -146,3 +146,5 @@ pnpm --filter @cosmos.gl/gpu-lab benchmark:packaged-forces --points 1000000
 ```
 
 To reproduce a single topology, add `--fixture dense` or `--fixture hubs`. Add `--smoke` to check initialization and the first tick on both packages in layout mode, or eight steady frames and four clicks per package in timing mode. Every invocation creates a separate capture directory. A failed run retains its stage, diagnostics and completed layout checkpoints. Compare partial measurements only where all required controls and both engine orders completed. [Million-point layout results](#/production-forces?section=doc-results) · [M3 timing and workflow results](#/production-forces?section=doc-scale-timing)
+
+For all eight forces, append `--composed` to the fixed-tick command. A candidate-only rerun can reuse an existing layout capture with `--webgl-controls <run-name>`. The command checks the WebGL bundle digest, complete controls, input and settings hashes, point count and browser version. The new capture keeps the old control directory in its source metadata. Performance runs always record fresh WebGL controls.

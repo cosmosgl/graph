@@ -12,7 +12,10 @@ const lab = fileURLToPath(new URL('../', import.meta.url))
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
 const { values } = parseArgs({ options: {
   fixture: { type: 'string' }, points: { type: 'string', default: '8192' }, smoke: { type: 'boolean' }, layout: { type: 'boolean' },
+  composed: { type: 'boolean' }, 'webgl-controls': { type: 'string' },
 } })
+if (values.composed && !values.layout) throw new Error('Use --composed with --layout for the eight-force fixed-tick replay')
+if (values['webgl-controls'] && (!values.layout || values.smoke)) throw new Error('Reuse controls only for a complete fixed-tick replay')
 const pointCount = Number(values.points)
 if (!Number.isSafeInteger(pointCount) || pointCount < 1026 || pointCount > 1000000) throw new Error('Expected 1,026–1,000,000 points')
 const kinds = values.fixture ? [values.fixture] : ['dense', 'hubs']
@@ -20,6 +23,8 @@ if (!kinds.every(k => ['dense', 'hubs'].includes(k))) throw new Error('Expected 
 const cpu = cpus()[0]?.model ?? 'unknown'
 if (!/Apple M3/i.test(cpu)) throw new Error(`Requires the native M3 machine, found ${cpu}`)
 const root = join(lab, 'captures')
+const controlsDir = values['webgl-controls'] ? resolve(root, values['webgl-controls']) : undefined
+if (controlsDir && !controlsDir.startsWith(`${root}/`)) throw new Error('Choose a control run under captures/')
 const runId = process.env.LAB_ARTIFACT_RUN || `packaged-force-timing-${new Date().toISOString().replace(/[.:]/g, '-')}`
 const capture = resolve(root, runId)
 if (!capture.startsWith(`${root}/`)) throw new Error('Choose a new LAB_ARTIFACT_RUN below captures/')
@@ -27,6 +32,11 @@ await mkdir(resolve(capture, '..'), { recursive: true })
 await mkdir(capture)
 const save = (name, object) => writeFile(join(capture, `${name}.json`), `${JSON.stringify(object, null, 2)}\n`)
 const source = await captureBenchmarkSource(repo, lab, capture)
+if (controlsDir) {
+  const previous = JSON.parse(await readFile(join(controlsDir, 'source.json'), 'utf8'))
+  if (source.productionSha256 !== previous.productionSha256) throw new Error('WebGL control bundle hash changed')
+  source.webglControls = relative(root, controlsDir)
+}
 source.webgpuSha256 = await sha256(join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
 source.cpu = cpu
 source.node = process.version
@@ -73,7 +83,7 @@ async function run(url, kind, engine, name) {
     await page.goto(url)
     await page.bringToFront()
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
-    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout])
+    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed])
     const bounds = await page.locator('#graph canvas').boundingBox()
     if (!bounds || bounds.width !== 961 || bounds.height !== 541 || bounds.x < 0 || bounds.y < 0 ||
       bounds.x + bounds.width > 1050 || bounds.y + bounds.height > 680) throw new Error('Canvas not fully visible')
@@ -82,6 +92,13 @@ async function run(url, kind, engine, name) {
       entry.result.checkpoints = []
       for (const tick of values.smoke ? [0, 1] : [0, 1, 4, 8, 16, 31, 32, 99, 100]) {
         entry.stage = `tick ${tick}`
+        if (values.composed && tick === 1) {
+          const [x, y] = entry.result.pointer.target
+          await page.mouse.move(bounds.x + x - 2, bounds.y + y)
+          await page.mouse.down({ button: 'right' })
+          await page.mouse.move(bounds.x + x, bounds.y + y)
+        }
+        if (values.composed && tick === 16) await page.mouse.up({ button: 'right' })
         const { positions, ...row } = await page.evaluate(tick => window.forceTiming.checkpoint(tick), tick)
         const coordinates = Buffer.from(positions, 'base64')
         const xyFile = join(capture, kind, `${name}-${tick}.f32`)
@@ -90,9 +107,18 @@ async function run(url, kind, engine, name) {
         await save(`${kind}/${name}`, entry)
         console.log(`${kind} ${name}: tick ${tick}, collision RMS ${row.quality.overlap.rmsDepth.toFixed(3)} (stride ${row.quality.overlap.stride})`)
       }
+      if (values.composed && values.smoke) await page.mouse.up({ button: 'right' })
       await page.evaluate(() => window.forceTiming.finish())
       const { checkpoints } = entry.result
       entry.result = { ...await snapshot(), checkpoints }
+      if (values.composed) {
+        const held = Array.from({ length: values.smoke ? 1 : 8 }, (_, i) => i + 1)
+        const { pointer, submittedTicks } = entry.result
+        if (!pointer.trusted || pointer.pressed || String(pointer.ticks) !== String(held) || submittedTicks !== checkpoints.at(-1).step) {
+          throw new Error(`Unexpected right-button or tick sequence: ${JSON.stringify({ pointer, submittedTicks })}`)
+        }
+        if (!values.smoke && Math.abs(pointer.alpha - 0.001) > 0.000001) throw new Error(`The 100-tick cooldown ended at alpha ${pointer.alpha}`)
+      }
       entry.stage = 'complete'; entry.status = 'complete'
       return entry
     }
@@ -142,16 +168,21 @@ try {
     }
     if (values.layout) {
       const lanes = []
-      for (const [engine, name] of [['webgl', 'reference'], ['webgl', 'repeat'], ['webgpu', 'candidate']]) {
-        lanes.push(await run(url, kind, engine, name))
+      for (const name of ['reference', 'repeat']) {
+        const reference = controlsDir ? JSON.parse(await readFile(join(controlsDir, kind, `${name}.json`), 'utf8')) : await run(url, kind, 'webgl', name)
+        if (controlsDir && (reference.status !== 'complete' || reference.engine !== 'webgl' || reference.pointCount !== pointCount)) {
+          throw new Error(`Invalid stored ${kind} ${name} control`)
+        }
+        lanes.push(reference)
       }
+      lanes.push(await run(url, kind, 'webgpu', 'candidate'))
       const rows = []
       for (const [i, reference] of (lanes[0].result?.checkpoints ?? []).entries()) {
-        const file = name => join(capture, kind, `${name}-${reference.step}.f32`)
+        const file = name => join(name === 'candidate' ? capture : controlsDir ?? capture, kind, `${name}-${reference.step}.f32`)
         for (const lane of lanes.slice(1)) {
           const probe = lane.result?.checkpoints?.[i]
           if (!probe || reference.step !== probe.step) continue
-          if (lane.result.input !== lanes[0].result.input) throw new Error('Layout comparison used different public buffers or settings')
+          if (lane.result.input !== lanes[0].result.input || lane.browser !== lanes[0].browser) throw new Error('Layout comparison used different inputs, settings or browser versions')
           const rmsFraction = await comparePositions(file('reference'), await readFile(file(lane.name)), reference.motion.radius)
           const radiusFraction = Math.abs(probe.motion.radius - reference.motion.radius) / reference.motion.radius
           const retentionLoss = Math.max(...reference.quality.communities.map((group, index) => group.retainedFraction - probe.quality.communities[index].retainedFraction))

@@ -18,7 +18,7 @@ type LayoutCheckpoint = {
   step: number; motion: ReturnType<typeof positionStats>; quality: ReturnType<typeof scaleMetrics>; positions: string;
 }
 export function layoutCheckpoints (
-  graph: Graph, fixture: ScaleFixture, read: () => Promise<Float32Array>
+  graph: Graph, fixture: ScaleFixture, read: () => Promise<Float32Array>, activeFrames = false
 ): (target: number) => Promise<LayoutCheckpoint> {
   let step = 0
   let previous = fixture.positions
@@ -28,12 +28,19 @@ export function layoutCheckpoints (
     // fence waits for GPU work without allocating another full XY snapshot.
     while (step < target) {
       const batch = Math.min(4, target - step)
-      for (let i = 0; i < batch; i++) graph.step()
+      if (activeFrames) graph.unpause()
+      for (let i = 0; i < batch; i++) {
+        if (activeFrames) graph.renderOneFrame()
+        else graph.step()
+      }
+      if (activeFrames) graph.pause()
       step += batch
       const fence = graph.simulation.device!.createFence()
       try { await fence.signaled } finally { fence.destroy() }
     }
-    graph.renderOneFrame()
+    // A paused draw while the pointer is held applies an extra repulsion.
+    // The active frame above has already drawn the composed layout.
+    if (!activeFrames || target === 0) graph.renderOneFrame()
     const xy = await read()
     const motion = positionStats(xy, previous, 1)
     const movedPin = fixture.pinned.find(id => xy[id * 2] !== fixture.positions[id * 2] || xy[id * 2 + 1] !== fixture.positions[id * 2 + 1])

@@ -6,6 +6,7 @@ import { forceConfig, loadForce } from './fixture'
 import { scaleFixture, type ScaleCase } from './scale-fixture'
 import { layoutCheckpoints } from './scale-layout'
 import { measureScaleUpdates } from './scale-updates'
+import { composedChannels, composedConfig, loadComposedChannels } from './scale-composed'
 
 const viewport = { width: 961, height: 541, pixelRatio: 2 }
 const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
@@ -25,9 +26,10 @@ function distribution (samples: number[]): { p50: number; p95: number; max: numb
   }
 }
 
-async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false): Promise<void> {
+async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false, composed = false): Promise<void> {
   if (navigator.userAgent.includes('HeadlessChrome') || devicePixelRatio !== viewport.pixelRatio) throw new Error('Requires foreground Chrome at DPR 2')
   const fixture = scaleFixture(kind, pointCount)
+  const channels = composed ? composedChannels(fixture) : undefined
   const arrays = {
     positions: fixture.positions,
     links: fixture.links,
@@ -37,13 +39,14 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
     linkColors: fixture.linkColors,
     linkWidths: fixture.linkWidths,
     pins: Uint32Array.from(fixture.pinned),
+    ...channels,
   }
   const digests = await Promise.all(Object.entries(arrays).map(async ([key, array]) => {
     const bytes = new Uint8Array(array.buffer, array.byteOffset, array.byteLength)
     const hash = await crypto.subtle.digest('SHA-256', bytes.slice())
     return [key, [...new Uint8Array(hash)].map(x => x.toString(16).padStart(2, '0')).join('')]
   }))
-  const settings = { ...forceConfig(kind), enableRenderLoop: !layout, pixelRatio: viewport.pixelRatio }
+  const settings = { ...forceConfig(kind), ...(composed ? composedConfig : {}), enableRenderLoop: !layout, pixelRatio: viewport.pixelRatio }
   const input = JSON.stringify({ arrays: Object.fromEntries(digests), settings, viewport })
   let hidden = document.visibilityState !== 'visible'
   document.addEventListener('visibilitychange', () => { hidden ||= document.visibilityState !== 'visible' })
@@ -58,6 +61,7 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   const refreshMs = percentile(idle, 0.5)
   const observer = observePresentation(health)
   let tick = 0
+  const pointer = { pressed: false, trusted: false, ticks: [] as number[], target: [] as number[], alpha: 1 }
   let readyBeforeNotification = 0
   let destroyed = false
   let peakBytes = 0
@@ -93,8 +97,12 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
     onPointClick: (id, _xy, event) => onPick(`Point ${id}`, event),
     onLinkClick: (id, event) => onPick(`Link ${id}`, event),
     onBackgroundClick: event => onPick('Background', event),
-    onSimulationTick (): void {
+    onSimulationTick (alpha): void {
       const submittedTick = ++tick
+      if (composed) {
+        if (pointer.pressed) pointer.ticks.push(submittedTick)
+        pointer.alpha = alpha
+      }
       if (layout) return
       // Both packages draw and submit later in this same frame callback. The fence
       // marks its completed GPU work without blocking the autonomous Graph loop.
@@ -124,6 +132,7 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   if (adapter.type !== engine || adapter.gpuType === 'cpu' || !/apple/i.test(JSON.stringify(adapter)) ||
     (engine === 'webgpu' && adapter.fallback !== false)) throw new Error(`Unexpected device ${JSON.stringify(adapter)}`)
   device.lost.then(() => { if (!destroyed) error = 'Graph device lost' })
+  if (channels) loadComposedChannels(graph, channels)
   loadForce(graph, kind, viewport, pointCount)
   graph.renderOneFrame()
   sampleMemory()
@@ -131,6 +140,15 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   try { await startupFence.signaled } finally { startupFence.destroy() }
   const startupMs = performance.now() - startupStart
   const canvas = host.querySelector('canvas')!
+  if (composed) {
+    const [cx, cy] = fixture.communityCenters[0]
+    pointer.target = graph.spaceToScreenPosition([cx + 18, cy + 12])
+    canvas.addEventListener('pointermove', event => {
+      pointer.pressed = (event.buttons & 2) !== 0
+      if (pointer.pressed) pointer.trusted = event.isTrusted
+    })
+    canvas.addEventListener('pointerup', () => { pointer.pressed = false })
+  }
   if (canvas.width !== viewport.width * 2 || canvas.height !== viewport.height * 2) throw new Error(`Incorrect backing size ${canvas.width} × ${canvas.height}`)
   const pin = graph.spaceToScreenPosition([fixture.positions[0], fixture.positions[1]])
   if (Math.abs(pin[0] - viewport.width / 2) > 1 || Math.abs(pin[1] - viewport.height / 2) > 1) throw new Error(`Unexpected pin coordinates ${pin}`)
@@ -185,6 +203,8 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
     idle,
     refreshMs,
     picked,
+    pointer: composed ? pointer : undefined,
+    get submittedTicks (): number { return tick },
     startupMs,
     updates: {} as Partial<Awaited<ReturnType<typeof measureScaleUpdates>>>,
     memoryAfterTeardown: undefined as number | undefined,
@@ -206,7 +226,7 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   }
   Object.assign(window, {
     forceTiming: {
-      checkpoint: layout ? layoutCheckpoints(graph, fixture, readPositions) : undefined,
+      checkpoint: layout ? layoutCheckpoints(graph, fixture, readPositions, composed) : undefined,
       async run (warmup: number, count: number): Promise<void> {
         graph.unpause()
         await frames(warmup)
