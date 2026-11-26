@@ -5,6 +5,7 @@ import { zoomIdentity, type ZoomTransform } from 'd3-zoom'
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, validateConfig, type GraphConfig } from '@/graph/config'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
+import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import type { GraphData } from '@/graph/modules/GraphData'
 import { sanitizeHtml } from '@/graph/helper'
@@ -32,6 +33,7 @@ export class Graph {
   private readonly listeners = new AbortController()
   private readonly pending: Array<() => void> = []
   private canvas?: HTMLCanvasElement
+  private fpsMonitor?: FPSMonitor
   private attribution?: HTMLDivElement
   private observer?: ResizeObserver
   private renderer?: GraphRenderer
@@ -95,6 +97,7 @@ export class Graph {
         this.observer = new ResizeObserver(() => this.resize())
         this.observer.observe(container)
         this.updateAttribution()
+        if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(null, container)
       }
       this.isReady = true
       if (this.config.initialZoomLevel !== undefined) this.setZoomLevel(this.config.initialZoomLevel)
@@ -188,13 +191,12 @@ export class Graph {
       // ResizeObserver can run after the caller’s animation callback. Draw the
       // new backing size immediately and consume any already scheduled idle paint.
       this.resize()
-      if (this.frame && !this.isSimulationRunning && !this.transition.isActive && !this.mouseRepulsion) {
+      if (this.frame && !this.isSimulationRunning && !this.transition.isActive && !this.mouseRepulsion && !this.fpsMonitor) {
         cancelAnimationFrame(this.frame)
         this.frame = 0
       }
     }
-    this.runSimulationStep(false, this.isAutomaticFrame && this.simulation.ownsDevice)
-    this.drawFrame()
+    this.drawFrame(true)
   }
 
   /** Record into the host's open pass using the viewport supplied to setViewTransform(). */
@@ -460,6 +462,8 @@ export class Graph {
     cancelAnimationFrame(this.frame)
     clearTimeout(this.fitTimer)
     this.observer?.disconnect()
+    this.fpsMonitor?.destroy()
+    this.fpsMonitor = undefined
     this.listeners.abort()
     this.refreshHoverAfterDraw = undefined
     if (this.canvas) select(this.canvas).interrupt().on('.zoom', null).on('.drag', null)
@@ -473,8 +477,12 @@ export class Graph {
     this.attribution?.remove()
   }
 
-  private drawFrame (): void {
+  private drawFrame (stepSimulation = false): void {
     if (!this.canvas || this.isDestroyed) return
+    const monitor = this.fpsMonitor
+    monitor?.begin()
+    if (stepSimulation) this.runSimulationStep(false, this.isAutomaticFrame && this.simulation.ownsDevice)
+    if (this.isDestroyed) return // A simulation callback can tear down the graph.
     const refreshHover = this.hasHoverSceneChanged || this.transition.isActive
     this.hasHoverSceneChanged = false
     if (this.transition.isActive) {
@@ -485,6 +493,7 @@ export class Graph {
     }
     this.renderer?.draw(this.view())
     this.refreshHoverAfterDraw?.(refreshHover)
+    monitor?.end(performance.now())
   }
 
   private runSimulationStep (forceExecution = false, measureOccupancy = false): void {
@@ -583,7 +592,7 @@ export class Graph {
         this.isFrameInFlight = false
       }
       fence.signaled.then(release, release)
-      if (this.hasRendered && (this.isSimulationRunning || this.transition.isActive || this.mouseRepulsion)) this.requestFrame()
+      if (this.hasRendered && (this.isSimulationRunning || this.transition.isActive || this.mouseRepulsion || this.fpsMonitor)) this.requestFrame()
     })
   }
 
@@ -616,9 +625,17 @@ export class Graph {
       this.config.randomSeed = previous.randomSeed
       this.config.attribution = previous.attribution
 
+      const keys = Object.keys(config)
+      if (this.container && this.config.showFPSMonitor !== previous.showFPSMonitor) {
+        this.fpsMonitor?.destroy()
+        this.fpsMonitor = this.config.showFPSMonitor ? new FPSMonitor(null, this.container) : undefined
+      }
+      if (!reset && keys.length === 1 && keys[0] === 'showFPSMonitor') {
+        if (this.fpsMonitor) this.requestFrame()
+        return
+      }
       // The next area query reads its mode directly. Rebuilding styles here
       // would discard a size transition's displayed value when changing modes.
-      const keys = Object.keys(config)
       if (!reset && keys.length === 1 && keys[0] === 'pointSelectionMode') return
       this.hasHoverSceneChanged = true
       this.hoverRequest++

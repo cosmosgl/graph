@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 
 // Run against the two previews from this checkout. Set --performance to also
-// exercise the three moving layouts that take asynchronous position snapshots.
+// exercise the moving layout readouts and the stories that display frame rate.
 const { values } = parseArgs({ options: {
   webgl: { type: 'string', default: 'http://127.0.0.1:6006' },
   webgpu: { type: 'string', default: 'http://127.0.0.1:6007' },
@@ -74,6 +74,13 @@ async function checkReadouts(page, open) {
   await open('performance--steady-state-motion')
   await page.getByRole('button', { name: 'fast', exact: true }).click()
   await page.getByText(/one point, last \d+ ticks/).first().waitFor({ timeout: 180_000 })
+  for (const id of ['collision-stress-test', 'point-occlusion-culling', 'hyperbolic-large-graph']) {
+    await open(`performance--${id}`)
+    const widget = page.locator('#storybook-root #gl-bench')
+    await widget.locator('.gl-fps').filter({ hasText: /^[1-9]\d* FPS$/ }).waitFor({ timeout: 60_000 })
+    await widget.locator('.gl-chart[points]:not([points=""])').waitFor({ state: 'attached' })
+    console.log(`${id} displayed a live FPS counter and frame chart`)
+  }
 }
 
 try {

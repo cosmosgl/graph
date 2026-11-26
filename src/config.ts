@@ -884,7 +884,7 @@ export interface GraphConfigInterface {
   onDragEnd?: (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => void;
 
   /**
-   * Show WebGL performance monitor.
+   * Show the graph's frame rate and CPU frame load. A headless graph has no monitor.
    * Default value: `false`
    */
   showFPSMonitor: boolean;
