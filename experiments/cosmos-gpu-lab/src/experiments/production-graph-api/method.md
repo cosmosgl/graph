@@ -14,6 +14,10 @@ Open `#/production-graph-api`. Click the red point in each pane and check for po
 
 This small case exercises pre-initialization setters, NaN absence, linking, pinning, public async reads and picking. The panes share the GPU, so use the separate matched runs to measure performance.
 
+### Replace only the links
+
+With four stationary points, move link 0 from the upper pair to the lower pair, draw both links in reversed index order, then clear the list. At both pixel ratios on M3 and SwiftShader, all 16 paired frames matched every pixel. The upper midpoint changed from link 0 to background to link 1, then back to background. The red point kept its color and ID throughout. For each engine a full point-and-link update also produced the exact same canvas at every stage. The WebGPU regression checks that changing only the link list writes zero bytes to the point style and draw-order buffers. [Million-point edit timings](#/production-forces?section=doc-scale-timing)
+
 ### Move a curved link across a point
 
 The red point (ID 2) stays at (128, 80) CSS px. Both endpoints of green link 0 move downward together for one second. The arc passes through the point’s center at 500 ms, while the straight line between its endpoints is still 24 CSS px below it. A second run omits point 2 and keeps the link, endpoints, camera and clock identical. [Replay the crossing](#/production-graph-api?section=try-curved-link-crossing)

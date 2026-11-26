@@ -1,6 +1,6 @@
 # How closely does WebGPU follow the original Cosmos?
 
-At the audited revision `93e23212`, changing one link width repacked every point and link. The candidate now routes width-only edits to Lines and point color and size edits to Points. Both modules keep other records on the GPU. Topology or additional style changes in the same render still take the full update path. [Link-width measurements](../cosmos-gpu-lab/src/experiments/production-lines/results.md#changing-only-link-widths) · [Point-style measurements](../cosmos-gpu-lab/src/experiments/production-graph-api/method.md#change-only-point-colors-and-sizes)
+At the audited revision `93e23212`, changing one link width repacked every point and link. The candidate now routes width-only edits to Lines and point color and size edits to Points. Both modules keep other records on the GPU. A link-only topology edit rebuilds the adjacency and link records while retaining point paint and draw order. A simultaneous point edit or an active transition uses the full update path. [Link-width measurements](../cosmos-gpu-lab/src/experiments/production-lines/results.md#changing-only-link-widths) · [Point-style measurements](../cosmos-gpu-lab/src/experiments/production-graph-api/method.md#change-only-point-colors-and-sizes)
 
 ## Where to look in each engine
 
