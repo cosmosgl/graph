@@ -2,9 +2,9 @@ import type { DeviceInfo } from '@luma.gl/core'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
 import type { Engine } from './frame'
 
-type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'snap-remove' | 'snap-restore'
+type Phase = 'initial' | 'remove' | 'restore' | 'remove-again' | 'restore-original' | 'snap-remove' | 'snap-restore'
 type Point = [number, number]
-export type SparseScenario = 'complete' | 'interrupted' | 'remove-again'
+export type SparseScenario = 'complete' | 'interrupted' | 'remove-again' | 'restore-original'
 type Site = { pick: string; rgb: number[] }
 const anchor: Point = [192, 96]
 const original: Point = [48, 96]
@@ -116,6 +116,8 @@ export async function runSparseTransition (
       let now = win.performance.now()
       Object.defineProperty(win.performance, 'now', { configurable: true, value: () => now })
       const samples: SparseSample[] = []
+      const interrupted = scenario !== 'complete'
+      const repeatedRemoval = scenario === 'remove-again' || scenario === 'restore-original'
       const sample = async (phase: Phase, time: number, point: Point): Promise<void> => {
         graph.renderOneFrame()
         if (canvas.width !== copy.width || canvas.height !== copy.height) throw new Error(`Unexpected drawing buffer size for ${engine}`)
@@ -145,10 +147,10 @@ export async function runSparseTransition (
         const xy = await graph.getPointPositionsAsync()
         const picks = { point: await click(point), link: await click(linkProbe), anchor: await click(anchor), control: await click(control) }
         let sites: SparseSample['sites']
-        if (scenario !== 'complete') {
+        if (interrupted) {
           const readSite = async (site: Point): Promise<Site> => ({ pick: point === site ? picks.point : await click(site), rgb: rgb(site) })
           sites = { old: await readSite(original), destination: await readSite(restored) }
-          if (scenario === 'remove-again') sites.midpoint = await readSite(midpoint)
+          if (repeatedRemoval) sites.midpoint = await readSite(midpoint)
         }
         let midpointPicks: string[] | undefined
         if (phase === 'restore' && time === 500) {
@@ -190,14 +192,18 @@ export async function runSparseTransition (
         }
       }
       await sample('initial', 0, original)
-      const interrupted = scenario !== 'complete'
       await edit('remove', [NaN, NaN], original, 1000, interrupted ? [0, 500] : [0, 500, 1000])
       // At each interruption, the new edit starts on the preceding sample's clock.
       const restoreTimes = interrupted ? [0, 16, 250, 500] : [0, 500]
-      if (scenario !== 'remove-again') restoreTimes.push(521, 522, 749, 750, 751, 1000)
+      if (!repeatedRemoval) restoreTimes.push(521, 522, 749, 750, 751, 1000)
       await edit('restore', restored, restored, 1000, restoreTimes)
-      if (scenario === 'remove-again') {
-        await edit('remove-again', [NaN, NaN], midpoint, 1000, [0, 16, 250, 500, 750, 1000])
+      if (repeatedRemoval) {
+        const fadeTimes = scenario === 'restore-original' ? [0, 16, 250, 500] : [0, 16, 250, 500, 750, 1000]
+        await edit('remove-again', [NaN, NaN], midpoint, 1000, fadeTimes)
+        if (scenario === 'restore-original') {
+          // Bracket the area boundaries and the x=80 click handoff from the returning point to its link.
+          await edit('restore-original', original, original, 1000, [0, 16, 250, 314, 315, 358, 359, 500, 685, 686, 750, 1000])
+        }
       } else if (!interrupted) {
         await edit('snap-remove', [NaN, NaN], restored, 0, [0])
         await edit('snap-restore', original, original, 0, [0])

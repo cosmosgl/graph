@@ -69,6 +69,24 @@ Before the edit, the click search window at each endpoint could reach the return
 
 The frames halfway through restoration and halfway through the second fade matched byte for byte within each package, even though all three click results changed. Across packages, all 26 frame pairs matched pixel for pixel on M3 at 1× and 2×.
 
+### Restore the original position during the second fade
+
+At 500 ms into its second removal, point 1 is 12 CSS px wide at x = 64 and its link’s green channel is 128/255. Submitting x = 48 as the destination at that same clock time makes the slot present again. The new fade starts fully transparent at the midpoint. Both packages draw zero pixels for the point and link on that frame, yet clicks at all three sites reach point 1. [Replay the return to the original center](#/production-graph-api?section=try-restore-original)
+
+The click column lists the results at x = 48, 64 and 80 in that order. The last two columns list the centers whose 4 × 4 CSS px rectangle or diamond lasso returned `[1]`. Every other local region returned `[]`.
+
+| Time from final restoration | Clicks at original / midpoint / first target | Rectangle centers selecting point 1 | Lasso centers selecting point 1 |
+| --- | --- | --- | --- |
+| Just before the edit | Background / Background / Background | None | None |
+| 0 ms | Point 1 / Point 1 / Point 1 | 64 | 64 |
+| 315 ms | Point 1 / Point 1 / Point 1 | 48, 64 | None |
+| 359 ms | Point 1 / Point 1 / Link 0 | 48, 64 | None |
+| 500 ms | Point 1 / Point 1 / Link 0 | 48, 64 | None |
+| 686 ms | Point 1 / Point 1 / Link 0 | 48 | 48 |
+| 1,000 ms | Point 1 / Point 1 / Link 0 | 48 | 48 |
+
+The point travels 16 CSS px left with the default cubic easing. Rectangles use the 12 CSS px target radius and lassos use the moving center. The click at x = 80 changes to the underlying link when the point leaves its picking window. Each of the three switches above was checked one millisecond earlier as well. At 500 ms the paint is 12 CSS px wide at x = 56, with link green back at 128/255. At 1,000 ms the 24 CSS px point and its link exactly reproduce the initial canvas and hit results in each package. All 46 paired frames matched pixel for pixel on M3 at 1× and 2×.
+
 ### Hover under a stationary cursor
 
 Open the [stationary hover replay](#/production-graph-api?section=try-stationary-hover). The application parks the cursor over empty space, moves point 0 underneath it, holds it there, then replaces it with point 1. It moves point 1 away and zooms the camera to bring the point back beneath the cursor. The last checkpoint takes the pointer off the canvas. Choose a checkpoint to compare the green ring and the sequence of callbacks at either pixel ratio.

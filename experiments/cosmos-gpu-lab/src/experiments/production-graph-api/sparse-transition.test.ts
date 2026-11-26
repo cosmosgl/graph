@@ -4,11 +4,13 @@ import { writeArtifact } from '../../testing/artifacts'
 import { runSparseTransition, type SparseSample, type SparseScenario } from './sparse-transition'
 
 function expectedSelections (phase: SparseSample['phase'], time: number): SparseSample['selections'] {
-  // The destination lies 32 CSS px from the frozen position. The default cubic
-  // easing gives the restored center, even on the first frame with no paint.
+  // The default cubic easing gives the live center on each restoration leg,
+  // including its first frame when the point has no paint.
   const t = time / 1000
   const progress = t < 0.5 ? 4 * t ** 3 : 1 - 4 * (1 - t) ** 3
-  const x = phase === 'restore' ? 48 + 32 * progress : 48
+  let x = 48
+  if (phase === 'restore') x += 32 * progress
+  if (phase === 'restore-original') x = 64 - 16 * progress
   const absent = phase === 'remove' || phase === 'remove-again' || phase === 'snap-remove'
   const local = (region: 'old' | 'midpoint' | 'destination', center: number): SparseSample['selections'][number] => ({
     region,
@@ -34,6 +36,7 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
   samples: SparseSample[];
   comparisons: Comparison[];
   repeatedMidpoint?: { webgl: PixelComparison; webgpu: PixelComparison };
+  restoredOriginal?: { webgl: PixelComparison; webgpu: PixelComparison };
 }> {
   const gl = await runSparseTransition('webgl', ratio, scenario)
   const gpu = await runSparseTransition('webgpu', ratio, scenario)
@@ -42,16 +45,22 @@ async function compareSparseTransition (ratio: 1 | 2, scenario: SparseScenario):
     expect([otherPhase, otherTime]).toEqual([phase, time])
     return { phase, time, ...comparePixels(pixels, other), webgl, webgpu }
   })
-  const suffix = scenario === 'complete' ? 'transition' : scenario === 'interrupted' ? 'interruption' : 'remove-again'
+  const suffix = scenario === 'complete' ? 'transition' : scenario === 'interrupted' ? 'interruption' : scenario
   const repeatedMidpoint = scenario === 'remove-again' ? { webgl: compareMidpointFrames(gl.samples), webgpu: compareMidpointFrames(gpu.samples) } : undefined
+  const restoredOriginal = scenario === 'restore-original'
+    ? {
+      webgl: comparePixels(gl.samples[0]!.pixels, gl.samples.at(-1)!.pixels),
+      webgpu: comparePixels(gpu.samples[0]!.pixels, gpu.samples.at(-1)!.pixels),
+    }
+    : undefined
   await writeArtifact(`package-sparse-${suffix}-${ratio}x`, {
-    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons, repeatedMidpoint,
+    devices: [gl.deviceInfo, gpu.deviceInfo], ratio, comparisons, repeatedMidpoint, restoredOriginal,
   })
   if (import.meta.env.LAB_NATIVE_GPU) {
     expect(gl.deviceInfo.gpuType).not.toBe('cpu')
     expect(gpu.deviceInfo.fallback).toBe(false)
   }
-  return { samples: gl.samples, comparisons, repeatedMidpoint }
+  return { samples: gl.samples, comparisons, repeatedMidpoint, restoredOriginal }
 }
 
 it.each([1, 2] as const)('removes and restores a slot in both packages at %i×', async ratio => {
@@ -176,4 +185,45 @@ it.each([1, 2] as const)('removes the slot again halfway through its restoration
     expect.soft(row.webgpu, `${row.phase} ${row.time} ms`).toEqual(row.webgl)
     expect.soft(row.differingPixels, `${row.phase} ${row.time} ms`).toBe(0)
   }
+})
+
+it.each([1, 2] as const)('restores the original position halfway through the second removal at %i×', async ratio => {
+  const { comparisons, restoredOriginal } = await compareSparseTransition(ratio, 'restore-original')
+  expect(comparisons.map(row => [row.phase, row.time])).toEqual([
+    ['initial', 0], ['remove', 0], ['remove', 500], ['restore', 0], ['restore', 16], ['restore', 250], ['restore', 500],
+    ['remove-again', 0], ['remove-again', 16], ['remove-again', 250], ['remove-again', 500],
+    ['restore-original', 0], ['restore-original', 16], ['restore-original', 250], ['restore-original', 314], ['restore-original', 315],
+    ['restore-original', 358], ['restore-original', 359], ['restore-original', 500], ['restore-original', 685], ['restore-original', 686],
+    ['restore-original', 750], ['restore-original', 1000],
+  ])
+  expect(restoredOriginal?.webgl.differingPixels).toBe(0)
+  expect(restoredOriginal?.webgpu.differingPixels).toBe(0)
+  const beforeEdit = comparisons.find(row => row.phase === 'remove-again' && row.time === 500)!.webgl
+  expect(beforeEdit.pointBounds?.map(value => value / ratio)).toEqual([58, 90, 70, 102])
+  expect(beforeEdit.linkRgb).toEqual([0, 128, 0])
+  expect([beforeEdit.sites?.old.pick, beforeEdit.sites?.midpoint?.pick, beforeEdit.sites?.destination.pick])
+    .toEqual(['Background', 'Background', 'Background'])
+  const returning = comparisons.filter(row => row.phase === 'restore-original')
+  const paintKeyframes = returning.filter(row => row.time % 500 === 0 || row.time === 16)
+  expect(paintKeyframes.map(row => row.webgl.pointBounds?.map(value => value / ratio) ?? null))
+    .toEqual([null, null, [50, 90, 62, 102], [36, 84, 60, 108]])
+  expect(returning.map(row => row.webgl.linkRgb[1])).toEqual([0, 0, 16, 32, 32, 47, 47, 128, 223, 223, 239, 255])
+  for (const row of comparisons) {
+    const label = `${row.phase} ${row.time} ms`
+    for (const engine of ['webgl', 'webgpu'] as const) {
+      const frame = row[engine]
+      const at = `${engine} ${label}`
+      expect.soft(frame.selections, at).toEqual(expectedSelections(row.phase, row.time))
+      expect.soft(frame.survivors, at).toEqual([320, 240, 256, 296])
+      expect.soft([frame.picks.anchor, frame.picks.control], at).toEqual(['Point 0', 'Point 2'])
+      if (row.phase === 'restore-original') {
+        // At x=80 the link is exposed once point 1 leaves the pointer's search window.
+        expect.soft([frame.sites?.old.pick, frame.sites?.midpoint?.pick, frame.sites?.destination.pick], at)
+          .toEqual(['Point 1', 'Point 1', row.time < 359 ? 'Point 1' : 'Link 0'])
+      }
+    }
+    expect.soft(row.webgpu, label).toEqual(row.webgl)
+    expect.soft(row.differingPixels, label).toBe(0)
+  }
+  expect(comparisons.at(-1)!.webgl).toEqual(comparisons[0]!.webgl)
 })

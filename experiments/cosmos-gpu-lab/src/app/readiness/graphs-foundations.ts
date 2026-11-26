@@ -71,6 +71,19 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     ],
     next: 'Replay the second removal on another supported adapter.',
   },
+  'production-graph-api/restore-original': {
+    badge: 'Return to original matches',
+    tone: 'pass',
+    finding: 'Both packages restored the original canvas and hit results. The first return frame was invisible but all three clicks reached point 1.',
+    area: 'Integration',
+    status: '23 checkpoints per pixel ratio on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: '46 paired frames matched pixel for pixel. The settled and initial canvases also matched within each package.' },
+      { tone: 'pass', text: 'All 138 site clicks and all 368 rectangle and lasso results agreed' },
+      { tone: 'info', text: 'At x = 48 the rectangle selected point 1 at 315 ms and the lasso at 686 ms. The x = 80 click switched to link 0 at 359 ms.' },
+    ],
+    next: 'Repeat the full return on another supported adapter.',
+  },
   'production-graph-api/stationary-hover': {
     badge: 'Hover matches',
     tone: 'pass',

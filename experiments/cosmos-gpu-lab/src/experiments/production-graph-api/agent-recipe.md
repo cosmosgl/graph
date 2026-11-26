@@ -12,6 +12,8 @@ The same test also runs the interrupted-removal case. It sends the restoration e
 
 For the second removal, inspect `captures/repeated-removal-m3-release/package-sparse-remove-again-{1,2}x.json`. The `restore` sample at 500 ms and the `remove-again` sample at 0 ms share the same clock time. Compare the three sites’ click IDs and RGB values, the rectangle and lasso results, the point’s painted bounds and the sampled link color. The run’s `provenance.json` identifies the clean revision and both package bundles.
 
+For the return to the original center, compare `remove-again` at 500 ms with `restore-original` at 0 ms in `captures/restore-original-m3-release/package-sparse-restore-original-{1,2}x.json`. The three click sites are x = 48 (`old`), 64 (`midpoint`) and 80 (`destination`, the first restoration target). The `restoredOriginal` fields compare the initial and settled canvases within each package. The run’s `provenance.json` identifies the clean revision and package bundles.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.
