@@ -45,8 +45,11 @@ fn visualPresence(i: u32, absent: f32) -> f32 {
 }
 
 fn applyPresence(style: Point, presence: f32) -> Point {
-  if (presence == 1.0) { return style; }
   var p = style;
+  if (p.effects.y > 0.0) {
+    p.color = select(vec4f(p.color.rgb * 0.35 + params.greyExitColor.rgb, p.color.a), params.greyExitColor, params.pointRings.z > 0.0);
+  }
+  if (presence == 1.0) { return p; }
   let defaults = u32(p.effects.w);
   if ((defaults & 16u) != 0u) { p.metrics.x *= presence; }
   let exitColor = select(vec4f(0), params.greyExitColor, p.effects.y > 0.0);
@@ -58,7 +61,11 @@ fn applyPresence(style: Point, presence: f32) -> Point {
 fn currentPoint(i: u32, presence: f32) -> Point {
   let next = applyPresence(points[i], presence);
   if (params.transition.x >= 1.0 || i >= u32(params.transition.y)) { return next; }
-  return interpolatePoint(applyPresence(previousPoints[i], presence),next,params.transition.x,params.animateSizes.x);
+  // The selection is live. Apply it to both raw fills at the current frame.
+  var previous = previousPoints[i];
+  previous.effects.x = next.effects.x;
+  previous.effects.y = next.effects.y;
+  return interpolatePoint(applyPresence(previous, presence),next,params.transition.x,params.animateSizes.x);
 }
 
 fn currentLink(i: u32) -> Link {

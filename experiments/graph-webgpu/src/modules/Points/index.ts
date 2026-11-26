@@ -35,6 +35,21 @@ function copyColor (dest: Float32Array, offset: number, value: Float32Array | un
   }
 }
 
+// The same unhighlighted color feeds both animation endpoints. Missing input
+// channels follow the transparent exit default when a point is removed.
+function writeFill (data: GraphData, index: number, target: Float32Array, offset: number): number {
+  let defaults = 0
+  for (let channel = 0; channel < 4; channel++) {
+    const value = data.pointColors?.[index * 4 + channel]
+    if (isNumber(value)) target[offset + channel] = value!
+    else {
+      target[offset + channel] = data.defaultRgba[channel]!
+      defaults |= 1 << channel
+    }
+  }
+  return defaults
+}
+
 export class Points {
   public atlas?: Texture
   private styleKernel?: Kernel
@@ -47,7 +62,6 @@ export class Points {
     attributes: Float32Array;
     mask: PointHighlightMask;
     order: Uint32Array;
-    colors: Float32Array;
     greyExitColor: Rgba;
   } {
     const pointCount = data.pointsNumber ?? 0
@@ -65,14 +79,9 @@ export class Points {
     const ring = outlineColor(config.outlinedPointRingColor)
 
     const attributes = new Float32Array(pointCount * pointStride)
-    const colors = this.packColors(data, greyColor, greyExitColor, (i, pair, defaults) => {
-      const at = i * pointStride
-      const color = mask.isGreyed(i) ? 4 : 0
-      for (let ch = 0; ch < 4; ch++) attributes[at + ch] = pair[color + ch]!
-      attributes[at + 19] = defaults
-    })
     for (let i = 0; i < pointCount; i++) {
       const at = i * pointStride
+      attributes[at + 19] = writeFill(data, i, attributes, at)
       const isGreyed = mask.isGreyed(i)
       const imageIndex = data.pointImageIndices?.[i] ?? -1
       const imageValid = this.hasImage(imageIndex)
@@ -95,29 +104,24 @@ export class Points {
         for (let ch = 0; ch < 4; ch++) attributes[at + 20 + ch] = this.atlasCoords[start + ch] as number
       }
     }
-    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), colors, greyExitColor }
+    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), greyExitColor }
   }
 
   /** Update the changed lanes of the same records used by canvas, host, link gradients and picking. */
   public updateStyles (
-    target: Buffer, data: GraphData, config: GraphConfigInterface, mask: PointHighlightMask,
-    greyExitColor: Rgba, channels: PointChannels, snapshot: boolean
-  ): { previous?: Buffer; colors?: Float32Array } {
+    target: Buffer, data: GraphData, config: GraphConfigInterface, channels: PointChannels, snapshot: boolean
+  ): Buffer | undefined {
     const count = data.pointsNumber ?? 0
     const colorFields = channels.colors ? 5 : 0 // RGBA and the per-channel default mask
     const stride = colorFields + (channels.sizes ? 3 : 0) // diameter, image diameter, default-size bit
     const edits = new Float32Array(2 + count * stride)
     edits[0] = colorFields
     edits[1] = stride
-    let colors: Float32Array | undefined
     if (channels.colors) {
-      const grey = config.pointGreyoutColor ? getRgbaColor(config.pointGreyoutColor) : undefined
-      colors = this.packColors(data, grey, greyExitColor, (i, pair, defaults) => {
+      for (let i = 0; i < count; i++) {
         const at = 2 + i * stride
-        const color = mask.isGreyed(i) ? 4 : 0
-        for (let ch = 0; ch < 4; ch++) edits[at + ch] = pair[color + ch]!
-        edits[at + 4] = defaults
-      })
+        edits[at + 4] = writeFill(data, i, edits, at)
+      }
     }
     if (channels.sizes) {
       for (let i = 0; i < count; i++) {
@@ -156,7 +160,7 @@ export class Points {
         this.styleKernel.dispatch(pass, { x, y: Math.ceil(groups / x), bindings: { points: target, edits: input } })
       } finally { pass.end() }
       this.device.submit(encoder.finish())
-      return { previous, colors }
+      return previous
     } catch (error) {
       previous?.destroy()
       throw error
@@ -192,45 +196,5 @@ export class Points {
 
   private hasImage (index: number): boolean {
     return index >= 0 && index < (this.images?.length ?? 0) && !!this.atlasCoords
-  }
-
-  private packColors (
-    data: GraphData, greyColor: Rgba | undefined, greyExitColor: Rgba,
-    write: (index: number, pair: Float32Array, defaults: number) => void
-  ): Float32Array {
-    const pointCount = data.pointsNumber ?? 0
-    // Resolve both paints once, with the same double-to-Float32 rounding as the
-    // style upload. Uniform point colors share one pair even on million-point graphs.
-    let colors = new Float32Array(8)
-    const pair = new Float32Array(8)
-    for (let i = 0; i < pointCount; i++) {
-      let isUniform = colors.length === 8
-      // Keep the present values for drawing through an exit. Only default channels
-      // follow presence. An explicit size or color remains visible until the slot is gone.
-      let defaultChannels = 0
-      for (let ch = 0; ch < 4; ch++) {
-        const raw = data.pointColors?.[i * 4 + ch]
-        const fromDefault = !isNumber(raw)
-        if (fromDefault) defaultChannels |= 1 << ch
-        const value = fromDefault ? data.defaultRgba[ch]! : raw!
-        pair[ch] = value
-        let dim = value
-        if (greyColor) dim = greyColor[ch] as number
-        else if (ch < 3) dim = value * 0.35 + greyExitColor[ch]!
-        pair[4 + ch] = dim
-        isUniform &&= colors[ch] === pair[ch] && colors[4 + ch] === pair[4 + ch]
-      }
-      if (i === 0) colors.set(pair)
-      else if (!isUniform) {
-        if (colors.length === 8) {
-          const first = colors
-          colors = new Float32Array(pointCount * 8)
-          for (let j = 0; j < i; j++) colors.set(first, j * 8)
-        }
-        colors.set(pair, i * 8)
-      }
-      write(i, pair, defaultChannels)
-    }
-    return colors
   }
 }

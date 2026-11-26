@@ -15,7 +15,9 @@ function expected (radius: number, width: number): Sample {
   return { radius, width, labelBottom: 128 - radius - 2, pointPixels: radius, linkPixels: width }
 }
 
-it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with getters and a story label in the %s package', async engine => {
+it.each([
+  ['webgl', 1], ['webgpu', 1], ['webgl', 2], ['webgpu', 2],
+] as const)('follows the drawn point and link with getters and a story label in the %s package at %i×', async (engine, pixelRatio) => {
   const scene = document.createElement('div')
   scene.style.cssText = 'position:relative;width:256px;height:256px'
   const frame = document.createElement('iframe')
@@ -32,13 +34,14 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
     host.style.cssText = 'position:relative;width:256px;height:256px'
     doc.body.append(host)
     const graph = new GRAPH(host, {
-      pixelRatio: 1,
+      pixelRatio,
       enableSimulation: false,
       enableRenderLoop: false,
       fitViewOnInit: false,
       rescalePositions: false,
       backgroundColor: '#000',
       pointDefaultColor: '#f00',
+      pointGreyoutColor: '#00f',
       linkDefaultColor: '#0f0',
       linkVisibilityMinTransparency: 1,
     })
@@ -67,7 +70,7 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
       const sample = (advance: number): Sample => {
         now += advance
         graph.renderOneFrame()
-        context.drawImage(canvas, 0, 0)
+        context.drawImage(canvas, 0, 0, 256, 256)
         // Count the filled vertical span at the left point's center and halfway along the link.
         const span = (x: number, channel: number): number => {
           const column = context.getImageData(x, 0, 1, 256).data
@@ -89,6 +92,17 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
         resize(20, 10)
         const start = sample(0)
         const midpoint = sample(500)
+        // Hosts can replace a callback or highlight a selection at any point in a running style transition.
+        graph.setConfigPartial({ simulationGravity: 0.1, onClick: () => {} })
+        expect(sample(0)).toEqual(midpoint)
+        graph.setConfig({ ...graph.config, simulationFriction: 0.5 })
+        expect(sample(0)).toEqual(midpoint)
+        graph.setConfigPartial({ highlightedPointIndices: [0] })
+        expect(sample(0)).toEqual(midpoint)
+        expect(Array.from(context.getImageData(192, 128, 1, 1).data)).toEqual([0, 0, 255, 255])
+        graph.setConfigPartial({ highlightedPointIndices: undefined })
+        expect(sample(0)).toEqual(midpoint)
+        expect(Array.from(context.getImageData(192, 128, 1, 1).data)).toEqual([255, 0, 0, 255])
         graph.create()
         expect(sample(0)).toEqual(midpoint)
         graph.render()
@@ -98,7 +112,7 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
         const beforeInterrupt = sample(500)
         resize(28, 14)
         const interrupted = [sample(0), sample(500), sample(500)]
-        await writeArtifact(`package-style-transition-${engine}`, { device: graph.simulation.device?.info, complete, redraw, beforeInterrupt, interrupted })
+        await writeArtifact(`package-style-transition-${engine}-dpr${pixelRatio}`, { device: graph.simulation.device?.info, complete, redraw, beforeInterrupt, interrupted })
         expect(complete).toEqual([expected(4, 2), expected(12, 6), expected(20, 10)])
         expect(redraw).toEqual(midpoint)
         expect(beforeInterrupt).toEqual(expected(12, 6))
@@ -114,6 +128,32 @@ it.each(['webgl', 'webgpu'] as const)('follows the drawn point and link with get
         graph.setPointImageSizes(Float32Array.of(16, 0))
         resize(20, 10)
         expect([sample(0), sample(500), sample(500)]).toEqual([expected(16, 2), expected(16, 6), expected(20, 10)])
+
+        // Changing the highlighted IDs affects the current fill immediately, including while the fill itself is changing.
+        graph.setPointImageIndices(Float32Array.of(-1, -1))
+        graph.setPointColors(Float32Array.of(1, 0, 0, 1, 1, 0, 0, 1))
+        graph.render(undefined, 0)
+        graph.setPointColors(Float32Array.of(0, 0, 1, 1, 0, 0, 1, 1))
+        graph.render(undefined, 1000)
+        sample(500)
+        const secondFill = (): number[] => Array.from(context.getImageData(192, 128, 1, 1).data)
+        const halfway = secondFill()
+        expect(halfway).toEqual([128, 0, 128, 255])
+        graph.setConfigPartial({ highlightedPointIndices: [0] })
+        sample(0)
+        expect(secondFill()).toEqual([0, 0, 255, 255])
+        graph.setConfigPartial({ highlightedPointIndices: undefined })
+        sample(0)
+        expect(secondFill()).toEqual(halfway)
+
+        // A caller may resubmit a modified color tuple by reference.
+        const color: [number, number, number, number] = [1, 0, 0, 1]
+        graph.setConfigPartial({ linkDefaultColor: color })
+        expect(Array.from(graph.getLinkColors())).toEqual(color)
+        color[0] = 0
+        color[2] = 1
+        graph.setConfigPartial({ linkDefaultColor: color })
+        expect(Array.from(graph.getLinkColors())).toEqual(color)
       } finally { clock.mockRestore() }
     } finally { graph.destroy() }
   } finally { scene.remove() }

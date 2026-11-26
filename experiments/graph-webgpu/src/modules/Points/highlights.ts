@@ -69,33 +69,20 @@ const layout: ShaderLayout = {
   attributes: [],
   bindings: [
     { name: 'points', type: 'storage', group: 0, location: 0 },
-    { name: 'colors', type: 'read-only-storage', group: 0, location: 1 },
-    { name: 'changes', type: 'read-only-storage', group: 0, location: 2 },
-    { name: 'opacity', type: 'uniform', group: 0, location: 3 },
+    { name: 'changes', type: 'read-only-storage', group: 0, location: 1 },
+    { name: 'opacity', type: 'uniform', group: 0, location: 2 },
   ],
 }
 
 /** Patch the resident target in place so gradients, picking and future transitions see exactly the same record. */
 export class PointHighlightPass {
   private kernel?: Kernel
-  private colors?: Buffer
-  private packedColors?: Float32Array
 
   public constructor (private readonly device: Device) {}
-
-  public setColors (colors: Float32Array): void {
-    this.colors?.destroy()
-    this.colors = undefined
-    this.packedColors = colors
-  }
 
   public apply (points: Buffer, changes: Uint32Array, normalOpacity: number, greyOpacity: number): void {
     const device = this.device
     this.kernel ??= new Kernel(device, { id: 'cosmos-point-highlights', source: records + patch, shaderLayout: layout })
-    if (!this.colors) {
-      this.colors = device.createBuffer({ id: 'cosmos-point-highlight-colors', data: this.packedColors!, usage: Buffer.STORAGE })
-      this.packedColors = undefined
-    }
     const resources: Array<{ destroy(): void }> = []
     try {
       const changesBuffer = device.createBuffer({ data: changes, usage: Buffer.STORAGE })
@@ -108,7 +95,7 @@ export class PointHighlightPass {
       resources.push(encoder)
       const pass = encoder.beginComputePass({})
       try {
-        this.kernel.dispatch(pass, { x, y: Math.ceil(groups / x), bindings: { points, colors: this.colors, changes: changesBuffer, opacity } })
+        this.kernel.dispatch(pass, { x, y: Math.ceil(groups / x), bindings: { points, changes: changesBuffer, opacity } })
       } finally { pass.end() }
       device.submit(encoder.finish())
     } finally {
@@ -118,7 +105,5 @@ export class PointHighlightPass {
 
   public destroy (): void {
     this.kernel?.destroy()
-    this.colors?.destroy()
-    this.packedColors = undefined
   }
 }

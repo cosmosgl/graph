@@ -206,11 +206,8 @@ export class GraphRenderer {
     try {
       if (pointChannels) {
         const sizes = pointChannels.sizes && this.options.trackSizes ? captureSizes(this.pointCount, i => this.data.getResolvedPointSize(i)) : this.pointSizes
-        const result = this.points.updateStyles(
-          this.pointBuffer!, this.data, this.config, this.highlightMask!, this.greyExitColor, pointChannels, previous?.points === this.pointBuffer
-        )
-        if (result.previous && previous) previous.points = result.previous
-        if (result.colors) this.highlightPass.setColors(result.colors)
+        const source = this.points.updateStyles(this.pointBuffer!, this.data, this.config, pointChannels, previous?.points === this.pointBuffer)
+        if (source && previous) previous.points = source
         this.pointSizes = sizes
         this.opaquePointArea = estimateOpaqueArea(this.data)
       } else if (options.linkTopologyOnly && this.pointBuffer && this.pointCount === this.data.pointsNumber) {
@@ -244,8 +241,6 @@ export class GraphRenderer {
 
   public updatePointHighlights (): void {
     this.revision++
-    // A config update snaps to the target of an active style transition.
-    this.releasePrevious()
     if (!this.pointBuffer || !this.orderBuffer || !this.highlightMask || !this.order) return
     const mask = new PointHighlightMask(this.pointCount, this.config.highlightedPointIndices)
     const changes = mask.changesFrom(this.highlightMask)
@@ -374,7 +369,7 @@ export class GraphRenderer {
     const pointCount = data.pointsNumber ?? 0
     const background = getRgbaColor(config.backgroundColor)
     const clearColor = background[3] > 0 ? background : transparent
-    const { attributes, order, mask, colors, greyExitColor } = this.points.pack(data, config, clearColor)
+    const { attributes, order, mask, greyExitColor } = this.points.pack(data, config, clearColor)
     const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => data.getResolvedPointSize(i)) : 0
     const oldPointTarget = previous?.points === this.pointBuffer ? undefined : this.pointBuffer
     let pointBuffer: Buffer | undefined
@@ -404,7 +399,6 @@ export class GraphRenderer {
     const [fr, fg, fb] = getRgbaColor(config.focusedPointRingColor)
     this.hoverRing = [hr, hg, hb, hoveredPointRingOpacity]
     this.focusRing = [fr, fg, fb, focusedPointRingOpacity]
-    this.highlightPass.setColors(colors)
     this.highlightMask = mask
     this.order = order
     this.baseOrder = data.pointRenderOrder

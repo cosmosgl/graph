@@ -671,18 +671,22 @@ export class Graph {
       }
       this.simulation.applyConfigChanges(previous)
       if (rebuilding) this.hasRendered = !!this.graph.pointsNumber
+      if (!reset && keys.every(key => key.startsWith('on') || key.startsWith('simulation'))) {
+        this.requestFrame()
+        return
+      }
 
       // Applying unrelated config must not consume point or link data queued for the next render.
       if (previous.pointDefaultColor !== this.config.pointDefaultColor) this.graph.updatePointColor()
       if (previous.pointDefaultSize !== this.config.pointDefaultSize) this.graph.updatePointImageSizes()
       if (previous.pointDefaultShape !== this.config.pointDefaultShape) this.graph.updatePointShape()
-      if (previous.linkDefaultColor !== this.config.linkDefaultColor) this.graph.invalidateLinkDefaultColor()
+      if (reset || 'linkDefaultColor' in config) this.graph.invalidateLinkDefaultColor()
       if (previous.linkDefaultStyle !== this.config.linkDefaultStyle) this.graph.updateLinkStyles()
       if (previous.linkDefaultArrows !== this.config.linkDefaultArrows) this.graph.updateArrows()
       const defaultsOnly = !reset && this.hasRendered && !this.shouldUpdateAllStyles && keys.length > 0 &&
         keys.every(key => key === 'pointDefaultColor' || key === 'pointDefaultSize')
       const pointChannels = defaultsOnly ? { colors: keys.includes('pointDefaultColor'), sizes: keys.includes('pointDefaultSize') } : undefined
-      this.renderer?.update({ pointChannels })
+      this.renderer?.update({ pointChannels, continueTransition: this.transition.isActive && !rebuilding })
       if (!pointChannels || pointChannels.sizes) this.area?.invalidateFootprints()
       if (previous.pixelRatio !== this.config.pixelRatio) this.resize()
       if (!this.config.enableRenderLoop && this.frame) {

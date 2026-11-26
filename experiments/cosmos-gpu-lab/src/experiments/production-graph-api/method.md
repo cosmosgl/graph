@@ -210,6 +210,8 @@ Open [Change only point colors and sizes](#/production-graph-api?section=try-poi
 
 Both packages receive the same edits to the same reused arrays. The replay reads the canvas at eight checkpoints, measures the drawn diameter and clicks five locations per frame. Choose **Interrupt with a larger white point** to see how the next transition starts. Halfway from 40 to 8 CSS pixels the point is 24 pixels wide. WebGL restarts at its old 8-pixel target. WebGPU continues from the displayed 24 pixels.
 
+Updating a callback or gravity halfway through a one-second animation keeps the displayed point radius at 12 CSS px and the link width at 6 CSS px. The earlier WebGPU build jumped to 20 and 10, moving the label up eight pixels. At 1× and 2× on M3, both packages kept the intermediate geometry and label position after partial and full configuration updates. In a red-to-blue color transition, highlighting another point immediately applied the configured blue greyout. Clearing the highlight at the same instant restored the purple midpoint in both canvases.
+
 The two edge probes are 20 and 22 CSS pixels below point 0’s center. The standalone pointer searches a 9×9 window in a half-resolution pick buffer, so a click can hit just outside the painted circle. WebGPU uses the diameter from the last drawn frame. On M3, the following IDs were the same at 1× and 2×.
 
 | Checkpoint | WebGPU displayed diameter | WebGPU at 20 px | WebGPU at 22 px | WebGL at 20 / 22 px |
