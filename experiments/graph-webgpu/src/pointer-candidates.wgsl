@@ -5,6 +5,7 @@ struct PickBounds {
   query: vec4f, // CSS link pixel, point size scale, CSS link width scale
   width: vec4f, // arrow multiplier, extra CSS half-width, point zoom, projection / zoom
   count: vec4u, // points, links, pointer window
+  pointRecords: u32,
 }
 @group(0) @binding(0) var<uniform> params: PickBounds;
 @group(0) @binding(1) var<storage,read> positions: array<vec4f>;
@@ -41,7 +42,7 @@ fn candidates(@builtin(global_invocation_id) id: vec3u, @builtin(local_invocatio
     let point = order[i];
     let p = positions[point];
     let center = (ndc(p.xy) * 0.5 + 0.5) * params.region.zw;
-    let metrics = points[point].metrics;
+    let metrics = readCurrentPoint(point, params.pointRecords).metrics;
     let diameter = max(metrics.x, metrics.w) * params.query.z * params.width.z;
     let radius = max(diameter * (params.region.z / params.viewport.z) * 0.5, 1.0) * 1.000001 + 2.0;
     if (p.w <= 0.5 && diameter > 0.0 && all(center + radius >= params.region.xy) && all(center - radius <= params.region.xy + f32(params.count.z))) {

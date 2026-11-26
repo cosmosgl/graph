@@ -1,6 +1,9 @@
 import { Buffer, type Device, type ShaderLayout } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/graph'
 import records from './style-records.wgsl?raw'
+import { interruptedPointTable, pointStride, readPointStyle } from './modules/Points/style-table'
+import { workgroupGrid } from './modules/Shared/compute'
+import freeze from './modules/Points/freeze-styles.wgsl?raw'
 
 export type StyleKind = 'Point' | 'Link'
 
@@ -35,7 +38,40 @@ fn main(@builtin(global_invocation_id) invocation: vec3u) {
 export class StyleTransition {
   private kernels = new Map<StyleKind, Kernel>()
 
+  private compactPoints?: Kernel
+
   public constructor (private device: Device) {}
+
+  public freezePoints (
+    prior: Buffer, next: Buffer, time: number, fromCount: number, toCount: number, animateMetric: boolean, tables: WeakMap<Buffer, Uint32Array>
+  ): Buffer {
+    const previousIds = tables.get(prior); const nextIds = tables.get(next)
+    if (!previousIds && !nextIds) return this.freeze('Point', prior, next, time, fromCount, toCount, animateMetric)
+    const { ids, mixShared } = interruptedPointTable(previousIds, nextIds, fromCount, toCount, this.device.limits.maxStorageBufferBindingSize)
+    const physicalCount = ids ? ids.length + 1 : toCount
+    this.compactPoints ??= new Kernel(this.device, {
+      id: 'cosmos-freeze-shared-point-styles',
+      source: records + freeze + readPointStyle('readPrior', 'prior') + readPointStyle('readTarget', 'next'),
+      shaderLayout: { ...layout, bindings: [...layout.bindings!, { name: 'ids', type: 'read-only-storage', group: 0, location: 4 }] },
+    })
+    const values = new Float32Array(8)
+    values.set([time, +animateMetric])
+    const pointCounts = [previousIds ? previousIds.length + 1 : 0, nextIds ? nextIds.length + 1 : 0]
+    new Uint32Array(values.buffer).set([fromCount, physicalCount, ...pointCounts, +!!ids, +mixShared], 2)
+    const state = this.device.createBuffer({ data: values, usage: Buffer.UNIFORM })
+    let keys: Buffer | undefined
+    let result: Buffer | undefined
+    try {
+      keys = this.device.createBuffer({ data: ids?.length ? ids : Uint32Array.of(0), usage: Buffer.STORAGE })
+      result = this.device.createBuffer({ byteLength: physicalCount * pointStride * 4, usage: Buffer.STORAGE | Buffer.COPY_DST })
+      const groups = workgroupGrid(Math.ceil(physicalCount / 64), this.device.limits.maxComputeWorkgroupsPerDimension)
+      const pass = this.device.beginComputePass()
+      try { this.compactPoints.dispatch(pass, { ...groups, bindings: { prior, next, result, state, ids: keys } }) } finally { pass.end() }
+      this.device.submit()
+      if (ids) tables.set(result, ids)
+      return result
+    } catch (e) { result?.destroy(); throw e } finally { state.destroy(); keys?.destroy() }
+  }
 
   public freeze (kind: StyleKind, prior: Buffer, next: Buffer, time: number, fromCount: number, toCount: number, animateMetric: boolean): Buffer {
     let kernel = this.kernels.get(kind)
@@ -63,6 +99,7 @@ export class StyleTransition {
   }
 
   public destroy (): void {
+    this.compactPoints?.destroy()
     this.kernels.forEach(kernel => kernel.destroy())
     this.kernels.clear()
   }

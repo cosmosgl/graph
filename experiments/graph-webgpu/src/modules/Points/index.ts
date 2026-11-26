@@ -7,11 +7,12 @@ import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils
 import records from '../../style-records.wgsl?raw'
 import { PointHighlightMask } from './highlights'
 import updateStyles from './update-styles.wgsl?raw'
+import { packPointStyles, pointStride, type PointStyleTable } from './style-table'
 
 type Rgba = [number, number, number, number]
 const noColor: Rgba = [0, 0, 0, -1]
 const deriveColor: Rgba = [0, 0, 0, -2]
-export const pointStride = 24
+export { pointStride } from './style-table'
 export type PointChannels = { colors: boolean; sizes: boolean }
 
 export function shadeDirection (value: GraphConfigInterface['pointDefaultStrokeColor']): number {
@@ -50,6 +51,12 @@ function writeFill (data: GraphData, index: number, target: Float32Array, offset
   return defaults
 }
 
+export function hasOnlyDefaultPointStyles (data: GraphData, config: GraphConfigInterface): boolean {
+  return !data.inputPointColors?.length && !data.inputPointSizes?.length && !data.inputPointShapes?.length &&
+    !data.inputPointStrokeColors?.length && !data.inputPointStrokeWidths?.length && !data.inputPointImageIndices?.length &&
+    !config.outlinedPointIndices?.length
+}
+
 export class Points {
   public atlas?: Texture
   private styleKernel?: Kernel
@@ -58,8 +65,10 @@ export class Points {
 
   public constructor (private readonly device: Device) {}
 
-  public pack (data: GraphData, config: GraphConfigInterface, background: Rgba): {
-    attributes: Float32Array;
+  public pack (
+    data: GraphData, config: GraphConfigInterface, background: Rgba, preferCompact: boolean,
+    ordering?: { mask: PointHighlightMask; order: Uint32Array }
+  ): PointStyleTable & {
     mask: PointHighlightMask;
     order: Uint32Array;
     greyExitColor: Rgba;
@@ -67,7 +76,7 @@ export class Points {
     const pointCount = data.pointsNumber ?? 0
     const [r, g, b] = background
     const grey = rgbToBrightness(r, g, b) < 0.65 ? 0.2 : 0.8
-    const mask = new PointHighlightMask(pointCount, config.highlightedPointIndices)
+    const mask = ordering?.mask ?? new PointHighlightMask(pointCount, config.highlightedPointIndices)
     const outlined = new Set(config.outlinedPointIndices ?? [])
     const greyColor = config.pointGreyoutColor ? getRgbaColor(config.pointGreyoutColor) : undefined
     const greyExitColor: Rgba = greyColor || [
@@ -78,11 +87,10 @@ export class Points {
     const stroke = outlineColor(config.pointDefaultStrokeColor)
     const ring = outlineColor(config.outlinedPointRingColor)
 
-    const attributes = new Float32Array(pointCount * pointStride)
-    for (let i = 0; i < pointCount; i++) {
-      const at = i * pointStride
+    const tryShared = preferCompact || hasOnlyDefaultPointStyles(data, config)
+    const table = packPointStyles(pointCount, this.device.limits.maxStorageBufferBindingSize, tryShared, (i, attributes, at, dense) => {
       attributes[at + 19] = writeFill(data, i, attributes, at)
-      const isGreyed = mask.isGreyed(i)
+      const isGreyed = dense && mask.isGreyed(i)
       const imageIndex = data.pointImageIndices?.[i] ?? -1
       const imageValid = this.hasImage(imageIndex)
       const size = data.pointSizes?.[i]
@@ -102,9 +110,9 @@ export class Points {
       if (imageValid && this.atlasCoords) {
         const start = imageIndex * 4
         for (let ch = 0; ch < 4; ch++) attributes[at + 20 + ch] = this.atlasCoords[start + ch] as number
-      }
-    }
-    return { attributes, mask, order: mask.drawOrder(data.pointRenderOrder), greyExitColor }
+      } else attributes.fill(0, at + 20, at + 24)
+    })
+    return { ...table, mask, order: ordering?.order ?? mask.drawOrder(data.pointRenderOrder), greyExitColor }
   }
 
   /** Update the changed lanes of the same records used by canvas, host, link gradients and picking. */
@@ -172,8 +180,8 @@ export class Points {
     this.atlas?.destroy()
   }
 
-  public updateAtlas (images: ImageData[] | undefined): void {
-    if (images === this.images && this.atlas) return
+  public withAtlas (images: ImageData[] | undefined, upload: () => void): void {
+    if (images === this.images && this.atlas) { upload(); return }
     const packed = images?.length ? createAtlasDataFromImageData(images, this.device.limits.maxTextureDimension2D) : undefined
     const size = packed?.atlasSize ?? 1
     const atlas = this.device.createTexture({
@@ -188,10 +196,20 @@ export class Points {
       atlas.destroy()
       throw e
     }
-    this.atlas?.destroy()
+    const oldAtlas = this.atlas
+    const oldCoords = this.atlasCoords
+    const oldImages = this.images
     this.atlas = atlas
     this.atlasCoords = packed?.atlasCoords
     this.images = images
+    try { upload() } catch (error) {
+      this.atlas = oldAtlas
+      this.atlasCoords = oldCoords
+      this.images = oldImages
+      atlas.destroy()
+      throw error
+    }
+    oldAtlas?.destroy()
   }
 
   private hasImage (index: number): boolean {

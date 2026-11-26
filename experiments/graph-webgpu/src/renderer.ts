@@ -11,8 +11,9 @@ import { getPickingBufferSize, getPickingWindow, resolveNearestPickedPoint, type
 import { focusedPointRingOpacity, hoveredPointRingOpacity } from '../../../src/variables'
 import { Lines } from './modules/Lines'
 import { updateStyleBuffer } from './modules/Shared/style-buffer'
-import { Points, pointStride, shadeDirection, type PointChannels } from './modules/Points'
+import { hasOnlyDefaultPointStyles, Points, pointStride, shadeDirection, type PointChannels } from './modules/Points'
 import { estimateOpaqueArea } from './modules/Points/occlusion'
+import { readPointStyle } from './modules/Points/style-table'
 import { PointHighlightPass, PointHighlightMask } from './modules/Points/highlights'
 import { StyleTransition } from './style-transition'
 import { captureSizes, displayedSize, type SizeValues } from './size-transition'
@@ -113,10 +114,11 @@ const compactLayout: ShaderLayout = {
   bindings: [...layout.bindings!, { name: 'pickOrder', type: 'read-only-storage', group: 0, location: 10 }],
 }
 
-const pointShader = [records, common, shapes, applePointCoordinates, points].join('\n')
-const pointRingShader = [records, common, pointRings].join('\n')
-const linkShader = [records, common, links].join('\n')
-const pointerShader = [`const pickWindowSize = ${PICKING_WINDOW_SIZE}.0;`, records, common, pickWindow].join('\n')
+const pointReads = readPointStyle('readCurrentPoint', 'points') + readPointStyle('readPreviousPoint', 'previousPoints')
+const pointShader = [records, common, pointReads, shapes, applePointCoordinates, points].join('\n')
+const pointRingShader = [records, common, pointReads, pointRings].join('\n')
+const linkShader = [records, common, pointReads, links].join('\n')
+const pointerShader = [`const pickWindowSize = ${PICKING_WINDOW_SIZE}.0;`, records, common, pointReads, pickWindow].join('\n')
 const noColor: Rgba = [0, 0, 0, -1]
 const transparent: Rgba = [0, 0, 0, 0]
 const pickBytesPerRow = 256 // WebGPU aligns rows in a texture-to-buffer copy.
@@ -148,6 +150,7 @@ export class GraphRenderer {
   private readonly pointSource: string
   private pointerCandidates?: PointerCandidates
   private pointBuffer?: Buffer
+  private readonly styleIds = new WeakMap<Buffer, Uint32Array>()
   private readonly lines: Lines
   private orderBuffer?: Buffer
   private readonly highlightPass: PointHighlightPass
@@ -191,7 +194,7 @@ export class GraphRenderer {
     this.linkSource = `const swiftShaderQuad = ${device.info.gpuArchitecture === 'swiftshader'};\n${linkShader}`
     this.interpolation = new StyleTransition(device)
     try {
-      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 21 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+      this.uniforms = device.createBuffer({ id: 'cosmos-view', byteLength: 22 * 16, usage: Buffer.UNIFORM | Buffer.COPY_DST })
       this.vertices = device.createVertexArray({ shaderLayout: layout, bufferLayout: [] })
       this.pickTexture = device.createTexture({
         id: 'cosmos-pick', width: PICKING_WINDOW_SIZE, height: PICKING_WINDOW_SIZE + 1, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC,
@@ -213,7 +216,9 @@ export class GraphRenderer {
     const pointChannels = this.pointCount && this.pointBuffer && this.highlightMask && sameCounts ? options.pointChannels : undefined
     const previous = this.capturePrevious(options, widthsOnly, !!pointChannels)
     try {
-      if (pointChannels) {
+      if (pointChannels && (this.styleIds.has(this.pointBuffer!) || hasOnlyDefaultPointStyles(this.data, this.config))) {
+        this.updateAllStyles(previous, true)
+      } else if (pointChannels) {
         const sizes = pointChannels.sizes && this.options.trackSizes ? captureSizes(this.pointCount, i => this.data.getResolvedPointSize(i)) : this.pointSizes
         const source = this.points.updateStyles(this.pointBuffer!, this.data, this.config, pointChannels, previous?.points === this.pointBuffer)
         if (source && previous) previous.points = source
@@ -254,8 +259,14 @@ export class GraphRenderer {
     const mask = new PointHighlightMask(this.pointCount, this.config.highlightedPointIndices)
     const changes = mask.changesFrom(this.highlightMask)
     if (!changes.length) return
-    const normal = this.config.pointOpacity
-    this.highlightPass.apply(this.pointBuffer, changes, normal, this.config.pointGreyoutOpacity ?? normal)
+    if (this.styleIds.has(this.pointBuffer)) {
+      const first = changes[0]!
+      const end = changes[changes.length - 3]! + 1
+      this.orderBuffer.write(mask.words.subarray(first, end), (this.pointCount + first) * 4)
+    } else {
+      const normal = this.config.pointOpacity
+      this.highlightPass.apply(this.pointBuffer, changes, normal, this.config.pointGreyoutOpacity ?? normal)
+    }
     if (mask.splitsOrder || this.highlightMask.splitsOrder) {
       const order = mask.drawOrder(this.baseOrder)
       let first = 0
@@ -388,26 +399,46 @@ export class GraphRenderer {
         Math.ceil(count / 128) > this.device.limits.maxComputeWorkgroupsPerDimension) return undefined
     this.pointerCandidates ??= new PointerCandidates(this.device)
     this.pointerCandidates.select(c, view, projection, region, pixel, points, links,
-      position.buffer, this.pointBuffer, this.orderBuffer, this.lines.buffer)
+      position.buffer, this.pointBuffer, this.orderBuffer, this.lines.buffer, this.recordCount(this.pointBuffer))
     return this.pointerCandidates
   }
 
-  private updateAllStyles (previous?: PreviousStyles): void {
+  private recordCount (buffer: Buffer): number {
+    const ids = this.styleIds.get(buffer)
+    return ids ? ids.length + 1 : 0
+  }
+
+  private updateAllStyles (previous?: PreviousStyles, pointsOnly = false): void {
+    this.points.withAtlas(this.data.inputImageData, () => this.uploadStyles(previous, pointsOnly))
+  }
+
+  private uploadStyles (previous: PreviousStyles | undefined, pointsOnly: boolean): void {
     const data = this.data
     const config = this.config
-    this.points.updateAtlas(data.inputImageData)
     const pointCount = data.pointsNumber ?? 0
     const background = getRgbaColor(config.backgroundColor)
     const clearColor = background[3] > 0 ? background : transparent
-    const { attributes, order, mask, greyExitColor } = this.points.pack(data, config, clearColor)
+    const wasCompact = !!this.pointBuffer && this.styleIds.has(this.pointBuffer)
+    const ordering = pointsOnly && this.highlightMask && this.order ? { mask: this.highlightMask, order: this.order } : undefined
+    const { attributes, ids, order, mask, greyExitColor } = this.points.pack(data, config, clearColor, wasCompact, ordering)
     const pointSizes = this.options.trackSizes ? captureSizes(pointCount, i => data.getResolvedPointSize(i)) : 0
     const oldPointTarget = previous?.points === this.pointBuffer ? undefined : this.pointBuffer
     let pointBuffer: Buffer | undefined
     let orderBuffer: Buffer | undefined
     try {
-      pointBuffer = updateStyleBuffer(this.device, oldPointTarget, attributes, 'cosmos-point-style', pointStride * 4)
-      orderBuffer = updateStyleBuffer(this.device, this.orderBuffer, order, 'cosmos-point-order', 4)
-      this.lines.update(data, config, !!previous && previous.links === this.lines.buffer)
+      if (ordering && wasCompact === !!ids) orderBuffer = this.orderBuffer!
+      else {
+        let orderAndMask = order
+        if (ids) {
+          orderAndMask = new Uint32Array(order.length + mask.words.length)
+          orderAndMask.set(order)
+          orderAndMask.set(mask.words, order.length)
+        }
+        orderBuffer = updateStyleBuffer(this.device, this.orderBuffer, orderAndMask, 'cosmos-point-order', 4)
+      }
+      const reusable = ids && oldPointTarget?.byteLength !== attributes.byteLength ? undefined : oldPointTarget
+      pointBuffer = updateStyleBuffer(this.device, reusable, attributes, 'cosmos-point-style', pointStride * 4)
+      if (!pointsOnly) this.lines.update(data, config, !!previous && previous.links === this.lines.buffer)
     } catch (error) {
       if (pointBuffer !== this.pointBuffer) pointBuffer?.destroy()
       if (orderBuffer !== this.orderBuffer) orderBuffer?.destroy()
@@ -415,6 +446,8 @@ export class GraphRenderer {
     }
     if (oldPointTarget !== pointBuffer) oldPointTarget?.destroy()
     if (this.orderBuffer !== orderBuffer) this.orderBuffer?.destroy()
+    if (ids) this.styleIds.set(pointBuffer, ids)
+    else this.styleIds.delete(pointBuffer)
     this.pointBuffer = pointBuffer
     this.orderBuffer = orderBuffer
     this.pointSizes = pointSizes
@@ -453,8 +486,8 @@ export class GraphRenderer {
         linkWidths = captureSizes(this.lines.count, i => this.getLinkWidth(i, progress))
       }
       if (previous.points) {
-        points = this.interpolation.freeze(
-          'Point', previous.points, this.pointBuffer, progress, previous.pointCount, this.pointCount, previous.animatePointSizes
+        points = this.interpolation.freezePoints(
+          previous.points, this.pointBuffer, progress, previous.pointCount, this.pointCount, previous.animatePointSizes, this.styleIds
         )
       }
       try {
@@ -535,7 +568,7 @@ export class GraphRenderer {
     const picking = !!options.picking || !!linkPickPixel
     const c = this.config
     const segments = c.curvedLinks ? Math.max(1, Math.round(c.curvedLinkSegments)) : 1
-    uniforms.write(new Float32Array([
+    const params = new Float32Array([
       view.x, view.y, view.scale, view.pixelRatio, ...region,
       c.pointSizeScale, +c.scalePointsOnZoom, options.picking?.alpha ?? 1, options.picking?.linkIndexOffset ?? 0,
       c.linkWidthScale, +c.scaleLinksOnZoom, c.linkOpacity, +c.linkBlending,
@@ -555,7 +588,10 @@ export class GraphRenderer {
       ...this.greyExitColor,
       c.pointOpacity, c.pointGreyoutOpacity ?? -1, c.pointGreyoutColor ? 1 : 0, view.hostHoveredPoint ?? -1,
       fragmentOffset?.[0] ?? region[0], fragmentOffset?.[1] ?? region[1],
-    ]))
+      0, 0, 0, 0, 0, 0,
+    ])
+    new Uint32Array(params.buffer).set([this.recordCount(this.pointBuffer), this.recordCount(this.previous?.points ?? this.pointBuffer), this.pointCount], 82)
+    uniforms.write(params)
     const bindings = {
       params: uniforms,
       positions: position.buffer,

@@ -120,8 +120,8 @@ fn linkRibbon(vertex: u32, index: u32) -> Ribbon {
   if (params.visibility.w > 0.0) {
     // Like the WebGL endpoint color texture, gradients read the current data.
     // Only default channels follow the endpoint's presence.
-    out.sourceColor = applyPresence(points[source], sourcePresence).color.rgb;
-    out.targetColor = applyPresence(points[targetIndex], targetPresence).color.rgb;
+    out.sourceColor = applyPresence(targetPoint(source), sourcePresence).color.rgb;
+    out.targetColor = applyPresence(targetPoint(targetIndex), targetPresence).color.rgb;
   }
   return out;
 }

@@ -17,7 +17,7 @@ interface Scene {
   destroy: () => void;
 }
 
-async function createScene (config = createDefaultConfig()): Promise<Scene> {
+async function createScene (config = createDefaultConfig(), count = 3): Promise<Scene> {
   const errors: string[] = []
   const device = await luma.createDevice({
     type: 'webgpu',
@@ -36,15 +36,20 @@ async function createScene (config = createDefaultConfig()): Promise<Scene> {
     pointDefaultSize: 18,
   })
   const data = new GraphData(config)
-  data.inputPointPositions = new Float32Array([16, 32, 80, 32, 16, 32])
-  data.inputPointColors = new Float32Array([1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1])
+  data.inputPointPositions = new Float32Array(count * 2).fill(-100)
+  data.inputPointPositions.set([16, 32, 80, 32, 16, 32])
+  data.inputPointColors = new Float32Array(count * 4).fill(NaN)
+  data.inputPointColors.set([1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1])
   data.inputLinks = new Float32Array([0, 1])
   data.update()
+  const packed = new Float32Array(count * 4)
+  for (let i = 3; i < count; i++) packed.set([-100, -100, 0, 0], i * 4)
+  packed.set([16, 32, 1, 0, 80, 32, 0, 0, 16, 32, 0, 0])
   const positions = device.createBuffer({
-    data: new Float32Array([16, 32, 1, 0, 80, 32, 0, 0, 16, 32, 0, 0]),
+    data: packed,
     usage: Buffer.STORAGE | Buffer.COPY_DST,
   })
-  const renderer = new GraphRenderer(device, data, config, () => ({ buffer: positions, pointCount: 3 }))
+  const renderer = new GraphRenderer(device, data, config, () => ({ buffer: positions, pointCount: count }))
   const texture = device.createTexture({ width: 192, height: 128, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
   const framebuffer = device.createFramebuffer({ width: 192, height: 128, colorAttachments: [texture] })
   const pixel = device.createBuffer({ byteLength: 256, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
@@ -393,6 +398,70 @@ it('applies a highlight to the displayed style and invalidates a pick from the p
     expect(await renderer.pick(16, 32, halfway)).toEqual({ kind: 'point', index: 2 })
     renderer.draw({ ...view, styleProgress: 1 }, framebuffer)
     expect(await readPixel(32, 64)).toEqual([0, 0, 255, 255])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
+})
+
+it('preserves compact style edits, highlights, interrupted frames and picks when a dense binding cannot fit', async () => {
+  const count = 16
+  const config = createDefaultConfig()
+  config.pointDefaultColor = '#ff0000'
+  const scene = await createScene(config, count)
+  const { renderer, data, device, readPixel, framebuffer, view } = scene
+  // Exercise the real compute/draw/pick kernels with a budget of four Point records.
+  Object.defineProperty(device.limits, 'maxStorageBufferBindingSize', { configurable: true, value: 4 * 96 })
+  const edit = (rgb: [number, number, number], size: number, previousProgress: number): void => {
+    data.inputPointColors = new Float32Array(count * 4).fill(NaN)
+    data.inputPointColors.set([...rgb, 1], 4)
+    data.inputPointSizes = new Float32Array(count).fill(NaN)
+    data.inputPointSizes[1] = size
+    data.update()
+    renderer.update({ animate: true, animatePointSizes: true, previousProgress, pointChannels: { colors: true, sizes: true } })
+  }
+  const pixel = async (progress: number, x = 80): Promise<number[]> => {
+    renderer.draw({ ...view, styleProgress: progress }, framebuffer)
+    return readPixel(x * view.pixelRatio, 64)
+  }
+  try {
+    config.curvedLinks = false
+    config.linkColorInterpolateFromEndpoints = true
+    config.linkOpacity = 1
+    data.inputPointColors = undefined
+    data.update()
+    renderer.update()
+    expect(await pixel(1, 48)).toEqual([255, 0, 0, 255])
+    expect(await pixel(1)).toEqual([255, 0, 0, 255])
+    edit([0, 0, 1], 36, 1)
+    expect(await pixel(0.5)).toEqual([128, 0, 128, 255])
+    edit([0, 1, 0], 10, 0.5)
+    expect(await pixel(0)).toEqual([128, 0, 128, 255])
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    // The same link now mixes the inherited red and the exceptional green endpoint.
+    const [red, green, blue, alpha] = await pixel(1, 48)
+    expect(red).toBeGreaterThan(120)
+    expect(green).toBeGreaterThan(120)
+    expect(red! + green!).toBe(255)
+    expect([blue, alpha]).toEqual([0, 255])
+    expect(await renderer.pick(80, 32, view)).toEqual({ kind: 'point', index: 1 })
+    config.highlightedPointIndices = [2]
+    config.pointGreyoutColor = '#ffffff'
+    renderer.update()
+    expect(await pixel(1)).toEqual([255, 255, 255, 255])
+    config.highlightedPointIndices = [1]
+    renderer.updatePointHighlights()
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    expect(await pixel(1, 16)).toEqual([255, 255, 255, 255])
+
+    data.inputImageData = [new ImageData(1, 1)]
+    data.inputPointSizes = Float32Array.from({ length: count }, (_, i) => i + 1)
+    data.update()
+    expect(() => renderer.update()).toThrow(/storage binding/)
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
+    expect(await renderer.pick(80, 32, view)).toEqual({ kind: 'point', index: 1 })
+    data.inputPointSizes = undefined
+    data.update()
+    renderer.update()
+    expect(await pixel(1)).toEqual([0, 255, 0, 255])
     expect(scene.errors).toEqual([])
   } finally { scene.destroy() }
 })

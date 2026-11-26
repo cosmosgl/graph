@@ -23,6 +23,8 @@ struct Params {
   greyExitColor: vec4f,   // greyed version of the transparent black exit default
   pointRings: vec4f,      // universal opacity, grey opacity (-1 for default), explicit grey color, host-hovered index
   fragmentOffset: vec2f,  // convert framebuffer pixels to graph-view pixels, including crops and host subviewports
+  pointRecords: vec2u,     // physical current/previous records; zero selects dense point IDs
+  pointMaskOffset: u32,    // compact styles keep the highlight bitmap after the draw order
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -58,11 +60,21 @@ fn applyPresence(style: Point, presence: f32) -> Point {
   return p;
 }
 
+fn targetPoint(i: u32) -> Point {
+  var p = readCurrentPoint(i, params.pointRecords.x);
+  if (params.pointRecords.x != 0u) {
+    let grey = (pointOrder[params.pointMaskOffset + (i >> 5u)] & (1u << (i & 31u))) != 0u;
+    p.effects.x = select(params.pointRings.x, params.pointRings.y, grey && params.pointRings.y >= 0.0);
+    p.effects.y = select(0.0, 1.0, grey);
+  }
+  return p;
+}
+
 fn currentPoint(i: u32, presence: f32) -> Point {
-  let next = applyPresence(points[i], presence);
+  let next = applyPresence(targetPoint(i), presence);
   if (params.transition.x >= 1.0 || i >= u32(params.transition.y)) { return next; }
   // The selection is live. Apply it to both raw fills at the current frame.
-  var previous = previousPoints[i];
+  var previous = readPreviousPoint(i, params.pointRecords.y);
   previous.effects.x = next.effects.x;
   previous.effects.y = next.effects.y;
   return interpolatePoint(applyPresence(previous, presence),next,params.transition.x,params.animateSizes.x);

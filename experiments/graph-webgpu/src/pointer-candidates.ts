@@ -4,6 +4,7 @@ import type { GraphConfigInterface } from '@/graph/config'
 import { PICKING_WINDOW_SIZE } from '@/graph/modules/Points/picking-constants'
 import type { GraphView } from './renderer'
 import records from './style-records.wgsl?raw'
+import { readPointStyle } from './modules/Points/style-table'
 import scan from './pointer-candidates.wgsl?raw'
 
 const bindings: BindingDeclaration[] = [
@@ -30,11 +31,11 @@ export class PointerCandidates {
   private readonly compact: Kernel
 
   public constructor (private readonly device: Device) {
-    this.params = device.createBuffer({ id: 'cosmos-pick-bounds', byteLength: 96, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+    this.params = device.createBuffer({ id: 'cosmos-pick-bounds', byteLength: 112, usage: Buffer.UNIFORM | Buffer.COPY_DST })
     this.draws = device.createBuffer({ id: 'cosmos-pick-draws', byteLength: 32, usage: Buffer.STORAGE | Buffer.INDIRECT })
     const kernel = (entryPoint: string, slots: number[]): Kernel => new Kernel(device, {
       id: `cosmos-pick-${entryPoint}`,
-      source: records + scan,
+      source: records + scan + readPointStyle('readCurrentPoint', 'points'),
       entryPoint,
       shaderLayout: { bindings: slots.map(i => bindings[i]!) },
     })
@@ -45,7 +46,7 @@ export class PointerCandidates {
 
   public select (config: GraphConfigInterface, view: GraphView, projection: NonNullable<GraphView['pointProjection']>,
     region: readonly number[], pixel: readonly number[], pointCount: number, linkCount: number,
-    positions: Buffer, points: Buffer, order: Buffer, links: Buffer): void {
+    positions: Buffer, points: Buffer, order: Buffer, links: Buffer, pointRecords = 0): void {
     const groups = Math.ceil(Math.max(pointCount, linkCount) / 128)
     this.blocks = this.reserve(this.blocks, groups * 48, 'cosmos-pick-blocks')
     this.points = this.reserve(this.points, pointCount * 4, 'cosmos-pick-points')
@@ -53,12 +54,12 @@ export class PointerCandidates {
     const zoom = view.scale
     const fixed = Math.min(5, Math.max(1, zoom * 0.01))
     const extraWidth = 5 + Math.max(config.hoveredLinkWidthIncrease, 0) + Math.max(config.focusedLinkWidthIncrease, 0)
-    const values = new Float32Array(24)
+    const values = new Float32Array(28)
     values.set([...projection.origin, view.width, view.height, ...projection.transform, ...region,
       ...pixel, config.pointSizeScale, config.linkWidthScale * (config.scaleLinksOnZoom ? zoom : fixed),
       Math.max(1, 2 * config.linkArrowsSizeScale), extraWidth / 2 + 1 / view.pixelRatio,
       config.scalePointsOnZoom ? zoom : fixed, Math.max(Math.abs(projection.transform[0]), Math.abs(projection.transform[1])) / zoom])
-    new Uint32Array(values.buffer).set([pointCount, linkCount, PICKING_WINDOW_SIZE, groups], 20)
+    new Uint32Array(values.buffer).set([pointCount, linkCount, PICKING_WINDOW_SIZE, groups, pointRecords], 20)
     this.params.write(values)
     const pass = this.device.beginComputePass({})
     try {
