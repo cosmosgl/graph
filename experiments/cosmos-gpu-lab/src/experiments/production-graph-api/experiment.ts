@@ -3,7 +3,7 @@ import { defineExperiment } from '../../runtime/experiment'
 export const experiment = defineExperiment({
   id: 'production-graph-api',
   title: 'Run the same Graph application',
-  summary: 'Compare manual stepping, point styles, removal, hover, selection and tracking through the two built Cosmos packages.',
+  summary: 'Compare stepping, point styles, removal, curved links, hover, selection and tracking through the two built Cosmos packages.',
   tags: ['integration', 'interaction', 'WebGL', 'WebGPU'],
   presentation: 'demo',
   headerContent: 'question-only',
@@ -84,6 +84,15 @@ export const experiment = defineExperiment({
     acceptance: 'Compare the point and link pixels, click targets and exact rectangle and lasso IDs at all five positions.',
     recorded: null,
   }, {
+    id: 'curved-link-crossing',
+    title: 'Move a curved link across a point',
+    kind: 'compare',
+    question: 'When a curved link crosses a stationary point, which one is visible and which ID does a click return?',
+    description: 'Move both link endpoints together. Inspect the same point before, during and after the crossing.',
+    reference: 'Both Graph packages receive the same position transition and clicks at the same times.',
+    acceptance: 'Compare the painted overlap and click IDs with the link and background controls at 1× and 2×.',
+    recorded: null,
+  }, {
     id: 'stationary-hover',
     title: 'Hover under a stationary pointer',
     kind: 'compare',
@@ -120,6 +129,7 @@ export const experiment = defineExperiment({
     if (caseId === 'remove-on-return') return (await import('./sparse-view')).createSparseView(host, 'remove-on-return')
     if (caseId === 'restore-to-80') return (await import('./sparse-view')).createSparseView(host, 'restore-to-80')
     if (caseId === 'remove-at-68') return (await import('./sparse-view')).createSparseView(host, 'remove-at-68')
+    if (caseId === 'curved-link-crossing') return (await import('./curved-crossing-view')).createCurvedCrossingView(host)
     if (caseId === 'stationary-hover') return (await import('./stationary-hover-view')).createStationaryHoverView(host)
     if (caseId === 'headless-trackers') return (await import('./tracker-view')).createTrackerView(host)
     if (caseId === 'point-style-updates') return (await import('./point-style-view')).createPointStyleView(host)

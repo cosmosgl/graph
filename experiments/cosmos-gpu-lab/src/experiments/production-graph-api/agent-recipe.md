@@ -20,6 +20,16 @@ For restoration to x = 80 during the third fade, use `captures/restore-to-80-m3-
 
 For the fourth removal, open `captures/remove-at-68-m3-release/package-sparse-remove-at-68-{1,2}x.json`. Compare `restore-to-80` at 500 ms with `remove-at-68` at 0 ms on the same clock tick. `sites.removalCenter` and the corresponding selection region add x = 68 to the four existing probes. Compare the before-edit canvas with the canvas 500 ms into removal using `repeatedMidpoint`, and inspect the click and area IDs on both frames. The run’s `provenance.json` identifies the bundles and native adapters.
 
+## Curved link crossing a point
+
+Build both standalone packages and run the native browser check from the repository root with a fresh capture name.
+
+```sh
+LAB_ARTIFACT_RUN=curved-crossing-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/curved-crossing.test.ts
+```
+
+The two endpoints of link 0 move together while point 2 stays at (128, 80) CSS px. Compare the same pixel and click twice at each checkpoint, once in the complete graph and once with only the endpoints and their link. The second graph reveals what the point covers. The M3 run in `captures/curved-crossing-m3-release/` includes the per-frame pixel comparisons, click callbacks, bundle hashes and reported adapters.
+
 ## Point-only style updates
 
 Rebuild both standalone distributions. Use a fresh artifact run name for each comparison.

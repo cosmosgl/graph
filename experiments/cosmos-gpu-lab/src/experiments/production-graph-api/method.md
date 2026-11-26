@@ -14,6 +14,22 @@ Open `#/production-graph-api`. Click the red point in each pane and check for po
 
 This small case exercises pre-initialization setters, NaN absence, linking, pinning, public async reads and picking. The panes share the GPU, so use the separate matched runs to measure performance.
 
+### Move a curved link across a point
+
+The red point (ID 2) stays at (128, 80) CSS px. Both endpoints of green link 0 move downward together for one second. The arc passes through the point’s center at 500 ms, while the straight line between its endpoints is still 24 CSS px below it. A second run omits point 2 and keeps the link, endpoints, camera and clock identical. [Replay the crossing](#/production-graph-api?section=try-curved-link-crossing)
+
+On M3 at 1× and 2×, both packages returned these colors and click IDs.
+
+| Time | Point center (128, 80) | Same center with point 2 omitted | Beside the point (160, 83) |
+| --- | --- | --- | --- |
+| 0 ms, curve above | Red · point 2 | Black · background | Black · background |
+| 500 ms, crossing | Red · point 2 | Green · link 0 | Green · link 0 |
+| 1,000 ms, curve below | Red · point 2 | Black · background | Black · background |
+
+Following the exposed curve with a click returned link 0 at all three times. An empty corner always returned background. Adding point 2 at the crossing turned 164 fully green device pixels red at 1× and 700 at 2×. Both packages draw points after links and give a point in the pointer’s search area priority over the link beneath it.
+
+All 30 paired click results agreed. At 1×, 9, 9 and 10 of the 40,960 pixels differed between packages before, during and after the crossing. Each differed by one green-channel level. The same differences appeared with point 2 omitted. At 2×, all three frames and their controls matched every RGBA byte.
+
 ### Remove and restore a point
 
 The replay removes point 1 by setting its position to NaN, leaves its link to point 0 in the data, then restores the same slot 32 CSS pixels to the right. Point 2 stays isolated. Choose a frame to see each package’s canvas, click results and selected IDs. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition)

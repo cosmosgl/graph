@@ -5,6 +5,19 @@ import type { CaseReadiness } from './types'
 // live verdict or an approval of the production engine.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys are public case routes. */
 export const graphsAndFoundations: Record<string, CaseReadiness> = {
+  'production-graph-api/curved-link-crossing': {
+    badge: 'Crossing draws and picks the point',
+    tone: 'pass',
+    finding: 'At the crossing, both packages showed red and returned point 2. Omitting the point revealed green link 0 at the same pixel.',
+    area: 'Integration',
+    status: 'Before, during and after the crossing on M3 at 1× and 2×',
+    evidence: [
+      { tone: 'pass', text: 'All 30 paired click results agreed, including the exposed curve and the empty corner' },
+      { tone: 'pass', text: 'All three 2× canvases and their link-only controls matched every pixel' },
+      { tone: 'warn', text: 'At 1×, 9, 9 and 10 curve pixels differed by one green-channel level before, during and after the crossing' },
+    ],
+    next: 'Check what shows through a partially transparent point image and which object receives the click.',
+  },
   'production-graph-api/point-style-updates': {
     badge: 'Area selection matches',
     tone: 'pass',
