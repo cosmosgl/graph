@@ -17,7 +17,7 @@ export function createSpringKernel (device: Device, scope: Scope): Kernel {
 }
 
 /** CSR order, degrees, per-link weights and defaults come from the public graph data model. */
-function springEdges (group: LinksByPoint, data: GraphData, store: Store): Uint32Array {
+function springEdges (group: LinksByPoint, data: GraphData, sampleDistance: () => number): Uint32Array {
   const edges = new Uint32Array(group.neighbors.length * 4)
   const props = new Float32Array(edges.buffer)
   const degrees = data.degree!
@@ -32,7 +32,7 @@ function springEdges (group: LinksByPoint, data: GraphData, store: Store): Uint3
       edges[4 * j] = other
       props[4 * j + 1] = otherDegree / (degree + otherDegree)
       props[4 * j + 2] = Math.sqrt(strength)
-      props[4 * j + 3] = store.getRandomFloat(0, 1)
+      props[4 * j + 3] = sampleDistance()
     }
   }
   return edges
@@ -58,12 +58,15 @@ export class ForceLink {
   public updateTopology (data: GraphData): void {
     const next = resourceScope()
     const directions: Direction[] = []
+    // Both directions consume one seeded sequence in CSR order. Resolve the
+    // sampler for this update so a later seed change applies to the next batch.
+    const sampleDistance = this.store.getRandomFloatGenerator(0, 1)
     try {
       for (const group of [data.linksBySource, data.linksByTarget]) {
         if (!group?.neighbors.length) continue
         directions.push({
           offsets: next.own(upload(this.device, group.offsets)),
-          edges: next.own(upload(this.device, springEdges(group, data, this.store))),
+          edges: next.own(upload(this.device, springEdges(group, data, sampleDistance))),
         })
       }
       this.topology.destroy()

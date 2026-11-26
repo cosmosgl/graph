@@ -50,9 +50,10 @@ export class ForceManyBody {
     // including for non-square point counts and for a later re-enable of repulsion.
     const textureSlots = Math.ceil(Math.sqrt(this.count)) ** 2
     const jitter = new Float32Array(this.count * 2)
+    const sample = this.store.getRandomFloatGenerator(-1, 1)
     for (let i = 0; i < textureSlots; i++) {
-      const x = this.store.getRandomFloat(-1, 1) * 0.00001
-      const y = this.store.getRandomFloat(-1, 1) * 0.00001
+      const x = sample() * 0.00001
+      const y = sample() * 0.00001
       if (i < this.count) {
         jitter[2 * i] = x
         jitter[2 * i + 1] = y

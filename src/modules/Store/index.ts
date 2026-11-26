@@ -274,6 +274,11 @@ export class Store {
     this.random = this.random.clone(seed)
   }
 
+  /** Sample a batch from the current seeded stream without looking up its distribution per element. */
+  public getRandomFloatGenerator (min: number, max: number): () => number {
+    return this.random.uniform(min, max)
+  }
+
   public getRandomFloat (min: number, max: number): number {
     return this.random.float(min, max)
   }
