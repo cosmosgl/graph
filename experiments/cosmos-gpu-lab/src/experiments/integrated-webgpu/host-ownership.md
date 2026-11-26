@@ -395,3 +395,40 @@ reference declaration. The source revision, tarballs and browser reports
 are in `captures/signed-graph-deck-12c2b599-odsn6xvz/`. The Graph archive
 SHA-256 is `2b79f877177f70369f88cc6cc528bb0811fd3c120bfa652fc7210c476781a3c2`.
 The Deck archive has the same SHA-256 as the subviewport build above.
+
+### Replay the same archives on a second physical GPU
+
+Use a fresh qualification checkout with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-12c2b599-odsn6xvz` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
+
+```sh
+set -eu
+lab=experiments/cosmos-gpu-lab
+run=signed-graph-deck-12c2b599-odsn6xvz
+pair="$PWD/$lab/captures/$run"
+vendor=nvidia
+app=$(mktemp -d)
+
+(cd "$pair" && node -e 'const fs = require("node:fs"), { createHash } = require("node:crypto");
+  for (const [file, digest] of Object.entries(require("./source.json").sha256))
+    require("node:assert/strict").equal(createHash("sha256").update(fs.readFileSync(file)).digest("hex"), digest, file)' &&
+  cp graph.tgz deck-layers.tgz package-lock.json package.json main.ts index.html tsconfig.json "$app/")
+npm --prefix "$app" ci --ignore-scripts --no-audit --no-fund
+cmp "$pair/webgpu.js" "$app/node_modules/@cosmos.gl/graph/dist/index.min.js"
+mkdir -p "$app/public/standalone" dist experiments/graph-webgpu/dist
+cp "$pair/dist/standalone/index.html" "$app/public/standalone/index.html"
+cp "$pair/webgpu.js" "$app/public/standalone/index.min.js"
+cp "$pair/webgl.js" dist/index.min.js
+cp "$pair/webgpu.js" experiments/graph-webgpu/dist/index.min.js
+npm --prefix "$app" run build
+
+node scripts/check-packed-webgpu-deck.mjs "$app" --points 65536 --adapter-vendor "$vendor" > "$app/recovery.json"
+force() { node "$lab/scripts/packaged-force-benchmark.mjs" --points 1000000 --bundles "$run" --adapter-vendor "$vendor" "$@"; }
+force --layout --composed
+force --matched-ticks
+force
+youtube() { node "$lab/scripts/public-graph-youtube.mjs" --webgl-bundle "$pair/webgl.js" --webgpu-bundle "$pair/webgpu.js" --adapter-vendor "$vendor" "$@"; }
+youtube --lasso --mode correctness --release-ticks 10,26,40,54
+youtube --mode timing
+```
+
+Run the browser commands one at a time in the foreground. The force trials collect fresh WebGL controls on this machine. Each YouTube command covers both graph sizes and verifies the prepared fixture digest. Keep the new `recovery.json` and generated Lab captures alongside the machine's browser and adapter details. [Force checks](#/production-forces?section=doc-scale-method) · [YouTube checks](#/production-graph-api?section=doc-youtube-selection)
