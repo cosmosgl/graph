@@ -11,8 +11,8 @@ struct Params {
 @group(0) @binding(4) var<uniform> params: Params;
 @group(0) @binding(5) var<storage, read_write> forces: array<vec4<f32>>;
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i = gid.x;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) groups: vec3u) {
+  let i = gid.x + gid.y * groups.x * 64u;
   if (i >= u32(params.count)) { return; }
   let point = positions[i];
   var velocity = vec2<f32>(0.0);

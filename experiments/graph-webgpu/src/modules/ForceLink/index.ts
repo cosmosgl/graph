@@ -4,7 +4,7 @@ import type { GraphConfigInterface } from '@/graph/config'
 import type { GraphData, LinksByPoint } from '@/graph/modules/GraphData'
 import type { Store } from '@/graph/modules/Store'
 import { resourceScope } from '../Shared/resource-scope'
-import { kernel, upload } from '../Shared/compute'
+import { kernel, upload, workgroupGrid, type WorkgroupGrid } from '../Shared/compute'
 import source from './force-link.wgsl?raw'
 
 type Scope = ReturnType<typeof resourceScope>
@@ -39,7 +39,7 @@ function springEdges (group: LinksByPoint, data: GraphData, sampleDistance: () =
 }
 
 export class ForceLink {
-  private readonly groups: number
+  private readonly groups: WorkgroupGrid
   private readonly params: Buffer
   private topology = resourceScope()
   private directions: Direction[] = []
@@ -51,7 +51,7 @@ export class ForceLink {
     private readonly store: Store,
     private readonly program: Kernel
   ) {
-    this.groups = Math.ceil(count / 64)
+    this.groups = workgroupGrid(Math.ceil(count / 64), device.limits.maxComputeWorkgroupsPerDimension)
     this.params = scope.own(upload(device, new Float32Array(12), Buffer.UNIFORM))
   }
 
@@ -89,7 +89,7 @@ export class ForceLink {
 
   public encode (pass: ComputePass, current: () => Buffer, sizes: Buffer, forces: Buffer, integrate: (pass: ComputePass) => void): void {
     for (const direction of this.directions) {
-      this.program.dispatch(pass, { x: this.groups, bindings: { positions: current(), ...direction, sizes, params: this.params, forces } })
+      this.program.dispatch(pass, { ...this.groups, bindings: { positions: current(), ...direction, sizes, params: this.params, forces } })
       integrate(pass)
     }
   }

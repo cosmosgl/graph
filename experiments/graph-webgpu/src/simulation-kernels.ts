@@ -12,7 +12,7 @@ import { ForceManyBody, createRepulsionKernel } from './modules/ForceManyBody'
 import { ForceMouse } from './modules/ForceMouse'
 import { Clusters } from './modules/Clusters'
 import { resourceScope } from './modules/Shared/resource-scope'
-import { kernel, type Decl, upload } from './modules/Shared/compute'
+import { kernel, type Decl, upload, workgroupGrid, type WorkgroupGrid } from './modules/Shared/compute'
 import gather from './modules/Shared/gather-positions.wgsl?raw'
 import bounds from './modules/Shared/bounds.wgsl?raw'
 import integration from './modules/Shared/integrate-positions.wgsl?raw'
@@ -67,22 +67,20 @@ export function createState (device: Device, packed: Float32Array, store: Store,
   const scope = resourceScope()
   const count = packed.length / 4
   const positionBytes = packed.byteLength
-  const groups = Math.ceil(count / 64)
-  if (packed.byteLength > device.limits.maxStorageBufferBindingSize || groups > device.limits.maxComputeWorkgroupsPerDimension) {
-    throw new Error('The graph exceeds this WebGPU device’s storage buffer or compute dispatch limit.')
-  }
+  const axisLimit = device.limits.maxComputeWorkgroupsPerDimension
+  const groups = workgroupGrid(Math.ceil(count / 64), axisLimit)
   try {
     const own = scope.own
     const positions: [Buffer, Buffer] = [own(upload(device, packed)), own(upload(device, packed))]
 
-    const levels: Array<{ groups: number; output: Buffer; centroidParams: Buffer; boundsParams: Buffer }> = []
+    const levels: Array<{ groups: WorkgroupGrid; output: Buffer; centroidParams: Buffer; boundsParams: Buffer }> = []
     for (let n = count; ; n = Math.ceil(n / 256)) {
       const groups = Math.ceil(n / 256)
       const output = own(device.createBuffer({ byteLength: groups * 16, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
       const first = n === count
       const boundsParams = own(upload(device, new Uint32Array([n, first ? 0 : 1, 0, 0]), uniformUsage))
       const centroidParams = own(upload(device, new Uint32Array([n, first ? 1 : 0, 0, 0]), uniformUsage))
-      levels.push({ groups, output, boundsParams, centroidParams })
+      levels.push({ groups: workgroupGrid(groups, axisLimit), output, boundsParams, centroidParams })
       if (groups === 1) break
     }
     const reduce = (pass: ComputePass, source: Buffer, kind: 'bounds' | 'centroid'): Buffer => {
@@ -90,7 +88,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
         const bindings: Record<string, Buffer> = kind === 'bounds'
           ? { values: source, partials: output, params: boundsParams }
           : { input: source, output, params: centroidParams }
-        programs[kind].dispatch(pass, { x: groups, bindings })
+        programs[kind].dispatch(pass, { ...groups, bindings })
         source = output
       }
       return source
@@ -123,7 +121,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
     }
     const integrate = (pass: ComputePass, params = integrationParams): void => {
       const next = current === 0 ? 1 : 0
-      programs.integrate.dispatch(pass, { x: groups, bindings: { positions: positions[current], forces: forceBuffer(), params, output: positions[next] } })
+      programs.integrate.dispatch(pass, { ...groups, bindings: { positions: positions[current], forces: forceBuffer(), params, output: positions[next] } })
       current = next
     }
     const releaseForces = (): void => {

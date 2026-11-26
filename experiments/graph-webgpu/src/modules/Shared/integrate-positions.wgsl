@@ -4,8 +4,8 @@ struct Params { count: f32, alpha: f32, repulsion: f32, nearLimit: f32, friction
 @group(0) @binding(2) var<uniform> params: Params;
 @group(0) @binding(3) var<storage, read_write> output: array<vec4<f32>>;
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
-  let i = gid.x;
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) groups: vec3u) {
+  let i = gid.x + gid.y * groups.x * 64u;
   if (i >= u32(params.count)) { return; }
   let point = positions[i];
   let velocity = forces[i].xy;

@@ -26,8 +26,8 @@ fn pairVelocity(p: vec2f, other: vec2f, randomDir: vec2f) -> vec2f {
 // Each of those cells contributes an exact sum when it fits in the slots,
 // or a random, occupancy-weighted estimate of its pair forces otherwise.
 @compute @workgroup_size(64)
-fn addNearRepulsion(@builtin(global_invocation_id) id: vec3u) {
-  let i = id.x;
+fn addNearRepulsion(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let i = id.x + id.y * groups.x * 64u;
   if (i >= params.count) { return; }
   let p = positions[i];
   if (p.w > 0.5 || p.z > 0.5) { return; }

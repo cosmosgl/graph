@@ -2,7 +2,7 @@ import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import type { Kernel } from '@luma.gl/graph'
 import type { GraphData } from '@/graph/modules/GraphData'
 import { resourceScope } from '../Shared/resource-scope'
-import { kernel, upload } from '../Shared/compute'
+import { kernel, upload, workgroupGrid } from '../Shared/compute'
 import type { ForcePass } from '../Shared/force-pass'
 import arithmetic from '../Shared/attraction-arithmetic.wgsl?raw'
 import clusterSource from './force-cluster.wgsl?raw'
@@ -79,7 +79,7 @@ export class Clusters implements Attraction {
   public reducePositions (pass: ComputePass, positions: Buffer): void {
     const groups = this.mapping.size
     const bindings = { positions, ids: this.indices, offsets: this.offsets, aggregates: this.aggregates }
-    this.reduce.dispatch(pass, { x: Math.min(groups, 65535), y: Math.ceil(groups / 65535), bindings })
+    this.reduce.dispatch(pass, { ...workgroupGrid(groups, this.device.limits.maxComputeWorkgroupsPerDimension), bindings })
   }
 
   public decodeCentroids (sums: Float32Array): number[] {
@@ -109,7 +109,7 @@ export class Clusters implements Attraction {
       forces,
       params: this.params,
     }
-    this.pull.dispatch(pass, { x: Math.ceil(this.count / 64), bindings })
+    this.pull.dispatch(pass, { ...workgroupGrid(Math.ceil(this.count / 64), this.device.limits.maxComputeWorkgroupsPerDimension), bindings })
   }
 
   public destroy (): void {

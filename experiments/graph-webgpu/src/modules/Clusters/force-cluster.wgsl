@@ -6,10 +6,11 @@
 @group(0) @binding(5) var<storage, read_write> forces: array<vec4f>;
 @group(0) @binding(6) var<uniform> params: vec4f;
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= u32(params.x)) { return; }
-  forces[id.x] = vec4f(0.);
-  let group = membership[id.x]; let point = positions[id.x];
+fn main(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let index = id.x + id.y * groups.x * 64u;
+  if (index >= u32(params.x)) { return; }
+  forces[index] = vec4f(0.);
+  let group = membership[index]; let point = positions[index];
   if (group < 0 || point.w > 0.5) { return; }
   var destination = targets[u32(group)].xy;
   if (targets[u32(group)].z < 0.5) {
@@ -19,7 +20,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   let delta = vec2f(springSub(destination.x, point.x), springSub(destination.y, point.y));
   let distance = springRoot(springAdd(springMul(delta.x, delta.x), springMul(delta.y, delta.y)));
   if (distance > 0.) {
-    let magnitude = springMul(springMul(springMul(params.y, distance), params.z), strengths[id.x]);
-    forces[id.x] = vec4f(springMul(magnitude, springDiv(delta.x, distance)), springMul(magnitude, springDiv(delta.y, distance)), 0., 0.);
+    let magnitude = springMul(springMul(springMul(params.y, distance), params.z), strengths[index]);
+    forces[index] = vec4f(springMul(magnitude, springDiv(delta.x, distance)), springMul(magnitude, springDiv(delta.y, distance)), 0., 0.);
   }
 }

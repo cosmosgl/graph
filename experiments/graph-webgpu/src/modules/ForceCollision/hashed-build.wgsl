@@ -10,14 +10,15 @@ fn clearHeads(@builtin(global_invocation_id) id: vec3u) {
 }
 
 @compute @workgroup_size(64)
-fn linkPoints(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= grid.count) { return; }
-  let point = positions[id.x];
+fn linkPoints(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let index = id.x + id.y * groups.x * 64u;
+  if (index >= grid.count) { return; }
+  let point = positions[index];
   if (point.w > 0.5) { return; }
   let bucket = collisionSlotBucket(collisionWorldCell(point.xy));
   // Store index + 1 so zero can terminate the list. Dispatch order separates
   // all head and link writes from selection.
-  next[id.x] = atomicExchange(&heads[bucket], id.x + 1u);
+  next[index] = atomicExchange(&heads[bucket], index + 1u);
 }
 
 @compute @workgroup_size(64)

@@ -34,8 +34,8 @@ fn finalForce(sum: vec2f, r: f32) -> vec4f {
   }
   forces[i] = finalForce(sum, r);
 }
-@compute @workgroup_size(64) fn hashed(@builtin(global_invocation_id) id: vec3u) {
-  let i = id.x; if (i >= u32(params.count)) { return; }
+@compute @workgroup_size(64) fn hashed(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let i = id.x + id.y * groups.x * 64u; if (i >= u32(params.count)) { return; }
   let p = positions[i]; let r = radius(i); var sum = vec2f(0.);
   if (p.w < 0.5 && p.z < 0.5) {
     let own = collisionWorldCell(p.xy);

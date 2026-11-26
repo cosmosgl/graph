@@ -4,8 +4,8 @@
 @group(0) @binding(2) var<uniform> params: vec4f;
 
 @compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) invocation: vec3u) {
-  let index = invocation.x;
+fn main(@builtin(global_invocation_id) invocation: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let index = invocation.x + invocation.y * groups.x * 64u;
   if (index >= u32(params.w)) { return; }
   let point = positions[index];
   if (point.w > 0.5) {

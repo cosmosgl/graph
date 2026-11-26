@@ -4,7 +4,7 @@ import type { GraphConfigInterface } from '@/graph/config'
 import { COLLISION_ROTATIONS, collisionRotationSeed } from '@/graph/modules/ForceCollision/collision-grid'
 import { getFinestGridSize, getNearFieldSlotCount } from '@/graph/modules/Shared/cell-slots'
 import type { Store } from '@/graph/modules/Store'
-import { kernel, upload, type Decl } from '../Shared/compute'
+import { kernel, upload, workgroupGrid, type Decl } from '../Shared/compute'
 import type { ForcePass } from '../Shared/force-pass'
 import { resourceScope } from '../Shared/resource-scope'
 import roundedProduct from '../Shared/rounded-product.wgsl?raw'
@@ -78,9 +78,9 @@ export class ForceCollision implements ContactPass {
     if (iteration === 0) {
       params.write(new Float32Array([count, config.simulationCollision, radius, padding, maxRadius, store.alpha, config.simulationCollisionCooling, 0]))
     }
-    const groups = Math.ceil(count / 64)
+    const groups = workgroupGrid(Math.ceil(count / 64), this.device.limits.maxComputeWorkgroupsPerDimension)
     if (!hash) {
-      this.force.dispatch(pass, { x: groups, bindings: { positions, sizes, params, forces } })
+      this.force.dispatch(pass, { ...groups, bindings: { positions, sizes, params, forces } })
       return
     }
 
@@ -92,9 +92,9 @@ export class ForceCollision implements ContactPass {
     grid.write(values)
     const cellGroups = Math.ceil(edge * edge / 64)
     hash.clear.dispatch(pass, { x: cellGroups, bindings: { heads } })
-    hash.link.dispatch(pass, { x: groups, bindings: { positions, grid, heads, next } })
+    hash.link.dispatch(pass, { ...groups, bindings: { positions, grid, heads, next } })
     hash.select.dispatch(pass, { x: cellGroups, bindings: { grid, heads, next, slots } })
-    this.force.dispatch(pass, { x: groups, bindings: { positions, sizes, params, forces, grid, slots } })
+    this.force.dispatch(pass, { ...groups, bindings: { positions, sizes, params, forces, grid, slots } })
   }
 
   public destroy (): void {

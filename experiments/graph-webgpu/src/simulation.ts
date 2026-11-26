@@ -6,7 +6,7 @@ import { isPointAbsent } from '../../../src/helper'
 import { GraphData } from '../../../src/modules/GraphData'
 import { ALPHA_MIN, Store } from '../../../src/modules/Store'
 import { PointTrackerImpl, type PointTracker } from './modules/Points/point-tracker'
-import { upload } from './modules/Shared/compute'
+import { assertStorageSize, upload, workgroupGrid } from './modules/Shared/compute'
 import { positionScales, unpackPositions, writePosition } from './simulation-data'
 import { asFloats, createPrograms, createState, type Programs, type SimulationState } from './simulation-kernels'
 
@@ -19,6 +19,37 @@ export interface PointPositionBuffer {
   count: number;
   pointCount: number;
   version: number;
+}
+
+// Keep the four-float position ABI for up to ten million points on capable devices.
+const showcasePositionBytes = 10_000_000 * 4 * Float32Array.BYTES_PER_ELEMENT
+
+async function createGraphDevice (canvas?: HTMLCanvasElement): Promise<Device> {
+  const create = (maxStorageBufferBindingSize?: number): Promise<Device> => luma.createDevice({
+    type: 'webgpu',
+    adapters: [webgpuAdapter],
+    requiredLimits: maxStorageBufferBindingSize === undefined ? undefined : { maxStorageBufferBindingSize },
+    waitForPageLoad: false,
+    createCanvasContext: canvas ? { canvas, autoResize: false, useDevicePixels: false, alphaMode: 'premultiplied' } : undefined,
+  })
+  try {
+    return await create(showcasePositionBytes)
+  } catch (error) {
+    // A failed limit request consumes the GPUAdapter. Let luma select a fresh one
+    // with core limits; keep adapter, canvas, loss and other creation failures visible.
+    if (!(error instanceof Error) || error.message !== 'WebGPU device request failed') throw error
+    const cause = error.cause
+    if (!(cause instanceof DOMException) || cause.name !== 'OperationError') throw error
+    if (!/max[_ ]?storage[_ ]?buffer[_ ]?binding[_ ]?size/i.test(cause.message)) {
+      // Some browsers return only a generic OperationError. Confirm the limit
+      // on the current default adapter before attributing the rejection to size.
+      type Limits = Pick<Device['limits'], 'maxStorageBufferBindingSize'>
+      const { gpu } = navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ limits: Limits } | null> } }
+      const adapter = await gpu?.requestAdapter()
+      if (!adapter || adapter.limits.maxStorageBufferBindingSize >= showcasePositionBytes) throw error
+    }
+    return create()
+  }
 }
 
 // An external device can outlive many graphs. Remove their callbacks on dispose.
@@ -97,12 +128,7 @@ export class GraphSimulation {
     if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
     this.store.isSimulationRunning = this.config.enableSimulation
     this.shouldDestroyDevice = !devicePromise
-    this.ready = (devicePromise ?? luma.createDevice({
-      type: 'webgpu',
-      adapters: [webgpuAdapter],
-      waitForPageLoad: false,
-      createCanvasContext: canvas ? { canvas, autoResize: false, useDevicePixels: false, alphaMode: 'premultiplied' } : undefined,
-    })).then(device => {
+    this.ready = (devicePromise ?? createGraphDevice(canvas)).then(device => {
       if (device.type !== 'webgpu') throw new Error('Cosmos requires a WebGPU device.')
       this.device = device
       if (this.isDestroyed) { this.releaseDevice(); return }
@@ -286,6 +312,10 @@ export class GraphSimulation {
 
   public applyData (alpha?: number): void {
     if (this.defer(() => this.applyData(alpha))) return
+    // Reject an unsupported replacement before GraphData resolves its parallel
+    // channels. Keep the displayed model and GPU positions together on failure.
+    const nextCount = Math.floor((this.data.inputPointPositions?.length ?? 0) / 2)
+    assertStorageSize(this.device!, nextCount * 16, 'Point position buffer')
     this.data.update()
     this.uploadChannels(this.pendingUpdates)
     this.pendingUpdates = this.pendingCreates = 0
@@ -336,6 +366,8 @@ export class GraphSimulation {
     const source = this.getPointPositionBuffer()
     if (!source || !indices.length) return new Float32Array()
     const generation = this.countGeneration
+    assertStorageSize(source.device, indices.length * 16, 'Gathered position buffer')
+    const groups = workgroupGrid(Math.ceil(indices.length / 64), source.device.limits.maxComputeWorkgroupsPerDimension)
     const ids = upload(source.device, Uint32Array.from(indices, i => Number.isInteger(i) && i >= 0 && i < source.count ? i : 0xffffffff))
     let output: Buffer | undefined
     try {
@@ -344,7 +376,7 @@ export class GraphSimulation {
       try {
         const pass = encoder.beginComputePass({})
         try {
-          this.programs!.gather.dispatch(pass, { x: Math.ceil(indices.length / 64), bindings: { positions: source.buffer, ids, output } })
+          this.programs!.gather.dispatch(pass, { ...groups, bindings: { positions: source.buffer, ids, output } })
         } finally { pass.end() }
         source.device.submit(encoder.finish())
       } finally { encoder.destroy() }
@@ -505,6 +537,7 @@ export class GraphSimulation {
     let absent: Uint8Array | undefined
     try {
       if (reset) {
+        assertStorageSize(this.device!, count * 16, 'Point position buffer')
         const xy = this.data.pointPositions ?? new Float32Array()
         const rescale = !this.shouldSkipRescale && (this.config.rescalePositions ?? !this.config.enableSimulation)
         const scales = rescale ? positionScales(xy, this.store) : {}

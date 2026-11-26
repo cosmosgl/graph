@@ -1,7 +1,7 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import type { Kernel } from '@luma.gl/graph'
 import { resourceScope } from '../Shared/resource-scope'
-import { kernel, upload } from '../Shared/compute'
+import { kernel, upload, workgroupGrid, type WorkgroupGrid } from '../Shared/compute'
 import type { ForcePass } from '../Shared/force-pass'
 import mouseSource from './force-mouse.wgsl?raw'
 
@@ -11,10 +11,12 @@ const uniform = 'uniform'
 
 export class ForceMouse implements ForcePass<[forces: Buffer, x: number, y: number, strength: number]> {
   private readonly scope = resourceScope()
+  private readonly groups: WorkgroupGrid
   private readonly params: Buffer
   private readonly program: Kernel
 
   public constructor (device: Device, private readonly count: number) {
+    this.groups = workgroupGrid(Math.ceil(this.count / 64), device.limits.maxComputeWorkgroupsPerDimension)
     try {
       this.params = this.scope.own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       this.program = kernel(device, this.scope, mouseSource, 'main', [['positions', read], ['forces', write], ['params', uniform]])
@@ -26,7 +28,7 @@ export class ForceMouse implements ForcePass<[forces: Buffer, x: number, y: numb
 
   public encode (pass: ComputePass, positions: Buffer, forces: Buffer, x: number, y: number, strength: number): void {
     this.params.write(new Float32Array([x, y, strength, this.count]))
-    this.program.dispatch(pass, { x: Math.ceil(this.count / 64), bindings: { positions, forces, params: this.params } })
+    this.program.dispatch(pass, { ...this.groups, bindings: { positions, forces, params: this.params } })
   }
 
   public destroy (): void {

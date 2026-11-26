@@ -1,6 +1,6 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import { getFinestGridSize } from '@/graph/modules/Shared/cell-slots'
-import { kernel, upload } from '../Shared/compute'
+import { kernel, upload, workgroupGrid } from '../Shared/compute'
 import { resourceScope } from '../Shared/resource-scope'
 import gridCell from './grid-cell.wgsl?raw'
 import near from './near-field.wgsl?raw'
@@ -16,6 +16,7 @@ interface NearField {
 
 export function createNearField (device: Device, count: number): NearField {
   const scope = resourceScope()
+  const pointGroups = workgroupGrid(Math.ceil(count / 64), device.limits.maxComputeWorkgroupsPerDimension)
   const width = getFinestGridSize(count)
   const source = [gridCell, near].join('\n')
   const read = 'read-only-storage'; const write = 'storage'
@@ -34,7 +35,7 @@ export function createNearField (device: Device, count: number): NearField {
         floats.set([alpha, strength, maxStep], 4)
         params.write(words)
         add.dispatch(pass, {
-          x: Math.ceil(count / 64),
+          ...pointGroups,
           bindings: { params, slots, positions, samples, cells: grid.cells, box: grid.box, forces },
         })
       },

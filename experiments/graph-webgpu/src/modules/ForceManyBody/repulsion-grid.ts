@@ -2,7 +2,7 @@ import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import { MAX_REPULSION_SAMPLES } from '@/graph/config'
 import { COARSEST_GRID_SIZE, MIN_FINEST_CELL_SIZE } from '@/graph/modules/ForceManyBody/settings'
 import { getFinestGridSize } from '@/graph/modules/Shared/cell-slots'
-import { kernel, upload, type Decl } from '../Shared/compute'
+import { kernel, upload, workgroupGrid, type Decl } from '../Shared/compute'
 import { resourceScope } from '../Shared/resource-scope'
 import roundedProduct from '../Shared/rounded-product.wgsl?raw'
 import cellSlots from '../Shared/select-cell-slots.wgsl?raw'
@@ -29,6 +29,7 @@ export interface RepulsionGrid {
 export function createRepulsionGrid (device: Device, count: number): RepulsionGrid {
   const scope = resourceScope()
   try {
+    const pointGroups = workgroupGrid(Math.ceil(count / 64), device.limits.maxComputeWorkgroupsPerDimension)
     const width = getFinestGridSize(count)
     const leafCount = width * width
     const levels: Array<{ count: number; params: Buffer }> = []
@@ -87,10 +88,10 @@ export function createRepulsionGrid (device: Device, count: number): RepulsionGr
         values[9] = seed
         settings.write(words)
         fit.dispatch(pass, { x: 1, bindings: { bounds, box, settings } })
-        bin.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions, box, settings, heads, next, sums } })
+        bin.dispatch(pass, { ...pointGroups, bindings: { positions, box, settings, heads, next, sums } })
         leaf.dispatch(pass, { x: Math.ceil(leafCount / 64), bindings: { positions, box, settings, heads, next, sums, cells, slots } })
         for (const level of levels) merge.dispatch(pass, { x: Math.ceil(level.count / 64), bindings: { cells, level: level.params } })
-        force.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions, box, settings, cells, forces } })
+        force.dispatch(pass, { ...pointGroups, bindings: { positions, box, settings, cells, forces } })
         return slots
       },
       destroy (): void { slots?.destroy(); scope.destroy() },

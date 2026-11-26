@@ -2,7 +2,7 @@ import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
 import type { Kernel } from '@luma.gl/graph'
 import type { GraphData } from '@/graph/modules/GraphData'
 import { resourceScope } from '../Shared/resource-scope'
-import { kernel, upload } from '../Shared/compute'
+import { kernel, upload, workgroupGrid, type WorkgroupGrid } from '../Shared/compute'
 import type { ForcePass } from '../Shared/force-pass'
 import arithmetic from '../Shared/attraction-arithmetic.wgsl?raw'
 import attractorSource from './force-attractor.wgsl?raw'
@@ -15,12 +15,14 @@ type Attraction = ForcePass<[forces: Buffer, alpha: number, strength: number]>
 export class ForceAttractor implements Attraction {
   private readonly scope = resourceScope()
   private readonly attractors: Buffer
+  private readonly groups: WorkgroupGrid
   private readonly params: Buffer
   private readonly program: Kernel
   private readonly count: number
 
   private constructor (device: Device, packed: Float32Array) {
     this.count = packed.length / 4
+    this.groups = workgroupGrid(Math.ceil(this.count / 64), device.limits.maxComputeWorkgroupsPerDimension)
     try {
       this.attractors = this.scope.own(upload(device, packed))
       this.params = this.scope.own(upload(device, new Float32Array(4), Buffer.UNIFORM))
@@ -51,7 +53,7 @@ export class ForceAttractor implements Attraction {
 
   public encode (pass: ComputePass, positions: Buffer, forces: Buffer, alpha: number, strength: number): void {
     this.params.write(new Float32Array([this.count, alpha, strength, 0]))
-    this.program.dispatch(pass, { x: Math.ceil(this.count / 64), bindings: { positions, attractors: this.attractors, forces, params: this.params } })
+    this.program.dispatch(pass, { ...this.groups, bindings: { positions, attractors: this.attractors, forces, params: this.params } })
   }
 
   public destroy (): void {

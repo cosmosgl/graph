@@ -4,9 +4,10 @@
 @group(0) @binding(3) var<storage, read_write> aggregates: array<vec4f>;
 var<workgroup> sums: array<vec4f, 64>;
 
-@compute @workgroup_size(64) fn main(@builtin(workgroup_id) g: vec3u, @builtin(local_invocation_id) local: vec3u) {
+@compute @workgroup_size(64) fn main(@builtin(workgroup_id) g: vec3u, @builtin(local_invocation_id) local: vec3u,
+  @builtin(num_workgroups) groups: vec3u) {
   // Groups are laid out in a 2D dispatch if their count exceeds the per-axis limit.
-  let group = g.x + g.y * 65535u;
+  let group = g.x + g.y * groups.x;
   if (group >= arrayLength(&aggregates)) { return; }
   var sum = vec4f(0.);
   for (var i = offsets[group] + local.x; i < offsets[group + 1u]; i += 64u) {

@@ -32,13 +32,14 @@ fn fitBox() {
 }
 
 @compute @workgroup_size(64)
-fn binPoints(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= settings.count) { return; }
-  let p = positions[id.x];
+fn binPoints(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let index = id.x + id.y * groups.x * 64u;
+  if (index >= settings.count) { return; }
+  let p = positions[index];
   if (p.w > 0.5) { return; }
   let xy = gridCell(p.xy, settings.width, box);
   let i = xy.y * settings.width + xy.x;
-  next[id.x] = atomicExchange(&heads[i], id.x + 1u);
+  next[index] = atomicExchange(&heads[i], index + 1u);
 
   // Accumulate offsets inside one cell using portable integer atomics. The
   // quantization is bounded for the worst case of every point in one cell.
@@ -105,10 +106,11 @@ fn cellVelocity(position: vec2f, cell: vec4f, strength: f32) -> vec2f {
 }
 
 @compute @workgroup_size(64)
-fn farForce(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= settings.count) { return; }
-  let p = positions[id.x];
-  if (p.w > 0.5 || p.z > 0.5) { forces[id.x] = vec4f(0.); return; }
+fn farForce(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups) groups: vec3u) {
+  let index = id.x + id.y * groups.x * 64u;
+  if (index >= settings.count) { return; }
+  let p = positions[index];
+  if (p.w > 0.5 || p.z > 0.5) { forces[index] = vec4f(0.); return; }
   let finest = settings.width;
   let pointCell = gridCell(p.xy, finest, box);
   let strength = settings.alpha * settings.strength;
@@ -142,5 +144,5 @@ fn farForce(@builtin(global_invocation_id) id: vec3u) {
     }
     velocity += sum;
   }
-  forces[id.x] = vec4f(velocity, 0., 0.);
+  forces[index] = vec4f(velocity, 0., 0.);
 }
