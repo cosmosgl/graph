@@ -79,6 +79,8 @@ export class GraphSimulation {
     this.config = sharedConfig ?? createDefaultConfig()
     if (config) applyConfig(this.config, config, true)
     this.data = new GraphData(this.config)
+    // Points use instanced quads. Shared Zoom radius queries must use their full drawn size.
+    this.store.maxPointSize = Infinity
     this.store.adjustSpaceSize(this.config.spaceSize)
     if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
     this.store.isSimulationRunning = this.config.enableSimulation

@@ -491,7 +491,7 @@ export class Graph {
 
   private view (pixelRatio = this.config.pixelRatio): GraphView {
     const {
-      screenSize: [width, height], worldOrigin, transform, maxPointSize, hostHoveredPointIndex, hostHoveredLinkIndex,
+      screenSize: [width, height], worldOrigin, transform, hostHoveredPointIndex, hostHoveredLinkIndex,
     } = this.simulation.store
     const { x, y, k } = this.camera.eventTransform
     return {
@@ -504,7 +504,6 @@ export class Graph {
       hoveredPoint: this.config.renderHoveredPointRing ? this.hoveredPoint : undefined,
       hostHoveredPoint: hostHoveredPointIndex,
       hoveredLink: hostHoveredLinkIndex ?? this.hoveredLink,
-      maxPointSize,
       pointProjection: { origin: worldOrigin, transform: [transform[0], transform[4], transform[6], transform[7]] },
       styleProgress: this.transition.progress,
       previousPositions: this.positionTransition?.source,
@@ -666,7 +665,7 @@ export class Graph {
     const revision = this.revision
     this.area ??= new AreaSelection(source.device)
     try {
-      const ids = await this.area.select(source.buffer, this.graph, this.config, this.view(), area, this.maxPointSize)
+      const ids = await this.area.select(source.buffer, this.graph, this.config, this.view(), area)
       return this.isDestroyed || this.revision !== revision || source.device.isLost ? null : ids
     } catch (error) {
       if (this.isDestroyed || this.revision !== revision || source.device.isLost) return null

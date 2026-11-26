@@ -28,7 +28,7 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   if (presence <= 0.0) { return out; }
   let p = currentPoint(i, presence);
   let factor = params.point.x * params.camera.w * sizeZoom(params.point.y);
-  out.sizes = clamp(p.metrics.xw * factor, vec2f(0), vec2f(params.transition.w * params.camera.w));
+  out.sizes = max(p.metrics.xw * factor, vec2f(0));
   let diameter = max(out.sizes.x, out.sizes.y);
   out.index = i;
   if (diameter <= 0.0) { return out; }
@@ -42,7 +42,7 @@ fn snapSpriteEdge(edge: vec2f, subdivisions: f32) -> vec2f {
   if (p.ring.a < -1.5) { out.ring = vec4f(effectShade(p.color.rgb, params.shades.z, params.shades.w), 1); }
   let coreRadius = max(1.0, diameter) * 0.5;
   let outlined = p.ring.a != -1.0 || out.ring.a > 0.0;
-  out.spriteRadius = min(select(coreRadius, coreRadius * 1.3 + 1.0, outlined), params.transition.w * params.camera.w * 0.5);
+  out.spriteRadius = select(coreRadius, coreRadius * 1.3 + 1.0, outlined);
   let corners = array<vec2f,4>(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,1));
   let windowAxes = vec2f(1, -1);
   let center = screen(position.xy) * windowAxes;
@@ -108,21 +108,26 @@ fn shadePoint(input: Sprite) -> vec4f {
   }
   let pointCoord = orientedUV * 2.0 - 1.0;
   let offset = pointCoord * input.spriteRadius;
-  let coreCoord = pointCoord * (input.spriteRadius / radius);
-  var distance: f32;
-  if (shape == 0u) {
-    distance = length(coreCoord) * radius - radius;
-  } else {
-    distance = distanceToShape(coreCoord, shape) * radius;
-  }
-  var coverage = 1.0 - smoothstep(-0.5,0.5,distance);
-  if (shape == 8u || input.sizes.x <= 0.0) { coverage = 0.0; }
-  var color = input.color.rgb;
-  var alpha = coverage * input.color.a * min(1.0,input.sizes.x * input.sizes.x);
-  let strokeWidth = clamp(p.metrics.z * params.camera.w,0.0,radius * inradius(shape) * 0.5);
-  if (strokeWidth > 0.0) {
-    let band = abs(distance + strokeWidth * 0.5) - strokeWidth * 0.5;
-    color = mix(color,input.stroke.rgb,(1.0 - smoothstep(-0.5,0.5,band)) * input.stroke.a);
+  // An image-only point blends over transparent black, even if it has a configured fill.
+  var color = vec3f(0);
+  var alpha = 0.0;
+  var coverage = 0.0;
+  if (shape != 8u && input.sizes.x > 0.0) {
+    let coreCoord = pointCoord * (input.spriteRadius / radius);
+    var distance: f32;
+    if (shape == 0u) {
+      distance = length(coreCoord) * radius - radius;
+    } else {
+      distance = distanceToShape(coreCoord, shape) * radius;
+    }
+    coverage = 1.0 - smoothstep(-0.5,0.5,distance);
+    color = input.color.rgb;
+    alpha = coverage * input.color.a * min(1.0,input.sizes.x * input.sizes.x);
+    let strokeWidth = clamp(p.metrics.z * params.camera.w,0.0,radius * inradius(shape) * 0.5);
+    if (strokeWidth > 0.0) {
+      let band = abs(distance + strokeWidth * 0.5) - strokeWidth * 0.5;
+      color = mix(color,input.stroke.rgb,(1.0 - smoothstep(-0.5,0.5,band)) * input.stroke.a);
+    }
   }
   var imageAlpha = 0.0;
   if (input.sizes.y > 0.0 && all(abs(offset) <= vec2f(input.sizes.y * 0.5))) {

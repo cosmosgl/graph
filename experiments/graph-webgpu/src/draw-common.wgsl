@@ -12,7 +12,7 @@ struct Params {
   hoverColor: vec4f,       // negative alpha when the visible link color is retained
   hoverRing: vec4f,
   focusRing: vec4f,
-  transition: vec4f,       // eased progress, source point count, source link count, max size (CSS)
+  transition: vec4f,       // eased progress, source point count, source link count, max link width (CSS)
   shades: vec4f,           // stroke direction, stroke contrast, ring direction, ring contrast
   pointViewport: vec4f,    // world origin and full CSS viewport
   pointProjection: vec4f,  // x/y clip-space scales and translations from Zoom

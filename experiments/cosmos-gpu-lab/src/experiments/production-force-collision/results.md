@@ -30,4 +30,4 @@ We keep the WebGPU rule because changing an unused fallback should preserve the 
 
 On M3 we compared one collision-only step with seed 3, strength and friction 1, and 4,097 points in 64 columns spaced 1.25 graph units apart starting at (2,048, 2,048). The packages returned identical positions with default 2. Changing the default to 20 changed 3,701 point positions on WebGL and zero on WebGPU. The WebGPU regression also checks that when one point uses the larger default, its increased radius brings a previously separated pair into contact.
 
-These sizes govern collision in graph space. The current WebGPU renderer draws points as quads and caps their screen diameter at 64 CSS pixels. Raising that cap is a separate rendering decision that calls for checking large-point paint, picking, rectangle selection and frame cost.
+These sizes govern collision in graph space. WebGPU draws screen-space point quads at the requested diameter. The image crossing checks a 96 CSS px footprint at both pixel ratios. [Image crossing](#/production-graph-api?section=try-curved-link-image-crossing)

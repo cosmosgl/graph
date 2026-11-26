@@ -39,8 +39,6 @@ export interface GraphView {
   styleProgress?: number;
   /** Retained position-transition source. Absent destination slots may still be visible here. */
   previousPositions?: Buffer;
-  /** Point and link width cap in CSS pixels, shared with screen-space queries. */
-  maxPointSize?: number;
   /** Shared Zoom projection from normalized world positions to clip space. */
   pointProjection?: {
     origin: readonly [number, number];
@@ -497,7 +495,7 @@ export class GraphRenderer {
       linkPickPixel ? 2 : +picking, c.linkArrowsSizeScale, position.pointCount, options.picking?.alpha ?? 0.5,
       ...this.hoverColor, ...this.hoverRing, ...this.focusRing,
       this.previous ? Math.max(0, Math.min(1, view.styleProgress ?? 1)) : 1, this.previous?.points ? this.previous.pointCount : 0,
-      this.previous?.links ? this.previous.linkCount : 0, view.maxPointSize ?? 64,
+      this.previous?.links ? this.previous.linkCount : 0, 64,
       shadeDirection(c.pointDefaultStrokeColor), c.pointStrokeContrast, shadeDirection(c.outlinedPointRingColor), c.outlinedPointRingContrast,
       view.pointProjection?.origin[0] ?? 0, view.pointProjection?.origin[1] ?? 0, view.width, view.height,
       ...(view.pointProjection?.transform ?? [view.scale, view.scale, 2 * view.x / view.width - 1, 1 - 2 * view.y / view.height]),

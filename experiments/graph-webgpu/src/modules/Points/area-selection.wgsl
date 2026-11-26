@@ -5,7 +5,6 @@ struct View {
   bounds: vec4f,
   sizeZoom: f32,
   pixelRatio: f32,
-  maxSize: f32,
   pathLength: u32,
 }
 @group(0) @binding(0) var<storage, read> points: array<vec4f>;
@@ -23,7 +22,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (view.pathLength == 0u) {
     let size = sizes[id.x] * view.sizeScale;
     if (size <= 0.0) { return; }
-    let radius = 0.5 * clamp(size * view.sizeZoom, 1.0 / view.pixelRatio, view.maxSize);
+    let radius = 0.5 * max(size * view.sizeZoom, 1.0 / view.pixelRatio);
     mask[id.x] = select(0u, 1u, all(screen >= view.bounds.xy - radius) && all(screen <= view.bounds.zw + radius));
     return;
   }

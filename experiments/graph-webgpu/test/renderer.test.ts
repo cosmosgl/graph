@@ -2,7 +2,7 @@ import { Buffer, luma, Texture, type Device, type Framebuffer } from '@luma.gl/c
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { expect, it, vi } from 'vitest'
 import { createDefaultConfig } from '../../../src/config'
-import { GraphData } from '../../../src/modules/GraphData'
+import { GraphData, PointShape } from '../../../src/modules/GraphData'
 import { GraphRenderer, type GraphView } from '../src/renderer'
 
 interface Scene {
@@ -187,6 +187,47 @@ it('keeps the displayed scene usable when replacing the image atlas fails', asyn
     renderer.draw(view, framebuffer)
     expect(await readPixel(0, 0)).toEqual([255, 0, 255, 255])
   } finally { allocation.mockRestore(); scene.destroy() }
+})
+
+it('samples a 96 px point image at its drawn size and blends over the shape that is present', async () => {
+  const config = createDefaultConfig()
+  config.backgroundColor = '#000'
+  const scene = await createScene(config)
+  const { data, view, device, renderer, framebuffer, positions, readPixel } = scene
+  try {
+    positions.write(Float32Array.of(48, 32, 1, 0))
+    data.inputLinks = new Float32Array()
+    data.inputPointColors = Float32Array.of(0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+    data.inputImageData = [new ImageData(Uint8ClampedArray.of(255, 0, 0, 128, 0, 255, 0, 255), 2, 1)]
+    data.inputPointImageIndices = Float32Array.of(0, -1, -1)
+    data.inputPointImageSizes = Float32Array.of(96, 0, 0)
+    function draw (shape: PointShape, size: number): void {
+      data.inputPointShapes = Float32Array.of(shape, PointShape.None, PointShape.None)
+      data.inputPointSizes = Float32Array.of(size, 0, 0)
+      data.update()
+      renderer.update()
+      renderer.draw(view, framebuffer)
+    }
+
+    draw(PointShape.None, 16)
+    // At 2x the center falls between columns 95 and 96. Each reads one atlas texel.
+    expect(await readPixel(95, 64)).toEqual([64, 0, 0, 255])
+    expect(await readPixel(96, 64)).toEqual([0, 255, 0, 255])
+    expect(await readPixel(4, 64)).toEqual([64, 0, 0, 255])
+    expect(await renderer.pick(2, 32, view)).toEqual({ kind: 'point', index: 0 })
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+    renderer.drawToRenderPass(pass, view, { picking: { alpha: 7 / 255 } })
+    pass.end()
+    expect(await readPixel(4, 64)).toEqual([1, 0, 0, 7])
+
+    draw(PointShape.Circle, 0)
+    expect(await readPixel(95, 64)).toEqual([64, 0, 0, 255])
+    draw(PointShape.Circle, 16)
+    // WebGL retains the blue shape RGB outside its core, where only image alpha contributes.
+    expect(await readPixel(4, 64)).toEqual([64, 0, 64, 255])
+    expect(await readPixel(95, 64)).toEqual([128, 0, 127, 255])
+    expect(scene.errors).toEqual([])
+  } finally { scene.destroy() }
 })
 
 it('matches every RGBA byte of the general link shader for overlapping solid strokes', async () => {

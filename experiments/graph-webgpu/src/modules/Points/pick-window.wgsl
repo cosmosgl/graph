@@ -15,7 +15,7 @@ struct PickSprite {
   // an interruption. A live slot keeps its pick footprint during a presence fade.
   let style = currentPoint(i, 1.0);
   let size = max(style.metrics.x, style.metrics.w);
-  let cssDiameter = min(size * params.point.x * sizeZoom(params.point.y), params.transition.w);
+  let cssDiameter = size * params.point.x * sizeZoom(params.point.y);
   if (cssDiameter <= 0.0) { return out; }
   let normalized = (live.xy - params.pointViewport.xy) * (2.0 / params.pointViewport.zw);
   let ndc = normalized * params.pointProjection.xy + params.pointProjection.zw;

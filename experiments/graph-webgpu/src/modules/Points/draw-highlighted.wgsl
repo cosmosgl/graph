@@ -19,7 +19,7 @@ struct Ring {
   if (presence <= 0.0) { return out; }
   let p = currentPoint(i, presence);
   let factor = params.point.x * params.camera.w * sizeZoom(params.point.y);
-  let footprint = min(max(p.metrics.x, p.metrics.w) * factor, params.transition.w * params.camera.w);
+  let footprint = max(p.metrics.x, p.metrics.w) * factor;
   if (footprint <= 0.0) { return out; }
   out.radius = max(footprint, 1.0) * 1.3 * 0.5;
   let corners = array<vec2f,4>(vec2f(-1,-1),vec2f(1,-1),vec2f(-1,1),vec2f(1,1));

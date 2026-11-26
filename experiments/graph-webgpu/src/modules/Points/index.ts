@@ -177,7 +177,6 @@ export class Points {
       width: size,
       height: size,
       format: 'rgba8unorm',
-      sampler: { minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' },
     })
     try {
       atlas.copyImageData({ data: packed?.atlasData ?? new Uint8Array(4), bytesPerRow: size * 4 })

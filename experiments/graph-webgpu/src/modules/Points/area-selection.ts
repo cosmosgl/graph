@@ -32,7 +32,7 @@ export class AreaSelection {
     this.sizes = undefined
   }
 
-  public async select (points: Buffer, data: GraphData, config: GraphConfigInterface, view: GraphView, area: Area, maxSize: number): Promise<number[]> {
+  public async select (points: Buffer, data: GraphData, config: GraphConfigInterface, view: GraphView, area: Area): Promise<number[]> {
     const count = data.pointsNumber ?? 0
     if (!count || ('polygon' in area && area.polygon.length < 3)) return []
     if (!this.sizes) {
@@ -45,9 +45,9 @@ export class AreaSelection {
       const [[x0, y0], [x1, y1]] = area.rect
       params.set([Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)], 4)
     }
-    params.set([config.scalePointsOnZoom ? view.scale : Math.min(5, Math.max(1, view.scale * 0.01)), view.pixelRatio, maxSize], 8)
+    params.set([config.scalePointsOnZoom ? view.scale : Math.min(5, Math.max(1, view.scale * 0.01)), view.pixelRatio], 8)
     const vertices = 'polygon' in area ? area.polygon : []
-    new Uint32Array(params.buffer)[11] = vertices.length
+    new Uint32Array(params.buffer)[10] = vertices.length
 
     // Each request owns its output and camera/geometry snapshot until its copy completes.
     const resources: Array<{ destroy(): void }> = []
