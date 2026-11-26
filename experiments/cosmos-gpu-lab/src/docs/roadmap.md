@@ -69,7 +69,7 @@ In the packaged Lines replay, scrub a dashed endpoint across a pixel boundary an
 
 The packaged 8,192-slot graphs met the native M3 click margins. At one million points and 999,990 links, both dense and hub layouts passed their fixed-tick checks. WebGPU had fewer intersecting pairs at tick 100 in both three-force runs. The benchmark separately checks trusted clicks, point and topology edits, full replacement, resize and release of GPU allocations. WebGL control variation limits the verdicts about relative speed. [Layout and gates](#/production-forces?section=doc-scale-method) · [Paired timings](#/production-forces?section=doc-scale-timing)
 
-The moving YouTube replay checks each selection against freshly read positions from that package. Both packages returned the exact ordered IDs and all 1,000 label coordinates on every fixed-tick long lasso at both sizes. The earlier continuously running million-point WebGL rectangle queries reached their timeout. [YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
+The moving YouTube replay checks each lasso against that package’s positions at release. On the final M3 builds, WebGPU returned the exact ordered IDs and all 1,000 label coordinates at all eight releases. WebGL passed seven of eight asynchronously. At tick 10 on the million-point graph, its selection timed out twice. Its labels timed out on the first attempt and matched on retry. The synchronous WebGL control returned the expected 251,132 IDs and all 1,000 label coordinates at that tick. [YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
 
 ### Qualify and release the replacement
 

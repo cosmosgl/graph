@@ -37,6 +37,16 @@ million-point reads in this replay. The earlier continuously moving rectangle
 timing runs used a different queue state. The experiment's `agent-recipe.md`
 lists the replay commands and four capture digests.
 
+The final M3 replay used WebGL `1b589639` and WebGPU `b5236d3c`.
+All eight WebGPU releases and seven of eight WebGL releases returned the same
+ordered IDs and 1,000 tracked coordinates as the earlier run and matched
+their own complete release snapshots. At tick 10 on the million-point graph,
+the WebGL selection timed out on both async attempts. Its label query timed
+out on the first attempt and returned all 1,000 correct coordinates on retry.
+The synchronous WebGL control matched all four releases, including 251,132
+IDs and all 1,000 coordinates at tick 10. The six reports and their hashes
+are indexed in `captures/final-youtube-lasso-w68QsF/summary.json`.
+
 ## Why the readback wait changed
 
 The 267.0 and 400.2 ms medians came from eight ordinary releases on each build. Both started at tick 4, but the older build reached tick 14 or 15 by the fourth drag and the newer build reached tick 13. Even at tick 4, readback varied between sessions. Those runs did not record how much of the submitted frame had finished when the pointer was released. Holding the same gestures to ticks 10, 26, 40 and 54 put both builds on the same layouts. The eight-release medians were then within one millisecond of each other.
