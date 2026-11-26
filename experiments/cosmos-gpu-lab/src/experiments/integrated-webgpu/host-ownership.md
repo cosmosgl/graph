@@ -425,12 +425,14 @@ The clean app installed Graph archive `4074f410` and Deck archive `d2d9b440`. Al
 
 ### Replay the same archives on a second physical GPU
 
-Use a fresh checkout of `78f957f7` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-78f957f7-jo49x0fh` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
+The portable archive `captures/second-gpu-handoff-c418e90a/cosmos-webgpu-c418e90a.tar.gz` includes the source commit, both public packages, both historical and candidate engines, and the Roads and YouTube fixtures. Check its adjacent SHA-256 file and follow the enclosed README. A clean extraction verified all 24 inputs and built the consumer and both websites using local dependency caches.
+
+For a replay from an existing checkout, use a fresh checkout of `c418e90a` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-c418e90a-7np86iv8` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
 
 ```sh
 set -eu
 lab=experiments/cosmos-gpu-lab
-run=signed-graph-deck-78f957f7-jo49x0fh
+run=signed-graph-deck-c418e90a-7np86iv8
 pair="$PWD/$lab/captures/$run"
 vendor=nvidia
 app=$(mktemp -d)

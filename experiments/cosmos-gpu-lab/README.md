@@ -544,13 +544,26 @@ unchanged against both engines. The public config tests exercise callbacks
 that replace data or destroy the graph during initialization.
 [Packed app contracts](../graph-webgpu/fixtures/deck-consumer/contracts.ts) · [Shared geometry cases](../../test/public-geometry.ts) · [Config and pending edits](../graph-webgpu/test/config-change-pending-data.test.ts)
 
-For the full website Roads check, both builds loaded the original compressed
-DIMACS dataset (SHA-256 `c6039f43`). On M3 the frozen WebGL package drew
-1,890,815 points and 2,315,222 road links. The default WebGPU device stopped
-before drawing because the 181,518,240-byte point style buffer exceeded its
-128 MiB per-binding grant. Changing only that grant to 256 MiB in the browser
-probe let the signed package draw both counts. The screenshots, validation
-error and replay are in `captures/full-roads-754a02b6-20261126/`.
+The disposable public cutover at `c418e90a` reproduced all nine candidate
+distribution files with the ordinary prepublish hooks. Include the existing
+candidate development dependency `@types/node@26.6.6` when moving its build
+to the public root. Otherwise the declaration generator picks a different
+local name for luma's Buffer import. The regular Pages build drew the
+48,000-point homepage and picked point 2 in Quick Start. The Deck layer
+drew, hovered and tore down. The compiled Lab loaded the two expected
+distributions and picked point 1 after the same gravity step in each.
+The replay patch and file digests are in
+`captures/public-promotion-c418e90a-20261126/`.
+
+The packed website at `c418e90a` drew all 1,890,815 points and 2,315,222
+links from the California–Nevada DIMACS fixture (SHA-256 `c6039f43`) on
+M3 with a 128 MiB device binding limit. It also drew ten million points
+in one call with the 160,000,000-byte grant. The stock site and the
+headless simulation checked IDs and coordinates near the end of the
+buffer. The previous build reproduced the Roads picture only with a
+raised 256 MiB grant. The current examples and component checks are
+documented with their fixtures, click IDs and pixel comparisons.
+[Full website replay](../../website/README.md#packed-graph-qualification) · [Headless capacity tests](../graph-webgpu/test/simulation-capacity.test.ts)
 
 #### Linux release rehearsal
 
@@ -568,6 +581,13 @@ arm64 and on Ubuntu 26.04 amd64 under emulation. The local capture includes
 the Linux-only launch patch, both sets of logs and the plain WebGPU control
 in `captures/linux-public-promotion-951ec4d7-20261126/`. GitHub's hosted
 Ubuntu runner and a second physical GPU still need their own runs.
+
+On a local Ubuntu 26.04 x86_64 container under emulation, the job for
+`c418e90a` passed all 95 source cases and ten packed Graph and Deck cases
+using Node 22.23.5 and Chromium 151 SwiftShader. The Linux and macOS
+packages contained identical distribution files. The Graph archive differed
+only in the OS byte of its gzip header. The stage logs and file comparisons
+are in `captures/private-webgpu-ci-c418e90a-ubuntu-amd64-20261126/`.
 
 The candidate CI suite at `2b2c17a4` ran on a clean Linux source archive.
 On the first cold software run, the label, click, hover and camera tests

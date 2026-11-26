@@ -36,6 +36,24 @@ The table tracks the public contracts, their evidence and the open checks.
 | A performance story enables `showFPSMonitor` | Both graphs show the same FPS chart and CPU gauge. WebGPU uses gl-bench's CPU-only mode so opening the monitor leaves the graph's WebGPU device alone. Its tooltip identifies the unavailable GPU-time reading. A static graph keeps drawing while the monitor is visible. With the render loop disabled, only host draws advance the meter. [Shared monitor](../../src/modules/FPSMonitor/index.ts) | On M3, both packages updated two independently controlled graphs, including toggling the option, turning it off with a full config reset and destroying one graph with the other still visible. A headless graph added no widget. The Collision, Point Occlusion Culling and Hyperbolic stories displayed a live counter and chart in both previews. [Package replay](../cosmos-gpu-lab/src/experiments/production-graph-api/fps-monitor.test.ts) · [Storybook check](../../scripts/check-storybook-reads.mjs) |
 | A caller passes non-finite `simulationFriction` | Both engines resolve friction immediately before uploading integration uniforms. The same rule applies after a live config edit. [Shared fallback](../../src/config.ts#L1087) · [WebGPU writes](src/simulation-kernels.ts#L180) | Verified on M3 for ordinary steps and pointer impulses. The browser regression also covers a resting point, zero friction and negative friction. |
 
+## Large graphs
+
+**Roads uses one point style for the whole map.** Storing a 96-byte record for
+each of its 1,890,815 points would take 181,518,240 bytes in one binding. The
+WebGPU renderer stores an inherited style once and keys exceptions by point
+ID. Drawing, picking and link endpoint gradients resolve the same style.
+Highlight membership lives in a separate bitset, so highlighting a point
+preserves the shared record. Varied styles can still use direct indexing
+when they fit in the device's storage limit. [Point style packing](src/modules/Points/style-table.ts) · [Renderer comparisons](test/renderer.test.ts)
+
+**Ten million positions occupy one 160,000,000-byte buffer.** Custom host
+renderers can keep reading four floats per point, and the website can still
+submit every point in one draw. Graph asks for that binding size when it
+creates its device and can use the core limits on a less capable adapter.
+A supplied device keeps its existing limits. Compute jobs span multiple rows
+of workgroups when necessary. Both simulation and selection recover the
+original index from the row and column. [Device creation](src/simulation.ts) · [Compute dispatch](src/modules/Shared/compute.ts) · [Capacity tests](test/simulation-capacity.test.ts)
+
 ## Contributor experience and next changes
 
 1. **Make the public API as readable in an editor.** At the audited revision, counting public instance method declarations with attached JSDoc gave Graph **84/84** in WebGL and **4/78** in WebGPU. For GraphSimulation the counts are **42/42** and **2/32**. These counts include methods marked internal. Carry over array layouts, units and the setter-to-render timing. Describe read freshness and the borrowed buffer lifetime in WebGPU's own terms. Expand multi-operation one-liners where ordering matters, and use one import convention for shared source. [WebGL setter](../../src/index.ts#L559) · [WebGPU setter](src/graph.ts#L251) · [Shared imports in Graph](src/graph.ts#L5) · [Shared imports in GraphSimulation](src/simulation.ts#L3)

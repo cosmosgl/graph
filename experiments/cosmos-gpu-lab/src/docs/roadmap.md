@@ -69,7 +69,7 @@ In the packaged Lines replay, scrub a dashed endpoint across a pixel boundary an
 
 The packaged 8,192-slot graphs met the native M3 click margins. At one million points and 999,990 links, both dense and hub layouts passed their fixed-tick checks. WebGPU had fewer intersecting pairs at tick 100 in both three-force runs. The benchmark separately checks trusted clicks, point and topology edits, full replacement, resize and release of GPU allocations. WebGL control variation limits the verdicts about relative speed. [Layout and gates](#/production-forces?section=doc-scale-method) · [Paired timings](#/production-forces?section=doc-scale-timing)
 
-The moving YouTube replay checks each lasso against that engine’s positions at release. With Graph from `78f957f7`, all eight WebGPU lassos returned exact ordered IDs and all 1,000 label coordinates. The frozen WebGL package passed seven of eight on its first run. Both async attempts timed out at tick 10 on the million-point graph. Its blocking control returned 251,132 IDs at that tick and passed all four releases. [YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
+On M3 both real packages completed all eight fixed-tick YouTube lassos with the Graph candidate from `c418e90a`. Every ordered selection and all 1,000 tracked coordinates matched the respective engine’s positions at release. At tick 10 the million-point WebGL layout selected 251,132 IDs and WebGPU selected 251,241. Earlier runs of the same WebGL bundle timed out at this checkpoint. [YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
 
 ### Qualify and release the replacement
 
@@ -87,7 +87,7 @@ On the 65,536-point YouTube graph, both packages returned the expected rectangle
 | --- | --- |
 | Force controls and layout quality | Above 4,096 points both engines now sample nearby points and group distant cells using the same quality settings. In the Lab's seeded replay of the 22,500-point lasso, initial expansion and late cluster motion closely matched on M3. A settled step and draw took 4.8 ms on WebGL and 1.9 ms on corrected WebGPU. The million-point dense and hub replays cover layout, cooling and overlap through tick 100 with the real packages. Repeat on another physical GPU. [Force comparisons](#/production-forces?section=doc-results) |
 | Drawing and picking | On M3 at both pixel ratios, an opaque point covered a moving curve and owned the click. A 96 CSS px image showed the curve through transparent and translucent texels and kept the click 46 CSS px from center. At 1× up to ten curve-edge pixels per frame differed by one color level. The 2× frames matched exactly. Dashed gaps, overlapping translucent arrowheads and replacing only the links each preserved the expected drawing and click order. [Curve and image](#/production-graph-api?section=try-curved-link-image-crossing) · [Dashed crossing](#/production-graph-api?section=try-styled-link-crossing) · [Arrowheads](#/production-graph-api?section=try-translucent-arrow-crossing) · [Topology changes](#/production-graph-api?section=doc-method-replace-only-the-links) |
-| Interaction at scale | On M3, editing point colors and sizes preserved the resident links. WebGPU clicks track the displayed size through an interruption. WebGL holds its last hit. At 1× and 2×, both packages returned identical rectangle and lasso IDs at all eight checkpoints. Both area tools use the target footprint by default and can switch to center selection. In the latest eight long lassos WebGPU returned every expected ID and all 1,000 label coordinates. The WebGL control timed out at tick 10 on the million-point graph in both async runs. Its blocking control returned the expected IDs and coordinates at all four ticks. [Point-only style updates](#/production-graph-api?section=try-point-style-updates) |
+| Interaction at scale | On M3, editing point colors and sizes preserved the resident links. WebGPU clicks track the displayed size through an interruption. WebGL holds its last hit. At 1× and 2×, both packages returned identical rectangle and lasso IDs at all eight checkpoints. Both area tools use the target footprint by default and can switch to center selection. In the latest replay both packages returned all eight ordered selections and all 1,000 tracked coordinates per release. The completed WebGPU highlight at tick 72 also matched every frozen position, selected ID and pixel from the previous candidate. [Point-only style updates](#/production-graph-api?section=try-point-style-updates) |
 | Public API and packages | All 72 shared Graph story sources typecheck against both the WebGL distribution and the installed WebGPU tarball. Both static previews indexed the same 46 stories and four documentation pages. All 46 stories ran on both engines on M3. The visual stories painted a canvas and the repulsion benchmark completed all six graph sizes in each preview. The five Deck examples also run on the native WebGPU Deck host, including the map, offset mini graphs and the custom renderer. Quick Start, the selection gestures and the three moving readouts passed in both builds on M3. Area selection and moving position readouts use the fresh async queries on both packages. Two independent headless trackers kept their own indices and survived their peer’s destruction on M3. Graph now provides `flatten()`, `pair()` and `create()`. Both Graph and headless GraphSimulation expose cached cluster coordinates on WebGPU. The performance stories show FPS and CPU time. A custom renderer borrows the WebGPU position buffer for each draw. [Two headless trackers](#/production-graph-api?section=try-headless-trackers) |
 | Deck and device recovery | The packed Graph and Deck Layers app restored 65,536 points and 32,768 links under both ownership modes. Chrome exercised GPU-process loss on Apple Metal and SwiftShader. Firefox 153, Safari 26.5.2 and WebKit 26.5 exercised explicit device destruction on the M3 host. All saved coordinates, camera, selection, first picks and first resumed cooling values matched. Qualification on another physical GPU remains open. [Checkpoint costs and browser results](#/integrated-webgpu?section=doc-host-ownership-checkpointing-65-536-points) |
 
@@ -103,31 +103,52 @@ In a disposable checkout the ordinary public pack commands on Node 22 produced a
 
 ## What remains
 
-The branch now runs separate WebGL and WebGPU CI jobs. The WebGPU job checks
-84 source cases and installs the public Graph and Deck tarballs in an external
-TypeScript app. Its ten browser cases include two layers sharing one simulation,
-real drags through a quarter-scale viewport and a bounds request that finishes
-after a data replacement. The same geometry assertions run in both engines,
-including a 32,776-vertex lasso and fitting a two-million-unit layout. The
-package pair from `78f957f7` also preserves a position set from an interruption
-callback while the graph rebuilds. A complete local run of the job on Debian
-arm64 with Chromium SwiftShader passed all 84 source tests and ten packed
-cases at `2b2c17a4`. The GitHub-hosted Ubuntu runner still needs to run the
-workflow. Both M3 previews built from `78f957f7` ran all 46 shared stories.
-Three initial loads lost the local stylesheet connection. All three
-stories then passed in both previews on a fresh load. All 218 default Lab
-tests passed. Both million-point layouts reproduced every position from the
-preceding signed WebGPU build at all nine ticks. Their largest RMS differences
-from the WebGL controls were 0.256% of layout radius or less.
+The public distribution still uses WebGL. The private Graph and Deck packages
+from `c418e90a` run the stock Roads map and ten-million-point example on M3.
+The remaining work is release qualification and the public switch.
 
-1. **Make the full Roads example draw with the default device.** On M3, the installed WebGPU Graph asked for 181,518,240 bytes of point styles. The device granted 134,217,728 bytes per binding. Roads uses a single point style across the whole map. Represent that default once and give individual edits a way to override it within the same device limit. On a small fixture, compare inherited and explicit styles through highlighting, an interrupted edit and a link that inherits its endpoint colors. On the full map, verify draw counts, pixels, point and link picks, and an edit that changes one point. Then qualify the separate ten-million-point benchmark at its advertised count.
-2. **Qualify a second physical GPU when one is available.** The local machine has an Apple M3. Chrome, Firefox and Safari exercised that GPU, and SwiftShader added software coverage. No second GPU or remote test service is currently available. On another physical GPU family run the same sealed Graph and Deck packages, both ownership modes, drawing and picking, moving YouTube selection, and both composed million-point layouts. Record the actual vendor and measure fresh WebGL controls there. [Replay the sealed archives](#/integrated-webgpu?section=doc-host-ownership-replay-the-same-archives-on-a-second-physical-gpu) · [Force procedure](#/production-forces?section=doc-scale-method)
-3. **Settle the interaction timing verdict.** Both engine orders met the first-click allowance on the fixed-tick hub. On dense communities WebGPU took 14.2 and 14.4 ms, while WebGL took 8.2 and 15.5 ms. With normal loops running WebGPU averaged 182 ms for the first visible dense click and 282 ms on hubs. WebGL measured 995 and 1,108 ms. The WebGL controls varied beyond the declared limits, so the relative result remains unassessed. [Original timing runs and pointer profile](#/production-forces?section=doc-scale-timing)
-4. **Promote Graph and Deck together after acceptance.** The public builds still produce WebGL. Rehearse with the chosen dependency versions, use the normal lockstep package and Pages builds, and verify the Lab loads the frozen WebGL reference alongside the promoted Graph. The local rehearsal passed the packaging and default Storybook switch. The signed pair compiles with strict app checking and `skipLibCheck: true` on TypeScript 5.9.3, 6.0.3 and 7.0.2. When checking dependency declarations, Graph passes on 6 and 7. On 5.9, math.gl references a missing library. The full Deck app hits the same luma declaration error on 6 and 7. Choose a supported dependency and compiler profile before publication. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
+1. **Measure click feedback on the current packages.** Run dense and hub graphs at one million points with the clock fixed, then with normal simulation running. Collect two fresh WebGL controls per topology, reverse the engine order and apply the existing margins. The earlier M3 controls varied enough to leave some relative results unassessed. [Timing method](#/production-forces?section=doc-scale-method) · [Earlier measurements](#/production-forces?section=doc-scale-timing)
+2. **Repeat on another physical GPU family.** Chrome, Firefox and Safari exercised the Apple M3. SwiftShader adds software coverage. A second machine or remote service is currently unavailable. On that machine verify both owners of a Deck graph, drawing and picking, the two moving YouTube selections and both million-point force layouts. Record the actual adapter and fresh WebGL controls. [Replay the sealed archives](#/integrated-webgpu?section=doc-host-ownership-replay-the-same-archives-on-a-second-physical-gpu)
+3. **Run hosted CI and promote Graph and Deck together after acceptance.** The public packages still build WebGL. Verify the workflow on the draft PR, publish both versions in lockstep, switch the public Storybook and keep the last WebGL distribution for comparisons. The packed application compiles in strict mode on TypeScript 5.9.3, 6.0.3 and 7.0.2 with the fixture settings. The full Deck app also passes dependency checking on 6.0.3 and 7.0.2 with the verified browser type packages. A disposable public build produced all nine expected distribution files and passed Pages and Lab smoke checks. The release review still needs to accept the pinned Deck and luma prerelease versions. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
 
-Both installed packages drew one million points in one call and rendered all five stock website scenes on M3. WebGL also completed the ten-million-point draw. The WebGPU page stops before uploading its 160 MB of positions. At the current 96 bytes per point, its shared color and size would also occupy 960 MB of style records. The simulation checks for 156,250 workgroups along a single dimension against a limit of 65,535, even when the benchmark disables simulation. Preserve the benchmark's existing one-draw count and the public four-float position record when addressing these limits.
+### Local qualification
 
-The full California–Nevada dataset supplied 1,890,815 points and 2,315,222 links. WebGL drew both counts. A diagnostic run requested a 256 MiB storage binding on M3 before the same WebGPU website opened. Both full draws completed. With the website overlays hidden, 583,186 of the 585,000 canvas pixels matched WebGL exactly and 584,810 were within two channel levels. The default WebGPU device stopped before either draw. The comparison and the rendered canvases are in `captures/full-roads-754a02b6-20261126/`.
+All 95 candidate tests passed on native M3. The original WebGL and Deck
+suite passed 293 tests with one opt-in case skipped. The 72 shared Storybook source files
+typechecked against both distributions.
+The two static previews each built from the sealed source. The default Lab
+suite passed all 218 cases with the packaged candidate and frozen WebGL
+reference. A local Ubuntu 26.04 x86_64 container ran the same CI job under emulation
+using Chromium SwiftShader. All 95 source cases and ten installed-package
+cases passed. Both platforms produced identical Graph and Deck distribution
+files. The hosted GitHub runner is a separate outstanding check.
+
+On M3 both million-point layouts reproduced every coordinate from the
+previous WebGPU release candidate at all nine ticks. Across the 18 saved
+snapshots, the largest RMS difference from WebGL was under 0.256% of the
+layout radius against the 5% budget.
+
+### Full-size website checks
+
+The installed Graph from `c418e90a` draws the full Roads map on M3, including
+when the device grants only 128 MiB per storage binding. Both engines drew
+1,890,815 points and 2,315,222 links. The same click returned road point
+31462, then 31459 after enlarging that point, then 31462 after restoring its
+inherited style. Both picked link 38695. Of the 585,000 canvas pixels,
+583,186 matched WebGL exactly and 584,810 agreed within two channel levels.
+All 190 larger differences were on locally varying pixels. At a visibility
+threshold of two channel levels above the background, the six pixels that
+changed between ink and background were within one device pixel of ink in
+the other rendering.
+
+The stock ten-million-point scene also completed in one draw on both engines.
+WebGPU used one four-float position record per point with a 160,000,000-byte
+binding on M3. Rectangle selection, lasso selection and tracking preserved
+IDs across the workgroup-row and 128 MiB boundaries. The headless simulation
+also returned all 20,000,000 XY coordinates. A tracker followed point
+9,999,998 through a gravity step and a direct edit. Of 990,000 canvas
+pixels, 989,575 matched WebGL exactly. A device granting only 128 MiB
+reported the requested and available sizes before drawing. The raw frames and spatial probes are in the Lab capture `full-site-capacity-20261126/signed-c418e90a/`.
 
 ## Feature coverage
 
