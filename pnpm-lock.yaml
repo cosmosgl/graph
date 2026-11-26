@@ -259,6 +259,9 @@ importers:
       '@math.gl/core':
         specifier: 5.0.0-beta.8
         version: 5.0.0-beta.8
+      d3-ease:
+        specifier: ^3.0.1
+        version: 3.0.1
       d3-selection:
         specifier: ^3.0.0
         version: 3.0.0
@@ -278,6 +281,9 @@ importers:
       '@luma.gl/engine':
         specifier: 10.0.0-alpha.14
         version: 10.0.0-alpha.14(@luma.gl/core@10.0.0-alpha.14)(@luma.gl/shaders@10.0.0-alpha.14)(apache-arrow@21.2.0)
+      '@types/d3-ease':
+        specifier: ^3.0.0
+        version: 3.0.0
       '@types/node':
         specifier: 26.6.6
         version: 26.6.6

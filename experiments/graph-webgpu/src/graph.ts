@@ -1,4 +1,5 @@
 import type { Device, RenderPass } from '@luma.gl/core'
+import { easeQuadIn, easeQuadInOut, easeQuadOut } from 'd3-ease'
 import { select } from 'd3-selection'
 import 'd3-transition'
 import { zoomIdentity, type ZoomTransform } from 'd3-zoom'
@@ -8,7 +9,7 @@ import { Drag } from '@/graph/modules/Drag'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import type { GraphData } from '@/graph/modules/GraphData'
-import { sanitizeHtml } from '@/graph/helper'
+import { isPointAbsent, sanitizeHtml } from '@/graph/helper'
 import type { PositionsReadOptions } from '@/graph/simulation'
 import { defaultConfigValues } from '@/graph/variables'
 import { GraphSimulation, type PointPositionBuffer } from './simulation'
@@ -436,7 +437,25 @@ export class Graph {
   }
 
   public zoomToPointByIndex (id: number, duration = 700, scale = 3, canZoomOut = true, enableSimulation = true): void {
-    this.fitResult(() => this.simulation.getPointPositionsByIndicesAsync([id]), duration, 0, enableSimulation, canZoomOut ? scale : Math.max(this.getZoomLevel(), scale))
+    this.readViewPositions(() => {
+      const positions = this.graph.pointPositions
+      if (!this.canvas || !this.graph.isPointIndex(id) || !positions || isPointAbsent(positions, id)) return undefined
+      return this.simulation.getPointPositionsByIndicesAsync([id])
+    }, enableSimulation, xy => {
+      const point: Pair = [xy[0]!, xy[1]!]
+      if (!this.canvas || !point.every(Number.isFinite)) return
+      const zoom = canZoomOut ? scale : Math.max(this.getZoomLevel(), scale)
+      const target = this.camera.getTransform(point, zoom)
+      if (this.camera.getDistanceToPoint(point) < Math.min(...this.simulation.store.screenSize)) {
+        this.applyView(target, duration)
+        return
+      }
+      const selection = select<HTMLCanvasElement, undefined>(this.canvas)
+      selection.interrupt().transition().ease(easeQuadIn).duration(duration / 2)
+        .call(this.camera.behavior.transform, this.camera.getMiddlePointTransform(point))
+        .transition().ease(easeQuadOut).duration(duration / 2)
+        .call(this.camera.behavior.transform, target)
+    })
   }
 
   public findPointsInRectAsync (rect: [Pair, Pair]): Promise<number[] | null> { return this.selectArea({ rect }) }
@@ -722,17 +741,26 @@ export class Graph {
     }
     const selection = select<HTMLCanvasElement, undefined>(this.canvas)
     selection.interrupt()
-    if (duration > 0) selection.transition().duration(duration).call(this.camera.behavior.transform, transform)
+    if (duration > 0) selection.transition().ease(easeQuadInOut).duration(duration).call(this.camera.behavior.transform, transform)
     else selection.call(this.camera.behavior.transform, transform)
   }
 
-  private fitResult (read: () => PromiseLike<ArrayLike<number> | undefined>, duration: number, padding: number, enableSimulation: boolean, scale?: number): void {
+  private fitResult (read: () => Promise<Float32Array | number[] | undefined>, duration: number, padding: number, enableSimulation: boolean): void {
+    this.readViewPositions(read, enableSimulation, xy => this.applyView(this.camera.getTransform(xy, undefined, padding), duration))
+  }
+
+  private readViewPositions (
+    read: () => Promise<Float32Array | number[] | undefined> | undefined, enableSimulation: boolean, apply: (xy: Float32Array | number[]) => void
+  ): void {
     this.whenReady(() => {
+      const pending = read()
+      if (!pending) return
       const token = ++this.fitRequest
-      Promise.resolve(read()).then(positions => {
+      if (this.canvas) select(this.canvas).interrupt()
+      pending.then(positions => {
         if (positions?.length && token === this.fitRequest && !this.isDestroyed) {
           this.camera.shouldEnableSimulationDuringZoomOverride = enableSimulation
-          this.applyView(this.camera.getTransform(Float32Array.from(positions), scale, padding), duration)
+          apply(positions)
         }
       }).catch(error => { if (!this.isDestroyed && !this.simulation.device?.isLost) console.error(error) })
     })
@@ -953,6 +981,7 @@ export class Graph {
       this.requestFrame()
     })
     this.camera.behavior.on('zoom.webgpu', event => {
+      if (event.sourceEvent) this.fitRequest++
       if (cursor && event.sourceEvent && 'clientX' in event.sourceEvent) cursor = event.sourceEvent
       this.hasHoverSceneChanged = true
       this.hoverRequest++
