@@ -232,3 +232,60 @@ it('keeps host link hover styling independent of canvas pointer picks', async ()
     host.remove()
   }
 })
+
+it('uses the fractional pointer position for repulsion and accepts a standalone mouse event', async () => {
+  const host = document.createElement('div')
+  host.style.cssText = 'position:fixed;left:12px;top:12px;width:200px;height:120px'
+  document.body.append(host)
+  const graph = new Graph(host, {
+    enableRenderLoop: false,
+    enableRightClickRepulsion: true,
+    fitViewOnInit: false,
+    rescalePositions: false,
+    simulationGravity: 0,
+    simulationRepulsion: 0,
+  })
+  graph.setPointPositions(Float32Array.of(2048, 2048))
+  graph.render(1, 0)
+  try {
+    await graph.ready
+    graph.pause()
+    const canvas = host.querySelector('canvas')!
+    graph.setViewTransform({ k: 0.125, x: 0, y: 0 }, [200, 120])
+    const bounds = canvas.getBoundingClientRect()
+    const step = vi.spyOn(graph.simulation, 'runSimulationStep')
+    const pointer = (type: string, buttons: number): void => {
+      canvas.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        pointerType: 'mouse',
+        pointerId: 1,
+        isPrimary: true,
+        buttons,
+        clientX: bounds.left + 74.25,
+        clientY: bounds.top + 60.75,
+      }))
+    }
+    const observed = (): readonly [number, number] | undefined => {
+      graph.renderOneFrame()
+      return step.mock.lastCall?.[1]
+    }
+    pointer('pointermove', 2)
+    expect(observed()).toEqual(graph.screenToSpacePosition([74.25, 60.75]))
+    pointer('pointermove', 0)
+    expect(observed()).toBeUndefined()
+    pointer('pointerdown', 2)
+    pointer('pointercancel', 0)
+    expect(observed()).toBeUndefined()
+    canvas.dispatchEvent(new MouseEvent('mousedown', {
+      view: window,
+      bubbles: true,
+      button: 2,
+      buttons: 2,
+      clientX: bounds.left + 81,
+      clientY: bounds.top + 51,
+    }))
+    expect(observed()).toEqual(graph.screenToSpacePosition([81, 51]))
+    canvas.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    expect(observed()).toBeUndefined()
+  } finally { graph.destroy(); host.remove() }
+})

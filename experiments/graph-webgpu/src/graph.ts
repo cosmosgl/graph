@@ -805,13 +805,26 @@ export class Graph {
       if (cursor && (sceneChanged || positionVersion !== this.getPointPositionBuffer()?.version)) refreshHover()
     }
     const updateMouseRepulsion = (event: MouseEvent): void => {
-      if (event.buttons & 2 && this.config.enableRightClickRepulsion) {
+      const pointer = event instanceof PointerEvent
+      // Native mouse events follow pointer events with integer client coordinates.
+      // Also accept a standalone mouse event dispatched by a host.
+      if (pointer ? !event.isPrimary : event.isTrusted) return
+      if (!(event.buttons & 2) || !this.config.enableRightClickRepulsion) {
+        this.mouseRepulsion = undefined
+        return
+      }
+      if (pointer) this.mouseRepulsion = this.screenToSpacePosition([event.offsetX, event.offsetY])
+      else {
         const bounds = canvas.getBoundingClientRect()
         this.mouseRepulsion = this.screenToSpacePosition([event.clientX - bounds.left, event.clientY - bounds.top])
-        this.requestFrame()
-      } else this.mouseRepulsion = undefined
+      }
+      this.requestFrame()
     }
+    canvas.addEventListener('pointerdown', updateMouseRepulsion, options)
+    canvas.addEventListener('pointermove', updateMouseRepulsion, options)
     canvas.addEventListener('mousedown', updateMouseRepulsion, options)
+    window.addEventListener('pointerup', event => { if (event.isPrimary && !(event.buttons & 2)) this.mouseRepulsion = undefined }, options)
+    window.addEventListener('pointercancel', event => { if (event.isPrimary) this.mouseRepulsion = undefined }, options)
     window.addEventListener('mouseup', () => { this.mouseRepulsion = undefined }, options)
     const leave = (event?: MouseEvent): void => {
       cursor = pointerEvent = undefined
