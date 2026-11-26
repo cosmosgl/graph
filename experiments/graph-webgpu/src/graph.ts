@@ -47,6 +47,9 @@ export class Graph {
   private isAutomaticFrame = false
   private containerSize?: Pair
   private isFrameInFlight = false
+  private pendingFeedbackReads = 0
+  private hasRequestedAreaSinceDraw = false
+  private hasYieldedForSelection = false
   private isDestroyed = false
   private hasStyleUpload = false
   private shouldUpdateAllStyles = false
@@ -472,8 +475,13 @@ export class Graph {
     if (this.isDestroyed) return null
     if (!this.tracker) return new Map()
     const revision = this.revision
-    const positions = await this.tracker.positionsAsync()
-    return revision === this.revision && !this.isDestroyed ? positions : null
+    this.pendingFeedbackReads++
+    try {
+      const positions = await this.tracker.positionsAsync()
+      return revision === this.revision && !this.isDestroyed ? positions : null
+    } finally {
+      if (--this.pendingFeedbackReads === 0) this.hasRequestedAreaSinceDraw = false
+    }
   }
 
   /** The last completed gather. Use getTrackedPointPositionsMapAsync for a fresh snapshot. */
@@ -638,6 +646,15 @@ export class Graph {
         this.requestFrame()
         return
       }
+      // Let an area read and companion tracked-position read reach their caller
+      // before the next costly paint. Continuous input can defer only one refresh.
+      if (this.hasRequestedAreaSinceDraw && this.pendingFeedbackReads && !this.hasYieldedForSelection) {
+        this.hasYieldedForSelection = true
+        this.requestFrame()
+        return
+      }
+      this.hasRequestedAreaSinceDraw = false
+      this.hasYieldedForSelection = false
       this.isAutomaticFrame = true
       try { this.renderOneFrame() } finally { this.isAutomaticFrame = false }
       if (this.isDestroyed || device.isLost) return
@@ -772,12 +789,16 @@ export class Graph {
     if (!source || !this.canvas || this.isDestroyed) return this.isReady ? [] : null
     const revision = this.revision
     this.area ??= new AreaSelection(source.device)
+    this.hasRequestedAreaSinceDraw = true
+    this.pendingFeedbackReads++
     try {
       const ids = await this.area.select(source.buffer, this.graph, this.config, this.simulation.store, area)
       return this.isDestroyed || this.revision !== revision || source.device.isLost ? null : ids
     } catch (error) {
       if (this.isDestroyed || this.revision !== revision || source.device.isLost) return null
       throw error
+    } finally {
+      if (--this.pendingFeedbackReads === 0) this.hasRequestedAreaSinceDraw = false
     }
   }
 

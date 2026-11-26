@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation, PointShape, type GraphConfig } from '../src'
 import { Lines } from '../src/modules/Lines'
 import { GraphRenderer } from '../src/renderer'
+import { AreaSelection } from '../src/modules/Points/area-selection'
 import { StyleTransition } from '../src/style-transition'
 
 const config: GraphConfig = {
@@ -67,6 +68,84 @@ describe('WebGPU Graph', () => {
       await vi.waitFor(() => expect(onSimulationTick).toHaveBeenCalled())
       expect(draw.mock.calls.length).toBeGreaterThan(1)
     } finally { vi.restoreAllMocks(); cleanup() }
+  })
+
+  it.each([false, true])('bounds selection feedback waits when an area read is present: %s', async areaRequested => {
+    const onSimulationTick = vi.fn()
+    const { graph, cleanup } = mountedGraph({ onSimulationTick })
+    let finishRead!: (xy: Float32Array) => void
+    const positions = new Promise<Float32Array>(resolve => { finishRead = resolve })
+    try {
+      await graph.ready
+      let scheduled: FrameRequestCallback | undefined
+      let requestId = 0
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
+        scheduled = callback
+        return ++requestId
+      })
+      const refresh = (): void => {
+        if (!scheduled) throw new Error('Expected an automatic frame')
+        const callback = scheduled
+        scheduled = undefined
+        callback(performance.now())
+      }
+      graph.setConfigPartial({ enableRenderLoop: true })
+      graph.unpause()
+      graph.trackPointPositionsByIndices([0])
+      vi.spyOn(graph.simulation, 'getPointPositionsByIndicesAsync').mockReturnValue(positions)
+      const select = (): Promise<number[] | null> => graph.findPointsInRectAsync([[0, 0], [320, 200]])
+      if (!areaRequested) {
+        vi.spyOn(AreaSelection.prototype, 'select').mockRejectedValueOnce(new Error('Selection failed'))
+        await expect(select()).rejects.toThrow('Selection failed')
+      }
+      const labels = graph.getTrackedPointPositionsMapAsync()
+      if (areaRequested) expect(await select()).toEqual([0, 1])
+
+      refresh()
+      expect(onSimulationTick).toHaveBeenCalledTimes(areaRequested ? 0 : 1)
+      if (areaRequested) {
+        // A caller can still render explicitly. Another query cannot postpone
+        // the next automatic step, even if the tracker never settles.
+        graph.renderOneFrame()
+        expect(onSimulationTick).toHaveBeenCalledTimes(1)
+        expect(await select()).toEqual([0, 1])
+        refresh()
+        expect(onSimulationTick).toHaveBeenCalledTimes(2)
+      }
+      finishRead(Float32Array.of(2000, 2048))
+      expect(await labels).toEqual(new Map([[0, [2000, 2048]]]))
+    } finally {
+      finishRead(Float32Array.of(2000, 2048))
+      cleanup()
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('discards pending feedback and a scheduled frame on destruction', async () => {
+    const onSimulationTick = vi.fn()
+    const { graph, cleanup } = mountedGraph({ onSimulationTick })
+    let releaseSelection!: (ids: number[]) => void
+    const selection = new Promise<number[]>(resolve => { releaseSelection = resolve })
+    try {
+      await graph.ready
+      let scheduled!: FrameRequestCallback
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { scheduled = callback; return 1 })
+      vi.spyOn(AreaSelection.prototype, 'select').mockReturnValue(selection)
+      graph.setConfigPartial({ enableRenderLoop: true })
+      graph.unpause()
+      const ids = graph.findPointsInRectAsync([[0, 0], [320, 200]])
+      scheduled(performance.now())
+      expect(onSimulationTick).not.toHaveBeenCalled()
+      graph.destroy()
+      scheduled(performance.now())
+      releaseSelection([0])
+      expect(await ids).toBeNull()
+      expect(onSimulationTick).not.toHaveBeenCalled()
+    } finally {
+      releaseSelection([])
+      cleanup()
+      vi.restoreAllMocks()
+    }
   })
 
   it('retains the link buffer through color-only, size-only and interrupted point edits', async () => {
