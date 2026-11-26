@@ -10,7 +10,7 @@ const { values } = parseArgs({ options: {
   swiftshader: { type: 'boolean' },
   performance: { type: 'boolean' },
 } })
-const browser = await chromium.launch({ channel: 'chrome', args: values.swiftshader
+const browser = await chromium.launch({ channel: 'chrome', headless: !!values.swiftshader, args: values.swiftshader
   ? ['--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader', '--enable-unsafe-swiftshader', '--enable-unsafe-webgpu']
   : ['--enable-unsafe-webgpu'] })
 
@@ -87,6 +87,15 @@ try {
     }
     try {
       await open('interaction--area-selection')
+      if (engine === 'WebGPU') {
+        const info = await page.evaluate(async () => {
+          const adapter = await navigator.gpu.requestAdapter()
+          if (!adapter) throw new Error('No WebGPU adapter available')
+          return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, fallback: adapter.info.isFallbackAdapter }
+        })
+        assert.equal(info.fallback, !!values.swiftshader)
+        console.log('WebGPU adapter', info)
+      }
       await checkArea(page)
       console.log(`${engine} area presets, modes and dragged selections passed at both pixel ratios`)
       if (values.performance) {
