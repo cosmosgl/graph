@@ -75,7 +75,7 @@ export const validationContracts: Record<string, ValidationContract> = {
       'Check paint, clicks, rectangles and lassos during the third removal and restoration to x = 80. ' +
       'Remove the point halfway back at x = 68 and repeat the checks at x = 48, 56, 64, 68 and 80. ' +
       'Check the paint and click ID where a curved link crosses a point. Repeat the same motion with the point omitted and compare the entire frames. ' +
-      'Across an image with opaque, half-alpha and transparent areas, compare each pixel and click to the same site without the image point. ' +
+      'Compare paint and clicks in all three image bands and 46 CSS px from center, with and without the 96 CSS px image point. ' +
       'Match the hover ring and callback sequence as points and the camera move under a stationary cursor. ' +
       'Check point colors, sizes and endpoint gradients through an interruption. WebGPU edge clicks must follow the displayed diameter. ' +
       'Check exact rectangle and lasso IDs near the changing edge at both pixel ratios. ' +

@@ -7,9 +7,10 @@ export const imageAreas = [
   { key: 'translucent', x: 128, y: 80, alpha: 128 },
   { key: 'transparent', x: 152, y: 82, alpha: 0 },
 ] as const
-type Area = typeof imageAreas[number]['key']
+export const imageProbes = [...imageAreas, { key: 'edge', x: 174, y: 80, alpha: 0 }] as const
+type Probe = typeof imageProbes[number]['key']
 type Site = { pick: string; rgb: number[] }
-type AreaSamples = Record<Area, Site & { linkOnlyPick: string; linkOnlyRgb: number[] }>
+type AreaSamples = Record<Probe, Site & { linkOnlyPick: string; linkOnlyRgb: number[] }>
 type ImageSample = Pick<CrossingSample, 'phase' | 'time' | 'pixels'> & { areas: AreaSamples; linkOnlyPixels: ImageData }
 
 function bandImage (): ImageData {
@@ -26,7 +27,7 @@ function bandImage (): ImageData {
 }
 
 export function runImageCrossing (engine: Engine, ratio: 1 | 2): Promise<{ deviceInfo: DeviceInfo; samples: ImageSample[] }> {
-  return replayCurve<{ pixels: ImageData; sites: Record<Area, Site> }, ImageSample>(engine, ratio, {
+  return replayCurve<{ pixels: ImageData; sites: Record<Probe, Site> }, ImageSample>(engine, ratio, {
     configurePoint (graph) {
       // Point 2 keeps its red color but has no painted shape underneath the image.
       graph.setPointShapes(Float32Array.of(0, 0, 8)) // Circle, Circle, None
@@ -36,13 +37,13 @@ export function runImageCrossing (engine: Engine, ratio: 1 | 2): Promise<{ devic
       graph.setPointImageSizes(Float32Array.of(0, 0, 96))
     },
     async control ({ pixels, click, rgb }) {
-      const sites = {} as Record<Area, Site>
-      for (const { key, x, y } of imageAreas) sites[key] = { pick: await click(x, y), rgb: rgb(x, y) }
+      const sites = {} as Record<Probe, Site>
+      for (const { key, x, y } of imageProbes) sites[key] = { pick: await click(x, y), rgb: rgb(x, y) }
       return { pixels, sites }
     },
     async sample ({ phase, time, pixels, rgb, click }, linkOnly) {
       const areas = {} as AreaSamples
-      for (const { key, x, y } of imageAreas) {
+      for (const { key, x, y } of imageProbes) {
         areas[key] = { pick: await click(x, y), rgb: rgb(x, y), linkOnlyPick: linkOnly.sites[key].pick, linkOnlyRgb: linkOnly.sites[key].rgb }
       }
       return { phase, time, pixels, areas, linkOnlyPixels: linkOnly.pixels }

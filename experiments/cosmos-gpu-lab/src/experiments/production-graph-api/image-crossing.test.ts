@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { comparePixels } from '../../runtime/compare-pixels'
 import { writeArtifact } from '../../testing/artifacts'
-import { imageAreas, runImageCrossing } from './image-crossing'
+import { imageAreas, imageProbes, runImageCrossing } from './image-crossing'
 
 type Sample = Awaited<ReturnType<typeof runImageCrossing>>['samples'][number]
 
@@ -52,11 +52,13 @@ it.each([1, 2] as const)('draws a curved link behind opaque, translucent and tra
     let redDifferences = 0
     let greenDifferences = 0
     let otherChannelDifferences = 0
+    let differencesOffControlEdges = 0
     const fullFrame = comparePixels(a.pixels, b.pixels, undefined, index => {
       const offset = 4 * index
       if (a.pixels.data[offset] !== b.pixels.data[offset]) redDifferences++
       if (a.pixels.data[offset + 1] !== b.pixels.data[offset + 1]) greenDifferences++
       if (a.pixels.data[offset + 2] !== b.pixels.data[offset + 2] || a.pixels.data[offset + 3] !== b.pixels.data[offset + 3]) otherChannelDifferences++
+      if (a.linkOnlyPixels.data[offset + 1] === b.linkOnlyPixels.data[offset + 1]) differencesOffControlEdges++
     })
     const webglImage = measureImage(a, ratio)
     const webgpuImage = measureImage(b, ratio)
@@ -71,6 +73,7 @@ it.each([1, 2] as const)('draws a curved link behind opaque, translucent and tra
       redDifferences,
       greenDifferences,
       otherChannelDifferences,
+      differencesOffControlEdges,
       linkOnlyFrame: comparePixels(a.linkOnlyPixels, b.linkOnlyPixels),
       translucentPaintMatchesReference: a.areas.translucent.rgb.every((channel, c) => channel === b.areas.translucent.rgb[c]),
       imageBoundsMatchReference: webglImage.redInkBounds.length === 4 && webgpuImage.redInkBounds.length === 4 &&
@@ -81,6 +84,7 @@ it.each([1, 2] as const)('draws a curved link behind opaque, translucent and tra
     devices: [gl.deviceInfo, gpu.deviceInfo],
     ratio,
     imageAreas,
+    imageProbes,
     comparisons,
     translucentPaintMatchesReference: comparisons.every(frame => frame.translucentPaintMatchesReference),
     imageBoundsMatchReference: comparisons.every(frame => frame.imageBoundsMatchReference),
@@ -88,32 +92,35 @@ it.each([1, 2] as const)('draws a curved link behind opaque, translucent and tra
   expect(comparisons.map(({ phase, time }) => [phase, time])).toEqual([['before', 0], ['during', 500], ['after', 1000]])
   for (const row of comparisons) {
     const crossing = row.phase === 'during'
-    for (const { key } of imageAreas) {
+    for (const { key } of imageProbes) {
       for (const areas of [row.webgl, row.webgpu]) {
         expect.soft(areas[key].pick, row.phase).toBe('Point 2')
         expect.soft(areas[key].linkOnlyPick, row.phase).toBe(crossing ? 'Link 0' : 'Background')
-        expect.soft(areas[key].linkOnlyRgb, row.phase).toEqual(crossing ? [0, 255, 0] : [0, 0, 0])
+        // At x=174 only the link's padded pick target reaches y=80.
+        expect.soft(areas[key].linkOnlyRgb, row.phase).toEqual(crossing && key !== 'edge' ? [0, 255, 0] : [0, 0, 0])
       }
     }
     for (const areas of [row.webgl, row.webgpu]) {
       expect.soft(areas.opaque.rgb, row.phase).toEqual([255, 0, 0])
       expect.soft(areas.transparent.rgb, row.phase).toEqual(areas.transparent.linkOnlyRgb)
-      expect.soft(areas.translucent.rgb.slice(1), row.phase).toEqual([crossing ? 127 : 0, 0])
+      expect.soft(areas.translucent.rgb, row.phase).toEqual([64, crossing ? 127 : 0, 0])
+      expect.soft(areas.edge.rgb, row.phase).toEqual(areas.edge.linkOnlyRgb)
     }
     for (const image of [row.webglImage, row.webgpuImage]) {
       expect.soft(image.changesOutsideImage, row.phase).toBe(0)
       expect.soft(image.exposedStroke, row.phase).toEqual([0, 255, 0])
       expect.soft(image.exposedControlStroke, row.phase).toEqual([0, 255, 0])
     }
-    expect.soft(row.webgl.translucent.rgb, row.phase).toEqual([64, crossing ? 127 : 0, 0])
+    expect.soft(row.webgpu, row.phase).toEqual(row.webgl)
+    expect.soft(row.translucentPaintMatchesReference, row.phase).toBe(true)
+    expect.soft(row.imageBoundsMatchReference, row.phase).toBe(true)
     if (nativeM3) {
-      // Accept a parity fix while flagging any new color/size result. The artifact retains the strict verdicts.
-      expect.soft([64, 128], row.phase).toContain(row.webgpu.translucent.rgb[0])
-      expect.soft(row.webgpu.translucent.rgb[0], row.phase).toBe(comparisons[0]!.webgpu.translucent.rgb[0])
       const requested = [80, 68, 144, 92].map(css => css * ratio)
-      const capped = ratio === 1 ? [96, 72, 139, 88] : [192, 143, 278, 177]
       expect.soft(row.webglImage.redInkBounds, row.phase).toEqual(requested)
-      expect.soft([requested, capped], row.phase).toContainEqual(row.webgpuImage.redInkBounds)
+      expect.soft(row.redDifferences, row.phase).toBe(0)
+      expect.soft(row.otherChannelDifferences, row.phase).toBe(0)
+      expect.soft(row.differencesOffControlEdges, row.phase).toBe(0)
+      expect.soft(row.fullFrame.maxChannelDelta, row.phase).toBeLessThanOrEqual(ratio === 1 ? 1 : 0)
     }
   }
 })

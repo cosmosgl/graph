@@ -99,7 +99,7 @@ export const experiment = defineExperiment({
     question: 'What shows through each part of a point image, and which object receives the click?',
     description: 'Move green link 0 behind image point 2. From left to right the three areas are opaque red, translucent red and transparent.',
     reference: 'Both Graph packages replay the same motion twice, with and without image point 2.',
-    acceptance: 'Compare the pixel color and click ID in all three areas before, during and after the crossing at 1× and 2×.',
+    acceptance: 'Compare the pixels and click IDs in all three areas and 46 CSS px from the center before, during and after the crossing at 1× and 2×.',
     recorded: null,
   }, {
     id: 'stationary-hover',

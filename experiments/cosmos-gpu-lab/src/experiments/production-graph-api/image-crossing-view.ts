@@ -1,5 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { imageAreas, runImageCrossing } from './image-crossing'
+import { imageProbes, runImageCrossing } from './image-crossing'
 import { createPairedPickView } from './paired-pick-view'
 
 const names = { opaque: 'Opaque', translucent: 'Translucent', transparent: 'Transparent' }
@@ -10,8 +10,8 @@ function measurement (pick: string, rgb: number[]): string {
 }
 
 export function createImageCrossingView (host: HTMLElement): ExperimentInstance {
-  const probes = Object.fromEntries(imageAreas.flatMap(({ key, x, y, alpha }) => [
-    [key, `${names[key]} (${alpha}/255) at (${x}, ${y})`],
+  const probes = Object.fromEntries(imageProbes.flatMap(({ key, x, y, alpha }) => [
+    [key, key === 'edge' ? `46 CSS px from the center (${x}, ${y})` : `${names[key]} (${alpha}/255) at (${x}, ${y})`],
     [`${key}-control`, `Without point 2 at (${x}, ${y})`],
   ]))
   return createPairedPickView(host, {
@@ -22,7 +22,7 @@ export function createImageCrossingView (host: HTMLElement): ExperimentInstance 
       key: sample.phase,
       title: `${titles[sample.phase]} · ${sample.time} ms`,
       pixels: sample.pixels,
-      picks: Object.fromEntries(imageAreas.flatMap(({ key }) => {
+      picks: Object.fromEntries(imageProbes.flatMap(({ key }) => {
         const area = sample.areas[key]
         return [[key, measurement(area.pick, area.rgb)], [`${key}-control`, measurement(area.linkOnlyPick, area.linkOnlyRgb)]]
       })),

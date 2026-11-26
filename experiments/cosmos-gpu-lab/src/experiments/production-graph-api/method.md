@@ -32,19 +32,20 @@ All 30 paired click results agreed. At 1×, 9, 9 and 10 of the 40,960 pixels dif
 
 ### Move the curve behind a point image
 
-Point 2 carries one 96 × 96 image with a horizontal strip of red texels. Its three bands have alpha bytes 255, 128 and 0. The point keeps its red fill color but has no shape beneath the image. At 500 ms, the green curve passes behind all three probes. Omitting point 2 turns every probe green and every click into link 0 on that frame. At 0 and 1,000 ms, the same three control probes show black and return background. [Replay the image crossing](#/production-graph-api?section=try-curved-link-image-crossing)
+Point 2 carries a 96 × 96 CSS px image centered at (128, 80). Its horizontal red strip has opaque, half-alpha and transparent bands. The green curve crosses the strip at 500 ms. Both real packages produced these pixel colors and public click IDs on M3 at 1× and 2×. [Replay the image crossing](#/production-graph-api?section=try-curved-link-image-crossing)
 
-| Image area | WebGL RGB over the link | WebGPU RGB over the link | Click in either package |
+| Probe (CSS px) | RGB before and after | RGB at the crossing | Click with point 2 present |
 | --- | --- | --- | --- |
-| Opaque | (255, 0, 0) | (255, 0, 0) | Point 2 |
-| Translucent (128/255) | (64, 127, 0) | (128, 127, 0) | Point 2 |
-| Transparent | (0, 255, 0) | (0, 255, 0) | Point 2 |
+| Opaque (104, 82) | (255, 0, 0) | (255, 0, 0) | Point 2 |
+| Half-alpha (128, 80) | (64, 0, 0) | (64, 127, 0) | Point 2 |
+| Transparent (152, 82) | (0, 0, 0) | (0, 255, 0) | Point 2 |
+| 46 CSS px right of center (174, 80) | (0, 0, 0) | (0, 0, 0) | Point 2 |
 
-All 36 paired standalone clicks agreed across 1× and 2× on M3. The canvas picker tests the point’s circular footprint, so even the transparent interior returned point 2 before, during and after the crossing.
+With point 2 omitted, all four clicks returned background at 0 and 1,000 ms and link 0 at 500 ms. At (174, 80) the link’s picking tolerance reaches a pixel just beyond the painted stroke. Adding the image point makes its circular click target take precedence even at a transparent texel. All 48 paired clicks agreed.
 
-The translucent band also differed over black. WebGL drew (64, 0, 0) and WebGPU drew (128, 0, 0). WebGL mixes the image color with zero RGB when there is no shape, then applies its alpha when blending onto the canvas. WebGPU starts that mix with the configured point color even when the shape is absent. In a separate image-only control, changing only the hidden fill from red to black brought WebGPU’s red channel down from 128 to 64. WebGL stayed at 64.
+At 2× all 163,840 device pixels matched in each frame. At 1×, 9, 6 and 10 of the 40,960 pixels differed before, during and after the crossing, each by one green-channel level at a curve edge that also differed with the point omitted. Both packages painted the red strip from x = 80 to 144 and y = 68 to 92 CSS px (exclusive upper bounds).
 
-The packages also drew different image sizes. WebGL used the requested 96 CSS px. WebGPU clamped the image to 64 CSS px. The probes at (104, 82), (128, 80) and (152, 82) CSS px fall inside the respective bands at both sizes. In a separate control with a fully opaque 96 CSS px image, a click 46 CSS px from its center returned the point in WebGL and background in WebGPU at both pixel ratios.
+WebGPU previously used the invisible shape’s fill color under the image and drew a requested 96 CSS px image at 64. An image-only point now starts with transparent black, and the atlas uses the same nearest-texel sampling as WebGL. The half-alpha red texel contributes about half its red in the shader and is blended with the background at half opacity. The separate opaque-image control measured the full requested widths of 48, 64, 80, 96 and 128 CSS px on both packages. At 96, a click 46 CSS px from center hit the point and a click 57 CSS px away returned background.
 
 ### Remove and restore a point
 

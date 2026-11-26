@@ -38,9 +38,14 @@ Run the same native motion with one image on point 2. Keep the previous opaque-p
 LAB_ARTIFACT_RUN=image-crossing-01 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/production-graph-api/image-crossing.test.ts src/experiments/production-graph-api/curved-crossing.test.ts
 ```
 
-At 0, 500 and 1,000 ms, compare the three fixed sites with the image present and with point 2 omitted. Record the displayed RGB and public click ID for each. The M3 results and the exact package and adapter identities are in `captures/curved-link-image-m3-release/`.
+At 0, 500 and 1,000 ms, compare the three opacity bands and (174, 80), 46 CSS px right of center. Run each click with point 2 present and omitted. Check the full RGBA canvases, painted strip bounds and whether any differing pixel also differs in the link-only control. The M3 results and bundle identities are in `captures/fixed-image-crossing-m3-release/`. The earlier capped renderer is recorded in `captures/curved-link-image-m3-release/`.
 
-Two isolated controls in that capture explain the discrepancies. With the Lab running on port 5180, run `node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/image-alpha-control.mjs` from the repository root to change only the invisible shape’s color under a half-alpha image. Run `size-control.mjs` from the same capture directory using the same working directory to sweep a fully opaque image from 48 to 128 CSS px. Both commands print the device reports and measurements.
+Two isolated controls distinguish image color from the click footprint. With the Lab running on port 5180, run these commands from the repository root. The first changes only the invisible shape’s color under a half-alpha image. The second sweeps a fully opaque image from 48 to 128 CSS px and clicks five offsets at each size.
+
+```sh
+node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/image-alpha-control.mjs
+node experiments/cosmos-gpu-lab/captures/curved-link-image-m3-release/size-control.mjs
+```
 
 ## Point-only style updates
 

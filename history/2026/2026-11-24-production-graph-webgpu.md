@@ -26,6 +26,15 @@ SwiftShader independently rounds the projected center and corners. Keeping
 both placements in the Lab lets us check these edges with the same application
 and exact RGBA comparison as the original four diameters at both pixel ratios.
 
+A click 46 CSS pixels from the center of a 96-pixel image fell through
+to the link below it. WebGPU had inherited a 64-pixel point limit even
+though its renderer draws triangles. Drawing and picking now use the
+requested diameter. The same image exposed a color difference. A red
+fill assigned to an absent shape made half-transparent red too bright.
+Starting with transparent black and matching WebGL’s atlas sampling
+gave both packages RGB (64, 127, 0) over the green link. On M3, both
+returned point 2 at the outer click at 1× and 2×.
+
 Links exposed a different compatibility requirement. WebGL lets a pointer
 select a thin link several pixels beyond its painted edge and inside a dash
 gap. Checking both the canvas pixels and the public click callback preserves
