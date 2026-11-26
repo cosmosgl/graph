@@ -42,7 +42,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: 'Reversing the order changed 64 pixels at 1× and 256 at 2× on the dash. In the gap it changed zero pixels.' },
       { tone: 'pass', text: 'With the dashed link alone, the gap was black and the click returned link 0.' },
     ],
-    next: 'Check ownership where arrowheads or translucent links overlap.',
+    next: 'See the translucent-arrow crossing for ownership in both draw orders.',
   },
   'production-graph-api/point-style-updates': {
     badge: 'Area selection matches',
@@ -242,29 +242,28 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'integrated-webgpu/shared-device-recovery': {
     badge: 'Manual recovery passed',
     tone: 'pass',
-    finding: 'The prototype restored saved positions. The packed Deck app also restored its camera and selection on M3.',
+    finding: 'The packed Deck app restored all 65,536 saved positions, its camera and selection after device loss in both ownership modes.',
     area: 'Integration',
-    status: 'Host checkpoint recovery verified on M3',
+    status: 'Packed recovery verified in Chromium, Firefox and Safari on one M3 host',
     evidence: [
       { tone: 'pass', text: 'Host survived layout cleanup' },
       { tone: 'pass', text: 'Saved positions restored' },
       { tone: 'pass', text: 'Both Deck ownership modes recovered' },
     ],
-    next: 'Measure recovery with a larger checkpoint on more adapters',
+    next: 'Repeat the packed recovery run on another physical GPU family',
   },
   'selection/shape-selection': {
     badge: 'Isolated checks passed',
     tone: 'pass',
     finding: selectionCase.recorded.conclusion,
     area: 'Integration',
-    status: 'Moving rectangles verified on M3, lasso edge cases open',
+    status: 'Fixed-tick long lassos verified through both packages on M3',
     evidence: [
       { tone: 'pass', text: '19 isolated queries matched' },
       { tone: 'pass', text: 'The packaged WebGPU Graph returned the expected moving rectangle IDs and 1,000 tracked coordinates at both YouTube graph sizes.' },
-      { tone: 'warn', text: 'On replay, production WebGL and WebGPU agreed on both lasso edge points. The CPU reference placed each on the opposite side.' },
+      { tone: 'pass', text: 'At both YouTube sizes, all four 256-vertex releases matched each package’s live positions and all 1,000 label coordinates.' },
     ],
-    next: 'Replay the two moving lasso edge cases through both packaged selection modes. ' +
-      'Reduce the release-to-highlight delay in the million-point rectangle replay.',
+    next: 'Repeat the packaged selection gates on another physical GPU.',
   },
   'integrated-webgpu/tracked-positions': {
     badge: 'Positions matched',
