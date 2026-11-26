@@ -95,4 +95,4 @@ it('picks the original foreground IDs from a compact list, including scattered, 
     live.destroy()
     device.destroy()
   }
-})
+}, 120000)

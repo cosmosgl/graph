@@ -50,6 +50,13 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     } finally { pass.end() }
   }
   try {
+    const swiftShader = device.info.gpuArchitecture?.toLowerCase().includes('swiftshader')
+    const { COSMOS_TEST_SWIFTSHADER: requireSwiftShader } = import.meta.env
+    if (requireSwiftShader) {
+      expect(device.info.type).toBe('webgpu')
+      expect(device.info.fallback).toBe(true)
+      expect(swiftShader).toBe(true)
+    }
     graph.setPointPositions(new Float32Array([32, 64, 96, 64]))
     graph.setLinks(new Float32Array([0, 1]))
     graph.setPointColors(new Float32Array([1, 0, 0, 1, 0, 1, 0, 1]))
@@ -88,7 +95,8 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     graph.setConfigPartial({ linkDashLength: 32 })
     draw()
     // Sample the antialiased red ring at the same device pixel as the WebGL control.
-    expect(await pixel(16, 41)).toEqual([95, 0, 0, 95])
+    const ringAlpha = swiftShader ? 100 : 95
+    expect(await pixel(16, 41)).toEqual([ringAlpha, 0, 0, ringAlpha])
     expect((await pixel(32, 35))[1]).toBe(255)
     expect(graph.config.focusedPointIndex).toBeUndefined()
     draw(true)
@@ -113,7 +121,7 @@ it('composes visual and pick passes on a borrowed WebGPU device', async () => {
     expect(await pixel(16, 41)).toEqual([0, 255, 0, 255])
     graph.setHostHoveredPoint(0)
     draw(false, 1)
-    expect(await pixel(16, 41)).toEqual([95, 160, 0, 255])
+    expect(await pixel(16, 41)).toEqual([ringAlpha, 255 - ringAlpha, 0, 255])
     draw(true, 1)
     expect(await pixel(16, 41)).toEqual([2, 0, 0, 7])
 

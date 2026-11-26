@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Graph, GraphSimulation } from '../src'
+import { waitForGraphUpdate } from './wait-for-graph-update'
 
 describe('WebGPU graph lifecycle', () => {
   it('shares completed centroids with Graph and invalidates in-flight reads on membership edits', async () => {
@@ -43,13 +44,14 @@ describe('WebGPU graph lifecycle', () => {
       simulation.setPointPositions(new Float32Array([0, 0]))
       simulation.applyData(1)
       simulation.step()
-      simulation.setPointPositions(new Float32Array([20, 20]))
+      // An axis-aligned gravity step has the same exact coordinates on both adapters.
+      simulation.setPointPositions(new Float32Array([20, 100]))
       simulation.applyData(1)
-      simulation.setPointPosition(0, 30, 30)
+      simulation.setPointPosition(0, 30, 100)
       simulation.setConfig({ spaceSize: 200 })
       simulation.step()
       await simulation.ready
-      expect(await simulation.getPointPositionsAsync()).toEqual(new Float32Array([37, 37]))
+      expect(await simulation.getPointPositionsAsync()).toEqual(new Float32Array([37, 100]))
     } finally { simulation.destroy() }
   })
 
@@ -139,7 +141,7 @@ describe('WebGPU graph lifecycle', () => {
       })
       const draw = vi.spyOn(graph, 'renderOneFrame')
       graph.setConfigPartial({ enableRenderLoop: true })
-      await vi.waitFor(() => expect(tick).toHaveBeenCalledOnce())
+      await waitForGraphUpdate(() => expect(tick).toHaveBeenCalledOnce())
       graph.pause()
       graph.setHostHoveredPoint(0)
       for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame)
@@ -147,7 +149,7 @@ describe('WebGPU graph lifecycle', () => {
       graph.step()
       expect(tick).toHaveBeenCalledTimes(2)
       release()
-      await vi.waitFor(() => expect(draw).toHaveBeenCalledTimes(2))
+      await waitForGraphUpdate(() => expect(draw).toHaveBeenCalledTimes(2))
       expect(tick).toHaveBeenCalledTimes(2)
     } finally { release(); graph.destroy(); host.remove() }
   })
