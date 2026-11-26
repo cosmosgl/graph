@@ -41,7 +41,7 @@ export function createLargeComparisonView (
     <div class="viewer-comparison-panels large-comparison-panels">
       <section><h2>Production WebGL</h2><div class="large-comparison-surface" data-comparison-webgl></div>
         <p class="comparison-step-rate" data-webgl-rate>— ${rateUnit}</p></section>
-      <section><h2>Candidate WebGPU</h2><div class="large-comparison-surface" data-comparison-webgpu>
+      <section><h2>Lab WebGPU prototype</h2><div class="large-comparison-surface" data-comparison-webgpu>
         <canvas aria-label="${title} in WebGPU"></canvas></div>
         <p class="comparison-step-rate" data-webgpu-rate>— ${rateUnit}</p></section>
     </div>

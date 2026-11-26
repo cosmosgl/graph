@@ -7,12 +7,12 @@ scope: Historical fixed-setting 8,192-point matrix with eight near-field samples
 
 ## What this gate tests
 
-The [production-settings follow-up](#/layout-acceptance?section=doc-production) adds
+The [production-style settings follow-up](#/layout-acceptance?section=doc-production) adds
 32-sample and varied-spring controls, adaptive sampling, state-preserving cutoff
 crossings and selected 5,000-tick runs. This page records the earlier fixed-setting
-matrix; its measurements retain that scope.
+matrix. [Original fixed-setting study and replay](https://github.com/cosmosgl/cosmos/blob/3d46201073857139162f200766827a9c7335afaf/experiments/cosmos-gpu-lab/src/experiments/layout-acceptance/findings.md#reproduce)
 
-This experiment combines the accepted **hub prefetch** (degree ≥1,024) and
+This archived study combined **hub prefetch** (degree ≥1,024) and
 **cached grid IDs with a 32-index sort**. Both lanes use the same strict force
 arithmetic and production routing: exact all-pairs at **≤4,096** points,
 hierarchical repulsion above that cutoff. Earlier experiments retain their
@@ -135,8 +135,15 @@ sampling, larger/multi-hub graphs, remaining forces and other GPUs remain open.
 
 ## Reproduce
 
-Run `pnpm --filter @cosmos.gl/gpu-lab dev`, then open
-[Production layout gates](#/layout-acceptance). Keep the tab visible.
+The source attached to the [fixed-setting results](https://github.com/cosmosgl/cosmos/commit/3d46201073857139162f200766827a9c7335afaf) includes the original live study and GPU tests. From the repository root, prepare a separate checkout for replay.
+
+```sh
+git worktree add --detach ../cosmos-layout-fixed 3d46201073857139162f200766827a9c7335afaf
+cd ../cosmos-layout-fixed
+pnpm install --frozen-lockfile
+```
+
+In that checkout, run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Production layout gates**. Keep the tab visible.
 
 1. Check each boundary count with **Initial** input.
 2. Check the 8,192-point star at Initial before starting long trajectories.

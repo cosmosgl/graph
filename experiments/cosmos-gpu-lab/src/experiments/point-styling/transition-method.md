@@ -31,5 +31,13 @@ and picking behavior, the easing/timing scheduler, callbacks, live setters,
 sparse writes and simulation coordination. The probes perform readbacks
 for validation. The position restart itself uses a resident copy on both GPUs.
 
-The [archived transition test](https://github.com/cosmosgl/graph/blob/08e5ff5dd3ffdd4ca970a7bd96f22d7d3778a468/experiments/cosmos-gpu-lab/src/experiments/point-styling/transition.test.ts)
-contains the inputs and assertions for this study.
+## Replay the isolated study
+
+The archived test contains the nine-point fixture and all 12 checkpoints. From the repository root, replay it in a separate checkout with the historical dependencies.
+
+```sh
+git worktree add --detach ../cosmos-point-transition-replay 08e5ff5dd3ffdd4ca970a7bd96f22d7d3778a468
+cd ../cosmos-point-transition-replay
+pnpm install --frozen-lockfile
+LAB_ARTIFACT_RUN=point-transition-replay pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/transition.test.ts
+```

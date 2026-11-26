@@ -51,6 +51,8 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
     hide,
     destroy,
     async show (definition, parent, caseId): Promise<ExperimentInstance> {
+      const create = definition.create
+      if (!create) throw new Error(`No live view for ${definition.id}`)
       if (current?.id !== definition.id || current.caseId !== caseId) destroy()
       if (!current) {
         const host = document.createElement('div'); host.className = 'experiment-run'
@@ -59,7 +61,7 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
         host.innerHTML = '<div class="loading">Creating GPU devices…</div>'
         const run: Run = { id: definition.id, caseId, host, ready: undefined!, visible: true, retired: false }
         current = run; parent.append(host)
-        run.ready = Promise.resolve().then(async () => await definition.create(host, caseId)).then(instance => {
+        run.ready = Promise.resolve().then(async () => await create(host, caseId)).then(instance => {
           if (run.retired) instance.destroy()
           else {
             const key = evidenceKey(run)

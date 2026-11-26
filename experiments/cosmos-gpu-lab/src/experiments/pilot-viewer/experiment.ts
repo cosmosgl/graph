@@ -1,7 +1,6 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
 import recordedSummary from './recorded-summary.json'
-import { agentFindings } from './agent-findings'
 import { cases } from './cases'
 import { renderSelectionTiming } from './selection-timing-figure'
 export const experiment = defineExperiment({
@@ -10,7 +9,7 @@ export const experiment = defineExperiment({
   summary: 'Find members, inspect neighbors and drag points while the 34-member graph runs on WebGPU.',
   tags: ['integration', 'interaction'],
   cases,
-  study: { record: readStudyRecord(recordedSummary, 'pilot-viewer'), recipePage: 'agent-recipe', visualFirst: true, agentFindings },
+  study: { record: readStudyRecord(recordedSummary, 'pilot-viewer'), recipePage: 'agent-recipe' },
   create: async host => (await import('./view')).createView(host),
   pages: [
     {

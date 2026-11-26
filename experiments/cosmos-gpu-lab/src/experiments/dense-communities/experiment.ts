@@ -32,7 +32,7 @@ export const experiment = defineExperiment({
       href: experimentHref('viewer-comparison', 'migration-results', 'dense-communities-1-000-000-points-999-990-edges'),
       chart: {
         title: 'Slow frames took less than half as long with WebGPU',
-        context: '95th-percentile frame interval during steady motion · One million points · Separate runs on Apple M3',
+        context: 'Steady frame p95 · One million points · Built WebGL Graph and Lab WebGPU prototype on Apple M3',
         unit: 'ms',
         bars: [['WebGL', 151.4], ['WebGPU', 67.0]],
       },

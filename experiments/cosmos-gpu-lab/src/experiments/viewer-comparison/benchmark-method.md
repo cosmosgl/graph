@@ -1,8 +1,12 @@
-Compare the current production WebGL Graph and the Lab WebGPU candidate on
+Compare the built WebGL Graph and the Lab WebGPU prototype on
 the same workload in separate, visible Chrome sessions on the Apple M3. The
 runner compares the GPU-finished frames available at animation opportunities,
 the feedback that reaches the page, and the allocations each backend tracks.
 [Recorded results](#/viewer-comparison?section=doc-migration-results) · [Performance example audit](#/viewer-comparison?section=doc-performance-audit)
+
+The WebGPU side uses the Lab's solver, renderer and frame loop. The
+[packaged force benchmark](#/production-forces?section=doc-scale-timing)
+loads both built Graph packages.
 
 ## Run the comparison
 

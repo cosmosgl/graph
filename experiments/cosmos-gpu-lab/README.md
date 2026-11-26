@@ -10,11 +10,10 @@ checks. The links at the top jump to the coverage, parked investigations or futu
 
 For contributors porting an engine module, the audit maps its WebGL and WebGPU owners and records the differences found through the public API. [Engine architecture audit](../graph-webgpu/architecture-audit.md)
 
-**Viewer Comparison** links to the matched migration benchmark. Build the
-production bundle with `pnpm run build`, then use
+**Viewer Comparison** retains the matched prototype benchmark. Build the WebGL
+bundle with `pnpm run build`, then use
 `pnpm --filter @cosmos.gl/gpu-lab benchmark:migration --fixture karate`
-to replay it on the M3. The benchmark page lists large fixtures and the
-declared method, and its results link to each workload.
+to replay it on M3. The packaged force benchmark loads both built Graph packages.
 
 Home features core interactive concepts by topic, with related demos linked beneath the cards.
 Benchmarks, migration checks and earlier milestones appear in a separate study directory. The header links to the catalog and migration page.
@@ -218,7 +217,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `center-mass`: tick-by-tick WebGL/WebGPU correctness comparison.
 - `scalable-reduction`: GPU-resident hierarchical reduction at larger point counts.
 - `point-rendering`: WebGL point sprites and WebGPU instanced circle quads.
-- `performance-lab`: matched rendering and reduction benchmarks.
+- `performance-lab`: optional diagnostics for isolated rendering and reduction costs.
 - `spatial-grid`: count, scan and scatter into a CSR-style spatial index.
 - `neighborhood-forces`: tiled all-pairs versus grid-based local repulsion, integration and rendering.
 - `many-body-grid`: production hierarchical global repulsion versus WebGPU and CPU, with independent grid/sample builds,
@@ -239,7 +238,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
   Measures update time and the buffer memory held after removal.
 - `point-buffer-copy`: one manual step grows a chain from 2,048 to 8,192 points. Each preview reports the position data
   downloaded to the CPU and the total time to rebuild its buffers.
-- `ribbon-generation`: stopped compute-cache investigation; retained native findings and reproduction harness, with no live benchmark controls.
+- `ribbon-generation` and `layout-acceptance`: recorded compute-ribbon and prototype layout studies with replay instructions pinned to their historical source.
 - `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 - `hub-springs`: pinned/unpinned degree controls and ordered cooperative neighbor prefetch, checked against the
   strict baseline on one device, evolving checkpoint validation and GPU-batched normal-frame threshold controls.
@@ -376,10 +375,11 @@ Pass a test path to focus the run, for example
 and its picking and rendering checks. Moving-style and large-graph checks use
 the opt-in flags and visible-browser settings in their recipes.
 
-Use [the matched benchmark](src/experiments/viewer-comparison/benchmark-method.md)
-to assess responsiveness against production WebGL. It compares the same graph
-workflows and applies the declared workload margins. The Node tests above check
-when the benchmark has enough evidence to issue a timing verdict.
+Use [the packaged force benchmark](src/experiments/production-forces/scale-timing.md)
+to compare the built packages on the same graph workloads. The
+[prototype benchmark](src/experiments/viewer-comparison/benchmark-method.md)
+retains its larger fixtures and workload margins. The Node tests above check
+when the timing comparator has enough evidence to issue a verdict.
 
 ### Connect an existing browser
 

@@ -169,22 +169,17 @@ export async function renderEvidenceContent (
   const connected = target.isConnected
   // Load into a detached container so a cancelled navigation cannot leave table observers behind.
   const content = document.createElement('div')
-  if (page.kind === 'markdown') {
-    renderMarkdown(content, await page.load(), page.assets, {
-      examples: page.examples,
-      sectionNavigation: false,
-      headingLevelOffset: 1,
-      tables: false,
-    })
-    addArticleSections(content, experiment.id, page.id)
-    removeReproductionInstructions(content)
-    content.querySelector('[data-heading-level="1"]')?.remove()
-  } else {
-    const { renderReport } = await import('./report')
-    renderReport(content, await page.load(), experiment.id)
-  }
+  renderMarkdown(content, await page.load(), page.assets, {
+    examples: page.examples,
+    sectionNavigation: false,
+    headingLevelOffset: 1,
+    tables: false,
+  })
+  addArticleSections(content, experiment.id, page.id)
+  removeReproductionInstructions(content)
+  content.querySelector('[data-heading-level="1"]')?.remove()
   if (connected && !target.isConnected) { disposeDocumentTables(content); return }
-  unlinkOtherExperiments(content, experiment, page.kind === 'markdown' ? page.relatedExperiments : undefined)
+  unlinkOtherExperiments(content, experiment, page.relatedExperiments)
   target.replaceChildren(...Array.from(content.childNodes))
   disposeDocumentTables(content)
   presentDocumentTables(target)

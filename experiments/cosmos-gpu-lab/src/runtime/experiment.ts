@@ -1,5 +1,4 @@
 import { validationContractMarkdown } from './validation'
-import type { AgentFindings } from './agent-findings'
 import type { StudyRecord } from './study-record'
 import type { ResultChart } from './result-chart'
 import type { LiveCheckGroup } from './live-checks'
@@ -26,34 +25,9 @@ export type MarkdownPage = {
   relatedExperiments?: readonly string[];
 }
 
-export type ExperimentReportResult = {
-  backend: string;
-  values: Record<string, string | number>;
-}
-
-export type ExperimentReport = {
-  schemaVersion: number;
-  experiment: string;
-  title: string;
-  recordedAt: string;
-  status: string;
-  commit: string;
-  environment: Record<string, string>;
-  parameters: Record<string, string | number>;
-  results: ExperimentReportResult[];
-  notes: string[];
-}
-
-export type ReportPage = {
-  kind: 'report';
-  id: string;
-  title: string;
-  load: () => Promise<ExperimentReport>;
-}
-
 // This evidence is rendered by the experiment with its own GPU resources.
 export type LiveChecksPage = { kind: 'live-checks'; id: string; title: string; load: () => Promise<readonly LiveCheckGroup[]> }
-export type ExperimentPage = MarkdownPage | ReportPage | LiveChecksPage
+export type ExperimentPage = MarkdownPage | LiveChecksPage
 
 // A case has one question and its own bounded evidence. The files that retain
 // detailed research remain attached to the experiment, not copied into the UI.
@@ -103,9 +77,8 @@ export type ExperimentDefinition = {
   showRecordedSummary?: boolean;
   headerContent?: 'question-only';
   singlePage?: SinglePageCase;
-  // Optional prototype: a readable recorded result and a linked agent recipe.
-  study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
-  create: (host: HTMLElement, caseId?: string) => Promise<ExperimentInstance>;
+  study?: { record: StudyRecord; recipePage: string };
+  create?: (host: HTMLElement, caseId?: string) => Promise<ExperimentInstance>;
   pages: ExperimentPage[];
 }
 
@@ -124,6 +97,9 @@ export function defineExperiment (definition: ExperimentDefinition): ExperimentD
   if (definition.cases) {
     const ids = new Set<string>()
     if (!definition.cases.length) throw new Error(`Missing cases for ${definition.id}`)
+    if (!definition.create && definition.cases.some(item => item.kind !== 'recorded')) {
+      throw new Error(`Missing live view for ${definition.id}`)
+    }
     for (const item of definition.cases) {
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.id) || ids.has(item.id) ||
         (item.kind === 'recorded' && !item.recorded) ||

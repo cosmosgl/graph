@@ -95,7 +95,7 @@ const catalogTopics: CatalogTopic[] = [
   {
     id: 'viewer-studies',
     title: 'Layout and viewer integration',
-    links: ['combined-layout', 'integrated-webgpu', 'production-graph-api', 'viewer-comparison', 'million-graph', 'layout-acceptance'],
+    links: ['combined-layout', 'integrated-webgpu', 'production-graph-api', 'viewer-comparison', 'million-graph'],
   },
   {
     id: 'precision-performance',
@@ -105,7 +105,7 @@ const catalogTopics: CatalogTopic[] = [
   {
     id: 'milestones',
     title: 'Earlier milestones',
-    links: ['pilot-viewer', 'matched-layout', 'ribbon-generation', 'repulsion-trajectories'],
+    links: ['pilot-viewer', 'matched-layout', 'ribbon-generation', 'repulsion-trajectories', 'layout-acceptance'],
   },
 ]
 

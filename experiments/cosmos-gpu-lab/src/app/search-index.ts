@@ -284,7 +284,6 @@ export async function buildSearchIndex (): Promise<SearchIndex> {
         }))))
         continue
       }
-      if (page.kind !== 'markdown') continue
       jobs.push((async (): Promise<SearchEntry[]> => indexMarkdown(await page.load(), {
         key: `${experiment.id}/document/${page.id}`,
         title: page.title,

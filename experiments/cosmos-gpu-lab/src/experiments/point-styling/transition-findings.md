@@ -19,10 +19,10 @@ fill likewise returned to the previous target. Both GPUs reproduced this
 production distinction between positions and visual channels. Those restarts
 can show a style jump when updates interrupt one another.
 
-The check used the unchanged production position fragment and the production
-size, exit and fill rules read in isolation before rasterization. Count
-changes, strokes, links, picking, the full draw pipeline, scheduling,
-callbacks and simulation coordination remain open.
+The check used the production position fragment and read the size, exit and
+fill rules before rasterization. The public Graph comparisons now exercise
+removal and restoration with picking and selection, and changes to fill and
+size during an animation. [Remove and restore a point](#/production-graph-api?section=try-sparse-transition) · [Change only point colors and sizes](#/production-graph-api?section=try-point-style-updates)
 
 The focused test passed 2/2 on Apple M3, macOS 26.5.2, native Chrome
 `157.0.8103.79` and luma `10.0.0-alpha.15`. WebGL reported ANGLE Metal on

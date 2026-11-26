@@ -1,7 +1,7 @@
 Use Viewer Comparison for the migration speed decision. The other examples
 measure a named part of the workload or replay an earlier experiment. Their
 original results and acceptance checks remain attached to those experiments.
-[Run the migration benchmark](#/viewer-comparison?section=doc-migration-benchmark)
+[Replay the prototype benchmark](#/viewer-comparison?section=doc-migration-benchmark)
 
 ## Viewer and workflow measurements
 

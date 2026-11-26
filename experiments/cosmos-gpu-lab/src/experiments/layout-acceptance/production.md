@@ -7,7 +7,9 @@ scope: Production-style 32-sample, varied-spring and adaptive-sampling controls;
 
 ## From reference settings to Cosmos defaults
 
-The composed WebGPU force slice now supports **32 starting samples, production
+This archived study compared two WebGPU prototypes. The packaged force comparison uses both built Graph packages. [Original study and replay](https://github.com/cosmosgl/cosmos/blob/64e92c799a94bfb7b795325b8c8690bea48fdbae/experiments/cosmos-gpu-lab/src/experiments/layout-acceptance/production.md#reproduce-and-continue) · [Packaged force comparisons](#/production-forces?section=try-hubs)
+
+The prototype supported **32 starting samples, production
 spring-distance variation `[1, 1.2]`, occupancy-driven sampling and selected
 5,000-tick cooling runs**. This extends the earlier eight-sample, fixed-spring
 reference. Existing numerical tolerances remain unchanged.
@@ -143,7 +145,15 @@ buffer identities and the independent complete-tick CPU gate remain checked.
 
 ## Reproduce and continue
 
-Open [Production layout gates](#/layout-acceptance). The **100-tick preset ladder**
+The [source for the settings study](https://github.com/cosmosgl/cosmos/commit/64e92c799a94bfb7b795325b8c8690bea48fdbae) retains the preset ladder, checkpoint replay and GPU tests. From the repository root, prepare a separate checkout.
+
+```sh
+git worktree add --detach ../cosmos-layout-settings 64e92c799a94bfb7b795325b8c8690bea48fdbae
+cd ../cosmos-layout-settings
+pnpm install --frozen-lockfile
+```
+
+In that checkout, run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Production layout gates**. The **100-tick preset ladder**
 runs all four presets with ten-tick checkpoints on the selected graph/density.
 Use **Adaptive samples**, **After 300 cooled ticks**, and the graph/density sweep
 for the repeated matrix. For a selected long run choose **After 5,000 cooled
@@ -155,7 +165,4 @@ Export JSON locally. Keep shared findings and reproduction instructions in Markd
 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/combined-layout/production-settings.test.ts src/experiments/combined-layout/production-routing.test.ts src/experiments/combined-layout/checkpoint-replay.test.ts src/experiments/combined-layout/varied-spring.test.ts
 ```
 
-**Next:** compare matched production WebGL, WebGPU and CPU inputs and measure
-layout quality separately from numerical parity. Center attraction follows that
-comparison. Broader weights/graphs, remaining forces, full renderer/API behavior,
-allocation policy and other native GPUs remain migration gates.
+The packaged force comparison now measures layout quality through each Graph’s public API. [Dense communities and hubs](#/production-forces?section=try-dense)

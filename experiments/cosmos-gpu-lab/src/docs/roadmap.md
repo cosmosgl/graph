@@ -2,8 +2,8 @@
 
 During development, the Lab can keep loading the production WebGL build from the main workspace's `dist/index.min.js`. Build the WebGPU candidate separately and run the same Storybook stories against both packages. Once WebGPU passes the release checks, it takes over the main package and its build output. The last WebGL revision remains available for historical comparisons.
 
-Default-force motion meets the measured slowdown margin for Karate Club and the two million-point community fixtures.
-[Matched results](#/viewer-comparison?section=doc-migration-results) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
+The WebGPU prototype met the motion margin on Karate Club and two million-point community fixtures. In the built packages, click feedback met the margin on the 8,192-slot dense and hub graphs. Relative frame speed remained unassessed.
+[Prototype results](#/viewer-comparison?section=doc-migration-results) · [Packaged results](#/production-forces?section=doc-scale-timing)
 
 ## Current focus
 
@@ -17,8 +17,8 @@ migrationFocus
 youtubeMotion
 ```
 
-The sample has 300,000 points and 300,000 links. The recorded Chrome 157 runs
-used the same camera and measured simulation ticks 13–72.
+The Chrome 157 prototype comparison used 300,000 points, 300,000 links and
+the same camera. It measured simulation ticks 13–72.
 [Live demo](#/youtube-network?section=try-friendships-300k)
 
 ## Production Graph API
@@ -93,11 +93,11 @@ On M3, both packages returned exact rectangle IDs and 1,000 tracked coordinates 
 
 ## What remains
 
-- **Scope** The first paired run covers default forces and basic styles on native Chrome on M3. Repeat with production interaction styling and additional supported devices as integration proceeds. [Acceptance scope](#/million-graph?section=doc-production-envelope)
-- **Moving performance** At one million points, frame p95 went from 151.4 to 67.0 ms for dense communities and from 151.7 to 68.5 ms in the hub confirmation. The largest YouTube run to complete the full benchmark workflow on both backends had 262,144 points. On the million-point YouTube graph, WebGL box selection hit its one-second timeout while earlier frames were still queued. The Lab WebGPU run completed all eight selections. Relative speed remains unassessed at that size. Investigate variable click times, including the earlier 68.2 and 100.4 ms pilot stalls. [Matched results](#/viewer-comparison?section=doc-migration-results) · [YouTube timeout](#/viewer-comparison?section=doc-migration-results-youtube-capacity)
+- **Scope** The first paired prototype run covers default forces and basic styles on native Chrome on M3. Repeat with production interaction styling and additional supported devices as integration proceeds. [Acceptance scope](#/million-graph?section=doc-production-envelope)
+- **Moving performance** At one million points, the prototype comparison measured frame p95 of 151.4 ms on WebGL and 67.0 ms on WebGPU for dense communities, and 151.7 ms and 68.5 ms for hubs. Repeat these workloads with both built packages and check click latency, including the earlier 68.2 and 100.4 ms pilot stalls. [Prototype results](#/viewer-comparison?section=doc-migration-results) · [Performance rule](#/validation-workflow?section=performance-against-production-webgl)
 - **Full simulation** All eight forces match recorded CPU checkpoints through 32,768 points. The resident approximation runs all eight through one million with exact link indices, pins and absence. Both million-point WebGPU layouts take about 267 ms p95. Compare the same force set with production WebGL. Profile collision where it causes a slowdown. Retest dense overlap, multiple hubs, adaptive sampling, cell crossings and long cooling at scale. [Full-force evidence](#/integrated-webgpu?section=doc-composed-interaction)
 - **Appearance and picking** Moving circles and solid straight links match the checked interiors. Isolated shapes, images, rings, widths, gradients and patterned link studies still show some mask and color differences. Resolve visible ownership at edges and overlaps, then check arrows, hover, focus and depth-based occlusion in the same moving renderer. [Moving styles](#/viewer-comparison?section=doc-findings) · [Feature coverage](#feature-coverage)
-- **Graph workflows** Both backends completed moving selection, 1,000 labels, updates and resize on the community fixtures. Resolve the two near-edge polygon discrepancies and verify these workflows through the full production WebGPU API. Transitions, callbacks, point dragging and Fit remain integration checks. [Readback evidence](#/integrated-webgpu?section=doc-readback) · [Matched results](#/viewer-comparison?section=doc-migration-results)
+- **Graph workflows** The packaged WebGPU Graph returned the expected moving rectangle IDs and tracked positions on the million-point YouTube fixture. WebGL's async queries timed out at that size. Check long lasso paths through both built APIs and replay packaged updates, resize, dragging and Fit at scale. [Packaged replay](#/production-graph-api?section=doc-youtube-selection) · [Prototype readback evidence](#/integrated-webgpu?section=doc-readback)
 - **Deck, recovery and release** The packed WebGPU app can rebuild both Graph ownership modes from a host checkpoint. Startup tests also cover an unavailable adapter, a borrowed WebGL device and an interactive graph given a device without a canvas. In each case `graph.ready` rejects. The partial renderer releases its allocations and the borrowed devices stay usable. Larger sessions and the supported browser and GPU range still need qualification. [Host evidence](#/integrated-webgpu?section=doc-host-ownership)
 
 ## Feature coverage

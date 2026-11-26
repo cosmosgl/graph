@@ -92,15 +92,13 @@ instructions for constructing the input. Keep raw measurements in a unique
 local capture. The [input-order follow-up](#/precision-diagnostics?section=doc-method-follow-up-input-order)
 is an example.
 
-### Add a finding to this page
+### Record a follow-up investigation
 
-Create one JSON file per investigation in
+Keep one JSON file per investigation in
 `experiments/cosmos-gpu-lab/src/experiments/precision-diagnostics/agent-findings/`.
-Use a lowercase, hyphenated filename, such as `input-order.json`; it becomes the
-finding's stable identifier. The dev server reloads when a file is added, so
-export any needed live evidence before writing the record. A built Lab needs a
-rebuild. Do not replace the existing recorded summary or edit page code. Use
-the existing `input-order.json` as a complete example and include:
+Use a lowercase, hyphenated filename as the finding's stable identifier.
+The existing `input-order.json` illustrates the fields below. Put the reader-facing
+result in the case's linked evidence article.
 
 - `schemaVersion: 1`, `experiment: "precision-diagnostics"`, and `status`
   (`"complete"` or `"incomplete"`). Keep failures and incomplete work visible.
@@ -120,12 +118,9 @@ the existing `input-order.json` as a complete example and include:
   location of any needed inputs. Keep raw captures local and name their limits.
 - Optional `evidenceSection` and `replaySection` slugs only when the matching
   headings already exist in **Method and findings** and this recipe, respectively.
-  The Lab marks missing headings as unavailable. The steps must still be useful
-  without these links.
+  Check the heading names when recording the finding.
 
-Open the experiment and check that the finding appears without a record-loading
-warning. Verify the underlying evidence and retained source before reporting
-completion.
+Verify the result against the capture and retained source.
 
 ### Replay the input-order follow-up
 

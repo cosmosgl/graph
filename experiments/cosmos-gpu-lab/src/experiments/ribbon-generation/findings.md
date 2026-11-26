@@ -46,12 +46,18 @@ Keep the current vertex renderer. Adaptive tessellation, visibility culling and 
 
 No production shaders, configuration or picking policy changed. This screen does not establish power usage, GPU utilization, mobile performance, motion invalidation or end-to-end Graph frame cost.
 
+[Original findings and replay](https://github.com/cosmosgl/cosmos/blob/466da466b3d83b36f6d4295939822e724dd87d35/experiments/cosmos-gpu-lab/src/experiments/ribbon-generation/findings.md#reproduce)
+
 ## Reproduce
 
-The live benchmark controls have been removed. The original harness remains available for explicit command-line reproduction of the bounded six-workload/two-repeat screen:
+The archived harness contains both the 64-case preservation check and the six-workload cost screen. From the repository root, create a separate checkout of its pinned revision and use that checkout’s lockfile.
 
 ```sh
-LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation/cost.test.ts
+git worktree add --detach ../cosmos-ribbon-replay 466da466b3d83b36f6d4295939822e724dd87d35
+cd ../cosmos-ribbon-replay
+pnpm install --frozen-lockfile
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation/ribbon.test.ts
+LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 LAB_ARTIFACT_RUN=ribbon-replay pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation/cost.test.ts
 ```
 
-It writes local, ignored `captures/local/ribbon-cost-0.json` and `captures/local/ribbon-cost-1.json`. The artifact writer replaces prior local measurements without snapshot comparison; no `-u` is needed. The second file contains both repetitions. The test's completion means the screen executed, not that its candidates passed preservation or cost gates. Confirm adapter metadata in the file before treating a run as native.
+The cost screen writes `ribbon-cost-0.json` and `ribbon-cost-1.json` under `experiments/cosmos-gpu-lab/captures/ribbon-replay/`. The second file contains both repetitions. Inspect the recorded adapter and the preservation and timing results for each workload. A completed run can include a failed gate.

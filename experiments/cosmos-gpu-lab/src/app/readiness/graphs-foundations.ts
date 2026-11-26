@@ -372,7 +372,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
   'million-graph/moving-graph': {
     badge: 'Community motion faster',
     tone: 'review',
-    finding: 'Matched steady frame p95 fell by about 55% on both million-point community fixtures.',
+    finding: 'The WebGPU prototype reduced steady frame p95 by about 55% on both million-point community fixtures.',
     area: 'Integration',
     status: 'Real-graph workflow open',
     evidence: [
@@ -620,17 +620,16 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
     next: 'Check more inputs and establish an accuracy budget',
   },
   'layout-acceptance/production-settings': {
-    badge: 'Selected checks passed',
-    tone: 'pass',
-    finding: 'Selected settings passed; the full engine and other GPUs remain untested.',
-    area: 'Integration',
-    status: 'Full engine untested',
+    badge: 'Archived prototype',
+    tone: 'neutral',
+    finding: 'The prototype passed selected routing, sampling and long-run checks.',
+    area: 'Research',
+    status: 'Historical',
     evidence: [
       { tone: 'pass', text: 'Selected production-style checks passed' },
-      { tone: 'unknown', text: 'Complete engine untested' },
-      { tone: 'unknown', text: 'Other GPUs untested' },
+      { tone: 'info', text: 'The package uses different aggregation and spring code' },
     ],
-    next: 'Broaden force, graph and device coverage',
+    next: 'See Forces in the Cosmos packages for current coverage',
   },
 }
 /* eslint-enable @typescript-eslint/naming-convention */

@@ -320,11 +320,11 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'No independent runtime adaptation, complete behavioral certification, mathematical accuracy gate or end-to-end performance claim.',
   },
   'layout-acceptance': {
-    question: 'Do candidate arithmetic, routing, sampling and updates pass the existing bounded production-setting gates?',
+    question: 'Did the prototype pass the bounded routing, sampling and update checks?',
     reference: 'Float32 CPU compatibility checks and strict WebGPU controls with deterministic fixtures.',
     acceptance: 'Preserve original tolerances, exact/grid routing boundaries, state retention and all recorded failures.',
     coverage: 'Selected settings and scheduled checkpoints, including bounded long runs; see each findings matrix.',
-    limits: 'Production-setting checks do not approve all parameters, runtime scheduling, layout quality or other GPUs.',
+    limits: 'The prototype used selected production settings. The packaged Graph uses different aggregation and spring code.',
   },
   'gpu-stage-profile': {
     question: 'Which GPU stages dominate a controlled resident frame?',

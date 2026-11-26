@@ -24,7 +24,7 @@ const pointStylingResearch = Object.fromEntries(pointStylingCases.map(item => {
   if (item.id === 'shapes') {
     investigations.push(
       { page: 'method', state: 'Supporting investigation', description: 'Styling and picking matrix with retained visibility and coverage failures.' },
-      { page: 'transition-findings', state: 'Supporting investigation', description: 'Exact point position, fill, size and exit checkpoints on M3.' }
+      { page: 'transition-findings', state: 'Historical baseline', description: 'Isolated prototype position, fill, size and exit checkpoints on M3.' }
     )
   }
   return [id, {
@@ -77,7 +77,7 @@ export const research: Record<string, ResearchSummary> = {
     investigations: [{ page: 'findings', state: 'Parked', description: 'Investigation stopped; native measurements and the coarse-curve color failure are retained for reference.' }],
     comparison: 'Resident endpoints → vertex generation / compute sample cache → identical raster and coverage paths',
     next: 'No further work planned. Keep the current vertex renderer.',
-    reproduce: 'This page is a retained research record. Recorded findings describe the original conditions and optional command-line reproduction.',
+    reproduce: 'Use the pinned historical checkout and replay command in the findings.',
   },
   collision: {
     comparison: 'Shared initial graph → exact collision or hashed neighbor slots → slot, force and position checks',
@@ -227,5 +227,5 @@ export const research: Record<string, ResearchSummary> = {
 
 // Editorial priority for the migration page. The linked study owns the evidence.
 export const migrationFocus = {
-  experiment: 'viewer-comparison',
+  experiment: 'production-forces',
 } as const

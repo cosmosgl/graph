@@ -1,8 +1,8 @@
 # Benchmark methodology
 
-The Performance Lab compares matched WebGL 2 and WebGPU workloads on the same browser, device,
-canvas and input size. It is intended for migration decisions, not for producing a universal
-“WebGPU is X% faster” number.
+The Performance Lab is an optional diagnostic for isolated WebGL 2 and WebGPU workloads on the
+same browser, device, canvas and input size. The [packaged force benchmark](#/production-forces?section=doc-scale-timing)
+measures frame and click latency in the built Graph packages.
 
 ## Current workloads
 

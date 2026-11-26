@@ -77,6 +77,11 @@ export function experimentDestination (experiment: ExperimentDefinition, request
   if (section?.startsWith('doc-agent-recipe') || (page && !isReaderPage(experiment, page))) {
     section = 'recorded-findings'
   }
+  if (!experiment.create && section) {
+    const archivedCase = experiment.cases!.find(item => section === liveCaseSection(item))
+    if (archivedCase) section = findingSection(archivedCase)
+    else if (section === 'case-live' || section.startsWith('run-')) section = 'recorded-findings'
+  }
 
   const selectorCase = experiment.cases!.find(item => item.kind !== 'recorded' && section === liveCaseSection(item))
   const liveCase = selectorCase ?? (!section && experiment.presentation === 'demo' ? startingCase(experiment) : undefined)

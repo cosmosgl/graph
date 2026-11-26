@@ -5,7 +5,7 @@ import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'performance-lab',
   title: 'Performance lab',
-  summary: 'Benchmark WebGL and WebGPU rendering and simulation workloads with matched inputs.',
+  summary: 'Measure submission and completion costs for isolated circle drawing and center reduction.',
   tags: ['benchmark', 'rendering', 'simulation', 'WebGL', 'WebGPU'],
   cases,
   create: async (host, caseId): Promise<ExperimentInstance> => {

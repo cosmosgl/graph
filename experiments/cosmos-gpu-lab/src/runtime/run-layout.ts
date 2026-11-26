@@ -119,7 +119,7 @@ export function mountRunLayout (host: HTMLElement, read?: () => RunSummary, cont
       ? validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'
       : 'Only the inputs and checks explicitly named below.')
   }
-  const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references, .study-overview' })
+  const tables = createResultTables(frame)
   const refresh = (): void => {
     for (const { select, hint } of selectedValues) {
       const label = select.selectedOptions[0]?.textContent?.trim() ?? ''

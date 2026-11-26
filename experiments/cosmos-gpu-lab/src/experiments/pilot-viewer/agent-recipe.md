@@ -120,7 +120,7 @@ host activity are independent variables. Keep earlier misses in the report.
 
 ## Publish and review
 
-Add one record to `pilot-viewer/agent-findings/`; files load automatically. Follow
+Add one source record to `pilot-viewer/agent-findings/`. Follow
 the shared schema and the existing Precision diagnostics example. Use plain words
 for the question, answer and remaining unknown. Include actual environment,
 evidence location, exact clean revision or preserved modified source, and concrete
@@ -129,8 +129,7 @@ not a passing candidate or established cause. A completed study may be inconclus
 Keep raw JSON local and concise findings in Markdown. Link `evidenceSection` to a
 heading in `findings.md` and `replaySection` to a heading in this recipe.
 
-Verify the record's meaning against the capture; schema validation only checks
-its shape. Test that its result and expanded instructions are readable when live
-GPU setup fails. Keep the graph near the top. Report strict compatibility,
+Verify the record against the capture. Publish the reviewed result in the
+case's linked Markdown evidence. Report strict compatibility,
 bounded usability and full migration readiness separately. Do not convert older
 experiments merely to demonstrate the format.

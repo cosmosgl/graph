@@ -16,7 +16,7 @@ export const cases: ExperimentCase[] = [{
     scope: '34 points and 78 links, point interaction checks and two fixed-position color styles.',
     limits: 'The color result covers one device and two fresh styles. An earlier slow response to a click remains unexplained.',
     evidence: [
-      { label: 'Matched migration benchmark results', page: 'migration-results' },
+      { label: 'Recorded prototype benchmark results', page: 'migration-results' },
       { label: 'Graph comparison findings', page: 'findings' },
       { label: 'Historical comparison method', page: 'method' },
     ],

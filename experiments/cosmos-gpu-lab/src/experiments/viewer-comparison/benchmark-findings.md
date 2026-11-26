@@ -1,5 +1,5 @@
-Karate Club took about 18 ms per frame on both backends. At one million
-points, WebGPU cut frame p95 by about 55% on both community fixtures. Both
+Karate Club took about 18 ms per frame on both viewers. At one million
+points, the Lab WebGPU prototype cut frame p95 by about 55% on both community fixtures. Both
 WebGL controls moved the full YouTube graph and stopped at the first moving rectangle selection. WebGPU
 completed that workflow. Its million-point YouTube speed verdict is **Not assessed**.
 
@@ -8,7 +8,8 @@ completed that workflow. Its million-point YouTube speed verdict is **Not assess
 On 20 November 2026, visible Chrome `157.0.8103.79` ran one backend at a time
 on Apple M3. The production ANGLE Metal adapter identified Apple M3 and used
 luma `9.3.6`. WebGPU reported non-fallback Apple Metal 3 and used luma
-`10.0.0-alpha.15`. Both used 961 × 541 CSS pixels at DPR 2. The initial
+`10.0.0-alpha.15`. The WebGPU side used the Lab's solver, renderer and frame loop.
+Both used 961 × 541 CSS pixels at DPR 2. The initial
 positions, topology, flags, circle and link styles, camera, force settings,
 cooling and pointer sequence were matched. The [method](#/viewer-comparison?section=doc-migration-benchmark)
 names the solver and scheduling differences and the working margins.
@@ -209,9 +210,9 @@ YouTube graph was moving. On the M3, the count typically appeared about
 **100 ms** after mouse release. All but one of the 24 timed drags showed the
 count within 132 ms. The slowest took 139 ms.
 
-Once the production `Graph` supports WebGPU, repeat the same drags. Check which
-points were inside the box at release, then compare how long the count takes to
-appear. The Lab results give that test a baseline.
+The later [packaged Graph replay](#/production-graph-api?section=doc-youtube-selection)
+checked the ordered IDs and 1,000 tracked coordinates at release. It recorded
+the million-point WebGL async timeout and the WebGPU wait for feedback separately.
 
 WebGL gave up after one second because the GPU was still busy with earlier
 frames. That work took 1.63 seconds to finish. After we paused the graph and let

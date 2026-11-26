@@ -61,6 +61,4 @@ Adaptive tessellation, visibility compaction and compute rasterization were poss
 
 ## Reproduce
 
-The page now retains documentation and recorded findings without starting a GPU session. The original benchmark harness is retained for explicit command-line reproduction; see Recorded findings for the opt-in command and environment.
-
-Focused checks: `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation`. Software-adapter checks verify execution and preservation only. Native measurements require a verified native device.
+The [recorded findings](#/ribbon-generation?section=doc-findings-reproduce) give the pinned revision and commands for the 64-case pixel check and the six-workload cost screen.

@@ -12,22 +12,20 @@ export const experiment = defineExperiment({
   study: {
     record: readStudyRecord(recordedSummary, 'viewer-comparison'),
     recipePage: 'agent-recipe',
-    visualFirst: true,
-    liveDescription: 'Each dot is a person and each line is a connection.',
   },
   create: async host => (await import('./view')).createView(host),
   pages: [
     {
       kind: 'markdown',
       id: 'migration-results',
-      title: 'Matched migration benchmark results',
+      title: 'Recorded prototype benchmark results',
       load: async (): Promise<string> => (await import('./benchmark-findings.md?raw')).default,
       examples: { youtubeCapacity: renderYoutubeCapacity },
     },
     {
       kind: 'markdown',
       id: 'migration-benchmark',
-      title: 'Run the migration benchmark',
+      title: 'Replay the prototype benchmark',
       load: async (): Promise<string> => (await import('./benchmark-method.md?raw')).default,
     },
     {

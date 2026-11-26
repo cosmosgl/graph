@@ -2,13 +2,18 @@ import { defineExperiment } from '../../runtime/experiment'
 import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'layout-acceptance',
-  title: 'Production layout gates',
-  summary: 'Validate exact/grid routing and evolving layouts with hub prefetch and ordered grid aggregation enabled together.',
-  tags: ['simulation', 'benchmark', 'compute'],
+  title: 'Archived layout optimization study',
+  summary: 'Recorded checks of hub prefetch and ordered grid aggregation on two WebGPU prototypes.',
+  tags: ['simulation', 'benchmark', 'compute', 'archived'],
   cases,
-  create: async host => (await import('../cell-aggregation/view')).createGridAggregationView(host, true),
   pages: [
-    { kind: 'markdown', id: 'production', title: 'Production settings', load: async (): Promise<string> => (await import('./production.md?raw')).default },
+    {
+      kind: 'markdown',
+      id: 'production',
+      title: 'Production-style settings',
+      relatedExperiments: ['production-forces'],
+      load: async (): Promise<string> => (await import('./production.md?raw')).default,
+    },
     { kind: 'markdown', id: 'findings', title: 'Method and findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
   ],
 })

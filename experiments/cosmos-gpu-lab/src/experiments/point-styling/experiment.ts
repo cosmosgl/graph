@@ -55,6 +55,7 @@ const archivePages: ExperimentPage[] = [
     kind: 'markdown',
     id: 'transition-findings',
     title: 'Point transitions and exits',
+    relatedExperiments: ['production-graph-api'],
     load: async (): Promise<string> => (await import('./transition-findings.md?raw')).default,
   },
 ]

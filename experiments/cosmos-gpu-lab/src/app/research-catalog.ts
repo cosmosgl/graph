@@ -316,7 +316,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Fixed-tick layouts, local overlap and public picks, plus matched moving-frame intervals and trusted-click feedback on M3',
       method: 'method',
       evidence: 'results',
-      next: 'Check residual overlap on more seeds and larger hub graphs. Measure moving selection and label feedback through the packaged API.',
+      next: 'Run the million-point dense and hub fixtures through both built Graph packages. Compare steady frame intervals, layout quality and click feedback.',
       reproduce: 'Choose Dense communities or Hub. Step once and click the gold link in both previews, then select a later checkpoint.',
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Per-force measurements in the two built packages.' }],
     }),
@@ -345,18 +345,17 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [{ page: 'results', state: 'Current evidence', description: 'Matched positions and complete canvas comparisons on the two collision paths.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {
-      conclusion: 'On the matched Karate graph, both backends ran at about 18 ms frame p95. WebGPU reduced steady frame p95 on the million-point communities.',
+      conclusion: 'Both viewers ran at about 18 ms frame p95 on Karate Club. The WebGPU prototype reduced steady frame p95 on the million-point communities.',
       reviewed: '2026-11-20',
       variant: 'Production Graph with luma v9 and the corrected resident WebGPU viewer with luma v10',
       comparison: 'Same data, settings, camera and interactions through the autonomous loops, in separate visible Chrome sessions',
       method: 'migration-benchmark',
       evidence: 'migration-results',
       methodPages: ['performance-audit', 'method', 'agent-recipe'],
-      next: 'Test box selection through the production WebGPU Graph API on the moving million-point YouTube graph. ' +
-        'Check that it selects the right points and shows the result promptly.',
-      reproduce: 'Run the migration benchmark for the chosen fixture. Use Compare corrected link paint for the frozen color check.',
+      next: 'Use the built Graph packages for the cutover comparison.',
+      reproduce: 'Replay the prototype benchmark for the chosen fixture. Use Compare corrected link paint for the frozen color check.',
       investigations: [
-        { page: 'migration-results', state: 'Current evidence', description: 'Matched motion, click feedback, updates, selection, labels and memory on M3.' },
+        { page: 'migration-results', state: 'Historical baseline', description: 'Matched motion, interactions and memory on M3 using the WebGPU prototype.' },
         { page: 'link-color-evidence', state: 'Supporting investigation', description: 'Same-geometry opacity and edge comparisons for both Karate styles.' },
         { page: 'findings', state: 'Historical baseline', description: 'Original Karate Club timing and appearance checks.' },
       ],
@@ -474,7 +473,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     'performance-lab': entry('performance-lab', {
       conclusion: 'This benchmark separates CPU submission from synchronized completion for isolated ' +
         'drawing and reduction. It has no published cross-device measurement matrix.',
-      variant: 'Matched luma WebGL/WebGPU microbenchmarks; live measurements and local JSON export.',
+      variant: 'Optional luma WebGL and WebGPU diagnostics with live measurements and local JSON export.',
       comparison: 'Matched isolated workload → warmups and repeated samples → submit/completion distributions',
       method: 'methodology',
       methodPages: ['interpretation'],
@@ -579,17 +578,19 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'layout-acceptance': entry('layout-acceptance', {
-      conclusion: 'Selected production-style sampling, varied springs and long-run controls pass the ' +
-        'recorded original gates. They do not establish complete production acceptance.',
+      conclusion: 'The prototype passed selected sampling, varied-spring and long-run checks.',
       variant: 'Strict baseline versus hub-prefetch/cached-grid WebGPU candidate; bounded M3 production-setting matrix.',
       comparison: 'Selected production settings → evolving baseline / candidate → checkpoint gates, probes and normal-frame cost',
       method: 'validation-contract',
       evidence: 'production',
-      next: 'Broaden force coverage, graphs and devices, then agree quality/runtime budgets before integrating the complete engine.',
-      reproduce: 'Use the preset ladder, adaptive sampling and documented input history above. ' +
-        'Validate the full-strength probe and keep intermediate unchecked ticks explicit.',
+      next: 'Use the Cosmos package comparisons for current force evidence.',
+      reproduce: 'Replay the preset ladder and fixed settings from the source revisions pinned in the findings.',
       investigations: [
-        { page: 'production', state: 'Current evidence', description: '32-sample/varied-spring controls, adaptive sampling and selected 5,000-tick runs.' },
+        {
+          page: 'production',
+          state: 'Historical baseline',
+          description: '32-sample and varied-spring controls, adaptive sampling and selected 5,000-tick runs.',
+        },
         {
           page: 'findings',
           state: 'Historical baseline',

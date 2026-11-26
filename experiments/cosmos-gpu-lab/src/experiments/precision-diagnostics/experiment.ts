@@ -1,6 +1,5 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
-import { agentFindings } from './agent-findings'
 import { precisionCases } from './cases'
 import recordedSummary from './recorded-summary.json'
 
@@ -10,7 +9,7 @@ export const experiment = defineExperiment({
   summary: 'Explore how addition order and gravity calculations affect numerical results.',
   tags: ['validation', 'precision', 'WebGL', 'WebGPU'],
   cases: precisionCases,
-  study: { record: readStudyRecord(recordedSummary, 'precision-diagnostics'), recipePage: 'agent-recipe', agentFindings },
+  study: { record: readStudyRecord(recordedSummary, 'precision-diagnostics'), recipePage: 'agent-recipe' },
   create: async (host, caseId) => (await import('./view')).createPrecisionView(host, caseId),
   pages: [{
     kind: 'markdown',

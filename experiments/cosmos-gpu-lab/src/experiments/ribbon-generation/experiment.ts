@@ -6,7 +6,6 @@ export const experiment = defineExperiment({
   summary: 'Stopped investigation: the simple compute cache did not demonstrate a consistent benefit over vertex generation.',
   tags: ['WebGPU', 'compute', 'rendering', 'links', 'archived'],
   cases,
-  create: async host => (await import('./view')).createRibbonView(host),
   pages: [{
     kind: 'markdown',
     id: 'case-evidence',

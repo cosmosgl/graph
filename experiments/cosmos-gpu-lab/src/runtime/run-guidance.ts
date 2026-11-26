@@ -83,14 +83,8 @@ const guidance: Record<string, Guidance> = {
   },
   'cell-aggregation': {
     candidate: 'Grid aggregation candidate; preserve the selected ordering contract.',
-    preset: 'Production-style settings for the selected comparison.',
     distribution: 'Initial spatial density.',
-    history: 'Evolve the input before measuring. Cooled controls also capture a full-strength probe.',
-  },
-  'layout-acceptance': {
-    candidate: 'Candidate evaluated against the production preset gates.',
-    preset: 'Production setting envelope; passing one preset does not validate the others.',
-    history: 'Evolve the selected input before measuring; cooled controls also capture a full-strength probe.',
+    history: 'Measure the initial positions or the layout after 20 checked ticks.',
   },
   'performance-lab': {
     workload: 'An isolated render or reduction workload, not full Cosmos frame rate.',

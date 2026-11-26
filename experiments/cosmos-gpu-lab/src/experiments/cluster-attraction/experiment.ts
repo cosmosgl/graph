@@ -1,6 +1,5 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
-import { readAgentFindings } from '../../runtime/agent-findings'
 import { cases } from './cases'
 import summary from './recorded-summary.json'
 export const experiment = defineExperiment({
@@ -11,8 +10,6 @@ export const experiment = defineExperiment({
   study: {
     record: readStudyRecord(summary, 'cluster-attraction'),
     recipePage: 'agent-recipe',
-    visualFirst: true,
-    agentFindings: readAgentFindings(import.meta.glob<string>('./agent-findings/*.json', { query: '?raw', import: 'default', eager: true }), 'cluster-attraction'),
   },
   cases,
   create: async host => (await import('./view')).createView(host),

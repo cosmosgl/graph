@@ -61,18 +61,15 @@ other experiments retain their detailed reports with the contract explaining the
 
 ### Shared research navigation
 
-Every experiment is a complete document assembled by `src/app/experiment-page.ts`. The live view,
-technical articles, current findings, earlier investigations, diagnostics and references remain
-expanded on that document. A sticky right-hand contents menu tracks the section being read; on
-narrow screens it stays expanded after the live run and before the explanations. Simple header links replace the
-permanent left catalog sidebar. The full grouped catalog remains on Home.
+Each experiment opens as a case page assembled by `src/app/case-page.ts`. The page shows the case
+question, its comparison and its recorded findings. Live cases mount their GPU view in the same
+column. Recorded-only cases can be read without creating a GPU device. The topic link returns to the
+experiment's group in the catalog.
 
-Articles reuse their Markdown, assets, source metadata and investigation warnings. Shared comparison
-criteria appear once. Reference sections keep their annotations while moving to the document footer.
-Article headings have page-prefixed IDs, including the old duplicate-heading suffixes. Old `/docs/page`
-URLs and heading links resolve to these anchors; `/run` and `/evidence` also remain valid aliases.
-Section navigation updates the location and focus without pausing or remounting the run, including
-browser Back and Forward. The document remains readable after a GPU initialization failure.
+The case page loads its evidence articles from the experiment manifest. Direct links to other
+reader-facing evidence load that article on demand. Article headings have page-prefixed IDs so a
+link can open a specific result. Moving between sections preserves the current case and its live
+view. Source records and agent recipes live alongside the experiment files.
 
 The registry checks that every article is included and replacement links resolve. Experiments
 without a published matrix say so explicitly; a local run never becomes a recorded finding.
@@ -105,8 +102,6 @@ does not become a measurement date. Table scrolling and source labels change pre
 not the numerical gates or exported raw measurements.
 
 The catalog can group the same experiments by migration area or reading path. Current investigation, bounded study, foundation and parked describe purpose, not approval. A parked sub-investigation does not park its whole experiment. Explicit method verdicts name retained controls or rejected alternatives only where the evidence has been reviewed; archive states alone never imply viability.
-
-The experiment contents tree includes article titles, evidence states and source-level section headings. On wide screens it stays beside the article; on narrow screens it stays expanded after the live run and before explanations, so the graph remains near the top. Sticky-header height is measured for section offsets. Links preserve the live canvas and settings.
 
 This structure addresses run retention, status/entry-point and history-priority problems across the catalog. Each comparison description names its actual backends and reference roles; a
 WebGPU-only study does not inherit an independent WebGL/WebGPU/CPU trajectory description.
