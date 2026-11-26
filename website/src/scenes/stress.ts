@@ -1,4 +1,5 @@
 import { Graph } from '@cosmos.gl/graph'
+import { afterDraw, sceneDevice, uploadedPositions, type DrawFence, type SceneDevice } from './graph-device'
 import type { SceneControls } from './renderer'
 import type { SceneDefinition } from './types'
 import { STRESS_POINT_COUNTS } from './stress-data'
@@ -21,6 +22,8 @@ export const tenMillionPoints: SceneDefinition = {
 }
 
 const FIRST_DRAW_TIMEOUT_MS = 10000
+const usesPositionTextures = 'getPointPositionTexture' in Graph.prototype
+const positionBytesPerPoint = 4 * Float32Array.BYTES_PER_ELEMENT
 
 interface TimerExtension {
   TIME_ELAPSED_EXT: number;
@@ -28,13 +31,13 @@ interface TimerExtension {
 }
 
 interface PendingFrame {
-  fence: WebGLSync;
+  fence: DrawFence;
   first: boolean;
   readonly submittedAt: number;
 }
 
 /** Count the actual point vertices submitted by cosmos, then restore the GL methods. */
-function verifyPointDraw (gl: WebGL2RenderingContext, draw: () => void): { vertices: number; calls: number } {
+function verifyPointDraw (gl: WebGL2RenderingContext, draw: () => void): { points: number; vertices: number; calls: number } {
   let vertices = 0
   let calls = 0
   const record = (mode: number, count: number, instances = 1): void => {
@@ -65,19 +68,38 @@ function verifyPointDraw (gl: WebGL2RenderingContext, draw: () => void): { verti
     gl.drawArraysInstanced = instancedArrays
     gl.drawElementsInstanced = instancedElements
   }
-  return { vertices, calls }
+  return { vertices, calls, points: vertices }
+}
+
+/** This benchmark renders only points, as four-vertex WebGPU triangle strips. */
+function verifyPointInstances (render: () => void): ReturnType<typeof verifyPointDraw> {
+  let points = 0
+  let calls = 0
+  let vertices = 0
+  const pass = GPURenderPassEncoder.prototype
+  const draw = pass.draw
+  pass.draw = function (count, instances = 1, first, start): undefined {
+    if (count === 4) {
+      points += instances
+      vertices += count * instances
+      calls++
+    }
+    return draw.call(this, count, instances, first, start)
+  }
+  try { render() } finally { pass.draw = draw }
+  return { points, vertices, calls }
 }
 
 async function waitForPointDraw (
-  gl: WebGL2RenderingContext,
+  { gl }: SceneDevice,
   render: () => void,
   current: () => boolean
 ): Promise<ReturnType<typeof verifyPointDraw> | undefined> {
   const deadline = performance.now() + FIRST_DRAW_TIMEOUT_MS
   while (current()) {
-    if (gl.isContextLost()) throw new Error('The GPU context was lost.')
-    const draw = verifyPointDraw(gl, render)
-    if (gl.getError() !== gl.NO_ERROR) throw new Error('A GPU error interrupted the first point draw.')
+    if (gl?.isContextLost()) throw new Error('The GPU context was lost.')
+    const draw = gl ? verifyPointDraw(gl, render) : verifyPointInstances(render)
+    if (gl && gl.getError() !== gl.NO_ERROR) throw new Error('A GPU error interrupted the first point draw.')
     if (draw.calls || draw.vertices) return draw
     // luma.gl can skip drawing until the point pipeline finishes linking.
     if (performance.now() >= deadline) throw new Error('The GPU did not submit the first point draw.')
@@ -106,10 +128,10 @@ export async function createStressScene (
     <div class="benchmark-count-field"><select id="benchmark-count">${STRESS_POINT_COUNTS.map(count =>
     `<option value="${count}"${count === initialPointCount ? ' selected' : ''}>${(count / 1000000).toFixed(0)} million</option>`
   ).join('')}</select></div>
-    <p class="benchmark-memory">Estimated GPU data <span></span></p>
+    <p class="benchmark-memory">${usesPositionTextures ? 'Estimated GPU data' : 'Position buffer size'} <span></span></p>
     <button class="benchmark-run" type="button">Render ${initialMillions}M points</button>
     <p class="benchmark-status" role="status">Ready to load. This test measures rendering, with the simulation off.</p>
-    <div class="benchmark-verified" hidden><span>Verified point vertices / frame</span><strong>0</strong></div>
+    <div class="benchmark-verified" hidden><span>Verified points / frame</span><strong>0</strong></div>
     <dl class="benchmark-metrics">
       <div><dt>GPU-completed FPS</dt><dd data-metric="fps">—</dd></div>
       <div><dt>GPU draw time</dt><dd data-metric="gpu">—</dd></div>
@@ -149,7 +171,7 @@ export async function createStressScene (
   let destroyed = false
   let onscreen = true
   let graph: Graph | undefined
-  let gl: WebGL2RenderingContext | undefined
+  let device: SceneDevice | undefined
   let timer: TimerExtension | null = null
   let canvas: HTMLCanvasElement | undefined
   let worker: Worker | undefined
@@ -182,7 +204,9 @@ export async function createStressScene (
 
   const updateTarget = (): void => {
     const count = Number(select.value)
-    memory.textContent = `≈ ${(count * 164 / 1000000000).toFixed(2)} GB`
+    memory.textContent = usesPositionTextures
+      ? `≈ ${(count * 164 / 1000000000).toFixed(2)} GB`
+      : `${(count * positionBytesPerPoint / 1000000).toLocaleString()} MB`
     run.textContent = `Render ${count / 1000000}M points`
     run.disabled = graph !== undefined && count === activeCount
   }
@@ -206,15 +230,16 @@ export async function createStressScene (
     frame = 0
     worker?.terminate()
     worker = undefined
-    if (pending) gl?.deleteSync(pending.fence)
-    if (pendingTimer) gl?.deleteQuery(pendingTimer)
+    pending?.fence.release?.()
+    if (pendingTimer) device?.gl?.deleteQuery(pendingTimer)
     pending = undefined
     pendingTimer = undefined
     resetMetrics(performance.now())
     canvas?.removeEventListener('webglcontextlost', contextLost)
+    device?.gpu?.removeEventListener('uncapturederror', gpuError)
     graph?.destroy()
     graph = undefined
-    gl = undefined
+    device = undefined
     canvas = undefined
     timer = null
     loaded = false
@@ -227,6 +252,7 @@ export async function createStressScene (
     mobileStatus.textContent = ''
     surface.setAttribute('aria-label', `Point cloud. ${cameraInstructions}`)
     container.dispatchEvent(new CustomEvent<number | null>('benchmark-verified', { detail: null }))
+    surface.removeAttribute('data-verified-points')
     surface.removeAttribute('data-verified-vertices')
     surface.removeAttribute('data-draw-calls')
     surface.removeAttribute('data-texture-size')
@@ -244,6 +270,7 @@ export async function createStressScene (
     mobileStatus.textContent = message
   }
   const contextLost = (): void => { fail('The GPU context was lost.') }
+  const gpuError = (event: GPUUncapturedErrorEvent): void => { fail(event.error.message) }
   const canRedraw = (): boolean => !destroyed && !paused && onscreen && !document.hidden
   const fitScale = (): number => Math.min(
     Math.max(1, surface.clientWidth) * 0.86 / (bounds[2] - bounds[0]),
@@ -265,23 +292,25 @@ export async function createStressScene (
   }
   const tick = (now: number): void => {
     frame = 0
-    if (destroyed || !graph || !gl) return
-    if (gl.isContextLost()) {
+    if (destroyed || !graph || !device) return
+    const { gl } = device
+    if (gl?.isContextLost()) {
       contextLost()
       return
     }
     if (pending) {
-      const state = gl.clientWaitSync(pending.fence, 0, 0)
-      if (state === gl.WAIT_FAILED || (state === gl.TIMEOUT_EXPIRED && now - pending.submittedAt > 45000)) {
-        fail('The GPU could not complete this frame.')
+      try {
+        if (!pending.fence.completed()) {
+          if (now - pending.submittedAt > 45000) throw new Error('The GPU could not complete this frame.')
+          schedule()
+          return
+        }
+      } catch (error) {
+        fail(error instanceof Error ? error.message : 'The GPU could not complete this frame.')
         return
       }
-      if (state === gl.TIMEOUT_EXPIRED) {
-        schedule()
-        return
-      }
-      gl.deleteSync(pending.fence)
-      if (pendingTimer && timer) {
+      pending.fence.release?.()
+      if (gl && pendingTimer && timer) {
         const disjoint = gl.getParameter(timer.GPU_DISJOINT_EXT)
         const available = !disjoint && gl.getQueryParameter(pendingTimer, gl.QUERY_RESULT_AVAILABLE)
         if (disjoint) {
@@ -298,7 +327,7 @@ export async function createStressScene (
       }
       const first = pending.first
       pending = undefined
-      if (gl.getError() !== gl.NO_ERROR) {
+      if (gl && gl.getError() !== gl.NO_ERROR) {
         fail('A GPU error interrupted the test.')
         return
       }
@@ -314,7 +343,7 @@ export async function createStressScene (
         metric('load').textContent = `${((now - loadStarted) / 1000).toFixed(2)} s`
         pauseButton.disabled = false
         zoomButtons.forEach(button => { button.disabled = false })
-        status.textContent = `${activeCount.toLocaleString()} vertices verified in one cosmos point draw. Simulation off.`
+        status.textContent = `${activeCount.toLocaleString()} points verified in one Cosmos draw. Simulation off.`
         metric('fps').textContent = paused ? 'Paused' : 'Measuring…'
         resetMetrics(now)
       } else framesCompleted++
@@ -328,20 +357,17 @@ export async function createStressScene (
       dirty = false
       setCamera()
       // The timer result can lag the frame fence. Keep at most one timer pending.
-      const query = timer && !pendingTimer ? gl.createQuery() : null
-      if (query && timer) gl.beginQuery(timer.TIME_ELAPSED_EXT, query)
+      const query = gl && timer && !pendingTimer ? gl.createQuery() : null
+      if (gl && query && timer) gl.beginQuery(timer.TIME_ELAPSED_EXT, query)
       graph.renderOneFrame()
-      if (query && timer) {
+      if (gl && query && timer) {
         gl.endQuery(timer.TIME_ELAPSED_EXT)
         pendingTimer = query
       }
-      const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-      if (!fence) {
-        fail('The GPU could not create a completion fence.')
+      try { pending = { fence: afterDraw(device), first: false, submittedAt: performance.now() } } catch (error) {
+        fail(error instanceof Error ? error.message : 'The GPU could not create a completion fence.')
         return
       }
-      pending = { fence, first: false, submittedAt: performance.now() }
-      gl.flush()
     }
     schedule()
   }
@@ -457,7 +483,7 @@ export async function createStressScene (
     run.disabled = true
     releaseButton.disabled = false
     mobileOverlay.hidden = false
-    showProgress('Preparing WebGL 2…')
+    showProgress('Preparing the GPU…')
     try {
       graph = new Graph(surface, {
         enableSimulation: false,
@@ -481,12 +507,22 @@ export async function createStressScene (
       await graph.ready
       if (!current()) return
       canvas = surface.querySelector('canvas')!
-      gl = canvas.getContext('webgl2') ?? undefined
-      if (!gl) throw new Error('WebGL 2 is unavailable in this browser.')
-      canvas.addEventListener('webglcontextlost', contextLost)
+      device = sceneDevice(graph, canvas)
+      const { gl, gpu } = device
       const side = Math.ceil(Math.sqrt(count))
-      if ((gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) < side) throw new Error(`This GPU cannot hold the ${side} × ${side} position texture.`)
-      timer = gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExtension | null
+      if (gl) {
+        canvas.addEventListener('webglcontextlost', contextLost)
+        if ((gl.getParameter(gl.MAX_TEXTURE_SIZE) as number) < side) throw new Error(`This GPU cannot hold the ${side} × ${side} position texture.`)
+        timer = gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExtension | null
+      } else {
+        gpu.addEventListener('uncapturederror', gpuError)
+        gpu.lost.then(info => { if (current()) fail(info.message || 'The GPU device was lost.') })
+        const positionBytes = count * positionBytesPerPoint
+        const limit = gpu.limits.maxStorageBufferBindingSize
+        if (positionBytes > limit) {
+          throw new Error(`The positions need ${positionBytes.toLocaleString()} bytes. This device allows ${limit.toLocaleString()} per storage binding.`)
+        }
+      }
       worker = new Worker(new URL('./stress.worker.ts', import.meta.url), { type: 'module' })
       worker.onerror = (): void => { if (current()) fail('Point generation failed.') }
       worker.onmessage = (event: MessageEvent<StressResponse>): void => {
@@ -507,28 +543,28 @@ export async function createStressScene (
           cameraY = (bounds[1] + bounds[3]) / 2
           showProgress('Uploading points and waiting for the first completed GPU frame…')
           const drawFirstFrame = async (): Promise<void> => {
-            if (!current() || !graph || !gl) return
+            if (!current() || !graph || !device) return
             const drawingGraph = graph
-            const context = gl
+            const context = device
             try {
               drawingGraph.setPointPositions(message.positions)
               drawingGraph.render(0, 0)
-              const texture = drawingGraph.getPointPositionTexture()
-              if (texture?.pointCount !== count || texture.textureSize !== side) throw new Error('The GPU point texture has an unexpected count.')
+              const storage = uploadedPositions(drawingGraph)
+              if (storage?.pointCount !== count || (context.gl && storage.textureSize !== side)) {
+                throw new Error('The GPU point storage has an unexpected count.')
+              }
               const draw = await waitForPointDraw(context, () => {
                 setCamera()
                 drawingGraph.renderOneFrame()
               }, current)
               if (!draw || !current()) return
-              if (draw.vertices !== count || draw.calls !== 1) throw new Error('The point draw did not submit the full requested count.')
+              if (draw.points !== count || draw.calls !== 1) throw new Error('The point draw did not submit the full requested count.')
+              surface.setAttribute('data-verified-points', String(draw.points))
               surface.setAttribute('data-verified-vertices', String(draw.vertices))
               surface.setAttribute('data-draw-calls', String(draw.calls))
-              surface.setAttribute('data-texture-size', String(texture.textureSize))
+              if (storage.textureSize !== undefined) surface.setAttribute('data-texture-size', String(storage.textureSize))
               metric('resolution').textContent = `${canvas!.width} × ${canvas!.height}`
-              const fence = context.fenceSync(context.SYNC_GPU_COMMANDS_COMPLETE, 0)
-              if (!fence) throw new Error('The GPU could not create a completion fence.')
-              pending = { fence, first: true, submittedAt: performance.now() }
-              context.flush()
+              pending = { fence: afterDraw(context), first: true, submittedAt: performance.now() }
               schedule()
             } catch (error) {
               if (current()) fail(error instanceof Error ? error.message : 'The GPU could not initialize this point count.')

@@ -1,30 +1,44 @@
 import { Graph } from '@cosmos.gl/graph'
+import { afterDraw, sceneDevice, uploadedPositions, type SceneDevice } from './graph-device'
 import { loadDataset } from './dataset-loader'
 import type { SceneControls } from './renderer'
 import type { DatasetSceneDefinition } from './types'
 
+async function checkUploadAndDraw (device: SceneDevice, draw: () => Promise<void>): Promise<void> {
+  const { gpu } = device
+  if (!gpu) {
+    await draw()
+    return
+  }
+  // An invalid command can still leave the queue idle. Check errors from
+  // the upload and the first draw on this scene's own WebGPU device.
+  gpu.pushErrorScope('validation')
+  gpu.pushErrorScope('out-of-memory')
+  let failure: GPUError | undefined
+  try { await draw() } finally {
+    const [memory, validation] = await Promise.all([gpu.popErrorScope(), gpu.popErrorScope()])
+    failure = memory ?? validation ?? undefined
+  }
+  if (failure) throw new Error(failure.message)
+}
+
 /** Keep the loader up until the first full draw has completed on the GPU. */
-async function waitForInitialDraw (container: HTMLDivElement, signal?: AbortSignal): Promise<void> {
+async function waitForInitialDraw (graph: Graph, device: SceneDevice, signal?: AbortSignal): Promise<void> {
   await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
   signal?.throwIfAborted()
-  const gl = container.querySelector('canvas')?.getContext('webgl2')
-  if (!gl || gl.isContextLost()) throw new Error('The GPU could not open the full graph.')
-  const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-  if (!fence) throw new Error('The GPU could not start the first frame.')
+  // WebGPU's automatic frame can be deferred while an earlier draw is in flight.
+  if (device.gpu) graph.renderOneFrame()
+  const fence = afterDraw(device)
   const deadline = performance.now() + 30000
-  gl.flush()
   try {
-    while (true) {
+    while (!fence.completed()) {
       signal?.throwIfAborted()
-      const status = gl.clientWaitSync(fence, 0, 0)
-      if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) break
-      if (status === gl.WAIT_FAILED || performance.now() >= deadline) throw new Error('The GPU could not draw the full graph.')
+      if (performance.now() >= deadline) throw new Error('The GPU could not draw the full graph.')
       await new Promise<void>(resolve => window.setTimeout(resolve, 16))
     }
-    if (gl.getError() !== gl.NO_ERROR) throw new Error('A GPU error interrupted the full graph draw.')
-  } finally {
-    gl.deleteSync(fence)
-  }
+    const { gl } = device
+    if (gl && gl.getError() !== gl.NO_ERROR) throw new Error('A GPU error interrupted the full graph draw.')
+  } finally { fence.release?.() }
 }
 
 /** Static datasets upload once; the engine draws on camera/input changes. */
@@ -98,20 +112,26 @@ export async function createDatasetScene (
   try {
     await graph.ready
     signal?.throwIfAborted()
-    graph.setPointPositions(positions, true)
-    graph.setLinks(links)
-    graph.render(0, 0)
-    const query = new URLSearchParams(window.location.search)
-    if (query.has('capture') && query.has('overview')) fitView(0)
-    else {
-      const { center, height } = dataset.initialView
-      graph.setZoomTransformByPointPositions(
-        Float32Array.from(center, value => 2048 + value * 1000),
-        0, Math.max(1, container.clientHeight) / (height * 1000), 0, false
-      )
-    }
-    await waitForInitialDraw(container, signal)
-    const uploaded = graph.getPointPositionTexture()?.pointCount
+    const canvas = container.querySelector('canvas')
+    if (!canvas) throw new Error('The graph did not create its drawing canvas.')
+    const device = sceneDevice(graph, canvas)
+    await checkUploadAndDraw(device, async () => {
+      graph.setPointPositions(positions, true)
+      graph.setLinks(links)
+      graph.render(0, 0)
+      const query = new URLSearchParams(window.location.search)
+      if (query.has('capture') && query.has('overview')) fitView(0)
+      else {
+        const { center, height } = dataset.initialView
+        graph.setZoomTransformByPointPositions(
+          Float32Array.from(center, value => 2048 + value * 1000),
+          0, Math.max(1, container.clientHeight) / (height * 1000), 0, false
+        )
+      }
+      await waitForInitialDraw(graph, device, signal)
+    })
+    signal?.throwIfAborted()
+    const uploaded = uploadedPositions(graph)?.pointCount
     if (uploaded !== definition.pointCount) throw new Error('The uploaded point count does not match the dataset.')
     container.setAttribute('data-points', String(uploaded))
     container.setAttribute('data-links', String(definition.linkCount))
