@@ -262,7 +262,7 @@ export const graphsAndFoundations: Record<string, CaseReadiness> = {
       { tone: 'pass', text: '19 isolated queries matched' },
       { tone: 'pass', text: 'The packaged WebGPU Graph returned the expected moving rectangle IDs and 1,000 tracked coordinates at both YouTube graph sizes.' },
       { tone: 'pass', text: 'Each package returned exact IDs and all 1,000 label positions on eight fixed-tick lassos across the two YouTube sizes.' },
-      { tone: 'warn', text: 'WebGL took 2.87 seconds to return all 251,132 IDs at million-point tick 10 after two earlier async timeouts.' },
+      { tone: 'warn', text: 'On eight moving million-point rectangles, WebGL timed out on both reads. WebGPU returned IDs and 1,000 coordinates each time.' },
     ],
     next: 'Repeat the packaged selection gates on another physical GPU.',
   },
