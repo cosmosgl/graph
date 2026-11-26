@@ -22,6 +22,6 @@ export async function captureBenchmarkSource(repo, lab, capture) {
     snapshot: relative(repo, archive),
     snapshotSha256: await sha256(archive),
     productionSha256: await sha256(join(repo, 'dist/index.min.js')),
-    luma: { webgl: await version(repo), webgpu: await version(lab) },
+    workspaceLuma: { webgl: await version(repo), lab: await version(lab), webgpu: await version(join(repo, 'experiments/graph-webgpu')) },
   }
 }

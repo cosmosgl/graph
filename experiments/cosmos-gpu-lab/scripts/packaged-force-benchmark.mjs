@@ -44,6 +44,7 @@ await mkdir(resolve(capture, '..'), { recursive: true })
 await mkdir(capture)
 const save = (name, object) => writeFile(join(capture, `${name}.json`), `${JSON.stringify(object, null, 2)}\n`)
 const source = await captureBenchmarkSource(repo, lab, capture)
+source.luma = {}
 const pinned = {}
 if (useBundleCopies) {
   const directory = values.bundles ? resolve(root, values.bundles) : null
@@ -55,8 +56,6 @@ if (useBundleCopies) {
   }
   source.productionSha256 = await sha256(join(capture, 'webgl.js'))
   source.bundlesFrom = directory ? relative(root, directory) : 'workspace distributions'
-  source.workspaceLuma = source.luma
-  source.luma = {}
 }
 if (controlsDir) {
   const previous = JSON.parse(await readFile(join(controlsDir, 'source.json'), 'utf8'))
@@ -134,7 +133,7 @@ async function run(url, kind, engine, name) {
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
     await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed, vendor,
       matched, useBundleCopies ? '/__force_package__.js' : undefined])
-    if (useBundleCopies && !source.luma[engine]) {
+    if (!source.luma[engine]) {
       source.luma[engine] = await page.evaluate(() => window.luma.VERSION)
       await save('source', source)
     }

@@ -246,7 +246,7 @@ async function replay(count, mode, engine, trial) {
       document.querySelector('#stage').textContent = `${engine} Graph · ${count.toLocaleString()} points`
       window.publicYoutube = await openYoutubeCheck(count, engine, mode, lassoTicks)
       const session = window.publicYoutube
-      return { device: session.info, links: session.links, input: session.input, dpr: devicePixelRatio }
+      return { device: session.info, luma: window.luma.VERSION, links: session.links, input: session.input, dpr: devicePixelRatio }
     }, { count, mode, engine, lassoTicks: values.lasso ? releaseTicks : undefined })
     Object.assign(run, metadata)
     assertAdapter(run.device, engine)
