@@ -452,6 +452,47 @@ porting and strict consumer checks separately under
 `captures/public-promotion-cfaae9f7-20261126/` in `REHEARSAL.md`,
 `ci-routing/` and `consumer/`.
 
+#### TypeScript consumers and the default CI suite
+
+A clean app installed both rehearsal tarballs with `npm install --strict-peer-deps`.
+TypeScript 5.9.3 accepted the published API with the fixture's `strict: true`
+and `skipLibCheck: true`. The production build succeeded, the npm runtime
+audit found zero advisories, and the classic script at `dist/index.min.js`
+exposed `Cosmos.Graph` without a module loader.
+[Consumer source](../graph-webgpu/fixtures/deck-consumer/main.ts) · [Compiler settings](../graph-webgpu/fixtures/deck-consumer/tsconfig.json)
+
+Apps that also check dependency declarations have different results depending
+on their imports. With ES2022 and DOM libraries, the same Graph-only example
+passed on TypeScript 6.0.3. On 5.9.3, math.gl 5.0.0-beta.8 references
+`es2025.float16`, a library that compiler cannot supply. The full Deck app
+also imports the luma WebGPU adapter. On TypeScript 6 its declarations
+require `GPUCanvasConfigurationOut`, which the bundled DOM declarations
+do not define. Adding all of `@webgpu/types` creates conflicting globals.
+On TypeScript 5.9, adding those GPU declarations still leaves three float16
+references in math.gl and loaders.gl. The frozen WebGL 3.6.1 Graph-only
+control passed both full checks after the app installed its two missing D3
+type packages. Qualify the dependency family against these imports before
+promising full declaration checking for Deck.
+
+In the scratch checkout, the ordinary typecheck covered the WebGPU source,
+shared stories, integration and website. The default browser job selected
+all 13 candidate test files and a public Deck test file on Chromium's
+SwiftShader adapter. All 60 tests passed, including 58 candidate checks and
+one case for each Deck graph owner. Both owners picked a point and
+link at two canvas sizes. Removing the layer destroyed its own graph, left
+the supplied graph editable and left the shared device usable. The reference
+job uses the original 15 test files at `fad6e487`. Its recorded run had
+285 passes and one opt-in skip. Port its public checks for two Deck layers
+sharing a simulation, dragging through the active viewport and bounds reads
+interrupted by a data replacement. Also port setters queued during
+initialization or configuration changes, camera fitting at million-unit
+coordinates, repulsion around distant outliers and concave or collapsed
+selections. The capture contains a file-by-file coverage map,
+the reproducible CI patch and the original failures under
+`captures/public-promotion-cfaae9f7-20261126/ci-routing/`, with the external
+TypeScript results in its sibling `consumer/` directory.
+[Reference Deck contracts](../../test/deck-layers.test.ts) · [Candidate host contracts](../graph-webgpu/test/host.test.ts) · [CI workflow](../../.github/workflows/ci.yml)
+
 ### Historical replays
 
 At promotion, record the full Git revision of the last WebGL source, its frozen
