@@ -12,7 +12,7 @@ The selection IDs are Cosmos point indices in the prepared graph. The tracked ID
 
 On M3, WebGPU returned ordered point IDs and all 1,000 tracked coordinates on all eight continuously moving million-point releases. WebGL returned `null` from both async queries at all eight releases. This held for both signed WebGPU builds below with the same WebGL control (`74a216a7`). In the latest run, WebGL took a median 1,006.9 ms for selection and 1,007.0 ms for labels before reporting the timeout.
 
-| Median WebGPU time over eight releases | Earlier package (`b52a9c7f`) | Current package (`c7c523be`) |
+| Median WebGPU time over eight releases | Earlier package (`b52a9c7f`) | Before the scheduling change (`c7c523be`) |
 | --- | ---: | ---: |
 | Release until selected IDs available | 265.4 ms | 250.9 ms |
 | Release until 1,000 tracked coordinates available | 265.7 ms | 251.1 ms |
@@ -25,6 +25,31 @@ On M3, WebGPU returned ordered point IDs and all 1,000 tracked coordinates on al
 Visible Chrome 158 replayed four trusted drags in fresh sessions, with both engine orders. During the latest replay WebGPU released at ticks 4, 7, 11, 15 and 4, 8, 11, 14. Both WebGL sessions released at ticks 9, 17, 25, 33. The layout kept moving and the timing runs omitted the full position copy. These values measure the observed workflows at those ticks. A paired million-point rectangle latency comparison requires a successful WebGL read. The earlier and latest timing captures are `captures/public-graph-youtube-tqhKGb/` and `captures/public-graph-youtube-CDH2Xg/`.
 
 With the latest pair at 65,536 points, all four rectangle selections on each engine matched its independently projected release snapshot, including the empty selection. Every set of 1,000 tracked coordinates matched. The results are in `captures/public-graph-youtube-HYzAES/`. The fixed-tick lassos below check the million-point IDs and coordinates against each package’s own snapshot.
+
+## A frame submitted between the two readbacks
+
+At tick 10 on the million-point graph, the area call returned its IDs 278.5 ms after release. Chrome ran the next animation callback at 278.7 ms. The tracked-label call finished at 280.8 ms, and the app applied the highlights at 281.2 ms. The GPU already had a whole unhighlighted frame to draw. The same sequence occurred at tick 40 with only 2.7 ms between the callback and the label result.
+
+WebGPU now gives pending Graph reads one eligible refresh after an area selection. This lets code awaiting both results apply the highlights before the next automatic simulation and draw. A second query cannot postpone that frame again. Explicit rendering and applications that only track points keep their existing schedule.
+
+On M3, each comparison used four fresh browser sessions, with four trusted rectangle releases per session. We ran the packages in the order before, after, after, before. All four releases in each timing session returned ordered IDs and 1,000 labels.
+
+| Million-point metric | Before | After |
+| --- | ---: | ---: |
+| Fixed tick 10, highlighted-frame completion in the two sessions | 585.4 / 592.3 ms | 323.8 / 315.9 ms |
+| Fixed tick 40, highlighted-frame completion in the two sessions | 166.4 / 303.7 ms | 168.2 / 169.2 ms |
+| Fixed ticks 10, 26, 40 and 54, extra frames queued before highlight | 3 of 8 | 0 of 8 |
+| Fixed ticks, median release to feedback | 466.1 ms | 391.6 ms |
+| Ordinary moving releases, median time until both reads finished | 242.2 ms | 256.6 ms |
+| Ordinary moving releases, median highlight setter / label redraw | 9.6 / 10.2 ms | 9.4 / 10.4 ms |
+| Ordinary moving releases, median setter to completed highlighted frame | 429.7 ms | 308.2 ms |
+| Ordinary moving releases, median release to feedback | 646.6 ms | 551.3 ms |
+
+The ordinary sessions used the normal gesture cadence, with no profiling fences. The two before sessions released at ticks 4/8/11/15 and 4/7/11/15. The after sessions released at 4/7/10/13 and 4/8/12/15. After the four fixed releases, every session produced the same two million XY coordinates, highlighted IDs and 1,922 × 1,082 RGBA pixels at tick 72. The timing probe used UMD `0db591b3`. The signed build from `951ec4d7`, UMD `6a6f1ceb`, differs only in two private Boolean field names, verified by comparing the complete bundles.
+
+Separate full-copy rectangle replays returned identical ordered-ID and tracked-XY hashes before and after the change on all four drags at each size. The independent CPU projection agreed on every ID except million-point ID 334004 at tick 10. At its release position (1916.84619140625, 1178), the public CPU camera reports y = 488 for a one-pixel radius and a rectangle ending at y = 487. On the same 961 × 541 camera at 2×, **both real WebGL and WebGPU exclude the point at 487 and include it at 487.00001**. Both also excluded it at 486.99990 and 486.99999 and included it at 487.00010. The raw reports retain the ideal-projection mismatch. All 1,000 tracked XY pairs matched the release snapshot at every tick.
+
+Capture directories under `captures/public-graph-youtube-*` use these suffixes in session order. The fixed-tick profiles are `HNvrtD/UclNLC/4CtMzc/Wlut2E`, the ordinary sessions are `Qgdvon/0KAzzI/kTIbdb/caWpeH` and the full-copy checks are `RzRF2Z/19tti3` (65,536) and `sYj2Dv/lwu4mo` (one million, before/after). The callback trace is in `QDxNU6`, and the one-point WebGL/WebGPU reproduction and both paired summaries are in `captures/cosmos-selection-frame-vg3saqgb/`.
 
 ## A 256-vertex lasso on the moving YouTube graph
 
