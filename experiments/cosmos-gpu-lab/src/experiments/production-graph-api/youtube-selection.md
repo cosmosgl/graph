@@ -8,6 +8,38 @@ In the correctness runs, a full position copy is also requested in the release h
 
 The selection IDs are Cosmos point indices in the prepared graph. The tracked IDs are spaced across the whole index range. Storybook's `CosmosLabels` receives the 1,000 returned coordinates, projects them and lets its label renderer cull overlaps. A correct read therefore covers more points than the number of labels visible at once.
 
+## Continuously moving million-point rectangles on the signed packages
+
+On M3, the signed WebGPU Graph returned ordered rectangle IDs and all 1,000 tracked
+coordinates on **8 of 8 releases**. The WebGL Graph returned `null` for both queries
+on **all 8** with its existing one-second fence wait. The median times from pointer
+release until WebGL returned `null` were 1,008.2 ms for selection and 1,008.3 ms for
+labels. A successful interactive WebGL latency baseline remains open.
+
+| WebGPU stage | Median over eight releases |
+| --- | ---: |
+| Release until selected IDs available | 265.4 ms |
+| Release until all 1,000 tracked coordinates available | 265.7 ms |
+| Release until both queries complete | 265.7 ms |
+| Apply the highlighted IDs | 8.8 ms |
+| Redraw the labels | 9.9 ms |
+| Highlight setter start until the highlighted GPU frame completes | 466.4 ms |
+| Release until feedback | 695.4 ms |
+
+Visible Chrome 158 replayed all four rectangle drags in each of four fresh sessions,
+first WebGL then WebGPU, then in reverse order. The graph kept moving throughout.
+WebGPU released at ticks 4, 8, 11, 14 and 4, 8, 12, 15. WebGL released at ticks
+10, 17, 25, 33 and 9, 16, 23, 30. Both loads used the same hashed input arrays
+and native Apple adapters. WebGL `74a216a7` reported luma 9.3.6 and the WebGPU
+standalone `b52a9c7f` reported luma 10.0.0-alpha.14.
+
+These timing runs omit the full position copy. The WebGL timeouts precluded a
+paired correctness comparison for these releases. The fixed-tick lasso below
+independently checks IDs and coordinates at release. The rectangle results,
+including all timeouts, are in
+`captures/public-graph-youtube-tqhKGb/result.json` (SHA-256
+`c6c6a1860bb5dadaaff7ef7388d838dc9a0b215ae11ea6c98debc2e8a79ea14b`).
+
 ## A 256-vertex lasso on the moving YouTube graph
 
 On 26 November 2026, both real packages selected the expected IDs and returned all
@@ -101,7 +133,7 @@ Each cell gives the number of selected points in the latest replay of the WebGL 
 
 The million-point WebGL release snapshots contained 463,961, 5,811, 80,475 and 8,341 points inside the four rectangles. Both async APIs returned null on all four correctness drags and all eight timed releases. In the corresponding WebGPU session, 102–130 labels remained in the overlay after culling.
 
-In the latest ordinary timing blocks, WebGPU returned both reads in a median 8.0 ms at 65,536 points and 240.6 ms at one million. Median release-to-feedback times were 57.1 and 595.2 ms respectively. Those gestures advanced at their natural speed. The fixed-tick timing table above compares builds at the same layouts.
+In the earlier ordinary timing blocks accompanying that correctness comparison, WebGPU returned both reads in a median 8.0 ms at 65,536 points and 240.6 ms at one million. Median release-to-feedback times were 57.1 and 595.2 ms respectively. Those gestures advanced at their natural speed. The fixed-tick timing table above compares builds at the same layouts.
 
 A separate million-point replay with synchronous WebGL queries returned all expected ordered IDs and all 1,000 label coordinates on every drag. These calls block JavaScript and run separately from the interactive timings.
 
