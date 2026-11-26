@@ -135,6 +135,39 @@ Use `--mode blocking` in place of `--mode drained` to check the same moving WebG
 
 For each run inspect `result.json` under the printed capture directory. It contains the release endpoints, camera, simulation ticks, adapter, fixture and package digests, result-list digests, per-stage durations and any missing results. The adjacent static site, source archive and screenshots preserve the tested caller. The selection digest covers the full ordered list of graph indices. A failed read has a null result and its dependent UI stage has a null duration.
 
+### Long lasso at four fixed ticks
+
+Use the same prepared YouTube fixture and built Graph packages as the rectangle
+comparison. This command runs WebGPU in its own visible Chrome session on M3.
+
+```sh
+node experiments/cosmos-gpu-lab/scripts/public-graph-youtube.mjs 65536 --engine webgpu --mode correctness --lasso --release-ticks 10,26,40,54
+```
+
+Repeat with `--engine webgl` and with `1000000` points. If the WebGL async
+query times out, retain that capture and repeat its command with `--mode blocking`
+to check the synchronous selection and tracker.
+
+Each drag traces 256 distinct CSS pixels. The driver holds the requested
+simulation tick while Chrome delivers the full path, then resumes motion after
+submitting the release reads. The capture must contain the requested path in
+order, every selected ID in ascending order, zero missing or extra IDs, and
+exact coordinates for all 1,000 tracked labels. The independent CPU check uses
+the complete release positions from the engine under test. These runs establish
+correctness at a known layout. Use the separate timing runs for feedback latency.
+
+The November 26 M3 runs used Chrome 158.0.8127.37, WebGL bundle `7379115a…`,
+WebGPU bundle `281eb928…`, and YouTube fixture `1b4f834c…`. Each local capture
+retains the built site, exact bundle and input hashes, delivered paths and the
+selection and label digests for each release.
+
+| Points | Engine | Capture directory under `captures/` | SHA-256 of `result.json` |
+| ---: | --- | --- | --- |
+| 65,536 | WebGL | `public-graph-youtube-BIo6bu` | `db6ab89ba7d290f195240f7b4d97c18d1c5f6f30c844db90a6a762ffd9859ae9` |
+| 65,536 | WebGPU | `public-graph-youtube-Mihx2E` | `38251cabf1ef3f7175260c525009efb604e1ece8ea9c822045adaa481a190307` |
+| 1,000,000 | WebGL | `public-graph-youtube-pESchY` | `7570233fcc51dc3c9f8e3018e120f458a3499e8eb947c02ae8d632ea3542abf0` |
+| 1,000,000 | WebGPU | `public-graph-youtube-XAaOYA` | `1d282b0d7174e309d980f534f160bdc76747a203dc88d50d26a153509e4c94f8` |
+
 ## Trace the WebGPU queue
 
 Run the profile separately from the correctness and timing sessions.

@@ -14,7 +14,7 @@ const root = resolve(lab, '../..')
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' },
+    lasso: { type: 'boolean' }, mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' },
     'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' },
   },
 })
@@ -31,10 +31,27 @@ const boxes = [
   [[115, 54], [846, 487]], [[421, 221], [499, 292]],
   [[92, 137], [316, 434]], [[847, 475], [665, 202]],
 ]
+// A smooth, non-convex 256-vertex gesture. Integer CSS coordinates round-trip
+// through Chromium's native input. The driver verifies the entire delivered path.
+const paths = boxes.map(([[x0, y0], [x1, y1]]) => {
+  const distinct = new Map()
+  for (let i = 0; i < 2048; i++) {
+    const angle = 2 * Math.PI * i / 2048
+    const radius = 0.8 + 0.2 * Math.cos(5 * angle)
+    const x = Math.round((x0 + x1 + (x1 - x0) * radius * Math.cos(angle)) / 2)
+    const y = Math.round((y0 + y1 + (y1 - y0) * radius * Math.sin(angle)) / 2)
+    distinct.set(`${x},${y}`, [x, y])
+  }
+  const outline = [...distinct.values()]
+  assert.ok(outline.length >= 256, 'all requested lasso vertices must occupy distinct CSS pixels')
+  return Array.from({ length: 256 }, (_, i) => outline[Math.floor(i * outline.length / 256)])
+})
 const releaseTicks = values['release-ticks']?.split(',').map(Number)
+if (values.lasso) assert.ok(releaseTicks && ['blocking', 'correctness'].includes(values.mode),
+  'The long-lasso comparison requires --release-ticks and correctness or blocking mode')
 if (releaseTicks) {
   const canTime = values.mode === 'timing' && values.engine === 'webgpu'
-  assert.ok(positionals.length === 1 && values.engine && (canTime || ['correctness', 'profile'].includes(values.mode)),
+  assert.ok(positionals.length === 1 && values.engine && (canTime || ['correctness', 'profile'].includes(values.mode) || (values.lasso && values.mode === 'blocking')),
     '--release-ticks requires one point count and engine for correctness, WebGPU profile or WebGPU timing')
   assert.ok(releaseTicks.length === boxes.length && releaseTicks.every((tick, i) =>
     Number.isSafeInteger(tick) && tick >= 4 && (!i || tick > releaseTicks[i - 1])),
@@ -60,7 +77,7 @@ const result = {
     webgpu: await sha256(selectedWebGPU),
   },
   fixtureSha256: await sha256(resolve(captureRoot, 'fixtures/youtube-million.bin')),
-  cpu, node: process.version, arguments: process.argv.slice(2), boxes, counts, runs: [],
+  cpu, node: process.version, arguments: process.argv.slice(2), boxes, ...(values.lasso ? { paths } : {}), counts, runs: [],
 }
 assert.equal(result.fixtureSha256, '1b4f834c6acf374905934cc4fd65ded5ef8116fd73016db5e15ee8177da0f8b5', 'unexpected SNAP YouTube fixture')
 async function save() {
@@ -121,10 +138,14 @@ function assertAdapter(device, engine) {
 
 function checkSample(sample, index, mode, previousTick) {
   assert.equal(sample.index, index, 'stale or missing release')
-  const [from, to] = boxes[index]
+  const [from, to] = values.lasso ? [paths[index][0], paths[index].at(-1)] : boxes[index]
+  if (values.lasso) assert.deepEqual(sample.path, paths[index], 'native lasso path differs from the requested vertices')
   assert.deepEqual(sample.from, from, 'pointerdown coordinates')
   assert.deepEqual(sample.to, to, 'pointerup coordinates')
-  const expected = [[Math.min(from[0], to[0]), Math.min(from[1], to[1])], [Math.max(from[0], to[0]), Math.max(from[1], to[1])]]
+  const vertices = values.lasso ? paths[index] : boxes[index]
+  const xs = vertices.map(([x]) => x)
+  const ys = vertices.map(([, y]) => y)
+  const expected = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]]
   assert.deepEqual(sample.rect, expected)
   assert.ok(sample.trusted && sample.visible, 'native visible pointer release required')
   assert.equal(sample.zoom, 0.25)
@@ -221,13 +242,13 @@ async function replay(count, mode, engine, trial) {
     page.on('pageerror', err => run.errors.push(err.message))
     await page.goto(origin)
     await page.bringToFront()
-    const metadata = await page.evaluate(async ({ count, mode, engine }) => {
+    const metadata = await page.evaluate(async ({ count, mode, engine, lassoTicks }) => {
       const { openYoutubeCheck } = await import('/public-youtube.js')
       document.querySelector('#stage').textContent = `${engine} Graph · ${count.toLocaleString()} points`
-      window.publicYoutube = await openYoutubeCheck(count, engine, mode)
+      window.publicYoutube = await openYoutubeCheck(count, engine, mode, lassoTicks)
       const session = window.publicYoutube
       return { device: session.info, links: session.links, input: session.input, dpr: devicePixelRatio }
-    }, { count, mode, engine })
+    }, { count, mode, engine, lassoTicks: values.lasso ? releaseTicks : undefined })
     Object.assign(run, metadata)
     assertAdapter(run.device, engine)
     assert.equal(run.links, linkCounts.get(count))
@@ -239,7 +260,9 @@ async function replay(count, mode, engine, trial) {
     assert.ok(bounds && bounds.width === 961 && bounds.height === 541 && bounds.x >= 0 && bounds.y >= 0 &&
       bounds.x + bounds.width <= viewport.width && bounds.y + bounds.height <= viewport.height, 'graph surface must be fully visible')
     let previousTick = 3
-    for (const [index, [from, to]] of boxes.entries()) {
+    for (const [index, box] of boxes.entries()) {
+      const path = values.lasso ? paths[index] : undefined
+      const [from, to] = path ? [path[0], path.at(-1)] : box
       const entry = { index, from, to }
       if (releaseTicks) entry.targetTick = releaseTicks[index]
       run.samples.push(entry)
@@ -249,7 +272,9 @@ async function replay(count, mode, engine, trial) {
         if (!releaseTicks) await page.waitForFunction(tick => window.publicYoutube.tick > tick, previousTick, { timeout: 60000 })
         await page.mouse.move(bounds.x + from[0], bounds.y + from[1])
         await page.mouse.down()
-        await page.mouse.move(bounds.x + to[0], bounds.y + to[1], { steps: 4 })
+        if (path) {
+          for (const [x, y] of path.slice(1)) await page.mouse.move(bounds.x + x, bounds.y + y)
+        } else await page.mouse.move(bounds.x + to[0], bounds.y + to[1], { steps: 4 })
         if (releaseTicks) {
           entry.tickAfterMove = await page.evaluate(() => window.publicYoutube.tick)
           await page.waitForFunction(tick => window.publicYoutube.tick >= tick, releaseTicks[index], { polling: 5, timeout: 60000 })

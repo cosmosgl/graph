@@ -8,6 +8,35 @@ In the correctness runs, a full position copy is also requested in the release h
 
 The selection IDs are Cosmos point indices in the prepared graph. The tracked IDs are spaced across the whole index range. Storybook's `CosmosLabels` receives the 1,000 returned coordinates, projects them and lets its label renderer cull overlaps. A correct read therefore covers more points than the number of labels visible at once.
 
+## A 256-vertex lasso on the moving YouTube graph
+
+On 26 November 2026, both real packages selected the expected IDs and returned all
+1,000 tracked coordinates on each of four long-lasso drags at both graph sizes.
+Chrome 158 on Apple M3 delivered the same 256 distinct CSS-pixel vertices to
+each package. At pointer release, we compared the ordered selection with an
+independent circle–polygon intersection check over the complete position array.
+Every returned label position exactly matched its point in that array.
+
+| Points | Package | Tick 10 | Tick 26 | Tick 40 | Tick 54 |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 65,536 | WebGL | 65,496 | 540 | 611 | 0 |
+| 65,536 | WebGPU | 65,496 | 529 | 609 | 0 |
+| 1,000,000 | WebGL | 251,132 | 2,208 | 27,256 | 2,494 |
+| 1,000,000 | WebGPU | 251,241 | 2,207 | 27,273 | 2,494 |
+
+The table counts selected IDs. The independently moving layouts produced
+identical ID lists at ticks 10 and 54 on the smaller graph. All four
+million-point lists differed between engines, including the two 2,494-point
+lists. The tracked-position digests also differed between engines at every
+checkpoint. In all 16 releases, the comparison against each engine's own
+positions found zero missing IDs, extra IDs or incorrect label coordinates.
+
+The driver held each requested simulation tick until the path arrived and
+resumed motion after submitting all three async reads. WebGL completed its
+million-point reads in this replay. The earlier continuously moving rectangle
+timing runs used a different queue state. The experiment's `agent-recipe.md`
+lists the replay commands and four capture digests.
+
 ## Why the readback wait changed
 
 The 267.0 and 400.2 ms medians came from eight ordinary releases on each build. Both started at tick 4, but the older build reached tick 14 or 15 by the fourth drag and the newer build reached tick 13. Even at tick 4, readback varied between sessions. Those runs did not record how much of the submitted frame had finished when the pointer was released. Holding the same gestures to ticks 10, 26, 40 and 54 put both builds on the same layouts. The eight-release medians were then within one millisecond of each other.

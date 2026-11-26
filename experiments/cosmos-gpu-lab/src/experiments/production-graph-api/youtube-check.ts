@@ -16,6 +16,7 @@ type ReplaySample = {
   from: Pair;
   to: Pair;
   rect: [Pair, Pair];
+  path?: Pair[];
   center: Pair;
   zoom: number;
   selected: number | null;
@@ -74,7 +75,7 @@ function readBlocking<T> (name: string, request: () => T, release: number): Time
 }
 
 // The native driver opens one real package per page, with the same public Graph calls.
-export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu', mode: ReplayMode): Promise<ReplaySession> {
+export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu', mode: ReplayMode, lassoTicks?: number[]): Promise<ReplaySession> {
   if ((mode === 'drained' || mode === 'blocking') && engine !== 'webgl') throw new Error('The synchronous release diagnostic requires WebGL')
   if (mode === 'profile' && engine !== 'webgpu') throw new Error('The queue profile requires WebGPU')
   const graphHost = document.querySelector<HTMLDivElement>('#graph')!
@@ -107,6 +108,9 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
     onSimulationTick (): void {
       tick++
       profile?.afterStep(tick)
+      // Hold the requested release frame while the native pointer traces its full path.
+      // The normal simulation resumes as soon as the release reads have been submitted.
+      if (lassoTicks?.includes(tick)) queueMicrotask(() => graph.pause())
       if (afterDraw) {
         // The graph completes this autonomous frame's draw/submit in the same task.
         queueMicrotask(afterDraw)
@@ -128,6 +132,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
     selectionLayer.style.cssText = 'position:absolute;inset:0;touch-action:none;cursor:crosshair'
     surface.append(selectionLayer)
     let start: Pair | undefined
+    let path: Pair[] | undefined
     let pending: ReturnType<typeof replay> | undefined
     let index = -1
     let hidden = document.hidden
@@ -162,9 +167,12 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       })
     }
 
-    async function replay (event: PointerEvent, from: Pair, to: Pair, sampleIndex: number): Promise<ReplaySample> {
+    async function replay (event: PointerEvent, from: Pair, to: Pair, sampleIndex: number, polygon?: Pair[]): Promise<ReplaySample> {
       const release = now()
-      const rect: [Pair, Pair] = [[Math.min(from[0], to[0]), Math.min(from[1], to[1])], [Math.max(from[0], to[0]), Math.max(from[1], to[1])]]
+      const vertices = polygon ?? [from, to]
+      const xs = vertices.map(([x]) => x)
+      const ys = vertices.map(([, y]) => y)
+      const rect: [Pair, Pair] = [[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]]
       const tickAtRelease = tick
       const zoom = graph.getZoomLevel()
       const center = graph.spaceToScreenPosition([origin, origin])
@@ -186,14 +194,15 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       const releasedFrame = profile?.lastSubmittedFrame
       const beforeQueries = profile?.mark()
       const ids = blocking
-        ? readBlocking('selection', () => graph.findPointsInRect(rect), release)
-        : readAtRelease('selection', () => graph.findPointsInRectAsync(rect), release)
+        ? readBlocking('selection', () => polygon ? graph.findPointsInPolygon(polygon) : graph.findPointsInRect(rect), release)
+        : readAtRelease('selection', () => polygon ? graph.findPointsInPolygonAsync(polygon) : graph.findPointsInRectAsync(rect), release)
       const labelRead = blocking
         ? readBlocking('tracked labels', () => graph.getTrackedPointPositionsMap(), release)
         : readAtRelease('tracked labels', () => graph.getTrackedPointPositionsMapAsync(), release)
       let snapshot: TimedRead<Float32Array> | Promise<TimedRead<Float32Array>> | null = null
       if (blocking) snapshot = readBlocking('release snapshot', () => graph.getPointPositionsArray(), release)
       if (mode === 'correctness') snapshot = readAtRelease('release snapshot', () => graph.getPointPositionsAsync(), release)
+      if (polygon) graph.unpause()
       // Measure both independently submitted reads before any highlight upload or label DOM work.
       const [selection, labelsResult] = await Promise.all([ids, labelRead])
       if (selection.error) errors.push(selection.error)
@@ -210,12 +219,16 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       }
       const afterHighlight = profile?.mark()
       feedback.textContent = selected ? `${selected.length} selected` : 'Selection unavailable'
-      Object.assign(box.style, {
-        left: `${rect[0][0]}px`,
-        top: `${rect[0][1]}px`,
-        width: `${rect[1][0] - rect[0][0]}px`,
-        height: `${rect[1][1] - rect[0][1]}px`,
-      })
+      if (polygon) {
+        Object.assign(box.style, { inset: '0', clipPath: `polygon(${polygon.map(([x, y]) => `${x}px ${y}px`).join(', ')})` })
+      } else {
+        Object.assign(box.style, {
+          left: `${rect[0][0]}px`,
+          top: `${rect[0][1]}px`,
+          width: `${rect[1][0] - rect[0][0]}px`,
+          height: `${rect[1][1] - rect[0][1]}px`,
+        })
+      }
       box.hidden = false
       const positions = labelsResult.value
       let labelRedrawMs: number | null = null
@@ -236,7 +249,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
       const releaseXY = oracleRead?.value ?? drainedSnapshot
       if (releaseXY) {
         try {
-          oracle = await verifyRelease(releaseXY, count, origin, center, zoom, rect, selected, tracked, positions)
+          oracle = await verifyRelease(releaseXY, count, origin, center, zoom, rect, selected, tracked, positions, polygon)
         } catch (error) {
           errors.push(`Release oracle: ${String(error)}`)
         }
@@ -266,6 +279,7 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
         from,
         to,
         rect,
+        ...(polygon ? { path: polygon } : {}),
         center,
         zoom,
         selected: selected?.length ?? null,
@@ -305,14 +319,19 @@ export async function openYoutubeCheck (count: number, engine: 'webgl' | 'webgpu
     }
     selectionLayer.onpointerdown = (event): void => {
       start = local(event)
+      if (lassoTicks) path = [start]
       selectionLayer.setPointerCapture(event.pointerId)
+    }
+    selectionLayer.onpointermove = (event): void => {
+      if (path) path.push(local(event))
     }
     selectionLayer.onpointerup = (event): void => {
       if (!start) return
       const end = local(event)
       const from = start
       start = undefined
-      pending = replay(event, from, end, ++index)
+      pending = replay(event, from, end, ++index, path)
+      path = undefined
       pending.catch(() => {})
     }
     return {

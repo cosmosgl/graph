@@ -1,6 +1,6 @@
 import type { Pair } from '../selection/reference'
 
-type SelectionMismatch = { id: number; x: number; y: number; expected: boolean; edgeDistance: number }
+type SelectionMismatch = { id: number; x: number; y: number; expected: boolean }
 type LabelMismatch = { id: number; expected: Pair; actual: Pair | null }
 export type ReleaseOracle = {
   expected: number;
@@ -21,13 +21,47 @@ export async function arrayHash (array: Float32Array | Uint32Array): Promise<str
   return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('')
 }
 
+// Index the edges by pixel row so a million-point oracle can check the complete
+// path without scanning hundreds of edges per point. The fixture radius is 1 CSS px.
+function lassoTouches (vertices: Pair[]): (x: number, y: number) => boolean {
+  const rows = new Map<number, Array<[Pair, Pair]>>()
+  for (let i = 0; i < vertices.length; i++) {
+    const a = vertices[i]
+    const b = vertices[(i + 1) % vertices.length]
+    for (let row = Math.floor(Math.min(a[1], b[1]) - 1); row <= Math.floor(Math.max(a[1], b[1]) + 1); row++) {
+      const edges = rows.get(row) ?? []
+      edges.push([a, b])
+      rows.set(row, edges)
+    }
+  }
+  return (x, y) => {
+    let inside = false
+    for (const [a, b] of rows.get(Math.floor(y)) ?? []) {
+      const dx = b[0] - a[0]
+      const dy = b[1] - a[1]
+      if ((a[1] > y) !== (b[1] > y) && x < a[0] + dx * (y - a[1]) / dy) inside = !inside
+      const length2 = dx * dx + dy * dy
+      const t = length2 ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / length2)) : 0
+      if ((x - a[0] - t * dx) ** 2 + (y - a[1] - t * dy) ** 2 <= 1) return true
+    }
+    return inside
+  }
+}
+
 /** Compare each real package with its own independently evolving layout at pointer release. */
 export async function verifyRelease (
   xy: Float32Array, count: number, origin: number, center: Pair, zoom: number, rect: [Pair, Pair],
-  selected: number[] | null, tracked: number[], positions: ReadonlyMap<number, Pair> | null
+  selected: number[] | null, tracked: number[], positions: ReadonlyMap<number, Pair> | null, polygon?: Pair[]
 ): Promise<ReleaseOracle> {
   if (xy.length !== 2 * count) throw new Error(`Expected ${2 * count} release coordinates, read ${xy.length}`)
   const [[left, top], [right, bottom]] = rect
+  const touches = polygon
+    ? lassoTouches(polygon)
+    : (x: number, y: number): boolean => {
+      const dx = Math.max(left - x, 0, x - right)
+      const dy = Math.max(top - y, 0, y - bottom)
+      return dx * dx + dy * dy <= 1
+    }
   const expected: number[] = []
   const selectedSet = new Set(selected)
   const examples: SelectionMismatch[] = []
@@ -37,13 +71,12 @@ export async function verifyRelease (
     const x = center[0] + (xy[2 * id] - origin) * zoom
     const y = center[1] - (xy[2 * id + 1] - origin) * zoom
     // Both packages draw a two-CSS-pixel point with a fixed radius when zoomed out.
-    const edgeDistance = Math.min(x + 1 - left, right + 1 - x, y + 1 - top, bottom + 1 - y)
-    const inside = edgeDistance >= 0
+    const inside = touches(x, y)
     if (inside) expected.push(id)
     if (selected && inside !== selectedSet.has(id)) {
       if (inside) missing++
       else extra++
-      if (examples.length < 12) examples.push({ id, x, y, expected: inside, edgeDistance })
+      if (examples.length < 12) examples.push({ id, x, y, expected: inside })
     }
   }
   if (selected) extra += selected.filter(id => !Number.isInteger(id) || id < 0 || id >= count).length + selected.length - selectedSet.size
