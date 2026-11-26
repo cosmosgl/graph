@@ -1,8 +1,8 @@
 import { Buffer, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/graph'
 import type { GraphConfigInterface } from '@/graph/config'
-import type { GraphData } from '@/graph/modules/GraphData'
-import type { GraphView } from '../../renderer'
+import { PointShape, type GraphData } from '@/graph/modules/GraphData'
+import type { Store } from '@/graph/modules/Store'
 import source from './area-selection.wgsl?raw'
 
 export type Pair = [number, number]
@@ -10,7 +10,7 @@ export type Area = { rect: [Pair, Pair] } | { polygon: Pair[] }
 
 export class AreaSelection {
   private readonly kernel: Kernel
-  private sizes?: Buffer
+  private footprints?: Buffer
 
   public constructor (private readonly device: Device) {
     this.kernel = new Kernel(device, {
@@ -18,7 +18,7 @@ export class AreaSelection {
       shaderLayout: {
         bindings: [
           { name: 'points', group: 0, location: 0, type: 'read-only-storage' },
-          { name: 'sizes', group: 0, location: 1, type: 'read-only-storage' },
+          { name: 'footprints', group: 0, location: 1, type: 'read-only-storage' },
           { name: 'path', group: 0, location: 2, type: 'read-only-storage' },
           { name: 'mask', group: 0, location: 3, type: 'storage' },
           { name: 'view', group: 0, location: 4, type: 'uniform' },
@@ -27,32 +27,58 @@ export class AreaSelection {
     })
   }
 
-  public invalidateSizes (): void {
-    this.sizes?.destroy()
-    this.sizes = undefined
+  public invalidateFootprints (): void {
+    this.footprints?.destroy()
+    this.footprints = undefined
   }
 
-  public async select (points: Buffer, data: GraphData, config: GraphConfigInterface, view: GraphView, area: Area): Promise<number[]> {
+  public async select (points: Buffer, data: GraphData, config: GraphConfigInterface, store: Store, area: Area): Promise<number[]> {
     const count = data.pointsNumber ?? 0
-    if (!count || ('polygon' in area && area.polygon.length < 3)) return []
-    if (!this.sizes) {
-      const sizes = Float32Array.from({ length: count }, (_, i) => data.getResolvedPointFootprint(i))
-      this.sizes = this.device.createBuffer({ data: sizes, usage: Buffer.STORAGE })
+    if (!count) return []
+    if (!this.footprints) {
+      // Target diameters are nonnegative. Store untextured squares with a minus
+      // sign so resolving the shape needs no second word per simulated point.
+      const footprints = new Float32Array(count)
+      for (let i = 0; i < count; i++) {
+        const diameter = data.getResolvedPointFootprint(i)
+        const square = data.pointShapes?.[i] === PointShape.Square && !data.pointDrawsImage(i)
+        footprints[i] = square ? -diameter : diameter
+      }
+      this.footprints = this.device.createBuffer({ data: footprints, usage: Buffer.STORAGE })
     }
-    const params = new Float32Array(12)
-    params.set([view.x, view.y, view.scale, config.pointSizeScale])
-    if ('rect' in area) {
-      const [[x0, y0], [x1, y1]] = area.rect
-      params.set([Math.min(x0, x1), Math.min(y0, y1), Math.max(x0, x1), Math.max(y0, y1)], 4)
+    // Match WebGL's lower-left projection and evaluate the bounds at the
+    // precision of the path the shader actually reads.
+    const { screenSize: [width, height], transform, worldOrigin } = store
+    const vertices = 'polygon' in area ? area.polygon : area.rect
+    const pathData = 'polygon' in area ? new Float32Array(vertices.length * 2) : new Float32Array(2)
+    let left = Infinity
+    let bottom = Infinity
+    let right = -Infinity
+    let top = -Infinity
+    for (const [i, [screenX, screenY]] of vertices.entries()) {
+      const x = Math.fround(screenX)
+      const y = Math.fround(height - screenY)
+      if ('polygon' in area) {
+        pathData[i * 2] = x
+        pathData[i * 2 + 1] = y
+      }
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+      bottom = Math.min(bottom, y)
+      top = Math.max(top, y)
     }
-    params.set([config.scalePointsOnZoom ? view.scale : Math.min(5, Math.max(1, view.scale * 0.01)), view.pixelRatio], 8)
-    const vertices = 'polygon' in area ? area.polygon : []
-    new Uint32Array(params.buffer)[10] = vertices.length
+    const zoom = transform[0]
+    const params = new Float32Array(20)
+    params.set([...worldOrigin, width, height, zoom, transform[4], transform[6], transform[7], left, bottom, right, top])
+    params.set([config.pointSizeScale, config.pixelRatio, config.scalePointsOnZoom ? zoom : Math.min(5, Math.max(1, zoom * 0.01))], 12)
+    const integers = new Uint32Array(params.buffer)
+    integers[15] = 'polygon' in area ? vertices.length : 0
+    integers[16] = Number(config.pointSelectionMode === 'center')
 
     // Each request owns its output and camera/geometry snapshot until its copy completes.
     const resources: Array<{ destroy(): void }> = []
     try {
-      const path = this.device.createBuffer({ data: new Float32Array(vertices.length ? vertices.flat() : [0, 0]), usage: Buffer.STORAGE })
+      const path = this.device.createBuffer({ data: pathData, usage: Buffer.STORAGE })
       resources.push(path)
       const uniform = this.device.createBuffer({ data: params, usage: Buffer.UNIFORM })
       resources.push(uniform)
@@ -62,7 +88,7 @@ export class AreaSelection {
       resources.push(encoder)
       const pass = encoder.beginComputePass({})
       try {
-        this.kernel.dispatch(pass, { x: Math.ceil(count / 64), bindings: { points, sizes: this.sizes, path, mask, view: uniform } })
+        this.kernel.dispatch(pass, { x: Math.ceil(count / 64), bindings: { points, footprints: this.footprints, path, mask, view: uniform } })
       } finally { pass.end() }
       this.device.submit(encoder.finish())
       const bytes = await mask.readAsync()
@@ -76,7 +102,7 @@ export class AreaSelection {
   }
 
   public destroy (): void {
-    this.invalidateSizes()
+    this.invalidateFootprints()
     this.kernel.destroy()
   }
 }

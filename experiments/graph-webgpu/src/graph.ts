@@ -154,7 +154,7 @@ export class Graph {
         this.labels?.invalidate()
         this.clusterVersion = -1
       }
-      if (!linkWidthsOnly && (!pointStylesOnly || pointSizes)) this.area?.invalidateSizes()
+      if (!linkWidthsOnly && (!pointStylesOnly || pointSizes)) this.area?.invalidateFootprints()
       const isFirst = !this.hasRendered && !!this.graph.pointsNumber
       this.hasRendered = !!this.graph.pointsNumber
       this.hasHoverSceneChanged = true
@@ -596,9 +596,12 @@ export class Graph {
       this.config.randomSeed = previous.randomSeed
       this.config.attribution = previous.attribution
 
+      // The next area query reads its mode directly. Rebuilding styles here
+      // would discard a size transition's displayed value when changing modes.
+      const keys = Object.keys(config)
+      if (!reset && keys.length === 1 && keys[0] === 'pointSelectionMode') return
       this.hasHoverSceneChanged = true
       this.hoverRequest++
-      const keys = Object.keys(config)
       if (!reset && this.hasRendered && keys.length === 1 && keys[0] === 'highlightedPointIndices') {
         // Highlights change paint and picking order. The selection footprint stays valid.
         this.renderer?.updatePointHighlights()
@@ -625,7 +628,7 @@ export class Graph {
         keys.every(key => key === 'pointDefaultColor' || key === 'pointDefaultSize')
       const pointChannels = defaultsOnly ? { colors: keys.includes('pointDefaultColor'), sizes: keys.includes('pointDefaultSize') } : undefined
       this.renderer?.update({ pointChannels })
-      if (!pointChannels || pointChannels.sizes) this.area?.invalidateSizes()
+      if (!pointChannels || pointChannels.sizes) this.area?.invalidateFootprints()
       if (previous.pixelRatio !== this.config.pixelRatio) this.resize()
       if (!this.config.enableRenderLoop && this.frame) {
         cancelAnimationFrame(this.frame)
@@ -660,12 +663,13 @@ export class Graph {
   }
 
   private async selectArea (area: Area): Promise<number[] | null> {
+    if ('polygon' in area && area.polygon.length < 3) return []
     const source = this.getPointPositionBuffer()
     if (!source || !this.canvas || this.isDestroyed) return this.isReady ? [] : null
     const revision = this.revision
     this.area ??= new AreaSelection(source.device)
     try {
-      const ids = await this.area.select(source.buffer, this.graph, this.config, this.view(), area)
+      const ids = await this.area.select(source.buffer, this.graph, this.config, this.simulation.store, area)
       return this.isDestroyed || this.revision !== revision || source.device.isLost ? null : ids
     } catch (error) {
       if (this.isDestroyed || this.revision !== revision || source.device.isLost) return null

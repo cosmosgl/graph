@@ -2,7 +2,7 @@ import { Buffer, type Device, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/core/webgl'
 import { webgpuAdapter } from '@luma.gl/core/webgpu'
 import { describe, expect, it, vi } from 'vitest'
-import { Graph, GraphSimulation, type GraphConfig } from '../src'
+import { Graph, GraphSimulation, PointShape, type GraphConfig } from '../src'
 import { Lines } from '../src/modules/Lines'
 import { StyleTransition } from '../src/style-transition'
 
@@ -78,6 +78,8 @@ describe('WebGPU Graph', () => {
       graph.render(undefined, 1000)
       clock += 500
       graph.renderOneFrame()
+      expect(graph.getPointRadiusByIndex(0)).toBe(16)
+      graph.setConfigPartial({ pointSelectionMode: 'center' })
       expect(graph.getPointRadiusByIndex(0)).toBe(16)
       sizes[0] = 32
       graph.setPointSizes(sizes)
@@ -266,6 +268,35 @@ describe('WebGPU Graph', () => {
       expect(await graph.getPointPositionsAsync()).toHaveLength(0)
     } finally { cleanup() }
     expect(host.childElementCount).toBe(0)
+  })
+
+  it.each([1, 2])('selects touching footprints or centers on the boundary at %i×', async pixelRatio => {
+    const { graph, cleanup } = mountedGraph({ pixelRatio, enableSimulation: false })
+    try {
+      await graph.ready
+      // Three centers share y=100. The second is on the right edge, and the
+      // third is a radius outside it. A zero-size point sits inside.
+      graph.setPointPositions(Float32Array.of(2048, 2048, 2064, 2048, 2074, 2048, 2044, 2048))
+      graph.setPointSizes(Float32Array.of(20, 20, 20, 0))
+      graph.render(undefined, 0)
+      const expectBoth = async (expected: number[]): Promise<void> => {
+        expect(await graph.findPointsInRectAsync([[176, 116], [144, 84]])).toEqual(expected)
+        expect(await graph.findPointsInPolygonAsync([[144, 84], [176, 84], [176, 116], [144, 116]])).toEqual(expected)
+      }
+      await expectBoth([0, 1, 2])
+      graph.setConfigPartial({ pointSelectionMode: 'center' })
+      await expectBoth([0, 1])
+      graph.setConfigPartial({ pointSelectionMode: 'touch' })
+      graph.setPointShapes(Float32Array.of(PointShape.Circle, PointShape.Circle, PointShape.Square, PointShape.None))
+      graph.render(undefined, 0)
+      // The rendered square is 16 px wide, so its left edge misses. Adding
+      // an image switches this slot back to the 20 px circular footprint.
+      await expectBoth([0, 1])
+      graph.setImageData([new ImageData(1, 1)])
+      graph.setPointImageIndices(Float32Array.of(-1, -1, 0, -1))
+      graph.render(undefined, 0)
+      await expectBoth([0, 1, 2])
+    } finally { cleanup() }
   })
 
   it('selects and tracks the points in the captured view, discarding requests invalidated by replacement', async () => {
