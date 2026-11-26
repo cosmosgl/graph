@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { cpus } from 'node:os'
-import { join, relative, resolve } from 'node:path'
+import { join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseArgs } from 'node:util'
+import { isDeepStrictEqual, parseArgs } from 'node:util'
 import { chromium } from 'playwright'
 import { createServer } from 'vite'
 import { captureBenchmarkSource, sha256 } from './benchmark-source.mjs'
@@ -12,7 +12,7 @@ const lab = fileURLToPath(new URL('../', import.meta.url))
 const repo = fileURLToPath(new URL('../../../', import.meta.url))
 const { values } = parseArgs({ options: {
   fixture: { type: 'string' }, points: { type: 'string', default: '8192' }, smoke: { type: 'boolean' }, layout: { type: 'boolean' },
-  composed: { type: 'boolean' }, 'webgl-controls': { type: 'string' },
+  composed: { type: 'boolean' }, 'webgl-controls': { type: 'string' }, 'adapter-vendor': { type: 'string' },
 } })
 if (values.composed && !values.layout) throw new Error('Use --composed with --layout for the eight-force fixed-tick replay')
 if (values['webgl-controls'] && (!values.layout || values.smoke)) throw new Error('Reuse controls only for a complete fixed-tick replay')
@@ -21,13 +21,15 @@ if (!Number.isSafeInteger(pointCount) || pointCount < 1026 || pointCount > 10000
 const kinds = values.fixture ? [values.fixture] : ['dense', 'hubs']
 if (!kinds.every(k => ['dense', 'hubs'].includes(k))) throw new Error('Expected --fixture dense or hubs')
 const cpu = cpus()[0]?.model ?? 'unknown'
-if (!/Apple M3/i.test(cpu)) throw new Error(`Requires the native M3 machine, found ${cpu}`)
+const vendor = (values['adapter-vendor'] ?? 'apple').toLowerCase()
+if (!['apple', 'intel', 'amd', 'nvidia'].includes(vendor)) throw new Error('Expected --adapter-vendor apple, intel, amd or nvidia')
+if (!values['adapter-vendor'] && !/Apple M3/i.test(cpu)) throw new Error(`Expected Apple M3, found ${cpu}. Set --adapter-vendor to qualify this device.`)
 const root = join(lab, 'captures')
 const controlsDir = values['webgl-controls'] ? resolve(root, values['webgl-controls']) : undefined
-if (controlsDir && !controlsDir.startsWith(`${root}/`)) throw new Error('Choose a control run under captures/')
+if (controlsDir && !controlsDir.startsWith(root + sep)) throw new Error('Choose a control run under captures/')
 const runId = process.env.LAB_ARTIFACT_RUN || `packaged-force-timing-${new Date().toISOString().replace(/[.:]/g, '-')}`
 const capture = resolve(root, runId)
-if (!capture.startsWith(`${root}/`)) throw new Error('Choose a new LAB_ARTIFACT_RUN below captures/')
+if (!capture.startsWith(root + sep)) throw new Error('Choose a new LAB_ARTIFACT_RUN below captures/')
 await mkdir(resolve(capture, '..'), { recursive: true })
 await mkdir(capture)
 const save = (name, object) => writeFile(join(capture, `${name}.json`), `${JSON.stringify(object, null, 2)}\n`)
@@ -35,9 +37,11 @@ const source = await captureBenchmarkSource(repo, lab, capture)
 if (controlsDir) {
   const previous = JSON.parse(await readFile(join(controlsDir, 'source.json'), 'utf8'))
   if (source.productionSha256 !== previous.productionSha256) throw new Error('WebGL control bundle hash changed')
+  if (cpu !== previous.cpu || vendor !== (previous.adapterVendor ?? 'apple')) throw new Error('WebGL controls used a different CPU or GPU vendor')
   source.webglControls = relative(root, controlsDir)
 }
 source.webgpuSha256 = await sha256(join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
+source.adapterVendor = vendor
 source.cpu = cpu
 source.node = process.version
 source.packageManager = process.env.npm_config_user_agent ?? null
@@ -83,7 +87,7 @@ async function run(url, kind, engine, name) {
     await page.goto(url)
     await page.bringToFront()
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
-    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed])
+    await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed, vendor])
     const bounds = await page.locator('#graph canvas').boundingBox()
     if (!bounds || bounds.width !== 961 || bounds.height !== 541 || bounds.x < 0 || bounds.y < 0 ||
       bounds.x + bounds.width > 1050 || bounds.y + bounds.height > 680) throw new Error('Canvas not fully visible')
@@ -175,7 +179,12 @@ try {
         }
         lanes.push(reference)
       }
-      lanes.push(await run(url, kind, 'webgpu', 'candidate'))
+      const candidate = await run(url, kind, 'webgpu', 'candidate')
+      lanes.push(candidate)
+      if (controlsDir && candidate.status === 'complete') {
+        const original = JSON.parse(await readFile(join(controlsDir, kind, 'candidate.json'), 'utf8'))
+        if (!isDeepStrictEqual(original.result?.adapter, candidate.result.adapter)) throw new Error('Saved layout used a different WebGPU adapter')
+      }
       const rows = []
       for (const [i, reference] of (lanes[0].result?.checkpoints ?? []).entries()) {
         const file = name => join(name === 'candidate' ? capture : controlsDir ?? capture, kind, `${name}-${reference.step}.f32`)

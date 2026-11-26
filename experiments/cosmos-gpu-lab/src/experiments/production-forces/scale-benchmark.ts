@@ -26,7 +26,7 @@ function distribution (samples: number[]): { p50: number; p95: number; max: numb
   }
 }
 
-async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false, composed = false): Promise<void> {
+async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout = false, composed = false, vendor = 'apple'): Promise<void> {
   if (navigator.userAgent.includes('HeadlessChrome') || devicePixelRatio !== viewport.pixelRatio) throw new Error('Requires foreground Chrome at DPR 2')
   const fixture = scaleFixture(kind, pointCount)
   const channels = composed ? composedChannels(fixture) : undefined
@@ -129,8 +129,10 @@ async function open (engine: Engine, kind: ScaleCase, pointCount = 8192, layout 
   const device = graph.simulation.device!
   const memory = device.statsManager.getStats('GPU Time and Memory').get('GPU Memory')
   const adapter = device.info as typeof device.info & { fallback?: boolean }
-  if (adapter.type !== engine || adapter.gpuType === 'cpu' || !/apple/i.test(JSON.stringify(adapter)) ||
-    (engine === 'webgpu' && adapter.fallback !== false)) throw new Error(`Unexpected device ${JSON.stringify(adapter)}`)
+  const matchesVendor = adapter.gpu === vendor || (adapter.gpu === 'unknown' && adapter.vendor.toLowerCase().includes(vendor))
+  if (adapter.type !== engine || adapter.gpuType === 'cpu' || !matchesVendor || (engine === 'webgpu' && adapter.fallback !== false)) {
+    throw new Error(`Expected native ${vendor} ${engine}, found ${JSON.stringify(adapter)}`)
+  }
   device.lost.then(() => { if (!destroyed) error = 'Graph device lost' })
   if (channels) loadComposedChannels(graph, channels)
   loadForce(graph, kind, viewport, pointCount)
