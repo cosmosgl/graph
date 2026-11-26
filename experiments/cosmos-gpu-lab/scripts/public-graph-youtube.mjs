@@ -16,7 +16,8 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     lasso: { type: 'boolean' }, mode: { type: 'string' }, engine: { type: 'string' }, 'release-ticks': { type: 'string' },
-    'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' }, 'adapter-vendor': { type: 'string' },
+    'draw-tick': { type: 'string' }, 'webgpu-bundle': { type: 'string' }, 'webgl-bundle': { type: 'string' },
+    'adapter-vendor': { type: 'string' },
   },
 })
 const counts = positionals.length ? positionals.map(Number) : [65536, 1000000]
@@ -72,8 +73,12 @@ await mkdir(captureRoot, { recursive: true })
 const capture = await mkdtemp(resolve(captureRoot, 'public-graph-youtube-'))
 console.log(`Capture: ${capture}`)
 const source = await captureBenchmarkSource(root, lab, capture)
+const packagedWebGL = resolve(root, 'dist/index.min.js')
 const packagedWebGPU = resolve(root, 'experiments/graph-webgpu/dist/index.min.js')
-const selectedWebGPU = values['webgpu-bundle'] ? resolve(values['webgpu-bundle']) : packagedWebGPU
+const selectedWebGL = resolve(values['webgl-bundle'] ?? packagedWebGL)
+const selectedWebGPU = resolve(values['webgpu-bundle'] ?? packagedWebGPU)
+const bundles = new Map([[packagedWebGL, selectedWebGL], [packagedWebGPU, selectedWebGPU]])
+source.productionSha256 = await sha256(selectedWebGL)
 const result = {
   source,
   bundles: {
@@ -95,12 +100,14 @@ await save()
 const site = resolve(capture, 'site')
 await build({
   configFile: false, root: lab, base: './',
-  plugins: selectedWebGPU === packagedWebGPU ? [] : [{
-    name: 'replay-captured-webgpu-package',
+  plugins: [{
+    name: 'replay-captured-graph-packages',
     enforce: 'pre',
     resolveId(source, importer) {
-      if (importer && source.endsWith('?url') && resolve(dirname(importer), source.slice(0, -4)) === packagedWebGPU) {
-        return selectedWebGPU + '?url'
+      if (importer && source.endsWith('?url')) {
+        const file = resolve(dirname(importer), source.slice(0, -4))
+        const selected = bundles.get(file)
+        if (selected && selected !== file) return selected + '?url'
       }
     },
   }],
