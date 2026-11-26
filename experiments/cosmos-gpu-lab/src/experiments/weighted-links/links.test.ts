@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
 import { buildTopology, createFixture } from './data'
+import { springTextureLayout } from './spring-textures'
 
 describe('weighted link topology and semantics', () => {
+  it('recognizes both spring texture layouts regardless of sampler precision', () => {
+    for (const qualifier of ['', 'lowp ', 'mediump ', 'highp ']) {
+      const sampler = `uniform ${qualifier}sampler2D`
+      const packed = `${sampler} linkNeighborAndSpringTexture;`
+      const indices = `${sampler} linkIndicesTexture;`
+      const properties = `${sampler} linkPropertiesTexture;`
+      expect(springTextureLayout(packed)).toBe('packed')
+      expect(springTextureLayout(`${indices}\n${properties}`)).toBe('separate')
+      expect(() => springTextureLayout(indices)).toThrow('Unsupported production spring texture contract')
+      expect(() => springTextureLayout(`${packed}\n${indices}`)).toThrow('Unsupported production spring texture contract')
+    }
+  })
+
   it('preserves duplicates, self-loops, edge IDs and stable directional order; skips invalid endpoints', () => {
     const graph = createFixture('edge-cases'); const t = buildTopology(graph)
     expect(t.links.length).toBe(14)

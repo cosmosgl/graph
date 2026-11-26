@@ -5,7 +5,8 @@ import type { Adjacency } from './data'
 // Keep uploads compatible with both sides of the texture-packing transition;
 // an unknown contract must fail here, not silently sample an unbound texture.
 export function springTextureLayout (source: string): 'packed' | 'separate' {
-  const declares = (name: string): boolean => new RegExp(`uniform\\s+sampler2D\\s+${name}\\s*;`).test(source)
+  const declares = (name: string): boolean =>
+    new RegExp(`\\buniform\\s+(?:(?:lowp|mediump|highp)\\s+)?sampler2D\\s+${name}\\s*;`).test(source)
   const packed = declares('linkNeighborAndSpringTexture')
   const indices = declares('linkIndicesTexture'); const properties = declares('linkPropertiesTexture')
   if (packed && !indices && !properties) return 'packed'
