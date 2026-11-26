@@ -104,3 +104,22 @@ Using the same archived distributions, the host completed ticks 8–56 consecuti
 **The first click on pinned Point 0** cost about one extra display interval in WebGPU on both topologies. On dense, the public callback arrived in 6.8 and 7.8 ms on WebGL and 20.7 and 17.9 ms on WebGPU. Across all twelve dense clicks, WebGPU met the original allowance. Emptying the queue changed the control substantially. Dense WebGL's slowest clicks dropped from 941.9 / 947.5 ms in the autonomous controls to 40.4 / 40.7 ms here. In both experiments most of the slowest click elapsed before its public callback.
 
 The host uses the public single-frame path. WebGL's autonomous loop additionally performs adaptive near-field occupancy reads when sample counts are unset. The host also delays its next step until visible click feedback. These differences limit the timing verdicts to this scheduling pattern. Dense WebGL frame controls still differed by 13.8 ms against the 12.5 ms limit. Hub WebGL controls agreed at 333.3 / 334.5 ms, but its last paired WebGL trial reached 467.0 ms at the same ticks. The captures establish this run-order variation. They do not identify its physical cause. [Timing protocol](#/production-forces?section=doc-scale-method)
+
+### Packed release and the cost of an idle repaint
+
+The public tarball bundles luma.gl 10.0.0-alpha.14. Its standalone file (`f6e6a88b`) matched the installed and workspace copies byte for byte. Fresh WebGL (`74a216a7`) and this tarball completed another 12-process block with the same arrays, input ticks, controls and engine orders. On the hub, the first click and topology update exceeded the calibrated allowances in both orders. A lower average WebGPU time still left several comparisons unassessed when the paired WebGL timing drifted.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Host-driven frame p95 (ms) | 358.5 / 199.8 | Paired WebGL drift | 400.5 / 283.7 | Paired WebGL drift |
+| First click (ms) | 14.8 / 23.2 | Orders disagreed | 13.6 / 40.0 | Slower |
+| Click p95 and slowest of 12 (ms) | 43.4 / 33.0 | Within margin | 58.5 / 41.3 | Paired WebGL drift |
+| Point update (ms) | 183.1 / 91.7 | Paired WebGL drift | 174.7 / 99.8 | Paired WebGL drift |
+| Topology update (ms) | 341.0 / 366.6 | Paired WebGL drift | 358.5 / 431.9 | Slower |
+| Full replacement (ms) | 632.4 / 517.7 | Paired WebGL drift | 633.5 / 573.9 | Paired WebGL drift |
+| Resize (ms) | 75.1 / 50.1 | Paired WebGL drift | 66.0 / 66.7 | A/A spread exceeded cap |
+| Peak sampled GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+The block and runtime versions are in `captures/packaged-force-timing-2026-11-26T11-29-19-306Z/`. Separate traces replayed the hub through the same 80 ticks. Updating link 1 on the paused WebGPU graph issued three full draws. The public `render()` painted immediately, its automatic callback painted again, and the host requested a manual draw. The two last canvas submissions finished about 29 ms apart. The parked cursor also triggered a new hover query after the link change. The first trusted click trace recorded an extra hover query from movement at the click coordinates followed by the fresh click query. See the WebGL trace in `captures/packaged-force-timing-2026-11-26T11-34-58-232Z/` and the WebGPU trace in `captures/packaged-force-timing-2026-11-26T11-35-33-388Z/`.
+
+After the idle scheduling change, the packed standalone (`51929a23`) issued two full canvas draws for the same hub edit. The immediate public render, host-requested draw and one hover read all remained. The 12 click IDs, four public edits, pins, moving points and ordered endpoints passed. The isolated check counts draws while other correctness tests were running. Its raw trace is in `captures/packaged-force-timing-2026-11-26T11-39-49-622Z/`.
