@@ -299,18 +299,23 @@ Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map).
 
 ## Custom deck layers
 
-To draw the layout with deck layers of your own — for deck's attribute pipeline, its
-transitions and extensions — sample the live position texture:
-`PositionTextureSource` from `@cosmos.gl/graph`, implemented by `Graph` and `GraphSimulation`.
-The *Custom deck layers* story does exactly that over a standalone `GraphSimulation`; its two
-layers are in the story's panes, as a starting point for yours. Positions stay on the GPU,
-so this scales like `CosmosGraphLayer` does. Create the simulation on deck's device.
+The *Custom deck layers* story draws points and links with its own two shaders. Both layers
+read positions from a standalone `GraphSimulation` on Deck's device. The application supplies
+colors, sizes and widths through Deck attributes. Deck reports the original point or link index
+when you hover, even after the simulation moves it.
+
+In the WebGL preview, each vertex fetches its point from the texture returned by
+`getPointPositionTexture()`. The WebGPU preview binds the buffer returned by
+`getPointPositionBuffer()` and reads the corresponding four-float record in WGSL.
+Borrow the current resource on every draw, including the picking pass. A simulation step can
+swap the active resource between frames. The simulation owns its lifetime. The story's source
+panes show the shaders for the preview you opened.
 
 Try it: [Custom deck layers](../?path=/story/examples-integrations--custom-deck-layers).
 
 ## Good to know
 
-- **WebGL 2 only**, and the layout is 2D under a flat, y-up view: `OrthographicView({ flipY: false })`,
+- **The published 3.6.1 integration uses WebGL 2.** Both previews use a flat, y-up view: `OrthographicView({ flipY: false })`,
   or a map at pitch 0 and bearing 0.
 - **Transitions** have no effect yet: a headless `Graph` applies a change at once.
 - **Framing**: the layout is not confined to `spaceSize` — a large graph grows past the space's

@@ -56,6 +56,10 @@ const config: StorybookConfig = {
         { find: './graph-host.js', replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/graph-host.ts') },
         { find: /^\.\/story-device(\?raw)?$/, replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/story-device.ts$1') },
         { find: /^\.\/thumbnail-background(\?raw)?$/, replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/thumbnail-background.ts$1') },
+        {
+          find: /^\.\/(?:custom-deck-layers\/)?(points|links)-layer-uniforms(\?raw)?$/,
+          replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/custom-story/$1-layer-uniforms.ts$2'),
+        },
       ] : [],
     },
   }),

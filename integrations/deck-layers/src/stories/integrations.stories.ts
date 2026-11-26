@@ -97,9 +97,9 @@ export const CustomDeckLayers: Story = {
   name: 'Custom deck layers',
   tags: ['advanced', 'interactive'],
   parameters: {
-    requiresWebGLDeck: true,
     sourceCode: [
       { name: 'Story', code: customDeckLayersRaw },
+      { name: 'story-device', code: deviceRaw },
       { name: 'PointsLayer', code: pointsLayerRaw },
       { name: 'points-layer-uniforms', code: pointsLayerUniformsRaw },
       { name: 'LinksLayer', code: linksLayerRaw },
