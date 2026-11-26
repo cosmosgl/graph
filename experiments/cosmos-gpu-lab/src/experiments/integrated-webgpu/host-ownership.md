@@ -282,20 +282,25 @@ bytes of Float32 XY coordinates as a JavaScript array. It also saves the camera,
 spring strength, cooling and running state. Both ownership modes reproduced
 every coordinate and the first resumed cooling value. Deck returned the
 original picks before and after resize and the supplied device remained usable
-after teardown.
+after teardown. The first 65,536-point capture recorded these checkpoint and
+remount times for one run of each owner.
 
 | Browser on the M3 host | Loss exercised | Checkpoint, layer / app (ms) | Remount through restored state, layer / app (ms) |
 | --- | --- | ---: | ---: |
 | Chrome 158, Apple Metal | Test browser's GPU process crash | 8.8 / 9.1 | 211 / 224 |
 | Firefox 153, non-fallback, adapter name unavailable | Explicit destruction of the test device | 34 / 47 | 198 / 187 |
+| Safari 26.5.2, Apple | Explicit destruction of the test device | 9 / 10 | 85 / 93 |
 | WebKit 26.5, Apple | Explicit destruction of the test device | 11 / 11 | 124 / 107 |
 | Chrome 158, SwiftShader | Test browser's GPU process crash | 3,359 / 2,731 | 5,442 / 4,532 |
 
-These are individual observations, with the camera and first rendered pixels
-checked separately. Firefox and WebKit both delivered the device-loss
-notification and restored the session on a new device. A retail Safari
-WebDriver run still requires Remote Automation to be enabled. Additional
-physical GPU families need their own qualification runs.
+The verifier checked the camera and first rendered pixels separately. Firefox
+and WebKit both delivered the device-loss notification and restored the
+session on a new device. Installed Safari ran the same packed app in a
+localhost page. It sampled
+the canvas and picked the scene at the initial, resized, restored, resumed
+and removed stages. All 40 colors and 40 picks matched across the two
+ownership modes. Its display was 2× and its canvas used one backing pixel
+per CSS pixel. Additional physical GPU families need their own runs.
 
 Run the same checks from the repository root. The preparation script prints
 the temporary application directory to use for each command.
@@ -312,3 +317,27 @@ The local capture `captures/packed-deck-milestone-20261126/` retains the
 application, both tarballs, browser reports and the original Firefox compile
 error. Browser and adapter details and the SHA-256 of each tarball are in
 each report.
+
+### Rechecking the packages after the engine changes
+
+At `7f807e49`, a clean TypeScript application installed both packages from
+local tarballs, with one copy of luma core. All 72 shared Graph Storybook
+TypeScript files compiled against the installed WebGPU declaration and the
+WebGL distribution declaration. The app also passed its own typecheck and
+production build.
+
+On the M3 host, Chrome 158, Firefox 153, Playwright WebKit 26.5 and
+Chrome 158 on SwiftShader passed drawing, point and link picking,
+background misses, resize and teardown for both owners at display ratios
+1 and 2. Installed Safari 26.5.2 passed the same ownership checks at its
+native 2× display ratio. Both owners recovered on every browser and adapter.
+All 65,536 point positions, the camera, pin and selected ID matched the
+checkpoint. The first resumed cooling value matched the uninterrupted
+session at the same tick. Chrome exercised a GPU-process
+crash in each fresh test process. Firefox, WebKit and Safari exercised
+explicit destruction of the test device.
+
+The local capture `captures/packed-deck-final-20261126-FcFbxf/` contains
+the tarballs, consumer, declaration check and per-browser reports. Its
+Graph SHA-256 is `071a239639cc9804c39a096a070105ce9ae73424e385e1966bec28464b3b8932`.
+Its Deck Layers SHA-256 is `b4ea371f4f3074da8a4fe0bf0c20396dd8b994c4ba7f1adc33dc5d7f855c341b`.
