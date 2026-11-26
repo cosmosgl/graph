@@ -31,9 +31,15 @@ four. The FPS counter waits for the drawing device to finish each frame. The
 WebGPU page displays **Unavailable** for GPU draw time. A separate seven-point,
 four-link dataset check verified the initial draw and canvas cleanup.
 
+Both packages also rendered the stock home galaxy (48,000 points), Worm
+(10,000), Lorenz (38,000), Point Collisions (50,000) and Knowledge Network
+(5,570 from the bundled arXiv dataset). All four example pages accepted
+zoom and fit.
+
 The full WebGL benchmark also rendered 10,000,000 points. On the tested WebGPU
 device that selection needed 160,000,000 bytes for positions, exceeding the
 134,217,728-byte limit granted to this device for a single storage binding.
+Chrome reported a 4,294,967,292-byte binding limit on the underlying adapter.
 The page reported the limit before generating the points. The full Roads
 dataset has 1,890,815 points and 2,315,222 links. Its WebGPU point styles alone
 would require 181,518,240 bytes at 96 bytes per point. Both full-size examples
