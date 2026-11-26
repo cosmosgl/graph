@@ -103,7 +103,10 @@ export class Graph {
       }
       this.isReady = true
       if (this.config.initialZoomLevel !== undefined) this.setZoomLevel(this.config.initialZoomLevel)
-      for (const operation of this.pending.splice(0)) operation()
+      // A callback can destroy the graph while these calls replay. destroy()
+      // clears this same array, so later setters never reach a released device.
+      for (const operation of this.pending) operation()
+      this.pending.length = 0
     }).catch(error => {
       this.destroy()
       throw error
@@ -717,12 +720,18 @@ export class Graph {
         return
       }
 
-      const rebuilding = previous.spaceSize !== this.config.spaceSize || (!previous.enableSimulation && this.config.enableSimulation)
-      if (rebuilding) {
-        this.interruptPositionTransition()
+      const enablingSimulation = !previous.enableSimulation && this.config.enableSimulation
+      const rebuilding = previous.spaceSize !== this.config.spaceSize || enablingSimulation
+      if (rebuilding && (enablingSimulation || this.transition.isPending)) {
+        // End the cycle before resolving data so setters in onTransitionEnd join
+        // this rebuild. A space change alone leaves a running transition intact.
+        this.positionTransition?.clear()
+        this.transition.end(true)
+        if (this.isDestroyed) return
         this.transition.dequeueAll()
       }
       this.simulation.applyConfigChanges(previous)
+      if (this.isDestroyed) return // A simulation lifecycle callback can tear down the graph.
       if (rebuilding) this.hasRendered = !!this.graph.pointsNumber
       if (!reset && keys.every(key => key.startsWith('on') || key.startsWith('simulation'))) {
         this.requestFrame()
@@ -739,7 +748,7 @@ export class Graph {
       const defaultsOnly = !reset && this.hasRendered && !this.shouldUpdateAllStyles && keys.length > 0 &&
         keys.every(key => key === 'pointDefaultColor' || key === 'pointDefaultSize')
       const pointChannels = defaultsOnly ? { colors: keys.includes('pointDefaultColor'), sizes: keys.includes('pointDefaultSize') } : undefined
-      this.renderer?.update({ pointChannels, continueTransition: this.transition.isActive && !rebuilding })
+      this.renderer?.update({ pointChannels, continueTransition: this.transition.isActive })
       if (!pointChannels || pointChannels.sizes) this.area?.invalidateFootprints()
       if (previous.pixelRatio !== this.config.pixelRatio) this.resize()
       if (!this.config.enableRenderLoop && this.frame) {
