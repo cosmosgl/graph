@@ -417,14 +417,20 @@ the link and background. The four automated lanes
 checked 1× and 2×, and installed Safari matched all 40 color and 40 pick
 probes at its native 2× display ratio.
 
+### Recovery after the config callback and Deck drag fixes
+
+At `78f957f7`, each browser and adapter configuration recovered a layer-owned and an app-supplied graph. All ten sessions restored the 65,536-point checkpoint and resumed at the expected cooling value. Chrome 158 on M3 and SwiftShader recovered from GPU-process loss. Firefox 153, WebKit 26.5 and installed Safari 26.5.2 recovered after device destruction. The four automated lanes drew, picked, resized and removed both owners at 1× and 2×. Installed Safari matched all 40 color and 40 pick probes at 2×.
+
+The clean app installed Graph archive `4074f410` and Deck archive `d2d9b440`. All 72 shared story sources compiled against the installed WebGPU Graph and frozen WebGL Graph declarations. The standalone script (`754a02b6`) picked both points, the link and the background on each lane. A second install from the copied archives and lockfile built offline. The complete archive digests, browser reports and verified summary are in `captures/signed-graph-deck-78f957f7-jo49x0fh/`.
+
 ### Replay the same archives on a second physical GPU
 
-Use a fresh checkout of `951ec4d7` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-951ec4d7-bi347zmj` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
+Use a fresh checkout of `78f957f7` with its locked workspace dependencies and native Chrome installed. Copy the complete `signed-graph-deck-78f957f7-jo49x0fh` directory into the Lab's `captures/`. Copy the prepared `youtube-million.bin` into `captures/fixtures/`. The capture includes the consumer source, lockfile, both public tarballs, both standalone scripts and the four SHA-256 digests in `source.json`. Run from the repository root and set `vendor` to the vendor observed on the second machine.
 
 ```sh
 set -eu
 lab=experiments/cosmos-gpu-lab
-run=signed-graph-deck-951ec4d7-bi347zmj
+run=signed-graph-deck-78f957f7-jo49x0fh
 pair="$PWD/$lab/captures/$run"
 vendor=nvidia
 app=$(mktemp -d)
@@ -432,7 +438,7 @@ app=$(mktemp -d)
 (cd "$pair" && node -e 'const fs = require("node:fs"), { createHash } = require("node:crypto");
   for (const [file, digest] of Object.entries(require("./source.json").sha256))
     require("node:assert/strict").equal(createHash("sha256").update(fs.readFileSync(file)).digest("hex"), digest, file)' &&
-  cp graph.tgz deck-layers.tgz package-lock.json package.json main.ts index.html tsconfig.json "$app/")
+  cp graph.tgz deck-layers.tgz package-lock.json package.json main.ts contracts.ts index.html tsconfig.json "$app/")
 npm --prefix "$app" ci --ignore-scripts --no-audit --no-fund
 cmp "$pair/webgpu.js" "$app/node_modules/@cosmos.gl/graph/dist/index.min.js"
 mkdir -p "$app/public/standalone" dist experiments/graph-webgpu/dist
