@@ -22,7 +22,7 @@ catalog:
   '@luma.gl/shadertools': ~9.3.6
   '@luma.gl/webgl': ~9.3.6
   typescript: ^5.9.3
-  vite: ^6.4.3
+  vite: ^6.4.6
   vite-plugin-dts: ^4.3.0
 
 # Keep AJV's transitive URI parser on the patched v3 release. Restrict the
