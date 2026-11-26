@@ -170,6 +170,49 @@ fn fallingRamp(high: f32, low: f32, sample: f32) -> f32 {
   return vec4f(params.uniformLinkRgb, input.color.a * coverage);
 }
 
+// Compute derivatives before branching on per-link style. Helper lanes must
+// participate even when adjacent fragments will use a different mask.
+fn linkPatternMask(input: Ribbon) -> f32 {
+  let phase = clamp(input.coord.x, 0.0, 1.0) * input.span;
+  var phaseDx = dpdx(phase);
+  let phaseDy = dpdy(phase);
+  var left: vec2f;
+  var right: vec2f;
+  if (swiftShaderQuad) {
+    // Reconstruct the bottom row used by the WebGL SwiftShader quad.
+    let dx = dpdx(input.coord);
+    let dy = dpdy(input.coord);
+    let lane = vec2f(vec2u(input.position.xy) % 2u);
+    left = input.coord - lane.x * dx + (1.0 - lane.y) * dy;
+    right = left + dx;
+    phaseDx = (clamp(right.x, 0.0, 1.0) * input.span) - (clamp(left.x, 0.0, 1.0) * input.span);
+  }
+  var diameter = input.geometry.w * (1.0 - input.geometry.x);
+  if (params.link.w <= 0.0) {
+    diameter = max(diameter, 1.4142136 * max(length(vec2f(phaseDx, phaseDy)), 1e-4));
+  }
+  let period = max(diameter + params.widths.w, 0.001);
+  let radial = dotDistance(input.coord, input.span, input.geometry.w, period);
+  var radialDx = dpdx(radial);
+  if (swiftShaderQuad) {
+    radialDx = dotDistance(right, input.span, input.geometry.w, period)
+             - dotDistance(left, input.span, input.geometry.w, period);
+  }
+  let radialDy = dpdy(radial);
+  let pattern = input.style % 4u;
+  if (pattern == 2u) {
+    let aa = max(abs(radialDx) + abs(radialDy), 1e-4) * 0.5;
+    return 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, radial);
+  }
+  if (pattern == 1u) {
+    let aa = max(abs(phaseDx) + abs(phaseDy), 1e-4) * 0.5;
+    let dashPeriod = max(params.widths.z + params.widths.w, 0.001);
+    let m = phase - floor(phase / dashPeriod) * dashPeriod;
+    return smoothstep(-aa, aa, m) * (1.0 - smoothstep(params.widths.z - aa, params.widths.z + aa, m));
+  }
+  return 1.0;
+}
+
 @fragment fn linkFragment(input: Ribbon) -> @location(0) vec4f {
   let t = input.coord.x;
   let side = abs(input.coord.y);
@@ -189,6 +232,8 @@ fn fallingRamp(high: f32, low: f32, sample: f32) -> f32 {
       coverage = max(coverage,1.0 - smoothstep(taper-halfRamp,taper+halfRamp,side));
     }
   }
+  var mask = 1.0;
+  if (params.modes.x == 0.0) { mask = linkPatternMask(input); }
   let hovered = f32(input.index) == params.selected.z && params.hoverColor.a >= 0.0;
   if (params.modes.x > 0.0) {
     if (params.modes.x == 2.0) {
@@ -198,50 +243,7 @@ fn fallingRamp(high: f32, low: f32, sample: f32) -> f32 {
     return encodedId(input.index + u32(params.point.w),params.modes.w);
   }
 
-  let pattern = input.style % 4u;
-  // Style is flat across the primitive. Evaluate pattern derivatives across the
-  // entire triangle, including helpers, before selecting the solid arrowhead.
-  @diagnostic(off, derivative_uniformity)
-  if (pattern == 1u || pattern == 2u) {
-    let phase = clamp(t, 0.0, 1.0) * input.span;
-    var phaseDx = dpdx(phase);
-    let phaseDy = dpdy(phase);
-    var left: vec2f;
-    var right: vec2f;
-    if (swiftShaderQuad) {
-      // SwiftShader takes coarse dFdx from the first row in its 2×2 quad.
-      // The WebGL viewport starts at the bottom. Reconstruct that row in the
-      // WebGPU quad before applying the nonlinear clamp and dot distance.
-      let dx = dpdx(input.coord);
-      let dy = dpdy(input.coord);
-      let lane = vec2f(vec2u(input.position.xy) % 2u);
-      left = input.coord - lane.x * dx + (1.0 - lane.y) * dy;
-      right = left + dx;
-      phaseDx = (clamp(right.x, 0.0, 1.0) * input.span) - (clamp(left.x, 0.0, 1.0) * input.span);
-    }
-    var mask: f32;
-    if (pattern == 1u) {
-      let aa = max(abs(phaseDx) + abs(phaseDy), 1e-4) * 0.5;
-      let period = max(params.widths.z + params.widths.w, 0.001);
-      let m = phase - floor(phase / period) * period;
-      mask = smoothstep(-aa, aa, m) * (1.0 - smoothstep(params.widths.z - aa, params.widths.z + aa, m));
-    } else {
-      var diameter = input.geometry.w * (1.0 - smoothing);
-      if (params.link.w <= 0.0) {
-        diameter = max(diameter, 1.4142136 * max(length(vec2f(phaseDx, phaseDy)), 1e-4));
-      }
-      let period = max(diameter + params.widths.w, 0.001);
-      let radial = dotDistance(input.coord, input.span, input.geometry.w, period);
-      var radialDx = dpdx(radial);
-      if (swiftShaderQuad) {
-        radialDx = dotDistance(right, input.span, input.geometry.w, period)
-                 - dotDistance(left, input.span, input.geometry.w, period);
-      }
-      let aa = max(abs(radialDx) + abs(dpdy(radial)), 1e-4) * 0.5;
-      mask = 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, radial);
-    }
-    if (!inHead) { coverage *= mask; }
-  }
+  if (!inHead) { coverage *= mask; }
 
   var color = input.color.rgb;
   if (params.visibility.w > 0.0) { color = mix(input.sourceColor,input.targetColor,clamp(t,0.0,1.0)); }
