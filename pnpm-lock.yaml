@@ -248,11 +248,17 @@ importers:
   experiments/graph-webgpu:
     dependencies:
       '@luma.gl/core':
-        specifier: 10.0.0-alpha.15
-        version: 10.0.0-alpha.15
+        specifier: 10.0.0-alpha.14
+        version: 10.0.0-alpha.14
       '@luma.gl/graph':
-        specifier: 10.0.0-alpha.15
-        version: 10.0.0-alpha.15(@luma.gl/core@10.0.0-alpha.15)(@luma.gl/shaders@10.0.0-alpha.15)(apache-arrow@21.2.0)
+        specifier: 10.0.0-alpha.14
+        version: 10.0.0-alpha.14(@luma.gl/core@10.0.0-alpha.14)(@luma.gl/shaders@10.0.0-alpha.14)(apache-arrow@21.2.0)
+      '@luma.gl/shaders':
+        specifier: 10.0.0-alpha.14
+        version: 10.0.0-alpha.14
+      '@math.gl/core':
+        specifier: 5.0.0-beta.8
+        version: 5.0.0-beta.8
       d3-selection:
         specifier: ^3.0.0
         version: 3.0.0
@@ -710,6 +716,9 @@ packages:
     peerDependencies:
       '@loaders.gl/core': ~4.4.0
 
+  '@luma.gl/core@10.0.0-alpha.14':
+    resolution: {integrity: sha512-zVkRk0Dxn41qui9IbplTNBJlUKZ8xmC/a5A4ExGc54lgV3odIR82qV+M53bU6ohIGHVi1becTGjmIVRx7W/14w==}
+
   '@luma.gl/core@10.0.0-alpha.15':
     resolution: {integrity: sha512-FhdRisqKbxDYUqn39Y6EYu0Qa4S8gMABzU6j7r9zctfew/UyMk7CPlxK2/oKRfc17c0pi5Sd0vOsSz0UvNRJag==}
 
@@ -732,6 +741,16 @@ packages:
       '@luma.gl/core': ~9.3.0
       '@luma.gl/shadertools': ~9.3.0
 
+  '@luma.gl/graph@10.0.0-alpha.14':
+    resolution: {integrity: sha512-KXKea7KhsNaLtmzwxhfMeIChUY4ye9yMU5Acgu2usY0d7ZCFh54YiHpCEkn96453jDV9xPOdNadskqo4N85bIg==}
+    peerDependencies:
+      '@luma.gl/core': ~10.0.0-alpha.14
+      '@luma.gl/shaders': ~10.0.0-alpha.14
+      apache-arrow: '>=17.0.0'
+    peerDependenciesMeta:
+      apache-arrow:
+        optional: true
+
   '@luma.gl/graph@10.0.0-alpha.15':
     resolution: {integrity: sha512-t1Pv0wQPvr8cbrlHM0UgJy1sFdXYPqCSlYC/l1JSTZQIfLAG9AYY6c9HuVr6LDi2s4MNSk2zDs9QsI3hkMehCA==}
     peerDependencies:
@@ -741,6 +760,9 @@ packages:
     peerDependenciesMeta:
       apache-arrow:
         optional: true
+
+  '@luma.gl/shaders@10.0.0-alpha.14':
+    resolution: {integrity: sha512-LZLJJeOlI3o11bkHW/LzWmJsa1hu4GCXY9oKGnVHkqn7PUke4geZbnY9+hRNFw5uNHCrO0/xEGUnLfKFNTDFSQ==}
 
   '@luma.gl/shaders@10.0.0-alpha.15':
     resolution: {integrity: sha512-8g6elAKDbpHlqD+vxw/ip+WdHon0wvF+xXpKqsgYPgkkKee85ZP6O6DGKONy1tNWtNtY6hw+n3QhNKCAOinO2w==}
@@ -774,6 +796,9 @@ packages:
 
   '@math.gl/core@5.0.0-beta.10':
     resolution: {integrity: sha512-vyxt14ut9Sl/VAxk8/ITAKXLRBvJbl4kyBuw1gMM3goDRzlfKYeNEXqRqb2AWqLZe7U7Dc4rYmpKn4WPK3ggxw==}
+
+  '@math.gl/core@5.0.0-beta.8':
+    resolution: {integrity: sha512-5aJzRyUe0kAoCHsenFHd4/Gkqe0TLMOexggi1oHp5chrIETN878LjSChE8NRVA3RGL3uK6GeW00fZfC8kSeDcQ==}
 
   '@math.gl/expressions@5.0.0-beta.10':
     resolution: {integrity: sha512-Fv9f0aAZ3b61poS0iC/lRxWVrWYrKQ/zDYXtDeqzYfmPHpLBeSNos7CuLtNbiBHs5GqAAJOSGJc7r/JX4Z0WDA==}
@@ -4273,6 +4298,14 @@ snapshots:
     dependencies:
       '@loaders.gl/core': 4.4.4
 
+  '@luma.gl/core@10.0.0-alpha.14':
+    dependencies:
+      '@luma.gl/shaders': 10.0.0-alpha.14
+      '@math.gl/core': 5.0.0-beta.8
+      '@types/offscreencanvas': 2019.7.3
+      '@webgpu/types': 0.1.74
+      probe.gl: 5.0.0
+
   '@luma.gl/core@10.0.0-alpha.15':
     dependencies:
       '@luma.gl/shaders': 10.0.0-alpha.15
@@ -4310,6 +4343,18 @@ snapshots:
       '@probe.gl/log': 4.1.1
       '@probe.gl/stats': 4.1.1
 
+  '@luma.gl/graph@10.0.0-alpha.14(@luma.gl/core@10.0.0-alpha.14)(@luma.gl/shaders@10.0.0-alpha.14)(apache-arrow@21.2.0)':
+    dependencies:
+      '@luma.gl/core': 10.0.0-alpha.14
+      '@luma.gl/shaders': 10.0.0-alpha.14
+      '@math.gl/arrow': 5.0.0-beta.10(apache-arrow@21.2.0)
+      '@math.gl/core': 5.0.0-beta.8
+      '@math.gl/expressions': 5.0.0-beta.10(apache-arrow@21.2.0)
+      '@math.gl/geospatial': 5.0.0-beta.10(apache-arrow@21.2.0)
+      probe.gl: 5.0.0
+    optionalDependencies:
+      apache-arrow: 21.2.0
+
   '@luma.gl/graph@10.0.0-alpha.15(@luma.gl/core@10.0.0-alpha.15)(@luma.gl/shaders@10.0.0-alpha.15)(apache-arrow@21.2.0)':
     dependencies:
       '@luma.gl/core': 10.0.0-alpha.15
@@ -4321,6 +4366,10 @@ snapshots:
       probe.gl: 5.0.0
     optionalDependencies:
       apache-arrow: 21.2.0
+
+  '@luma.gl/shaders@10.0.0-alpha.14':
+    dependencies:
+      '@math.gl/core': 5.0.0-beta.8
 
   '@luma.gl/shaders@10.0.0-alpha.15':
     dependencies:
@@ -4355,6 +4404,8 @@ snapshots:
       '@math.gl/types': 4.1.0
 
   '@math.gl/core@5.0.0-beta.10': {}
+
+  '@math.gl/core@5.0.0-beta.8': {}
 
   '@math.gl/expressions@5.0.0-beta.10(apache-arrow@21.2.0)':
     dependencies:

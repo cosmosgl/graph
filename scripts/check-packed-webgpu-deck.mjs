@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFile, realpath } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { isDeepStrictEqual, parseArgs } from 'node:util'
 import { chromium, firefox, webkit } from 'playwright'
@@ -96,6 +97,43 @@ function observeErrors(page) {
     }
   })
   return errors
+}
+
+async function checkStandalone(browser) {
+  const fromApp = createRequire(join(app, 'package.json'))
+  const manifest = fromApp('@cosmos.gl/graph/package.json')
+  const cdnFile = fromApp.resolve('@cosmos.gl/graph/' + manifest.jsdelivr)
+  assert.equal(manifest.jsdelivr, 'dist/index.min.js')
+  assert.equal(fromApp.resolve('@cosmos.gl/graph'), fromApp.resolve('@cosmos.gl/graph/dist/index.js'))
+  assert.deepEqual(await readFile(cdnFile), await readFile(join(site, 'standalone/index.min.js')))
+  const page = await browser.newPage({ viewport: { width: 600, height: 400 }, deviceScaleFactor: 1 })
+  const errors = observeErrors(page)
+  const scripts = []
+  page.on('request', request => {
+    if (request.resourceType() === 'script') scripts.push(new URL(request.url()).pathname)
+  })
+  try {
+    await page.goto(url + 'standalone/')
+    await page.waitForFunction(() => document.querySelector('#hit')?.value === 'Ready')
+    const { adapter, positions } = await page.evaluate(async () => {
+      const graph = await window.standaloneGraph
+      return { adapter: graph.simulation.device.info, positions: Array.from(await graph.getPointPositionsAsync()) }
+    })
+    checkAdapter(adapter)
+    assert.deepEqual(positions, [192, 256, 320, 256])
+    const coords = [[64, 80], [192, 80], [128, 80], [8, 8]]
+    const pixels = await waitForPaint(page, coords, colors, 'standalone Graph paint')
+    const picks = ['Point 0', 'Point 1', 'Link 0', 'Background']
+    for (const [i, [x, y]] of coords.entries()) {
+      await page.locator('#graph canvas').click({ position: { x, y } })
+      await page.waitForFunction(hit => document.querySelector('#hit').value === hit, picks[i])
+    }
+    await page.evaluate(async () => (await window.standaloneGraph).destroy())
+    assert.equal(await page.locator('#graph canvas').count(), 0)
+    assert.deepEqual(scripts, ['/standalone/index.min.js'])
+    assert.deepEqual(errors, [])
+    return { entry: manifest.jsdelivr, adapter, pixels, picks, positions }
+  } finally { await page.close() }
 }
 
 function expectedPicks(owner) {
@@ -215,6 +253,7 @@ let browser
 try {
   browser = await launch()
   report.version = browser.version()
+  report.standalone = await checkStandalone(browser)
   if (values.browser === 'chrome') {
     const cdp = await browser.newBrowserCDPSession()
     report.gpus = (await cdp.send('SystemInfo.getInfo')).gpu.devices.map(d => d.deviceString)

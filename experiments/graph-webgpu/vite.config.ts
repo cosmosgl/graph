@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: !standalone,
       lib: {
         entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
-        formats: [standalone ? 'iife' : 'es'],
+        formats: [standalone ? 'umd' : 'es'],
         name: 'Cosmos',
         fileName: () => standalone ? 'index.min.js' : 'index.js',
       },

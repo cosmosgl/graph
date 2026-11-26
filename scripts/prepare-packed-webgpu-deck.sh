@@ -13,6 +13,11 @@ mv cosmos.gl-graph-*.tgz graph.tgz
 mv cosmos.gl-deck-layers-*.tgz deck-layers.tgz
 npm install --no-fund --no-audit --ignore-scripts
 npm ls @cosmos.gl/graph @cosmos.gl/deck-layers @deck.gl/core @luma.gl/core @luma.gl/graph
+# Serve the installed package's CDN file as a plain script, outside Vite's module graph.
+mkdir -p public/standalone
+cp "$repo_dir/experiments/graph-webgpu/fixtures/deck-consumer/standalone.html" public/standalone/index.html
+cdn_entry=$(node -p "require('./node_modules/@cosmos.gl/graph/package.json').jsdelivr")
+cp "node_modules/@cosmos.gl/graph/$cdn_entry" public/standalone/index.min.js
 npm run build
 echo "Run the browser checks: node \"$repo_dir/scripts/check-packed-webgpu-deck.mjs\" \"$app_dir\""
 echo "Open the app: npm --prefix \"$app_dir\" run preview"

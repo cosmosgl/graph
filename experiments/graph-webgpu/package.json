@@ -12,8 +12,10 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@luma.gl/core": "10.0.0-alpha.15",
-    "@luma.gl/graph": "10.0.0-alpha.15",
+    "@luma.gl/core": "10.0.0-alpha.14",
+    "@luma.gl/graph": "10.0.0-alpha.14",
+    "@luma.gl/shaders": "10.0.0-alpha.14",
+    "@math.gl/core": "5.0.0-beta.8",
     "d3-selection": "^3.0.0",
     "d3-transition": "^3.0.1",
     "d3-zoom": "^3.0.0"
