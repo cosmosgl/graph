@@ -1,3 +1,34 @@
+## First-click feedback on the capacity build
+
+The packaged Graph from `c418e90a` returned visible feedback for the first
+trusted click at tick 58 within the predeclared WebGL allowance in both
+engine orders on M3. Both fixtures had one million point slots and 999,990
+links. Each pair of numbers below gives the WebGL-first trial followed by
+the WebGPU-first trial.
+
+| First click to visible feedback | WebGL (ms) | WebGPU (ms) | Relative result |
+| --- | ---: | ---: | --- |
+| Dense, fixed tick 58 | 15.0 / 13.6 | 16.1 / 14.6 | Within 4.16 ms in both orders |
+| Hubs, fixed tick 58 | 15.5 / 14.4 | 14.9 / 15.6 | Within 4.17 ms in both orders |
+| Dense, simulation running | 1,084.2 / 1,805.6 | 215.6 / 229.9 | WebGL controls varied beyond the limit |
+| Hubs, simulation running | 1,003.4 / 1,822.7 | 201.3 / 184.2 | Paired WebGL results drifted beyond the limit |
+
+With the simulation running, WebGPU delivered the first click callback
+at tick 59, and WebGL at ticks 63–64. These measurements include the work
+already in the GPU queue when the user clicked. In the four moving WebGPU
+trials, 175.9–227.2 ms elapsed before the first click callback and
+2.7–15.5 ms from the callback to visible feedback. The fixed-tick run keeps
+the simulation stationary through the callback and feedback. The original
+timing rules also leave relative frame and click p95 unassessed for both
+topologies. All 288 trusted clicks returned the requested ID or background.
+Every trial completed the edits and resize, retained the pins and released
+all tracked GPU allocations.
+
+The package digests, two WebGL controls per topology and scheduling mode,
+individual events, and per-metric verdicts are in
+`captures/qualify-capacity-olaz2sw6/timing-summary.json`.
+[Method and thresholds](#/production-forces?section=doc-scale-method)
+
 ## Fresh pointer picking at one million points
 
 At the center of the million-point hub fixture, WebGPU spent 4.06 ms drawing the point pick window and another 4.06 ms drawing the link beneath it. Clearing an empty window took less than the GPU timer resolution. The same costs appeared over the isolated link and empty background. A fresh click submitted four vertices for each of one million points and 999,990 links, regardless of how many could reach the pointer.

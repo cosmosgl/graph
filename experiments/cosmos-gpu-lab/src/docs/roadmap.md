@@ -2,7 +2,7 @@
 
 During development, the Lab can keep loading the production WebGL build from the main workspace's `dist/index.min.js`. Build the WebGPU candidate separately and run the same Storybook stories against both packages. Once WebGPU passes the release checks, it takes over the main package and its build output. The last WebGL revision remains available for historical comparisons.
 
-Both built packages passed the million-point dense and hub layout checks on Apple M3. Two WebGL controls provide a baseline at nine fixed ticks. With all eight forces active, the largest RMS position difference was under 0.256% of the WebGL layout radius, against a 5% budget. Both topologies retained their communities through tick 100. After correcting the fractional mouse position, 39 of 999,999 live points in each fixture differed by more than one backing pixel on the first step. WebGPU build `c7c523be` and the frozen WebGL reference returned the correct targets for all 288 trusted clicks across both scheduling modes. The first WebGPU click produced visible feedback in 14–15 ms at a fixed tick. With the graphs moving it took 182 ms on dense communities and 282 ms on hubs. Peak tracked allocations in that block were 418.6 MiB for WebGL and 273.2 MiB for WebGPU. Both returned to zero after teardown.
+Both built packages passed the million-point dense and hub layout checks on Apple M3. Two WebGL controls provide a baseline at nine fixed ticks. With all eight forces active, the largest RMS position difference was under 0.256% of the WebGL layout radius, against a 5% budget. Both topologies retained their communities through tick 100. After correcting the fractional mouse position, 39 of 999,999 live points in each fixture differed by more than one backing pixel on the first step. With candidate `c418e90a`, all 288 trusted clicks returned the requested target or background. On both topologies the first WebGPU click at fixed tick 58 was visible in 14.6–16.1 ms and met the relative allowance in both engine orders. With simulation running, the first WebGPU click took 184–230 ms across the four paired trials. The reference varied too much for a relative live-speed verdict. Both packages released their tracked GPU allocations. [Timing and controls](#/production-forces?section=doc-scale-timing)
 [Prototype results](#/viewer-comparison?section=doc-migration-results) · [Packaged results](#/production-forces?section=doc-scale-timing)
 
 ## Current focus
@@ -107,21 +107,35 @@ The public distribution still uses WebGL. The private Graph and Deck packages
 from `c418e90a` run the stock Roads map and ten-million-point example on M3.
 The remaining work is release qualification and the public switch.
 
-1. **Measure click feedback on the current packages.** Run dense and hub graphs at one million points with the clock fixed, then with normal simulation running. Collect two fresh WebGL controls per topology, reverse the engine order and apply the existing margins. The earlier M3 controls varied enough to leave some relative results unassessed. [Timing method](#/production-forces?section=doc-scale-method) · [Earlier measurements](#/production-forces?section=doc-scale-timing)
-2. **Repeat on another physical GPU family.** Chrome, Firefox and Safari exercised the Apple M3. SwiftShader adds software coverage. A second machine or remote service is currently unavailable. On that machine verify both owners of a Deck graph, drawing and picking, the two moving YouTube selections and both million-point force layouts. Record the actual adapter and fresh WebGL controls. [Replay the sealed archives](#/integrated-webgpu?section=doc-host-ownership-replay-the-same-archives-on-a-second-physical-gpu)
-3. **Run hosted CI and promote Graph and Deck together after acceptance.** The public packages still build WebGL. Verify the workflow on the draft PR, publish both versions in lockstep, switch the public Storybook and keep the last WebGL distribution for comparisons. The packed application compiles in strict mode on TypeScript 5.9.3, 6.0.3 and 7.0.2 with the fixture settings. The full Deck app also passes dependency checking on 6.0.3 and 7.0.2 with the verified browser type packages. A disposable public build produced all nine expected distribution files and passed Pages and Lab smoke checks. The release review still needs to accept the pinned Deck and luma prerelease versions. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
+1. **Qualify another physical GPU family.** M3 has passed the fixed-tick first-click gate in both orders. Chrome, Firefox and Safari exercised the same M3. SwiftShader adds software coverage. A second machine or remote service is currently unavailable. On another machine verify both owners of a Deck graph, drawing and picking, moving YouTube selection and both million-point layouts. The portable kit includes the exact source, packages, fixtures and commands. [Replay the sealed archives](#/integrated-webgpu?section=doc-host-ownership-replay-the-same-archives-on-a-second-physical-gpu)
+2. **Review moving-click latency at release.** On M3 the first WebGPU click averaged 223 ms on dense communities and 193 ms on hubs with normal simulation running. WebGL averaged 1,445 and 1,413 ms in those paired trials, but its controls varied beyond the declared limits. The measurements establish the observed delays. A relative live-speed claim still needs repeatable controls. Collect them on the second GPU as part of the same replay. [Timing method](#/production-forces?section=doc-scale-method) · [Individual engine orders](#/production-forces?section=doc-scale-timing)
+3. **Resolve the PR sign-off check and promote Graph and Deck together after acceptance.** Both hosted CI jobs passed at `592fd779`. The DCO app could retrieve only part of the PR’s 402 commits. A separate comparison with the complete GitHub range found a matching author sign-off on each commit. The app’s verdict remains open. The public packages still build WebGL. At cutover publish both versions in lockstep, switch the public Storybook and retain the final WebGL distribution. The packed application compiles in strict mode on TypeScript 5.9.3, 6.0.3 and 7.0.2 with the fixture settings. The full Deck app also passes dependency checking on 6.0.3 and 7.0.2 with the verified browser type packages. A disposable public build produced all nine expected distribution files and passed Pages and Lab smoke checks. The release review still needs to accept the pinned Deck and luma prerelease versions. [Package and ownership checks](#/integrated-webgpu?section=doc-host-ownership)
 
 ### Local qualification
 
 All 95 candidate tests passed on native M3. The original WebGL and Deck
 suite passed 293 tests with one opt-in case skipped. The 72 shared Storybook source files
 typechecked against both distributions.
-The two static previews each built from the sealed source. The default Lab
+Every one of the 46 shared stories passed on first load in both M3 previews.
+Each preview painted 51 GPU canvases and completed the six-size repulsion
+benchmark. Quick Start, gesture and custom Deck checks passed. One
+additional Deck interaction run lost its local stylesheet connection on
+the WebGPU mini-graphs story. All four Deck stories passed in both previews
+when replayed from the same static builds. The default Lab
 suite passed all 218 cases with the packaged candidate and frozen WebGL
 reference. A local Ubuntu 26.04 x86_64 container ran the same CI job under emulation
 using Chromium SwiftShader. All 95 source cases and ten installed-package
 cases passed. Both platforms produced identical Graph and Deck distribution
-files. The hosted GitHub runner is a separate outstanding check.
+files. The hosted Ubuntu run at `592fd779` also passed both CI jobs. It
+ran 293 WebGL and Deck tests and 95 WebGPU tests, installed the actual
+Graph and Deck tarballs and exercised the packed app on SwiftShader.
+The package and Pages builds, production dependency audit and both CodeQL analyses
+passed. [Hosted CI](https://github.com/cosmosgl/graph/actions/runs/45872530472) · [DCO check](https://github.com/cosmosgl/graph/runs/140091330854)
+
+The packed app also passed the independent browser recovery replay.
+Chrome on Metal and SwiftShader, Firefox, WebKit and retail Safari each
+restored a 65,536-point graph under both ownership modes. Checks covered
+the saved coordinates and selection, resumed simulation and picking.
 
 On M3 both million-point layouts reproduced every coordinate from the
 previous WebGPU release candidate at all nine ticks. Across the 18 saved

@@ -579,8 +579,7 @@ canvas clear. Both SwiftShader runs initially passed 39 of 63 tests. Adding
 visible in the browser screenshot. All 63 tests then passed on native Debian
 arm64 and on Ubuntu 26.04 amd64 under emulation. The local capture includes
 the Linux-only launch patch, both sets of logs and the plain WebGPU control
-in `captures/linux-public-promotion-951ec4d7-20261126/`. GitHub's hosted
-Ubuntu runner and a second physical GPU still need their own runs.
+in `captures/linux-public-promotion-951ec4d7-20261126/`.
 
 On a local Ubuntu 26.04 x86_64 container under emulation, the job for
 `c418e90a` passed all 95 source cases and ten packed Graph and Deck cases
@@ -588,6 +587,12 @@ using Node 22.23.5 and Chromium 151 SwiftShader. The Linux and macOS
 packages contained identical distribution files. The Graph archive differed
 only in the OS byte of its gzip header. The stage logs and file comparisons
 are in `captures/private-webgpu-ci-c418e90a-ubuntu-amd64-20261126/`.
+
+GitHub's hosted Ubuntu runner passed both CI jobs at `592fd779`. It ran
+293 WebGL and Deck tests, 95 WebGPU tests and ten packed-app checks.
+SwiftShader covered the software adapter. Qualification on a second
+physical GPU family remains open.
+[Hosted CI](https://github.com/cosmosgl/graph/actions/runs/45872530472)
 
 The candidate CI suite at `2b2c17a4` ran on a clean Linux source archive.
 On the first cold software run, the label, click, hover and camera tests
