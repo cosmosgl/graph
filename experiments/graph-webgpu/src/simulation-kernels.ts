@@ -45,6 +45,7 @@ export function createPrograms (device: Device): Programs {
 }
 
 export interface SimulationState {
+  readonly repulsionSampling: ForceManyBody['sampling'];
   count: number;
   positions: [Buffer, Buffer];
   current(): Buffer;
@@ -137,6 +138,7 @@ export function createState (device: Device, packed: Float32Array, store: Store,
       pointer = collision = attractors = undefined
     }
     return {
+      get repulsionSampling (): ForceManyBody['sampling'] { return manyBody.sampling },
       releaseForces,
       count,
       positions,

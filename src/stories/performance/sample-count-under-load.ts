@@ -73,7 +73,17 @@ const createSwitch = <T>(label: string, options: readonly T[], format: (option: 
   return { element, setActive }
 }
 
-type ManyBodyInternals = { nearField?: { count: number }; autoSlotCount?: number }
+type SampleCounts = { count?: number; wanted?: number }
+
+/** Inspect the dispatched samples in each engine without scheduling a measurement. */
+function readSampleCounts (graph: Graph): SampleCounts {
+  const simulation = graph.simulation as unknown as {
+    forceManyBody?: { nearField?: { count: number }; autoSlotCount?: number };
+    state?: { repulsionSampling: SampleCounts };
+  }
+  const force = simulation.forceManyBody
+  return simulation.state?.repulsionSampling ?? { count: force?.nearField?.count, wanted: force?.autoSlotCount }
+}
 
 export const sampleCountUnderLoad = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const outer = document.createElement('div')
@@ -189,10 +199,6 @@ export const sampleCountUnderLoad = (): { graph: Graph; div: HTMLDivElement; des
   samplesSwitch.setActive('auto')
   bar.append(sizeSwitch.element, samplesSwitch.element)
 
-  // The count the force runs, and what the measurement wants, are internal; read here for display only
-  const manyBody = (): ManyBodyInternals | undefined =>
-    (graph as unknown as { simulation?: { forceManyBody?: ManyBodyInternals } }).simulation?.forceManyBody
-
   const context = strip.getContext('2d')
   const paint = (): void => {
     const now = performance.now()
@@ -203,15 +209,14 @@ export const sampleCountUnderLoad = (): { graph: Graph; div: HTMLDivElement; des
     const median = at(0.5)
     const isLong = (ms: number): boolean => median > 0 && ms >= 2 * median
     const ms = (value: number): string => `${value.toFixed(1)} ms`.padStart(9)
-    const force = manyBody()
-    const wanted = force?.autoSlotCount
+    const { count, wanted } = readSampleCounts(graph)
     const source = samples !== undefined ? 'fixed' : wanted === undefined ? 'auto, before a reading' : `auto, wanted ${wanted}`
     // Over the time the measured steps took: the window starts empty after a switch and fills
     // over 5 s, and a zoom between two steps is not part of it
     const measured = steps.reduce((sum, step) => sum + step, 0)
     const stepsPerSecond = measured > 0 ? steps.length / (measured / 1000) : 0
     stats.textContent = [
-      `samples in force ${String(force?.nearField?.count ?? '—').padStart(6)}  (${source})`,
+      `samples in force ${String(count ?? '—').padStart(6)}  (${source})`,
       `step median      ${ms(median)}`,
       `step p99         ${ms(at(0.99))}`,
       `step max         ${ms(sorted[sorted.length - 1] ?? 0)}`,

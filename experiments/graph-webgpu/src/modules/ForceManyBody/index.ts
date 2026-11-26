@@ -40,6 +40,11 @@ export class ForceManyBody {
     this.affordableSlots = getAffordableSlotCount(count)
   }
 
+  /** Counts used by the performance story. Reading them starts no GPU work. */
+  public get sampling (): { count?: number; wanted?: number } {
+    return { count: this.near?.sampleCount || undefined, wanted: this.occupancy?.wanted }
+  }
+
   public get nearLimit (): number {
     return this.store.kickSpan / this.width
   }

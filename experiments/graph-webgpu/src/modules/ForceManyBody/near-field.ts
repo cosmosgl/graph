@@ -8,6 +8,7 @@ import type { RepulsionGrid } from './repulsion-grid'
 
 type Grid = Pick<RepulsionGrid, 'cells' | 'box'>
 interface NearField {
+  readonly sampleCount: number;
   encode(pass: ComputePass, positions: Buffer, grid: Grid, slots: Buffer, samples: Buffer, forces: Buffer,
     alpha: number, strength: number, maxStep: number, slotCount: number): void;
   destroy(): void;
@@ -27,6 +28,7 @@ export function createNearField (device: Device, count: number): NearField {
     const floats = new Float32Array(words.buffer)
     const params = scope.own(upload(device, words, Buffer.UNIFORM))
     return {
+      get sampleCount (): number { return words[2]! },
       encode (pass, positions, grid, slots, samples, forces, alpha, strength, maxStep, slotCount): void {
         words[2] = slotCount
         floats.set([alpha, strength, maxStep], 4)
