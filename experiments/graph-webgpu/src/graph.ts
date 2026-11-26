@@ -821,22 +821,29 @@ export class Graph {
     let cursor: MouseEvent | undefined
     let pointerEvent: MouseEvent | undefined
     let positionVersion: number | undefined
+    let lastHover: { request: number; x: number; y: number; link?: number } | undefined
     let picking = false
     let needsPick = false
     // A moving layout can draw again before the readback completes. Keep one
     // read in flight and sample the latest scene once when it finishes.
     const refreshHover = (): void => {
       if (!cursor || this.drag.isActive || isPressPending() || this.isDestroyed) return
+      if (picking) { needsPick = true; lastHover = undefined; return }
       positionVersion = this.getPointPositionBuffer()?.version
-      if (picking) { needsPick = true; return }
       picking = true
       needsPick = false
       const token = this.hoverRequest
       const event = pointerEvent
       pointerEvent = undefined
+      const bounds = canvas.getBoundingClientRect()
+      lastHover = { request: token, x: cursor.clientX - bounds.left, y: cursor.clientY - bounds.top, link: this.hoveredLink }
       this.pickAt(cursor.clientX, cursor.clientY).then(hit => {
         if (hit && token === this.hoverRequest) this.applyHover(hit, event)
-      }).catch(error => this.reportReadError(error)).finally(() => {
+        else lastHover = undefined
+      }).catch(error => {
+        lastHover = undefined
+        this.reportReadError(error)
+      }).finally(() => {
         picking = false
         if (needsPick) refreshHover()
       })
@@ -878,9 +885,17 @@ export class Graph {
     canvas.addEventListener('mousemove', event => {
       updateMouseRepulsion(event)
       cursor = event
-      this.hoverRequest++
       const hovered = this.simulation.store.hoveredPoint
       this.config.onMouseMove?.(hovered?.index, hovered?.position, event)
+      // A browser can repeat mousemove at the click location. Keep delivering
+      // the event, but the same canvas pixel in the same scene needs one hover
+      // read. Clicks and presses still perform their own current-position pick.
+      if (lastHover && lastHover.request === this.hoverRequest && lastHover.link === this.hoveredLink &&
+        !this.hasHoverSceneChanged && !this.transition.isActive && positionVersion === this.getPointPositionBuffer()?.version) {
+        const bounds = canvas.getBoundingClientRect()
+        if (lastHover.x === event.clientX - bounds.left && lastHover.y === event.clientY - bounds.top) return
+      }
+      this.hoverRequest++
       if (!this.drag.isActive && !isPressPending()) {
         pointerEvent = event
         refreshHover()

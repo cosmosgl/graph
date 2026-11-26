@@ -8,6 +8,8 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
   document.body.append(host)
   const entered = vi.fn()
   const left = vi.fn()
+  const moved = vi.fn()
+  const clicked = vi.fn()
   const graph = new Graph(host, {
     enableRenderLoop: false,
     fitViewOnInit: false,
@@ -21,6 +23,8 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     simulationRepulsion: 0,
     onPointMouseOver: entered,
     onPointMouseOut: left,
+    onMouseMove: moved,
+    onPointClick: clicked,
   })
   graph.setPointPositions(Float32Array.of(40, 100, 160, 100), true)
   graph.render(1, 0)
@@ -55,6 +59,17 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     for (let i = 0; i < 4; i++) graph.renderOneFrame()
     expect(picks).toHaveBeenCalledTimes(2)
 
+    const repeat = (): void => {
+      canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: x + 40, clientY: y + 60, bubbles: true, view: window }))
+    }
+    repeat()
+    repeat()
+    expect(moved).toHaveBeenCalledTimes(3)
+    expect(picks).toHaveBeenCalledTimes(2)
+    canvas.dispatchEvent(new MouseEvent('click', { clientX: x + 40, clientY: y + 60, bubbles: true, view: window }))
+    await vi.waitFor(() => expect(clicked.mock.calls.map(([id]) => id)).toEqual([1]))
+    expect(picks).toHaveBeenCalledTimes(3)
+
     graph.step()
     graph.renderOneFrame()
     expect((await graph.getPointPositionsAsync())[2]).toBeGreaterThan(55)
@@ -77,6 +92,13 @@ it('coalesces stationary hover reads and drops superseded hits while the graph m
     await new Promise(requestAnimationFrame)
     expect(entered).toHaveBeenCalledOnce()
     expect(left).toHaveBeenCalledOnce()
+
+    // A moving canvas can deliver the same client coordinates at another local pixel.
+    repeat()
+    await vi.waitFor(() => expect(entered.mock.calls.map(([id]) => id)).toEqual([1, 1]))
+    host.style.transform = 'translateX(30px)'
+    repeat()
+    await vi.waitFor(() => expect(left).toHaveBeenCalledTimes(2))
   } finally {
     release()
     picks.mockRestore()
