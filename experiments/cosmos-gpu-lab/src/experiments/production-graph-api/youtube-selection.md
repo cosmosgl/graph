@@ -37,7 +37,7 @@ million-point reads in this replay. The earlier continuously moving rectangle
 timing runs used a different queue state. The experiment's `agent-recipe.md`
 lists the replay commands and four capture digests.
 
-The final M3 replay used WebGL `1b589639` and WebGPU `b5236d3c`.
+An earlier M3 replay used WebGL `1b589639` and WebGPU `b5236d3c`.
 All eight WebGPU releases and seven of eight WebGL releases returned the same
 ordered IDs and 1,000 tracked coordinates as the earlier run and matched
 their own complete release snapshots. At tick 10 on the million-point graph,
@@ -46,6 +46,16 @@ out on the first attempt and returned all 1,000 correct coordinates on retry.
 The synchronous WebGL control matched all four releases, including 251,132
 IDs and all 1,000 coordinates at tick 10. The six reports and their hashes
 are indexed in `captures/final-youtube-lasso-w68QsF/summary.json`.
+
+The signed release candidate repeated all 16 drags on M3 with WebGL
+`74a216a7` and the installed WebGPU standalone `b52a9c7f`. All 16 async
+selections and all 1,000 tracked coordinates on each release matched their
+own full-position snapshot. Every ordered ID-list and label-coordinate
+digest also matched its earlier same-engine result, including the WebGL
+blocking control above. At million-point tick 10 the WebGL selection
+and labels took 2.87 and 3.78 seconds from release on this run. The
+earlier timeouts remain relevant to interactive latency. The raw data and
+full hashes are in `captures/public-graph-youtube-Swh4J0/result.json`.
 
 ## Why the readback wait changed
 
