@@ -299,7 +299,19 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
 
 /** The slice of a deck gesture event the drag handlers need. */
 type DragGestureEvent = {
+  offsetCenter?: { x: number; y: number };
   stopImmediatePropagation?: () => void;
+}
+
+// Deck's async pick identifies the grabbed point and viewport at pointer-down.
+// Mjolnir supplies the current canvas-relative CSS pixels for each gesture.
+function dragPickingInfo (info: PickingInfo, event: DragGestureEvent): CosmosGraphPickingInfo {
+  const pointer = event.offsetCenter
+  if (!pointer || (info.x === pointer.x && info.y === pointer.y)) return info
+  const { x, y } = pointer
+  const viewport = info.viewport
+  const coordinate = viewport ? viewport.unproject([x - viewport.x, y - viewport.y]) : info.coordinate
+  return { ...info, x, y, pixel: [x, y], coordinate }
 }
 
 /** The update-trigger keys the layer reads. */
@@ -691,7 +703,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (dragReheatAlpha !== null) graph.start(dragReheatAlpha)
     // A grabbed point must not also pan the view
     event.stopImmediatePropagation?.()
-    this.props.onPointDragStart?.(picked)
+    this.props.onPointDragStart?.(dragPickingInfo(picked, event))
     return true
   }
 
@@ -699,12 +711,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const { graph, draggedPointIndex } = this.state
     if (!graph || draggedPointIndex === null) return false
 
-    const position = this._dragPosition(graph, info)
+    const picked = dragPickingInfo(info, event)
+    const position = this._dragPosition(graph, picked)
     if (position) graph.setPointPosition(draggedPointIndex, position[0], position[1])
     event.stopImmediatePropagation?.()
     // Repaint even when the simulation is settled and the ticker is idle
     ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
-    this.props.onPointDrag?.(info as CosmosGraphPickingInfo)
+    this.props.onPointDrag?.(picked)
     return true
   }
 
@@ -715,7 +728,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (this.props.unpinOnDragEnd) graph.setPinnedPoint(draggedPointIndex, false)
     this.state.draggedPointIndex = null
     event.stopImmediatePropagation?.()
-    this.props.onPointDragEnd?.(info as CosmosGraphPickingInfo)
+    this.props.onPointDragEnd?.(dragPickingInfo(info, event))
     return true
   }
 

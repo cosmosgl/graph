@@ -1146,6 +1146,7 @@ describe('CosmosGraphLayer', () => {
 
   it('maps a drag through the viewport the pointer is in, not the view cosmos drew last', async () => {
     const { deck, container, devicePromise } = createDeckDevice()
+    const pointDrag = vi.fn()
     const provided = new Graph(null, STATIC, devicePromise)
     // One point, at pixel (60, 140) of the main view — outside the thumbnail's quadrant
     provided.setPointPositions(new Float32Array([960, 960]))
@@ -1166,7 +1167,7 @@ describe('CosmosGraphLayer', () => {
         },
         layerFilter: ({ layer, viewport }): boolean => layer.id === viewport.id,
         layers: [
-          new CosmosGraphLayer({ id: 'main', graph: provided, pickable: true, enablePointDrag: true, dragReheatAlpha: null }),
+          new CosmosGraphLayer({ id: 'main', graph: provided, pickable: true, enablePointDrag: true, dragReheatAlpha: null, onPointDrag: pointDrag }),
           new CosmosGraphLayer({ id: 'thumb', graph: provided }),
         ],
       })
@@ -1179,6 +1180,12 @@ describe('CosmosGraphLayer', () => {
       // view and then the thumbnail, which leaves cosmos holding the thumbnail's view
       deck.redraw('drag')
       await waitFrames(1)
+
+      // Async Deck picking can retain the grab's info as the gesture moves.
+      expect(layer.onDrag(info, { offsetCenter: { x: 72, y: 130 } })).toBe(true)
+      expect(Array.from(provided.getPointPositionsArray())).toEqual([972, 970])
+      expect(pointDrag).toHaveBeenLastCalledWith(expect.objectContaining({ x: 72, y: 130, index: 0, pixel: [72, 130], viewport: info.viewport }))
+      expect(info.x).toBe(60)
 
       // (80, 120) in the main view is space (980, 980); through the thumbnail's view it would be far off
       expect(layer.onDrag({ ...info, x: 80, y: 120 }, {})).toBe(true)
