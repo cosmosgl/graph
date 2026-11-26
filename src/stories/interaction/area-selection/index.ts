@@ -29,7 +29,6 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
         <button data-preset="sizes" disabled>Different sizes</button>
         <button data-preset="edge" disabled>Edge overlap</button>
         <button data-preset="corner" disabled>Square vs circle</button>
-        <button data-preset="inside" disabled>Inside a point</button>
       </div>
     </div>
     <div class="selection-footer">
@@ -265,12 +264,10 @@ export const areaSelection = (): { div: HTMLDivElement; graph: Graph; destroy: (
         [[left, top], [right, top], [right, bottom], [left, bottom]]
       if (nextPreset === 'edge') selection = rectangle(centerX - 110, centerY + 24, centerX + 110, centerY + 65)
       if (nextPreset === 'corner') selection = rectangle(centerX - 46, centerY + 24, centerX + 46, centerY + 65)
-      if (nextPreset === 'inside') selection = rectangle(centerX - 78, centerY - 8, centerX - 62, centerY + 8)
       const captions: Record<string, string> = {
         sizes: '',
         edge: 'Edge overlap · both footprints touch the selection',
         corner: 'Corner overlap · square touches, circle stays outside',
-        inside: 'Containment · selection sits entirely inside the circle',
       }
       caption.textContent = captions[nextPreset] ?? ''
       presetButtons.forEach(button => button.setAttribute('aria-pressed', String(button.getAttribute('data-preset') === nextPreset)))
