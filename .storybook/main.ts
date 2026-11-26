@@ -44,11 +44,19 @@ const config: StorybookConfig = {
     cacheDir: resolve(configDir, '../node_modules/.cache', `storybook-vite-${engine.toLowerCase()}`),
     server: { watch: { ignored: ['**/storybook-static*/**'] } },
     resolve: {
-      // Scope this to the public entry. Both builds import story code through @/graph/stories.
-      alias: webgpu ? [{
-        find: /^@cosmos\.gl\/graph$/,
-        replacement: resolve(configDir, '../experiments/graph-webgpu/src/index.ts'),
-      }] : [],
+      // Use the same device family and the same host contract as the packed
+      // integration. Both previews still import the original stories and data.
+      alias: webgpu ? [
+        { find: /^@cosmos\.gl\/graph$/, replacement: resolve(configDir, '../experiments/graph-webgpu/src/index.ts') },
+        ...['core', 'layers'].map(name => ({
+          find: new RegExp(`^@deck\\.gl/${name}$`),
+          replacement: resolve(configDir, `../experiments/graph-webgpu/node_modules/@deck.gl/${name}/dist/index.js`),
+        })),
+        { find: /^@luma\.gl\/engine$/, replacement: resolve(configDir, '../experiments/graph-webgpu/node_modules/@luma.gl/engine/dist/index.js') },
+        { find: './graph-host.js', replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/graph-host.ts') },
+        { find: /^\.\/story-device(\?raw)?$/, replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/story-device.ts$1') },
+        { find: /^\.\/thumbnail-background(\?raw)?$/, replacement: resolve(configDir, '../experiments/graph-webgpu/deck-layers/thumbnail-background.ts$1') },
+      ] : [],
     },
   }),
 };

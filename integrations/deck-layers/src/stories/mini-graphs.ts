@@ -5,6 +5,8 @@ import type { GraphConfig } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
+import { createStoryDevice } from './story-device'
+import { thumbnailBackground, thumbnailView } from './thumbnail-background'
 import './style.css'
 
 /**
@@ -42,14 +44,15 @@ export const miniGraphs = async (): Promise<{ div: HTMLDivElement; destroy: () =
   const thumbRect = (i: number): { x: string; y: string; width: string; height: string } =>
     ({ x: '78%', y: `${4 + i * 23}%`, width: '20%', height: '21%' })
 
+  const host = await createStoryDevice(div)
   let deck!: Deck<OrthographicView[]>
   const devicePromise = new Promise<Device>((resolve) => {
     deck = new Deck({
-      parent: div,
+      ...host.props,
       views: [
         new OrthographicView({ id: 'main', controller: true, flipY: false }),
         // Thumbnails clear their rectangle to the page background, or the main view shows through
-        ...recipes.map((_, i) => new OrthographicView({ id: `thumb-${i}`, ...thumbRect(i), flipY: false, clear: true, clearColor: [25, 33, 50, 255] })),
+        ...recipes.map((_, i) => new OrthographicView({ id: `thumb-${i}`, ...thumbRect(i), flipY: false, ...thumbnailView })),
       ],
       initialViewState: {
         main: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: -1.6, minZoom: -5, maxZoom: 2 },
@@ -120,7 +123,7 @@ export const miniGraphs = async (): Promise<{ div: HTMLDivElement; destroy: () =
     pauseAction.textContent = dataset.isPaused ? 'Start' : 'Pause'
     deck.setProps({
       layers: [
-        ...datasets.map((each, i) => graphLayer(`thumb-${i}`, each)),
+        ...datasets.flatMap((each, i) => [thumbnailBackground(`thumb-${i}-background`), graphLayer(`thumb-${i}`, each)]),
         graphLayer('main', current),
       ],
     })
@@ -175,6 +178,7 @@ export const miniGraphs = async (): Promise<{ div: HTMLDivElement; destroy: () =
       // Teardown order: the graphs first, the device belongs to deck
       for (const { graph } of datasets) graph.destroy()
       deck.finalize()
+      host.destroy?.()
     },
   }
 }

@@ -6,6 +6,7 @@ import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 import { PointShape } from '@cosmos.gl/graph'
 import type { Graph } from '@cosmos.gl/graph'
 
+import { createStoryDevice } from './story-device'
 import './style.css'
 
 type City = { name: string; lngLat: [number, number] }
@@ -197,8 +198,9 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
     graph.render()
   }
 
+  const host = await createStoryDevice(div)
   const deck = new Deck({
-    parent: div,
+    ...host.props,
     views: new MapView({ repeat: false }),
     initialViewState: { longitude: 20, latitude: 22, zoom: 1.4, minZoom: 0.5, maxZoom: 8 },
     // cosmos's view cannot express pitch or bearing: the map stays flat and north-up
@@ -399,6 +401,7 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
       cancelAnimationFrame(animationFrame)
       // The layer owns the graph: finalizing deck finalizes the layer, which destroys it
       deck.finalize()
+      host.destroy?.()
     },
   }
 }

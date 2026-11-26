@@ -6,6 +6,7 @@ import type { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
+import { createStoryDevice } from './story-device'
 import './style.css'
 
 type StoryPoint = { id: string; group: number }
@@ -49,18 +50,11 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   let clusterCount = 0
   let schemeIndex = 0
   let graph: Graph | undefined
+  let disposed = false
   // The hubs are tracked for their labels: a point's index is its place in `points`
   const hubIndices = (): number[] => points.flatMap((point, index) => (point.id.startsWith('hub') ? [index] : []))
   const lastPositions = new Map<string, [number, number]>()
-  const snapshotPositions = (): void => {
-    if (!graph) return
-    const positions = graph.getPointPositionsArray()
-    points.forEach((point, index) => {
-      lastPositions.set(point.id, [positions[index * 2] as number, positions[index * 2 + 1] as number])
-    })
-  }
   const addCluster = (): void => {
-    snapshotPositions()
     const group = clusterCount
     clusterCount += 1
     const hub = `hub-${group}`
@@ -77,7 +71,6 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   }
   const removeCluster = (): void => {
     if (clusterCount === 0) return
-    snapshotPositions()
     clusterCount -= 1
     points = points.filter((point) => point.group !== clusterCount)
     // Keep only links between surviving points: the chain link into the
@@ -86,8 +79,9 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     links = links.filter((link) => survivingIds.has(link.source) && survivingIds.has(link.target))
   }
 
+  const host = await createStoryDevice(div)
   const deck = new Deck({
-    parent: div,
+    ...host.props,
     views: new OrthographicView({ flipY: false }), // cosmos's space has y up
     initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: 1, minZoom: -5, maxZoom: 2 },
     controller: true,
@@ -208,8 +202,23 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     setStatus()
   })
   makeAction('Reheat', () => { reheat(0.3); setStatus() })
-  makeAction('Add cluster', () => { addCluster(); render(); reheat(0.5) })
-  makeAction('Remove cluster', () => { removeCluster(); render(); reheat(0.5) })
+  let pendingEdits = Promise.resolve()
+  const changeClusters = (edit: () => void): void => {
+    // Preserve click order and carry surviving points forward from the live layout.
+    pendingEdits = pendingEdits.then(async () => {
+      if (!graph || disposed) return
+      const positions = await graph.getPointPositionsAsync()
+      if (disposed) return
+      for (let i = 0; i < Math.min(points.length, positions.length / 2); i++) {
+        lastPositions.set(points[i]!.id, [positions[2 * i]!, positions[2 * i + 1]!])
+      }
+      edit()
+      render()
+      reheat(0.5)
+    }).catch((error: unknown) => { if (!disposed) console.error(error) })
+  }
+  makeAction('Add cluster', () => changeClusters(addCluster))
+  makeAction('Remove cluster', () => changeClusters(removeCluster))
   makeAction('Recolor', () => { schemeIndex = (schemeIndex + 1) % SCHEMES.length; render() })
   div.appendChild(actions)
 
@@ -223,9 +232,11 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   return {
     div,
     destroy: (): void => {
+      disposed = true
       window.clearInterval(ticker)
       // The layer owns the graph: finalizing deck finalizes the layer, which destroys it
       deck.finalize()
+      host.destroy?.()
     },
   }
 }

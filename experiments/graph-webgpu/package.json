@@ -21,6 +21,9 @@
     "d3-zoom": "^3.0.0"
   },
   "devDependencies": {
+    "@deck.gl/core": "10.0.0-alpha.1",
+    "@deck.gl/layers": "10.0.0-alpha.1",
+    "@luma.gl/engine": "10.0.0-alpha.14",
     "@types/node": "26.6.6",
     "typescript": "catalog:",
     "vite": "catalog:",
