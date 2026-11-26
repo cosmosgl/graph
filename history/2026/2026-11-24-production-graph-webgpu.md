@@ -130,9 +130,10 @@ also showed that the app could keep editing a Graph it had supplied.
 
 ## Example
 
-Open **Examples → Get Started → Manual step** in both previews. Click either
-endpoint to see its ID, then step gravity. The red point stays pinned while
-the blue point moves and the link follows.
+In the GPU Lab, open **Run the same Graph application** and choose **A pinned
+point and a moving endpoint**. Click either endpoint to see its ID, then step
+gravity. The red point stays pinned while the blue point moves and the link
+follows.
 
 In the GPU Lab, **ForceCollision in the Cosmos packages** uses the same
 overlapping circles on both engines. Step either collision case to compare

@@ -17,7 +17,7 @@ export const experiment = defineExperiment({
     kind: 'compare',
     question: 'Do both Graph packages draw, pick and step the same points?',
     description: 'Each frame runs the same application against its own built Graph package.',
-    reference: 'The WebGL package and the fixed positions and IDs used in the Manual step Storybook example.',
+    reference: 'The built WebGL package with fixed point positions, a pinned endpoint and an absent slot.',
     acceptance: 'Point 0 stays pinned, point 1 moves toward the center and point 2 stays absent. Clicking a visible point reports its ID.',
     recorded: null,
   }, {

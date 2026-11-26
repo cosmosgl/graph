@@ -24,7 +24,7 @@ interface FixtureGraph {
   pause(): void;
 }
 
-/** Each invocation gets its own arrays, including when two Graph versions run in separate frames. */
+/** Both Graph packages get their own arrays in separate frames. */
 export function loadManualStep (graph: FixtureGraph): void {
   graph.setPointPositions(new Float32Array([1984, 2048, 2112, 2048, NaN, NaN]))
   graph.setPointColors(new Float32Array([1, 0.4, 0.4, 1, 0.35, 0.8, 1, 1, 0, 0, 0, 0]))

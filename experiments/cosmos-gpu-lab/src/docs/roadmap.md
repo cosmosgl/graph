@@ -41,7 +41,7 @@ Develop WebGPU in the private workspace package `experiments/graph-webgpu` on th
 
 Start with the same WebGL build in both previews. Use a paused fixture with overlapping points, identical typed arrays, a fixed camera, viewport and pixel ratio. Check that both previews paint the same scene and a click returns the same foreground point. Generate data once for stories that use randomness. This establishes a repeatable comparison before the first WebGPU draw.
 
-The **Manual step** story and `node scripts/check-storybook-pair.mjs` provide the first control on this branch. The check reads the actual canvas pixels, clicks both endpoints, steps gravity and opens Quick Start in each preview. Run it with both preview URLs set to the WebGL server to check the comparison setup itself.
+`node scripts/check-storybook-pair.mjs` checks that Quick Start uses the expected engine and paints its points in both previews. Pass the WebGL preview URL twice to check the comparison setup itself. For the pinned point, endpoint picks and gravity step, use [Run the same Graph application](#/production-graph-api).
 
 ### Draw and step a real WebGPU Graph
 
@@ -79,7 +79,7 @@ At cutover, record the final WebGL revision and point historical comparisons to 
 
 ### Working candidate and remaining release checks
 
-The same-branch candidate runs Quick Start and Manual step. Its browser tests cover resident simulation, input queued before initialization, pinned and absent slots, sparse edits, selection, label sampling, position and style transitions, and drawing and picking in a borrowed host pass. The real-package comparison lives in [Production Graph API](#/production-graph-api).
+The same-branch candidate runs Quick Start in Storybook. Its browser tests cover resident simulation, input queued before initialization, pinned and absent slots, sparse edits, selection, label sampling, position and style transitions, and drawing and picking in a borrowed host pass. The paired gravity step runs in [Production Graph API](#/production-graph-api).
 
 On M3, both packages returned exact rectangle IDs and 1,000 tracked coordinates on the moving 65,536-point YouTube graph. At one million points WebGPU returned exact results and WebGL's async queries timed out. Limiting queued frames and simplifying solid-link shading reduced feedback from 1.51–4.99 seconds to 0.46–0.90 seconds at the same four layout ticks. Earlier layouts still take longer. [Moving YouTube selection and labels](#/production-graph-api?section=doc-youtube-selection)
 

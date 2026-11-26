@@ -1,5 +1,5 @@
-import { loadManualStep, manualStepConfig } from '../../../../../src/stories/get-started/manual-step-fixture'
 import { loadGraphPackage } from '../viewer-comparison/production-bundle'
+import { loadManualStep, manualStepConfig } from './manual-step-fixture'
 
 export type Engine = 'webgl' | 'webgpu'
 export type PublicGraphSession = {
