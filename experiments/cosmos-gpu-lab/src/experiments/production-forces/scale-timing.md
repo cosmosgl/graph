@@ -1,3 +1,48 @@
+## Final signed million-point packages
+
+The release candidate at `e8fa6c3b` used the actual Graph tarball's standalone distribution (`b52a9c7f`, luma.gl 10.0.0-alpha.14) and the WebGL reference (`74a216a7`, luma.gl 9.3.6). The full package hashes and tarballs are in `captures/signed-graph-deck-release-xr98e9r4/`. Each number below is the average of the two paired trials, ordered WebGL / WebGPU. “A/A spread”, “WebGL drift” and “mixed orders” identify why a comparison remained unassessed.
+
+### Default autonomous graph
+
+All 144 real clicks returned pinned Point 0 or background as requested, and all four public edits and their checks passed. Cold startup and peak tracked allocation met their margins on both topologies. The hub's full data replacement also met its margin. Relative frame speed and live-click latency remain unassessed.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Frame p95 (ms) | 501.3 / 358.4 | WebGL drift | 525.7 / 308.3 | WebGL drift |
+| First click (ms) | 1,311.5 / 465.3 | A/A spread | 1,198.8 / 406.4 | A/A spread |
+| Click p95 and slowest of 12 (ms) | 1,686.9 / 539.9 | A/A spread | 1,317.6 / 523.9 | A/A spread |
+| Cold startup (ms) | 561.0 / 435.5 | Within margin | 569.4 / 442.8 | Within margin |
+| Point update (ms) | 135.9 / 139.1 | A/A spread | 118.9 / 98.1 | A/A spread |
+| Topology update (ms) | 445.5 / 332.3 | A/A spread | 434.1 / 307.3 | A/A spread |
+| Full replacement (ms) | 715.3 / 558.3 | A/A spread | 641.6 / 608.6 | Within margin |
+| Resize (ms) | 71.8 / 61.8 | WebGL drift | 74.5 / 69.3 | WebGL drift |
+| Peak tracked GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+The first click arrived at tick 63 or 64 on WebGL and 59 on WebGPU. By the edits WebGL had reached ticks 119–127 and WebGPU 97–99. Dense WebGL controls agreed on steady frame p95 at 549.9 / 550.0 ms, but their click p95 differed by 306.6 ms. Hub control click p95 differed by 708.0 ms. The live loop continued submitting work while physical input was dispatched. macOS reported fair thermal pressure at all lane boundaries with low power mode off. Raw intervals, event times, actual input ticks and all control limits are in `captures/packaged-force-timing-2026-11-26T12-02-02-376Z/`.
+
+### Host-driven frames and fixed-tick input
+
+All 144 trusted clicks returned the expected ID. Every trial completed ticks 8–56 consecutively, dispatched and resolved the alternating clicks on ticks 58–80, and paused at tick 80 for edits. Both packages produced all four requested updates, retained every pin and ordered link endpoint, and returned their tracked GPU memory to zero.
+
+| Metric | Dense WebGL / WebGPU | Dense verdict | Hub WebGL / WebGPU | Hub verdict |
+| --- | ---: | --- | ---: | --- |
+| Frame p95 (ms) | 417.9 / 300.8 | A/A spread | 468.2 / 316.5 | A/A spread |
+| First click (ms) | 14.4 / 32.4 | Slower | 15.0 / 30.9 | Slower |
+| Click p95 and slowest of 12 (ms) | 65.4 / 34.5 | WebGL drift | 56.1 / 33.7 | Within margin |
+| Point update (ms) | 149.7 / 99.9 | Within margin | 183.0 / 99.9 | WebGL drift |
+| Topology update (ms) | 390.2 / 399.9 | WebGL drift | 382.3 / 400.0 | WebGL drift |
+| Full replacement (ms) | 567.1 / 559.4 | WebGL drift | 651.7 / 566.9 | WebGL drift |
+| Resize (ms) | 65.8 / 67.6 | Within margin | 66.2 / 66.6 | Within margin |
+| Peak tracked GPU allocation (MiB) | 418.6 / 265.2 | Within margin | 418.6 / 265.2 | Within margin |
+
+**The idle edit and stationary pointer each do less work.** The packaged hub traces below establish two full canvas draws for the edit and one fresh click pick. The full timing block still found an extra display interval for the first click in both orders. For example, the dense WebGPU callbacks took 17.8 and 18.6 ms from the trusted click, followed by 14.6 and 13.7 ms to the visible feedback opportunity. The matched hub topology measurement fell from 431.9 ms before the fixes to 400.0 ms on the signed candidate. Paired WebGL drift leaves its comparative verdict open.
+
+The first dense control overlapped a short repository lint hook during Chrome startup. All 12 trials are included. macOS reported nominal thermal pressure at first and fair pressure by the end of the second control. Subsequent trials stayed at fair and low power mode was off throughout. Dense paired WebGL frame p95 still ranged from 318.0 to 517.9 ms under the same reported pressure and at the same ticks. These system readings do not isolate a cause. Raw records and exact served bytes are in `captures/packaged-force-timing-2026-11-26T11-49-46-177Z/`.
+
+A separate prototype combined the hit ID and point coordinates in one read. It returned Point 0 at tick 58 with one GPU submission after the DOM click. Compared with the earlier two-submit trace, the time from DOM click delivery to the public callback changed from 11.0 to 10.0 ms. The next display opportunity arrived 14.8 ms later in the prototype run and 0.9 ms later in the two-submit run. The recorded end-to-end times were 29.2 and 16.0 ms respectively. The signed tarball uses the two-submit path. The isolated prototype probe is in `captures/packaged-force-timing-2026-11-26T12-01-33-032Z/`.
+
+## Earlier 8,192-slot timing blocks
+
 On Apple M3, both packages returned the correct target for all **288 native clicks** in two independent timing blocks. WebGPU click feedback stayed within the predeclared margin on both 8,192-slot graphs. WebGPU frame p95 ranged from 17.6 to 17.7 ms in every paired trial. The WebGL frame controls varied enough to leave **relative frame speed unassessed** on both topologies.
 
 | Topology and block | Frame p95, WebGL / WebGPU | Click p95, WebGL / WebGPU | Click p95 change | First click, WebGL / WebGPU | Worst individual click, WebGL / WebGPU | Click allowance |
