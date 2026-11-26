@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { cpus, loadavg } from 'node:os'
 import { join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,12 +18,12 @@ const { values } = parseArgs({ options: {
   'matched-ticks': { type: 'boolean' }, bundles: { type: 'string' }, 'trace-engine': { type: 'string' },
 } })
 const matched = !!values['matched-ticks']
+const useBundleCopies = matched || !!values.bundles
 const traceEngine = values['trace-engine']
 if (traceEngine && (!matched || !values.fixture || !['webgl', 'webgpu'].includes(traceEngine))) {
   throw new Error('Trace one --fixture with --matched-ticks and --trace-engine webgl or webgpu')
 }
 if (matched && values.layout) throw new Error('Choose either fixed-tick timings or the layout replay')
-if (values.bundles && !matched) throw new Error('Use --bundles with --matched-ticks')
 if (values.composed && !values.layout) throw new Error('Use --composed with --layout for the eight-force fixed-tick replay')
 if (values['webgl-controls'] && (!values.layout || values.smoke)) throw new Error('Reuse controls only for a complete fixed-tick replay')
 const pointCount = Number(values.points)
@@ -44,7 +45,7 @@ await mkdir(capture)
 const save = (name, object) => writeFile(join(capture, `${name}.json`), `${JSON.stringify(object, null, 2)}\n`)
 const source = await captureBenchmarkSource(repo, lab, capture)
 const pinned = {}
-if (matched) {
+if (useBundleCopies) {
   const directory = values.bundles ? resolve(root, values.bundles) : null
   if (directory && !directory.startsWith(root + sep)) throw new Error('Choose a saved bundle directory under captures/')
   const defaults = { webgl: join(repo, 'dist/index.min.js'), webgpu: join(repo, 'experiments/graph-webgpu/dist/index.min.js') }
@@ -63,7 +64,7 @@ if (controlsDir) {
   if (cpu !== previous.cpu || vendor !== (previous.adapterVendor ?? 'apple')) throw new Error('WebGL controls used a different CPU or GPU vendor')
   source.webglControls = relative(root, controlsDir)
 }
-source.webgpuSha256 = await sha256(matched ? join(capture, 'webgpu.js') : join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
+source.webgpuSha256 = await sha256(useBundleCopies ? join(capture, 'webgpu.js') : join(repo, 'experiments/graph-webgpu/dist/index.min.js'))
 source.adapterVendor = vendor
 source.cpu = cpu
 source.node = process.version
@@ -97,9 +98,23 @@ function distribution(samples) {
     p95: sorted[Math.ceil(0.95 * sorted.length) - 1], max: sorted.at(-1) }
 }
 
+// Read outside the measured browser interval. macOS reports coarse process-wide
+// thermal pressure, distinct from instantaneous GPU clocks or temperature.
+function powerState() {
+  if (process.platform === 'darwin') {
+    try {
+      const value = execFileSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e',
+        'ObjC.import("Foundation"); const p = $.NSProcessInfo.processInfo; JSON.stringify([Number(p.thermalState), Boolean(p.isLowPowerModeEnabled)])'],
+      { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'] })
+      const [thermal, lowPower] = JSON.parse(value)
+      return { thermal: ['nominal', 'fair', 'serious', 'critical'][thermal], lowPower }
+    } catch { /* System diagnostics are optional on restricted hosts. */ }
+  }
+}
+
 async function run(url, kind, engine, name) {
   const entry = { kind, engine, name, pointCount, stage: 'open', status: 'started', diagnostics: [], result: null }
-  if (matched) entry.host = { started: new Date().toISOString(), loadBefore: loadavg() }
+  if (useBundleCopies) entry.host = { started: new Date().toISOString(), loadBefore: loadavg(), powerBefore: powerState() }
   let browser
   let page
   const log = error => { if (entry.diagnostics.length < 25) entry.diagnostics.push(String(error).slice(0, 700)) }
@@ -113,13 +128,13 @@ async function run(url, kind, engine, name) {
     page.on('console', message => { if (message.type() === 'error') log(message.text()) })
     // Serve the exact immutable UMD bytes from this run's archive. Another build
     // can replace either workspace dist long after this browser process starts.
-    if (matched) await page.route('**/__force_package__.js', route => route.fulfill({ contentType: 'application/javascript', body: pinned[engine] }))
+    if (useBundleCopies) await page.route('**/__force_package__.js', route => route.fulfill({ contentType: 'application/javascript', body: pinned[engine] }))
     await page.goto(url)
     await page.bringToFront()
     await page.waitForFunction(() => typeof window.openForceTiming === 'function')
     await page.evaluate(args => window.openForceTiming(...args), [engine, kind, pointCount, !!values.layout, !!values.composed, vendor,
-      matched, matched ? '/__force_package__.js' : undefined])
-    if (matched && !source.luma[engine]) {
+      matched, useBundleCopies ? '/__force_package__.js' : undefined])
+    if (useBundleCopies && !source.luma[engine]) {
       source.luma[engine] = await page.evaluate(() => window.luma.VERSION)
       await save('source', source)
     }
@@ -203,7 +218,7 @@ async function run(url, kind, engine, name) {
     if (!entry.result && page && !page.isClosed()) entry.result = await snapshot().catch(() => null)
   } finally {
     clearTimeout(timeout)
-    if (matched) Object.assign(entry.host, { ended: new Date().toISOString(), loadAfter: loadavg() })
+    if (useBundleCopies) Object.assign(entry.host, { ended: new Date().toISOString(), loadAfter: loadavg(), powerAfter: powerState() })
     try { await save(`${kind}/${name}`, entry) } finally { await browser?.close() }
   }
   return entry
